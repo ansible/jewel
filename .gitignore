@@ -25,6 +25,5 @@ __pycache__
 *.sw[poj]
 *~
 
-# service library
-service_lib/dist
-service_lib/coverage.xml
+# SQLite
+*.sqlite3
