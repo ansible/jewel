@@ -1,12 +1,45 @@
+---
+image: quay.io/centos/centos:stream9-minimal
+
+.before_script_template:
+  before_script:
+    - microdnf install -y --nodocs --setopt=install_weak_deps=0 python3-pip make
+    - pip install -r requirements/requirements_dev.txt
+
 include:
   - project: enterprise-pipelines/gitlab-ci/includes
     file: SAST/sonarqube.yml
 
 stages:
+  - lint
   - static-analysis # this can be overriden
-  # ...your other build stages...
 
 sonarqube:
   stage: static-analysis
   tags:
     - shared
+
+flake8:
+  extends: .before_script_template
+  stage: lint
+  tags:
+    - shared
+  script: 
+    - make check_flake8
+
+black:
+  extends: .before_script_template
+  stage: lint
+  tags:
+    - shared
+  script: 
+    - make check_black
+
+isort:
+  extends: .before_script_template
+  stage: lint
+  tags:
+    - shared
+  script: 
+    - make check_isort
+
