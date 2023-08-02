@@ -2,7 +2,7 @@
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
 
-.PHONY: PYTHON_VERSION .git/hooks/pre-commit clean
+.PHONY: check_black check_flake8 check_isort PYTHON_VERSION .git/hooks/pre-commit clean
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
@@ -20,6 +20,21 @@ clean:
 	find . -type d -name "__pycache__" -delete
 	find . -type d -name ".pytest_cache" -delete
 	rm -Rf service_lib/dist/*
+
+# Test targets
+# -------------------------------------
+
+# Run black syntax check
+check_black:
+	black --check $(CHECK_SYNTAX_FILES)
+
+# Run flake8 syntax check
+check_flake8:
+	flake8 $(CHECK_SYNTAX_FILES)
+
+# Run isort syntax check
+check_isort:
+	isort --check $(CHECK_SYNTAX_FILES)
 
 # HELP related targets
 # --------------------------------------
