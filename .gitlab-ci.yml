@@ -1,0 +1,12 @@
+include:
+  - project: enterprise-pipelines/gitlab-ci/includes
+    file: SAST/sonarqube.yml
+
+stages:
+  - static-analysis # this can be overriden
+  # ...your other build stages...
+
+sonarqube:
+  stage: static-analysis
+  tags:
+    - shared
