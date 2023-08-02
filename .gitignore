@@ -1,0 +1,30 @@
+# User level pre-commit hooks
+pre-commit-user
+
+# Python & setuptools
+__pycache__
+/build
+/deb-build
+/reprepro
+/rpm-build
+/tar-build
+/setup-bundle-build
+/dist
+/*.egg-info
+*.py[c,o]
+/.eggs
+.coverage
+
+# Mac OS X
+*.DS_Store
+
+# VSCode
+.vscode/
+
+# Editors
+*.sw[poj]
+*~
+
+# service library
+service_lib/dist
+service_lib/coverage.xml
