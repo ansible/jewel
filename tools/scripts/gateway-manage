@@ -1,0 +1,3 @@
+#!/bin/bash
+
+/opt/venv/bin/python /opt/aap-gateway/manage.py "$@"
