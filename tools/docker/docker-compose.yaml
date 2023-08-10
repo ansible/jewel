@@ -1,17 +1,15 @@
 ---
 version: "3.8"
 services:
-  django: &django
-    user: "1000"
+  gateway:
     build:
       context: $PWD
       dockerfile: tools/docker/Dockerfile
+    command:
+      - /usr/bin/launch-gateway
+    container_name: tools_aap_gw_1
     depends_on:
       - db
-    volumes:
-      - $PWD:/opt/aap-gateway
-    ports:
-      - "8000:8000"
     expose:
       - "8000"
     environment:
@@ -21,20 +19,33 @@ services:
       - DATABASE_USER=gateway
       - DATABASE_PASSWORD=gateway
       - DATABASE_HOST=db
-    command:
-      - /usr/bin/launch-gateway
+    links:
+      - db
     networks:
       - dbnet
+    ports:
+      - "8000:8000"
+    user: "1000"
+    volumes:
+      - $PWD:/opt/aap-gateway
   db:
-    image: docker.io/library/postgres:alpine
+    container_name: tools_aap_gw_db_pgsql_1
+    command: run-postgresql -c log_destination=stderr -c log_min_messages=info
     environment:
-      - POSTGRES_DB=gateway
-      - POSTGRES_USER=gateway
-      - POSTGRES_PASSWORD=gateway
+      - POSTGRESQL_DATABASE=gateway
+      - POSTGRESQL_USER=gateway
+      - POSTGRESQL_PASSWORD=gateway
+    image: quay.io/sclorg/postgresql-15-c9s
     networks:
       - dbnet
     ports:
       - "5432:5432"
+    volumes:
+      - "aap_gw_db:/var/lib/psql/data"
 
 networks:
   dbnet:
+
+volumes:
+  aap_gw_db:
+    name: tools_aap_gw_db
