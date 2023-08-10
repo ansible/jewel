@@ -3,7 +3,7 @@ FROM quay.io/centos/centos:stream9
 ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 
-ARG DJANGO_SETTINGS_MODULE=project.settings
+ARG DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
 ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
 
 RUN dnf install -y \

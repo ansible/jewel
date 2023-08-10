@@ -1,3 +1,4 @@
+---
 version: "3.8"
 services:
   django: &django
@@ -14,7 +15,7 @@ services:
     expose:
       - "8000"
     environment:
-      - DJANGO_SETTINGS_MODULE=project.settings
+      - DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
       - SECRET_KEY=${SECRET_KEY:-somesecret}
       - DATABASE_NAME=gateway
       - DATABASE_USER=gateway
