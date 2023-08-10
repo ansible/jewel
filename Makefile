@@ -2,7 +2,7 @@
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
 
-.PHONY: check_black check_flake8 check_isort PYTHON_VERSION .git/hooks/pre-commit clean
+.PHONY: check_black check_flake8 check_isort PYTHON_VERSION .git/hooks/pre-commit clean docker-compose
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
@@ -71,3 +71,9 @@ help/generate:
 	} \
 	{ lastLine = $$0 }' $(MAKEFILE_LIST) | sort -u
 	@printf "\n"
+
+# Container related targets
+# --------------------------------------
+
+docker-compose:
+	docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans

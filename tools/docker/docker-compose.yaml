@@ -1,0 +1,35 @@
+version: "3.8"
+services:
+  django: &django
+    user: "1000"
+    build:
+      context: $PWD
+      dockerfile: tools/docker/Dockerfile
+    depends_on:
+      - db
+    volumes:
+      - $PWD:/opt/aap-gateway
+    ports:
+      - "8000:8000"
+    expose:
+      - "8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings
+      - SECRET_KEY=${SECRET_KEY:-somesecret}
+    command:
+      - /usr/bin/launch-gateway
+    networks:
+      - dbnet
+  db:
+    image: docker.io/library/postgres:alpine
+    environment:
+      - POSTGRES_DB=gateway
+      - POSTGRES_USER=gateway
+      - POSTGRES_PASSWORD=gateway
+    networks:
+      - dbnet
+    ports:
+      - "5432:5432"
+
+networks:
+  dbnet:
