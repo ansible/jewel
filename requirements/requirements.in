@@ -1,9 +1,9 @@
 cryptography
-django==4.2.4
-django-extensions==3.2.3
+Django==4.2.3
 djangorestframework
-ipython==8.14.0
-psycopg[binary]==3.1.9
+django-crum
+django-extensions
+ipython
+psycopg[binary]
 pyjwt
-requests
-uwsgi==2.0.22
+uwsgi
