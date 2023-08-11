@@ -25,14 +25,24 @@ RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.n
 
 RUN mkdir /var/run/uwsgi
 RUN /usr/bin/python3 -m pip --no-cache-dir install supervisor
-RUN /usr/bin/python3 -m venv /opt/venv
-RUN echo "/opt/aap-gateway" > /opt/venv/lib/python3.9/site-packages/project.pth
-# See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
-RUN /opt/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
-COPY requirements/requirements.txt /opt/
-RUN /opt/venv/bin/pip --no-cache-dir install -r/opt/requirements.txt
 
-COPY . /opt/aap-gateway
+RUN for dir in \
+      /var/log/supervisor \
+      /var/run/supervisor \
+      /var/run/uwsgi \
+      /opt/aap_gateway \
+      /var/log/nginx \
+      /var/run/django_metrics ; \
+    do mkdir -p $dir ; chgrp -R 0 $dir; chmod -R g=u $dir ; done && \
+    echo "\setenv PAGER 'less -SXF'" > /etc/psqlrc
+
+RUN /usr/bin/python3 -m venv /opt/aap_gateway/venv
+RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/python3.9/site-packages/project.pth
+# See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
+RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
+
+COPY . /opt/aap_gateway/aap_gateway
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /opt/aap_gateway/aap_gateway/requirements/requirements.txt
 
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
@@ -42,15 +52,6 @@ COPY tools/scripts/gateway-manage /usr/bin/gateway-manage
 COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
 COPY tools/configs/supervisord.conf /etc/supervisor/supervisord.conf
 
-RUN for dir in \
-      /var/log/supervisor \
-      /var/run/supervisor \
-      /var/run/uwsgi \
-      /opt/aap-gateway \
-      /var/log/nginx \
-      /var/run/django_metrics ; \
-    do mkdir -p $dir ; chgrp -R 0 $dir; chmod -R g=u $dir ; done && \
-    echo "\setenv PAGER 'less -SXF'" > /etc/psqlrc
 
 USER 1000
 EXPOSE 8000

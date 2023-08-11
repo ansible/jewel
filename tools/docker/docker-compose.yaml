@@ -27,7 +27,7 @@ services:
       - "8000:8000"
     user: "1000"
     volumes:
-      - $PWD:/opt/aap-gateway
+      - $PWD:/opt/aap_gateway/aap_gateway
   db:
     container_name: tools_aap_gw_db_pgsql_1
     command: run-postgresql -c log_destination=stderr -c log_min_messages=info
