@@ -16,6 +16,10 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=project.settings
       - SECRET_KEY=${SECRET_KEY:-somesecret}
+      - DATABASE_NAME=gateway
+      - DATABASE_USER=gateway
+      - DATABASE_PASSWORD=gateway
+      - DATABASE_HOST=db
     command:
       - /usr/bin/launch-gateway
     networks:
