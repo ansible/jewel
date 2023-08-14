@@ -1,6 +1,9 @@
 # User level pre-commit hooks
 pre-commit-user
 
+# Make target touch files
+.docker-compose-built
+
 # Python & setuptools
 __pycache__
 /build
@@ -28,3 +31,11 @@ __pycache__
 
 # SQLite
 *.sqlite3
+
+# Nginx certs
+tools/configs/nginx.crt
+tools/configs/nginx.key
+tools/configs/nginx.csr
+
+# Mock built target
+.has_built

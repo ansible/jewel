@@ -89,5 +89,18 @@ help/generate:
 # Container related targets
 # --------------------------------------
 
-docker-compose:
+docker-compose: docker-compose-build
 	docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans
+
+docker-compose-build: .has_built
+
+.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/nginx.crt
+	docker-compose -f $< build #--no-cache
+	touch $@
+
+tools/configs/nginx.crt:
+	openssl req -nodes -newkey rsa:2048 -keyout tools/configs/nginx.key -out tools/configs/nginx.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=AWX Development/CN=awx.localhost"
+	openssl x509 -req -days 365 -in tools/configs/nginx.csr -signkey tools/configs/nginx.key -out tools/configs/nginx.crt
+
+requirements/requirements.txt: requirements/requirements.in
+	cd requirements; ./updater.sh run
