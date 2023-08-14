@@ -47,7 +47,10 @@ RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /opt/aap_gateway/aap
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
 COPY tools/configs/nginx.conf /etc/nginx/nginx.conf
+COPY tools/configs/nginx.crt /etc/nginx/nginx.crt
+COPY tools/configs/nginx.key /etc/nginx/nginx.key
 COPY tools/configs/nginx-gateway.conf /etc/nginx/conf.d/gateway.conf
+RUN chown 1000 /etc/nginx/nginx.crt /etc/nginx/nginx.key
 COPY tools/scripts/gateway-manage /usr/bin/gateway-manage
 COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
 COPY tools/configs/supervisord.conf /etc/supervisor/supervisord.conf
