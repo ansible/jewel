@@ -15,8 +15,25 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
+from rest_framework import routers
+
+from aap_gateway_api.views.api import EnvironmentViewSet, MeViewSet, OrganizationViewSet, ServiceViewSet, TeamViewSet, UserViewSet
+from aap_gateway_api.views.jwt_key import JWTKeyView
+from aap_gateway_api.views.local_login import LoggedLoginView, LoggedLogoutView
+
+router = routers.DefaultRouter()
+router.register(r'environment', EnvironmentViewSet)
+router.register(r'organization', OrganizationViewSet)
+router.register(r'service', ServiceViewSet)
+router.register(r'team', TeamViewSet)
+router.register(r'user', UserViewSet)
+router.register(r'me', MeViewSet, basename='me')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('jwt_key/', JWTKeyView.as_view()),
+    path('api/', include(router.urls)),
+    path('api/login/', LoggedLoginView.as_view(template_name='rest_framework/login.html', extra_context={'inside_login_context': True}), name='login'),
+    path('api/logout/', LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
 ]
