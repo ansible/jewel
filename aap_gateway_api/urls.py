@@ -18,9 +18,17 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
 
-from aap_gateway_api.views.api import EnvironmentViewSet, MeViewSet, OrganizationViewSet, ServiceViewSet, TeamViewSet, UserViewSet
+from aap_gateway_api.views.api import (
+    EnvironmentViewSet,
+    LoggedLoginView,
+    LoggedLogoutView,
+    MeViewSet,
+    OrganizationViewSet,
+    ServiceViewSet,
+    TeamViewSet,
+    UserViewSet,
+)
 from aap_gateway_api.views.jwt_key import JWTKeyView
-from aap_gateway_api.views.local_login import LoggedLoginView, LoggedLogoutView
 
 router = routers.DefaultRouter()
 router.register(r'environment', EnvironmentViewSet)
