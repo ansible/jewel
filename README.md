@@ -13,3 +13,5 @@ The goal for a platform wide gateway is to provide a single entry point that sit
 Gateway is currently in design phase, more information will be available later.
 
 This repo is internal only at this time. 
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
