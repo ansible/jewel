@@ -5,11 +5,11 @@
 
 {% block bootstrap_theme %}
   <link rel="stylesheet" type="text/css" href="{% static 'rest_framework/css/bootstrap.min.css' %}" />
-  <link rel="stylesheet" type="text/css" href="{% static 'api/api.css' %}?v={{unique_identifier}}" />
+  <link rel="stylesheet" type="text/css" href="{% static 'api/api.css' %}?v={{ gateway_version }}" />
 {% endblock %}
 
 {% block style %}
-<link href="{% static 'images/Product_icon-Red_Hat-Ansible_Automation_Platform-RGB.png' %}?v={{unique_identifier}}" rel="shortcut icon" />
+<link href="{% static 'images/Product_icon-Red_Hat-Ansible_Automation_Platform-RGB.png' %}?v={{ gateway_version }}" rel="shortcut icon" />
 {{ block.super }}
 {% endblock %}
 
@@ -28,7 +28,7 @@
           <span>{% trans 'REST API' %}</span>
         </a>
         <a class="navbar-title" href="{{ request.get_full_path }}">
-          <span>&nbsp;&mdash; {{name}}</span>
+          <span>&nbsp;&mdash; {{ name }}</span>
         </a>
       </div>
       <div class="collapse navbar-collapse" id="navbar-collapse">
@@ -74,5 +74,5 @@
   <a class="toggle-description js-tooltip" href="#" title="Show/Hide Description"><span class="glyphicon glyphicon-question-sign"></span></a>
 </div>
 {{ block.super }}
-<script src="{% static 'api/api.js' %}?v={{unique_identifier}}"></script>
+<script src="{% static 'api/api.js' %}?v={{ gateway_version }}"></script>
 {% endblock %}
