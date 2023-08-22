@@ -39,3 +39,7 @@ tools/configs/nginx.csr
 
 # Mock built target
 .has_built
+
+# Service lib temp files
+service_lib/coverage.xml
+service_lib/dist
