@@ -11,6 +11,11 @@ logger = logging.getLogger('aap.gateway.models.common')
 
 
 class CommonModel(models.Model):
+    # These are fields that should be reversed lookup as related fields.
+    # For example, an environment has related organizations so environment might specify reverse_foreign_key_fields = ['organizations']
+    # This would end up with a view like environment/1/organizations
+    reverse_foreign_key_fields = []
+
     class Meta:
         abstract = True
 
@@ -57,12 +62,29 @@ class CommonModel(models.Model):
             update_fields.append('modified_by')
         super().save(*args, **kwargs)
 
+    def get_summary_fields(self):
+        response = {}
+        for field in self._meta.concrete_fields:
+            if isinstance(field, models.ForeignKey) and getattr(self, field.name):
+                response[field.name] = getattr(self, field.name).summary_fields()
+        return response
+
     def related_fields(self, request):
         response = {}
-        if self.created_by:
-            response['created_by'] = reverse_lazy('user-detail', kwargs={'pk': self.created_by.pk}, request=request)
-        if self.modified_by:
-            response['modified_by'] = reverse_lazy('user-detail', kwargs={'pk': self.modified_by.pk}, request=request)
+        # Automatically add all of the ForeignKeys for the model as related fields
+        for field in self._meta.concrete_fields:
+            if isinstance(field, models.ForeignKey):
+                pk = getattr(self, field.name).pk
+                if pk:
+                    reverse_view = f"{field.related_model.__name__.lower()}-detail"
+                    response[field.name] = reverse_lazy(reverse_view, kwargs={'pk': pk}, request=request)
+
+        # Add any reverse relations required
+        for field in getattr(self, 'reverse_foreign_key_fields', []):
+            logger.error(self.__class__.__name__)
+            reverse_view = f"{self.__class__.__name__.lower()}-{field}"
+            response[field] = reverse_lazy(reverse_view, kwargs={'pk': self.pk}, request=request)
+
         return response
 
     def summary_fields(self):

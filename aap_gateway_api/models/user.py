@@ -4,7 +4,6 @@ from crum import get_current_user
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.timezone import now
-from rest_framework.reverse import reverse_lazy
 
 logger = logging.getLogger('aap.gateway.models.user')
 
@@ -23,6 +22,8 @@ class User(AbstractUser):
         editable=False,
     )
     modified_by = AbstractUser.username
+
+    reverse_foreign_key_fields = ['teams']
 
     def save(self, *args, **kwargs):
         update_fields = list(kwargs.get('update_fields', []))
@@ -56,9 +57,3 @@ class User(AbstractUser):
             'first_name': self.first_name,
             'last_name': self.last_name,
         }
-
-    # This is objects that are related to our object
-    def related_fields(self, request):
-        res = {}
-        res['teams'] = reverse_lazy('user-teams', kwargs={'pk': self.pk}, request=request)
-        return res
