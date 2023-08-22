@@ -1,4 +1,5 @@
 import logging
+import re
 
 from django.contrib.auth import views
 from rest_framework import status
@@ -33,7 +34,13 @@ class LoggedLoginView(views.LoginView):
             return ret
         else:
             if 'username' in self.request.POST:
-                logger.warning(f"Login failed for user {self.request.POST.get('username')} from {request.META.get('REMOTE_ADDR', None)}")
+                username = self.request.POST.get('username')
+                # Maybe we want to scale this in the future to support unicode characters
+                if not re.match('^[A-Za-z0-9@._-]+$', username):
+                    from base64 import b64encode
+
+                    username = f"(base64) {b64encode(username.encode('UTF-8'))}"
+                logger.warning(f"Login failed for user {username} from {request.META.get('REMOTE_ADDR', None)}")
             ret.status_code = 401
             return ret
 
@@ -41,12 +48,8 @@ class LoggedLoginView(views.LoginView):
 class LoggedLogoutView(views.LogoutView):
     def dispatch(self, request, *args, **kwargs):
         original_user = getattr(request, 'user', None)
-        logger.debug(f"Starting logout of {original_user.username}")
         ret = super(LoggedLogoutView, self).dispatch(request, *args, **kwargs)
         current_user = getattr(request, 'user', None)
-        logger.debug(f"After logout of {original_user.username} new user is {current_user.username}")
         if (not current_user or not getattr(current_user, 'pk', True)) and current_user != original_user:
-            logger.info(f"User {original_user.username} logged out.")
-        else:
-            logger.error(f"Logout of {current_user.username} failed!")
+            logger.info("User {} logged out.".format(original_user.username))
         return ret
