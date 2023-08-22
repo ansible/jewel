@@ -4,7 +4,7 @@ from cryptography.hazmat.primitives import serialization
 from django.http import HttpResponse
 from django.views import View
 
-from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key
+from aap_gateway_api.utils import get_jwt_rsa_key
 
 logger = logging.getLogger('jwt_key')
 
