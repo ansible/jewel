@@ -1,5 +1,7 @@
 FROM quay.io/centos/centos:stream9
 
+ARG PYTHON=python3.11
+
 ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 
@@ -8,9 +10,9 @@ ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
 
 RUN dnf install -y \
     gcc \
-    python3-devel \
-    python3 \
-    python3-pip \
+    ${PYTHON}-devel \
+    ${PYTHON} \
+    ${PYTHON}-pip \
     libpq \
     libpq-devel \
     postgresql \
@@ -24,7 +26,7 @@ RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.n
     dnf clean all
 
 RUN mkdir /var/run/uwsgi
-RUN /usr/bin/python3 -m pip --no-cache-dir install supervisor
+RUN /usr/bin/${PYTHON} -m pip --no-cache-dir install supervisor
 
 RUN for dir in \
       /var/log/supervisor \
@@ -36,8 +38,8 @@ RUN for dir in \
     do mkdir -p $dir ; chgrp -R 0 $dir; chmod -R g=u $dir ; done && \
     echo "\setenv PAGER 'less -SXF'" > /etc/psqlrc
 
-RUN /usr/bin/python3 -m venv /opt/aap_gateway/venv
-RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/python3.9/site-packages/project.pth
+RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
+RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/${PYTHON}/site-packages/project.pth
 # See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
 RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
 
