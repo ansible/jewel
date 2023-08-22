@@ -6,29 +6,26 @@ asttokens==2.2.1
     # via stack-data
 backcall==0.2.0
     # via ipython
-certifi==2023.7.22
-    # via requests
 cffi==1.15.1
     # via cryptography
-charset-normalizer==3.2.0
-    # via requests
 cryptography==41.0.3
     # via -r requirements/requirements.in
 decorator==5.1.1
     # via ipython
-django==4.2.4
+django==4.2.3
     # via
     #   -r requirements/requirements.in
+    #   django-crum
     #   django-extensions
     #   djangorestframework
+django-crum==0.7.9
+    # via -r requirements/requirements.in
 django-extensions==3.2.3
     # via -r requirements/requirements.in
 djangorestframework==3.14.0
     # via -r requirements/requirements.in
 executing==1.2.0
     # via stack-data
-idna==3.4
-    # via requests
 ipython==8.14.0
     # via -r requirements/requirements.in
 jedi==0.19.0
@@ -59,8 +56,6 @@ pyjwt==2.8.0
     # via -r requirements/requirements.in
 pytz==2023.3
     # via djangorestframework
-requests==2.31.0
-    # via -r requirements/requirements.in
 six==1.16.0
     # via asttokens
 sqlparse==0.4.4
@@ -72,12 +67,7 @@ traitlets==5.9.0
     #   ipython
     #   matplotlib-inline
 typing-extensions==4.7.1
-    # via
-    #   asgiref
-    #   ipython
-    #   psycopg
-urllib3==2.0.4
-    # via requests
+    # via psycopg
 uwsgi==2.0.22
     # via -r requirements/requirements.in
 wcwidth==0.2.6
