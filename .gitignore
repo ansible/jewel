@@ -14,6 +14,7 @@ __pycache__
 *.py[c,o]
 /.eggs
 .coverage
+*.tox
 
 # Mac OS X
 *.DS_Store
