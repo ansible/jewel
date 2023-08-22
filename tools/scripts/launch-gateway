@@ -1,8 +1,12 @@
 #!/bin/bash
 set -o errexit
 
+GATEWAY_BASE_DIR=/opt/aap_gateway
+GATEWAY_APP_DIR="${GATEWAY_BASE_DIR}/aap_gateway"
+GATEWAY_PYTHON="${GATEWAY_BASE_DIR}/venv/bin/python"
+
 database_ready() {
-/opt/venv/bin/python <<EOF
+${GATEWAY_PYTHON} <<EOF
 import sys
 from django.db import connection
 
@@ -19,8 +23,8 @@ do
     sleep 5
 done
 
-# /opt/venv/bin/python aap-gateway/manage.py migrate --noinput
-# /opt/venv/bin/python aap-gateway/manage.py collectstatic --noinput
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py migrate --noinput
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py collectstatic --noinput
 
-cd aap-gateway/
+cd ${GATEWAY_APP_DIR}
 /usr/local/bin/supervisord -n

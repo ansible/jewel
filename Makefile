@@ -1,6 +1,9 @@
 # Prefer python 3.11 but take python3 if 3.11 is not installed
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
+RM ?= /bin/rm
+SERVICE_LIB_DIR ?= service_lib
+SERVICE_LIB_DIST ?= $(SERVICE_LIB_DIR)/dist
 
 .PHONY: PYTHON_VERSION clean \
 	check_black check_flake8 check_isort \
@@ -19,10 +22,10 @@ PYTHON_VERSION:
 
 # Zero out all of the temp and build files
 clean:
-	find . -type f -regex ".*\.py[co]$$" -delete
-	find . -type d -name "__pycache__" -delete
-	find . -type d -name ".pytest_cache" -delete
-	rm -Rf service_lib/dist/*
+	@-find . -type f -regex ".*\.py[co]$$" -print0 | xargs -0 $(RM) -f
+	@-find . -type d -name "__pycache__" -print0 \
+			 -o -type d -name ".pytest_cache" -print0 | xargs -0 $(RM) -rf
+	@-$(RM) --preserve-root=all -rf $(SERVICE_LIB_DIST)/* || $(RM) -rf $(SERVICE_LIB_DIST)/*
 
 # Test targets
 # -------------------------------------
@@ -42,6 +45,8 @@ check_isort:
 # Run service_lib tests
 test_service_lib:
 	cd service_lib; tox run
+
+check: check_black check_flake8 check_isort
 
 # Build targets
 # --------------------------------------
@@ -89,5 +94,20 @@ help/generate:
 # Container related targets
 # --------------------------------------
 
-docker-compose:
+docker-compose: docker-compose-build
 	docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans
+
+docker-compose-build: .has_built
+
+.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/nginx.crt
+	docker-compose -f $< build #--no-cache
+	touch $@
+
+tools/configs/nginx.crt:
+	openssl req -nodes -newkey rsa:2048 -keyout tools/configs/nginx.key -out tools/configs/nginx.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=AWX Development/CN=awx.localhost"
+	openssl x509 -req -days 365 -in tools/configs/nginx.csr -signkey tools/configs/nginx.key -out tools/configs/nginx.crt
+
+requirements/requirements.txt: requirements/requirements.in
+	cd requirements && \
+	    ./updater.sh run
+	@-cd .. || true
