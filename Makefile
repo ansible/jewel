@@ -2,7 +2,10 @@
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
 
-.PHONY: check_black check_flake8 check_isort PYTHON_VERSION .git/hooks/pre-commit clean docker-compose
+.PHONY: PYTHON_VERSION clean \
+	check_black check_flake8 check_isort \
+	build_service_lib test_service_lib \
+	docker-compose
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
@@ -35,6 +38,17 @@ check_flake8:
 # Run isort syntax check
 check_isort:
 	isort --check $(CHECK_SYNTAX_FILES)
+
+# Run service_lib tests
+test_service_lib:
+	cd service_lib; tox run
+
+# Build targets
+# --------------------------------------
+
+# Build the service_lib library into service_lib/dist
+build_service_lib:
+	python -m build service_lib
 
 # HELP related targets
 # --------------------------------------
