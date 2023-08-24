@@ -12,15 +12,24 @@ class Service(NamedCommonModel):
         ordering = ('environment', 'name', 'service_type')
         models.UniqueConstraint("name", "environment", name="unique_name_environment")
 
-    url_to_proxy_to = models.URLField()
+    url_to_proxy_to = models.URLField(
+        help_text="The URL that the API for this service resides at",
+    )
     service_type = models.CharField(
         max_length=1,
         choices=[('g', 'gateway'), ('c', 'controller'), ('h', 'hub'), ('e', 'eda')],
+        help_text="The type of service residing at the url_to_proxy_to",
     )
     ignore_ssl = models.BooleanField(
         default=False,
+        help_text="If the url_to_proxy_to is https enable this to ignore the certificate. Only do this if you are familiar with and accept the consequences,",
     )
-    environment = models.ForeignKey(Environment, on_delete=models.SET_NULL, null=True)
+    environment = models.ForeignKey(
+        Environment,
+        on_delete=models.SET_NULL,
+        null=True,
+        help_text="The environment this service is tied to",
+    )
 
     def get_jwt_login_url(self):
         return urljoin(self.url_to_proxy_to, 'api/gateway/login')
