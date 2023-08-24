@@ -11,5 +11,14 @@ class Team(NamedCommonModel):
         ordering = ('organization', 'name')
         models.UniqueConstraint("name", "organization", name="unique_name_organization")
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
-    users = models.ManyToManyField(User, related_name='users', blank=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization the team belongs to",
+    )
+    users = models.ManyToManyField(
+        User,
+        related_name='users',
+        blank=True,
+        help_text="The list of users on this team",
+    )

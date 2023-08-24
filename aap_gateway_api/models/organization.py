@@ -13,6 +13,11 @@ class Organization(NamedCommonModel):
         )
         models.UniqueConstraint("name", "environment", name="unique_name_environment")
 
-    environment = models.ForeignKey(Environment, on_delete=models.SET_NULL, null=True)
+    environment = models.ForeignKey(
+        Environment,
+        on_delete=models.SET_NULL,
+        null=True,
+        help_text="The environment this organization belongs to",
+    )
 
     reverse_foreign_key_fields = ['teams']
