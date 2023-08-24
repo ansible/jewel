@@ -27,4 +27,4 @@ ${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py migrate --noinput
 ${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py collectstatic --noinput
 
 cd ${GATEWAY_APP_DIR}
-/usr/local/bin/supervisord -n
+exec supervisord -n
