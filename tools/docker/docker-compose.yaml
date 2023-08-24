@@ -25,7 +25,7 @@ services:
       - dbnet
     ports:
       - "8000:8000"
-    user: "1000"
+    user: "${UID}"
     volumes:
       - $PWD:/opt/aap_gateway/aap_gateway
   db:
