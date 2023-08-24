@@ -22,6 +22,7 @@ class CommonModel(models.Model):
     created_on = models.DateTimeField(
         default=None,
         editable=False,
+        help_text="The date/time this resource was created",
     )
     created_by = models.ForeignKey(
         User,
@@ -30,10 +31,12 @@ class CommonModel(models.Model):
         null=True,
         editable=False,
         on_delete=models.DO_NOTHING,
+        help_text="The user who created this resource",
     )
     modified_on = models.DateTimeField(
         default=None,
         editable=False,
+        help_text="The date/time this resource was created",
     )
     modified_by = models.ForeignKey(
         User,
@@ -42,6 +45,7 @@ class CommonModel(models.Model):
         null=True,
         editable=False,
         on_delete=models.DO_NOTHING,
+        help_text="The user who last modified this resource",
     )
 
     def save(self, *args, **kwargs):
@@ -100,6 +104,7 @@ class NamedCommonModel(CommonModel):
     name = models.CharField(
         max_length=512,
         unique=True,
+        help_text="The name of this resource",
     )
 
     def summary_fields(self):
