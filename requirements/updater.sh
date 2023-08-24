@@ -1,8 +1,15 @@
 #!/bin/sh
 set -ue
 
+PYTHON=python3.11
+
+for FILE in requirements.in requirements.txt ; do
+	if [ ! -f ${FILE} ] ; then
+		touch ${FILE}
+	fi
+done
 requirements_in="$(readlink -f ./requirements.in)"
-requirements="$(readlink -f ./requirements.txt)"
+requirements_txt="$(readlink -f ./requirements.txt)"
 pip_compile="pip-compile --no-header --quiet -r --allow-unsafe"
 
 _cleanup() {
@@ -13,11 +20,11 @@ _cleanup() {
 generate_requirements() {
   venv="`pwd`/venv"
   echo $venv
-  python3 -m venv "${venv}"
+  ${PYTHON} -m venv "${venv}"
   # shellcheck disable=SC1090
   source ${venv}/bin/activate
 
-  ${venv}/bin/python3 -m pip install -U 'pip' pip-tools
+  ${venv}/bin/python -m pip install -U 'pip' pip-tools
 
   ${pip_compile} "${requirements_in}" --output-file requirements.txt
 }
@@ -25,7 +32,7 @@ generate_requirements() {
 main() {
   base_dir=$(pwd)
 
-  _tmp=$(python -c "import tempfile; print(tempfile.mkdtemp(suffix='.aap-gw-requirements', dir='/tmp'))")
+  _tmp=$(${PYTHON} -c "import tempfile; print(tempfile.mkdtemp(suffix='.aap-gw-requirements', dir='/tmp'))")
 
   trap _cleanup INT TERM EXIT
 
@@ -61,13 +68,13 @@ main() {
     exit
   fi
 
-  cp -vf requirements.txt "${_tmp}"
+  cp -vf ${requirements_txt} "${_tmp}"
   cd "${_tmp}"
 
   generate_requirements
 
   echo "Changing $base_dir to requirements"
-  cat requirements.txt | sed "s:$base_dir:requirements:" > "${requirements}"
+  cat requirements.txt | sed "s:$base_dir:requirements:" > "${requirements_txt}"
 
   _cleanup
 }
