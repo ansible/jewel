@@ -1,9 +1,12 @@
+SHELL=/bin/bash
+
 # Prefer python 3.11 but take python3 if 3.11 is not installed
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
 RM ?= /bin/rm
 SERVICE_LIB_DIR ?= service_lib
 SERVICE_LIB_DIST ?= $(SERVICE_LIB_DIR)/dist
+UID := $(shell id -u)
 
 .PHONY: PYTHON_VERSION clean \
 	check_black check_flake8 check_isort \
@@ -95,11 +98,11 @@ help/generate:
 # --------------------------------------
 
 docker-compose: docker-compose-build
-	docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans
+	env UID=${UID} docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans
 
 docker-compose-build: .has_built
 
-.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/nginx.crt
+.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/nginx.crt $(shell find tools/scripts -type f)
 	docker-compose -f $< build #--no-cache
 	touch $@
 
