@@ -11,7 +11,9 @@ authors = [
 ]
 description = "A Django Rest Framework authentication plugin for Gateway"
 readme = "README.md"
-requires-python = ">=3.9"
+
+# loosening the python requirements so that this can be installed in galaxy_ng 4.7 containers
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     #"License :: OSI Approved :: MIT License",

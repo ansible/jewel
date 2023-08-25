@@ -102,15 +102,31 @@ docker-compose: docker-compose-build
 
 docker-compose-build: .has_built
 
-.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/nginx.crt $(shell find tools/scripts -type f)
+.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/gateway.crt tools/configs/proxy.yaml $(shell find tools/scripts -type f)
 	docker-compose -f $< build #--no-cache
 	touch $@
 
-tools/configs/nginx.crt:
-	openssl req -nodes -newkey rsa:2048 -keyout tools/configs/nginx.key -out tools/configs/nginx.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=AWX Development/CN=awx.localhost"
-	openssl x509 -req -days 365 -in tools/configs/nginx.csr -signkey tools/configs/nginx.key -out tools/configs/nginx.crt
+tools/configs/gateway.crt:
+	openssl req -nodes -newkey rsa:2048 -keyout tools/configs/gateway.key -out tools/configs/gateway.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=AWX Development/CN=awx.localhost"
+	openssl x509 -req -days 365 -in tools/configs/gateway.csr -signkey tools/configs/gateway.key -out tools/configs/gateway.crt
+
+tools/configs/proxy.yaml:
+	cp tools/configs/proxy-config-sample.yaml tools/configs/proxy.yaml
 
 requirements/requirements.txt: requirements/requirements.in
 	cd requirements && \
 	    ./updater.sh run
 	@-cd .. || true
+
+# Use the following proxy.yaml settings to use this server:
+#   hub:
+#     use_tls: true
+#     proxy_root: /api/hub/
+#     service_root: /api/galaxy/
+
+#     load_balance:
+#       - address: "localhost"
+#         port: 5043
+example/hub:
+	docker build . -f tools/docker/hub.Dockerfile -t aap-gateway-hub
+	docker run --rm --add-host=localhost:host-gateway -p 5043:443 --rm aap-gateway-hub

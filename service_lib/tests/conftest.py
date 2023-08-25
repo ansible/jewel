@@ -87,13 +87,13 @@ def mocked_http(test_encryption_public_key, jwt_token):
                     self.text = text
                     self.status_code = status_code
 
-            if args[0] == 'http://someotherurl.com/200_junk/jwt_key/':
+            if args[0] == 'http://someotherurl.com/200_junk/api/gateway/v1/jwt_key/':
                 return MockResponse("Junk", 200)
-            elif args[0] == 'http://someotherurl.com/200_good/jwt_key/':
+            elif args[0] == 'http://someotherurl.com/200_good/api/gateway/v1/jwt_key/':
                 return MockResponse(test_encryption_public_key, 200)
-            elif args[0] == 'http://someotherurl.com/302/jwt_key/':
+            elif args[0] == 'http://someotherurl.com/302/api/gateway/v1/jwt_key/':
                 return MockResponse(None, 302)
-            elif args[0] == 'http://someotherurl.com/504/jwt_key/':
+            elif args[0] == 'http://someotherurl.com/504/api/gateway/v1/jwt_key/':
                 return MockResponse(None, 504)
 
             return MockResponse(None, 404)
