@@ -7,3 +7,8 @@ ipython
 psycopg[binary]
 pyjwt
 uwsgi
+xds-protos
+grpcio-tools
+grpcio
+django-grpc
+protobuf==4.24.0

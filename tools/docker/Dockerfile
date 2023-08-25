@@ -6,6 +6,10 @@ ARG PYTHON
 ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 
+ARG DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
+ENV PYTHONUNBUFFERED=1
+
 RUN dnf install -y \
     gcc \
     ${PYTHON}-devel \
@@ -47,9 +51,10 @@ COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
 COPY tools/configs/nginx.conf /etc/nginx/nginx.conf
-COPY tools/configs/nginx.crt /etc/nginx/nginx.crt
-COPY tools/configs/nginx.key /etc/nginx/nginx.key
+COPY tools/configs/gateway.crt /etc/nginx/gateway.crt
+COPY tools/configs/gateway.key /etc/nginx/gateway.key
 COPY tools/configs/nginx-gateway.conf /etc/nginx/conf.d/gateway.conf
+RUN chown 1000 /etc/nginx/gateway.crt /etc/nginx/gateway.key
 COPY tools/scripts/gateway-manage /usr/bin/gateway-manage
 COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
 COPY tools/configs/supervisord.conf /etc/supervisord.conf
@@ -67,6 +72,12 @@ RUN for dir in \
       /etc/nginx/nginx.crt \
       /etc/nginx/nginx.key ; \
     do touch $file ; chmod g+rw $file ; chgrp root $file ; done
+
+# This is required for the xds protobuf defintions in order for them
+# to be compatible with protobuf 3.21+. This should be removed
+# once a new version of xds-protos is available
+ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+
 
 USER 1000
 EXPOSE 8000

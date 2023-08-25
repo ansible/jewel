@@ -29,7 +29,7 @@ class GatewayCommonAuth:
         token = request.headers.get("X-AAP-GW-TOKEN", None)
         if not token:
             logger.info("X-AAP-GW-TOKEN header not set for JWT authentication")
-            return
+            return None, None
         logger.debug(f"Received token: {token}")
 
         jwt_key_setting = None
@@ -37,7 +37,7 @@ class GatewayCommonAuth:
             jwt_key_setting = settings.AAP_GATEWAY_KEY
         except NameError:
             logger.info("Failed to get the setting AAP_GATEWAY_KEY")
-            return
+            return None, None
 
         decryption_key = self.get_decryption_key(
             jwt_key_setting,
@@ -62,7 +62,8 @@ class GatewayCommonAuth:
         # If the URL does not end with / the urljoin will wipe out the existing path
         if not url.endswith('/'):
             url = f"{url}/"
-        jwt_key_url = urljoin(url, "jwt_key/")
+        jwt_key_url = urljoin(url, "api/gateway/v1/jwt_key/")
+
         logger.debug(f"Loading decryption key from url {jwt_key_url}")
 
         try:
@@ -180,10 +181,13 @@ class JWTAuthentication(BaseAuthentication):
         common_auth = GatewayCommonAuth(self.map_fields)
         user, token = common_auth.parse_jwt_token(request)
 
-        self.process_user_data(user, token)
-        self.process_permissions(user, token.get("claims", None))
+        if user:
+            self.process_user_data(user, token)
+            self.process_permissions(user, token.get("claims", None))
 
-        return user, None
+            return user, None
+        else:
+            return None, None
 
     def process_user_data(self, user, token):
         common_auth = GatewayCommonAuth(self.map_fields)

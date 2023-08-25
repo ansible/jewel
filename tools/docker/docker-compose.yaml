@@ -43,6 +43,23 @@ services:
     volumes:
       - "aap_gw_db:/var/lib/psql/data"
 
+  proxy:
+    build:
+      context: $PWD
+      dockerfile: tools/docker/envoy.Dockerfile
+    ports:
+      - "9080:9080"
+      - "9090:19000"
+    # command: --log-level debug
+    volumes:
+      - $PWD/tools/configs/proxy.yaml:/etc/envoy/proxy.yaml
+      - $PWD/tools/configs/gateway.crt:/etc/envoy/gateway.crt
+      - $PWD/tools/configs/gateway.key:/etc/envoy/gateway.key
+    extra_hosts:
+      localhost: "host-gateway"
+    networks:
+      - dbnet
+
 networks:
   dbnet:
 

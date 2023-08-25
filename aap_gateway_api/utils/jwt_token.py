@@ -8,16 +8,18 @@ logger = logging.getLogger('aap.gateway.utils.jwt_token')
 
 
 def create_signed_jwt(user):
-    due_date = datetime.now() + timedelta(minutes=10)
+    due_date = datetime.now() + timedelta(seconds=settings.GATEWAY_ACCESS_TOKEN_EXIPIRATION)
     payload = {
         "iss": "aap-gateway",
         "exp": int(due_date.timestamp()),
-        "aud": "aap-backends",
+        "aud": "aap-services",
         "sub": user.username,
         "first_name": user.first_name,
         "last_name": user.last_name,
         "email": user.email,
         "is_superuser": user.is_superuser,
+        # FIXME: what's the flag for system auditor?
+        "is_system_auditor": user.is_superuser,
         "claims": {"organizations": {}, "teams": {}},
     }
     if hasattr(user, 'claim'):
