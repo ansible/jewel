@@ -4,7 +4,10 @@
 {% block title %}{{ name }} &middot; {% trans 'Gateway REST API' %}{% endblock %}
 
 {% block bootstrap_theme %}
-  <link rel="stylesheet" type="text/css" href="{% static 'rest_framework/css/bootstrap.min.css' %}" />
+  <style>
+    @layer theme, bootstrap, global, layout, modules, utilities;
+    @import "{% static 'rest_framework/css/bootstrap.min.css' %}" layer(bootstrap);
+  </style>
   <link rel="stylesheet" type="text/css" href="{% static 'api/api.css' %}?v={{ gateway_version }}" />
 {% endblock %}
 
@@ -35,12 +38,12 @@
         <ul class="nav navbar-nav navbar-right">
           {% if user.is_authenticated and not inside_login_context %}
           <li><a href="{% url 'me-list'%}" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Logged in as {{ user }}{% if user.get_full_name %} ({{ user.get_full_name }}){% endif %}"><span class="glyphicon glyphicon-user"></span> <span class="visible-xs-inline">Logged in as </span>{{ user }}{% if user.get_full_name %}<span class="visible-xs-inline"> ({{ user.get_full_name }})</span>{% endif %}</a></li>
-          <li><a href="{% url 'logout' %}?next=/api/login/" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log out"><span class="glyphicon glyphicon-log-out"></span>Log out</a></li>
+          <li><a href="{% url 'logout' %}?next=/api/login/" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log out"><span class="glyphicon glyphicon-log-out"></span> Log out</a></li>
           {% else %}
-          <li><a href="{% url 'login' %}?next={{ request.get_full_path }}" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log in"><span class="glyphicon glyphicon-log-in"></span>Log in</a></li>
+          <li><a href="{% url 'login' %}?next={{ request.get_full_path }}" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log in"><span class="glyphicon glyphicon-log-in"></span> Log in</a></li>
           {% endif %}
-          <li><a href="https://forum.ansible.com/c/help/6/none" target="_blank" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="{% trans 'API Guide' %}"><span class="glyphicon glyphicon-question-sign"></span><span class="visible-xs-inline">{% trans 'API Guide' %}</span></a></li>
-          <li><a href="/" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="{% trans 'Back to application' %}"><span class="glyphicon glyphicon-circle-arrow-left"></span><span class="visible-xs-inline">{% trans 'Back to application' %}</span></a></li>
+          <li><a href="https://forum.ansible.com/c/help/6/none" target="_blank" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="{% trans 'API Guide' %}"><span class="glyphicon glyphicon-question-sign"></span><span class="visible-xs-inline"> {% trans 'API Guide' %}</span></a></li>
+          <li><a href="/" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="{% trans 'Back to application' %}"><span class="glyphicon glyphicon-circle-arrow-left"></span><span class="visible-xs-inline"> {% trans 'Back to application' %}</span></a></li>
           <li class="hidden-xs"><a href="#" class="resize" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="{% trans 'Resize' %}"><span class="glyphicon glyphicon-resize-full"></span></a></li>
         </ul>
       </div>
@@ -60,12 +63,8 @@
 {% block script %}
 <div id="footer">
   <div class="container">
-    <div class="row">
-      <div class="col-sm-6">
-      </div>
-      <div class="col-sm-6 footer-copyright">
-        Copyright &copy; 2023 <a href="http://www.redhat.com" target="_blank">Red Hat</a>, Inc. All Rights Reserved.
-      </div>
+    <div class="footer-copyright">
+      Copyright &copy; 2023 <a href="http://www.redhat.com" target="_blank">Red Hat</a>, Inc. All Rights Reserved.
     </div>
   </div>
 </div>
