@@ -40,8 +40,10 @@ router.register(r'me', MeViewSet, basename='me')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('jwt_key/', JWTKeyView.as_view()),
-    path('api/', include(router.urls)),
-    path('api/login/', LoggedLoginView.as_view(template_name='rest_framework/login.html', extra_context={'inside_login_context': True}), name='login'),
-    path('api/logout/', LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
+    path('api/gateway/v1/jwt_key/', JWTKeyView.as_view()),
+    path('api/gateway/v1/', include(router.urls)),
+    path(
+        'api/gateway/v1/login/', LoggedLoginView.as_view(template_name='rest_framework/login.html', extra_context={'inside_login_context': True}), name='login'
+    ),
+    path('api/gateway/v1/logout/', LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
 ]
