@@ -38,7 +38,8 @@ tools/configs/gateway.key
 tools/configs/gateway.csr
 
 # Mock built target
-.has_built
+.has_built_api
+.has_built_proxy
 
 # Service lib temp files
 service_lib/coverage.xml

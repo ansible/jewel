@@ -77,7 +77,7 @@ class CommonModel(models.Model):
         response = {}
         # Automatically add all of the ForeignKeys for the model as related fields
         for field in self._meta.concrete_fields:
-            if isinstance(field, models.ForeignKey):
+            if isinstance(field, models.ForeignKey) and getattr(self, field.name):
                 pk = getattr(self, field.name).pk
                 if pk:
                     reverse_view = f"{field.related_model.__name__.lower()}-detail"

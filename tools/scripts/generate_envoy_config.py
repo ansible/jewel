@@ -1,3 +1,5 @@
+from sys import exit
+
 import jinja2
 import yaml
 
@@ -12,4 +14,9 @@ environment = jinja2.Environment(autoescape=True, loader=jinja2.FileSystemLoader
 template = environment.get_template("envoy.yaml.j2")
 
 with open("/etc/envoy/envoy.yaml", "w") as f:
-    f.write(template.render(**config))
+    try:
+        f.write(template.render(**config))
+    except Exception as e:
+        print("Failed to render template")
+        print(e)
+        exit(255)
