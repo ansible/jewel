@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 # Logging
 LOGGING = {
@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'rest_framework',
     'aap_gateway_api',
+    'django_grpc',
 ]
 
 # User our own user model
@@ -192,6 +193,11 @@ SESSION_COOKIE_SECURE = True
 # Note: This setting may be overridden by database settings.
 SESSION_COOKIE_AGE = 1800
 
+SESSION_COOKIE_NAME = 'gateway_sessionid'
+
+# Time in seconds that the gateway access tokens are valid for.
+GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
+
 # Disallow sending csrf cookies over insecure connections
 CSRF_COOKIE_SECURE = True
 
@@ -267,3 +273,17 @@ IyOL/AFvLgRGxBPYt00q/Q2aurKz
 '''
 
 GATEWAY_TOKEN_NAME = "X-AAP-GW-TOKEN"
+
+GRPCSERVER = {
+    'servicers': ['aap_gateway_api.proxy.control_plane.grpc_hook'],  # see `grpc_hook()` below
+    # 'interceptors': ['dotted.path.to.interceptor_class',],  # optional, interceprots are similar to middleware in Django
+    'maximum_concurrent_rpcs': None,
+    # optional, list of key-value pairs to configure the channel. The full list of available channel
+    # arguments: https://grpc.github.io/grpc/core/group__grpc__arg__keys.html
+    # 'options': [("grpc.max_receive_message_length", 1024 * 1024 * 100)],
+    # 'credentials': [{
+    #     'private_key': 'private_key.pem',
+    #     'certificate_chain': 'certificate_chain.pem'
+    # }],    # required only if SSL/TLS support is required to be enabled
+    'async': True,  # Default: False, if True then gRPC server will start in ASYNC mode
+}

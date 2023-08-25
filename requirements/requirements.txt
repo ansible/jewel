@@ -22,10 +22,19 @@ django-crum==0.7.9
     # via -r requirements/requirements.in
 django-extensions==3.2.3
     # via -r requirements/requirements.in
+django-grpc==1.0.21
+    # via -r requirements/requirements.in
 djangorestframework==3.14.0
     # via -r requirements/requirements.in
 executing==1.2.0
     # via stack-data
+grpcio==1.57.0
+    # via
+    #   -r requirements/requirements.in
+    #   grpcio-tools
+    #   xds-protos
+grpcio-tools==1.57.0
+    # via -r requirements/requirements.in
 ipython==8.14.0
     # via -r requirements/requirements.in
 jedi==0.19.0
@@ -40,6 +49,11 @@ pickleshare==0.7.5
     # via ipython
 prompt-toolkit==3.0.39
     # via ipython
+protobuf==4.24.0
+    # via
+    #   -r requirements/requirements.in
+    #   grpcio-tools
+    #   xds-protos
 psycopg[binary]==3.1.9
     # via -r requirements/requirements.in
 psycopg-binary==3.1.9
@@ -67,8 +81,19 @@ traitlets==5.9.0
     #   ipython
     #   matplotlib-inline
 typing-extensions==4.7.1
-    # via psycopg
+    # via
+    #   asgiref
+    #   ipython
+    #   psycopg
 uwsgi==2.0.22
     # via -r requirements/requirements.in
 wcwidth==0.2.6
     # via prompt-toolkit
+xds-protos==0.0.10
+    # via -r requirements/requirements.in
+
+# The following packages are considered to be unsafe in a requirements file:
+setuptools==68.1.0
+    # via
+    #   django-grpc
+    #   grpcio-tools

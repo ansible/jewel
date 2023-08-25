@@ -1,0 +1,35 @@
+proxy:
+  enable_admin_interface: true
+  admin_address: 0.0.0.0
+  admin_port: 19000
+  use_tls: true
+  ssl_certificate: /etc/envoy/gateway.crt
+  ssl_certificate_key: /etc/envoy/gateway.key
+
+services:
+  gateway:
+    use_tls: true
+    proxy_root: /api/gateway/
+
+    load_balance:
+      - address: gateway
+        port: 8000
+        control_plane_port: 50051
+
+  hub:
+    use_tls: false
+    proxy_root: /api/hub/
+    service_root: /api/galaxy/
+
+    load_balance:
+      - address: "localhost"
+        port: 5001
+
+  controller:
+    use_tls: true
+    proxy_root: /api/controller/
+    service_root: /api/
+
+    load_balance:
+      - address: localhost
+        port: 8043
