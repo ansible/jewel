@@ -69,8 +69,8 @@ RUN for dir in \
       /var/run/django_metrics ; \
     do mkdir -m 0775 -p $dir ; chmod g+rwx $dir ; chgrp root $dir ; done && \
     for file in \
-      /etc/nginx/nginx.crt \
-      /etc/nginx/nginx.key ; \
+      /etc/nginx/gateway.crt \
+      /etc/nginx/gateway.key ; \
     do touch $file ; chmod g+rw $file ; chgrp root $file ; done
 
 # This is required for the xds protobuf defintions in order for them
