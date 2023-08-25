@@ -100,10 +100,14 @@ help/generate:
 docker-compose: docker-compose-build
 	env UID=${UID} docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans
 
-docker-compose-build: .has_built
+docker-compose-build: .has_built_api .has_built_proxy
 
-.has_built: tools/docker/docker-compose.yaml tools/docker/Dockerfile requirements/requirements.txt tools/configs/gateway.crt tools/configs/proxy.yaml $(shell find tools/scripts -type f)
-	docker-compose -f $< build #--no-cache
+.has_built_api: tools/docker/Dockerfile requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf $(shell find tools -type f -name "*gateway*")
+	docker-compose -f tools/docker/docker-compose.yaml build gateway
+	touch $@
+
+.has_built_proxy: tools/docker/envoy.Dockerfile tools/configs/gateway.crt tools/configs/proxy.yaml $(shell find tools -type f -name "*envoy*")
+	docker-compose -f tools/docker/docker-compose.yaml build proxy
 	touch $@
 
 tools/configs/gateway.crt:
