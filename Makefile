@@ -102,7 +102,7 @@ docker-compose: docker-compose-build
 
 docker-compose-build: .has_built_api .has_built_proxy
 
-.has_built_api: tools/docker/Dockerfile requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf $(shell find tools -type f -name "*gateway*")
+.has_built_api: tools/docker/Dockerfile requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/configs/gateway.crt $(shell find tools -type f -name "*gateway*")
 	docker-compose -f tools/docker/docker-compose.yaml build gateway
 	touch $@
 
