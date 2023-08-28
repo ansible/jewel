@@ -13,6 +13,21 @@ include:
 stages:
   - linting & testing
   - external-testing
+  - publish
+
+push_devel_image:
+  stage: publish
+  image:
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
+  script:
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/tools/docker/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}:devel"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "devel"
 
 flake8:
   extends: .before_script_template
