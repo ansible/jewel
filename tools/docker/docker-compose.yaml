@@ -52,9 +52,9 @@ services:
       - "9090:19000"
     # command: --log-level debug
     volumes:
-      - $PWD/tools/configs/proxy.yaml:/etc/envoy/proxy.yaml
-      - $PWD/tools/configs/gateway.crt:/etc/envoy/gateway.crt
-      - $PWD/tools/configs/gateway.key:/etc/envoy/gateway.key
+      - $PWD/tools/configs/proxy.yaml:/etc/envoy/proxy.yaml:Z
+      - $PWD/tools/configs/gateway.crt:/etc/envoy/gateway.crt:Z
+      - $PWD/tools/configs/gateway.key:/etc/envoy/gateway.key:Z
     extra_hosts:
       localhost: "host-gateway"
     networks:
