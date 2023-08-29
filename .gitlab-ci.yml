@@ -17,6 +17,8 @@ stages:
 
 push_devel_image:
   stage: publish
+  tags:
+    - shared
   image:
     name: gcr.io/kaniko-project/executor:v1.9.0-debug
     entrypoint: [""]
