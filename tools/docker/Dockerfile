@@ -50,14 +50,7 @@ RUN dnf module install -y nginx/common && \
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
-COPY tools/configs/nginx.conf /etc/nginx/nginx.conf
-COPY tools/configs/gateway.crt /etc/nginx/gateway.crt
-COPY tools/configs/gateway.key /etc/nginx/gateway.key
-COPY tools/configs/nginx-gateway.conf /etc/nginx/conf.d/gateway.conf
-RUN chown 1000 /etc/nginx/gateway.crt /etc/nginx/gateway.key
 COPY tools/scripts/gateway-manage /usr/bin/gateway-manage
-COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
-COPY tools/configs/supervisord.conf /etc/supervisord.conf
 
 RUN for dir in \
       /etc/nginx \

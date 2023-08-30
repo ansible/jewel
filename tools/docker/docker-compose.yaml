@@ -28,6 +28,12 @@ services:
     user: "${UID}"
     volumes:
       - $PWD:/opt/aap_gateway/aap_gateway
+      - $PWD/tools/configs/nginx.conf:/etc/nginx/nginx.conf
+      - $PWD/tools/configs/nginx-gateway.conf:/etc/nginx/conf.d/gateway.conf
+      - $PWD/tools/configs/gateway.crt:/etc/envoy/gateway.crt:z
+      - $PWD/tools/configs/gateway.key:/etc/envoy/gateway.key:z
+      - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini
+      - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf
   db:
     container_name: tools_aap_gw_db_pgsql_1
     command: run-postgresql -c log_destination=stderr -c log_min_messages=info
@@ -53,8 +59,8 @@ services:
     # command: --log-level debug
     volumes:
       - $PWD/tools/configs/proxy.yaml:/etc/envoy/proxy.yaml:Z
-      - $PWD/tools/configs/gateway.crt:/etc/envoy/gateway.crt:Z
-      - $PWD/tools/configs/gateway.key:/etc/envoy/gateway.key:Z
+      - $PWD/tools/configs/gateway.crt:/etc/envoy/gateway.crt:z
+      - $PWD/tools/configs/gateway.key:/etc/envoy/gateway.key:z
     extra_hosts:
       localhost: "host-gateway"
     networks:
