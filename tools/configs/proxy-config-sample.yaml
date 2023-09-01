@@ -3,8 +3,8 @@ proxy:
   admin_address: 0.0.0.0
   admin_port: 19000
   use_tls: true
-  ssl_certificate: /etc/envoy/gateway.crt
-  ssl_certificate_key: /etc/envoy/gateway.key
+  ssl_certificate: /etc/gateway/gateway.crt
+  ssl_certificate_key: /etc/gateway/gateway.key
 
 services:
   gateway:
