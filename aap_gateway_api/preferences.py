@@ -19,3 +19,13 @@ register(
     help_text="How long the access tokens are valid for",
     encrypted=False,
 )
+
+register(
+    section="proxy",
+    preference_name="gateway_basic_auth_enabled",
+    default=True,
+    required=True,
+    preference_type="bool",
+    help_text="Enable basic auth to the gateways API",
+    encrypted=False,
+)
