@@ -96,11 +96,7 @@ sonarqube:
     KUBERNETES_EPHEMERAL_STORAGE_LIMIT: "1Gi"
   script:
     - >
-      set -x; sonar-scanner
-      -Dsonar.pullrequest.key="$CI_MERGE_REQUEST_IID"
-      -Dsonar.pullrequest.branch="$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
-      -Dsonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-      -Dsonar.scm.provider="git"
+      set -x; sonar-scanner -Dsonar.qualitygate.wait=true
   timeout: 15 minutes
   # sonar-scanner image already has a basic cache of sonarqube files but
   # individual projects may have additional project-specific cache files
