@@ -3,7 +3,7 @@ from rest_framework.response import Response
 
 from aap_gateway_api.models import Team, User
 from aap_gateway_api.serializers import TeamSerializer, UserSerializer
-from aap_gateway_api.views.api.common import GatewayModelViewSet
+from aap_gateway_api.views.api.v1.common import GatewayModelViewSet
 
 
 class UserViewSet(GatewayModelViewSet):

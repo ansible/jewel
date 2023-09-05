@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'dynamic_preferences',
     'django_extensions',
     'rest_framework',
     'aap_gateway_api',
@@ -217,6 +218,12 @@ except Exception as e:
 if not read_key:
     SECRET_KEY = 'django-insecure-aa$p$j(w3+l)77o3d4hb^_qoed!#!$d0g*t1%4a$x7gtrezoio'
 
+DYNAMIC_PREFERENCES = {
+    'REGISTRY_MODULE': 'preferences',
+    'ENABLE_CACHE': False,
+    'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
+}
+
 JWT_KEY = '''
 -----BEGIN PRIVATE KEY-----
 MIIJQQIBADANBgkqhkiG9w0BAQEFAASCCSswggknAgEAAoICAQC9pygISKFezQzS
@@ -271,8 +278,6 @@ MZFkR0Zn5zhlup5vD9DgOJK5sBcGaqNDE68h2x4L20SqvZb/acw6TbGuztUfOq+Q
 IyOL/AFvLgRGxBPYt00q/Q2aurKz
 -----END PRIVATE KEY-----
 '''
-
-GATEWAY_TOKEN_NAME = "X-AAP-GW-TOKEN"
 
 GRPCSERVER = {
     'servicers': ['aap_gateway_api.proxy.control_plane.grpc_hook'],  # see `grpc_hook()` below

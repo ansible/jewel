@@ -85,7 +85,6 @@ class CommonModel(models.Model):
 
         # Add any reverse relations required
         for field in getattr(self, 'reverse_foreign_key_fields', []):
-            logger.error(self.__class__.__name__)
             reverse_view = f"{self.__class__.__name__.lower()}-{field}"
             response[field] = reverse_lazy(reverse_view, kwargs={'pk': self.pk}, request=request)
 

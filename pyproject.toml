@@ -2,11 +2,17 @@
 line-length = 160
 fast = true
 skip-string-normalization = true
+force-exclude = '''
+aap_gateway_api/migrations/
+'''
 
 [tool.isort]
 profile = "black"
 line_length = 160
+extend_skip = [ "aap_gateway_api/migrations" ]
+
 
 [tool.flake8]
 max-line-length = 160
 extend-ignore = [ "E203" ]
+exclude = [ 'aap_gateway_api/migrations/*' ]

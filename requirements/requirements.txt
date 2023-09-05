@@ -16,9 +16,12 @@ django==4.2.3
     # via
     #   -r requirements/requirements.in
     #   django-crum
+    #   django-dynamic-preferences
     #   django-extensions
     #   djangorestframework
 django-crum==0.7.9
+    # via -r requirements/requirements.in
+django-dynamic-preferences==1.15.0
     # via -r requirements/requirements.in
 django-extensions==3.2.3
     # via -r requirements/requirements.in
@@ -43,6 +46,8 @@ matplotlib-inline==0.1.6
     # via ipython
 parso==0.8.3
     # via jedi
+persisting-theory==1.0
+    # via django-dynamic-preferences
 pexpect==4.8.0
     # via ipython
 pickleshare==0.7.5
@@ -71,7 +76,9 @@ pyjwt==2.8.0
 pytz==2023.3
     # via djangorestframework
 six==1.16.0
-    # via asttokens
+    # via
+    #   asttokens
+    #   django-dynamic-preferences
 sqlparse==0.4.4
     # via django
 stack-data==0.6.2
@@ -81,10 +88,7 @@ traitlets==5.9.0
     #   ipython
     #   matplotlib-inline
 typing-extensions==4.7.1
-    # via
-    #   asgiref
-    #   ipython
-    #   psycopg
+    # via psycopg
 uwsgi==2.0.22
     # via -r requirements/requirements.in
 wcwidth==0.2.6
