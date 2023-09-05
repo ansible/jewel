@@ -36,6 +36,7 @@ sections = {}
 preference_type_mapping = {
     "string": types.StringPreference,
     "int": types.IntegerPreference,
+    "bool": types.BooleanPreference,
 }
 
 
