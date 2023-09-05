@@ -37,7 +37,7 @@ class LoggedLoginView(views.LoginView):
         else:
             if 'username' in self.request.POST:
                 username = self.request.POST.get('username')
-                # Maybe we want to scale this in the future to support unicode characters
+                # Maybe we want to scale this in the future to support additional characters
                 if not re.match('^[A-Za-z0-9@._-]+$', username):
                     from base64 import b64encode
 
@@ -52,7 +52,7 @@ class LoggedLogoutView(views.LogoutView):
         if session := request.session._session_key:
             JWTSessionCache.remove(session)
         original_user = getattr(request, 'user', None)
-        ret = super(LoggedLogoutView, self).dispatch(request, *args, **kwargs)
+        ret = super().dispatch(request, *args, **kwargs)
         current_user = getattr(request, 'user', None)
         if (not current_user or not getattr(current_user, 'pk', True)) and current_user != original_user:
             logger.info("User {} logged out.".format(original_user.username))
