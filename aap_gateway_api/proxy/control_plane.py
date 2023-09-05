@@ -7,8 +7,7 @@ from django.contrib.sessions.models import Session
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
 from envoy.service.auth.v3 import external_auth_pb2, external_auth_pb2_grpc
 
-from aap_gateway_api.utils.jwt_cache import JWTSessionCache
-from aap_gateway_api.utils.jwt_token import create_signed_jwt
+from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_preference_value
 
 logger = logging.getLogger('aap.gateway.proxy')
 
@@ -17,7 +16,9 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
     def _return_authenticated(self, jwt):
         logger.info("User successfully authenticated")
         return external_auth_pb2.CheckResponse(
-            ok_response=external_auth_pb2.OkHttpResponse(headers=[HeaderValueOption(header=HeaderValue(key="X-AAP-GW-TOKEN", value=jwt))])
+            ok_response=external_auth_pb2.OkHttpResponse(
+                headers=[HeaderValueOption(header=HeaderValue(key=get_preference_value('general', 'gateway_token_name'), value=jwt))]
+            )
         )
 
     def _return_not_authenticated(self):
