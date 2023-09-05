@@ -36,6 +36,6 @@ class Service(NamedCommonModel):
 
     # Add the service_type to the summary fields
     def summary_fields(self):
-        res = super.summary_fields()
+        res = super().summary_fields()
         res['service_type'] = self.service_type
         return res

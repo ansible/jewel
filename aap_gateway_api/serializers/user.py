@@ -1,5 +1,6 @@
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers import CommonModelSerializer
+from aap_gateway_api.utils import ENCRYPTED_STRING
 
 
 class UserSerializer(CommonModelSerializer):
@@ -24,6 +25,6 @@ class UserSerializer(CommonModelSerializer):
         #    ret.pop('password', None)
         # else:
         if True:
-            # If its an internal account lets assume there is a password and return $encrypted$ to the user
-            ret['password'] = '$encrypted$'
+            # If its an internal account lets assume there is a password and return a masked value to the user
+            ret['password'] = ENCRYPTED_STRING
         return ret

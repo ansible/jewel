@@ -8,7 +8,9 @@ logger = logging.getLogger('aap.gateway.utils.jwt_token')
 
 
 def create_signed_jwt(user):
-    due_date = datetime.now() + timedelta(seconds=settings.GATEWAY_ACCESS_TOKEN_EXIPIRATION)
+    from aap_gateway_api.utils import get_preference_value
+
+    due_date = datetime.now() + timedelta(seconds=get_preference_value("proxy", "gateway_access_token_expiration"))
     payload = {
         "iss": "aap-gateway",
         "exp": int(due_date.timestamp()),

@@ -9,15 +9,19 @@ from rest_framework.reverse import reverse
 from rest_framework.views import APIView
 
 
-class GatewayRootView(APIView):
+class V1RootView(APIView):
     permission_classes = (AllowAny,)
-    name = _('Gateway')
+    name = _('v1')
     versioning_class = None
 
     @method_decorator(ensure_csrf_cookie)
     def get(self, request, format=None):
-        v1 = reverse('api_gateway_v1_root_view')
         data = OrderedDict()
-        data['current_version'] = v1
-        data['available_versions'] = dict(v1=v1)
+        data['environment'] = reverse('environment-list', request=request)
+        data['me'] = reverse('me-list', request=request)
+        data['organization'] = reverse('organization-list', request=request)
+        data['service'] = reverse('service-list', request=request)
+        data['settings'] = reverse('settings-list', request=request)
+        data['team'] = reverse('team-list', request=request)
+        data['user'] = reverse('user-list', request=request)
         return Response(data)
