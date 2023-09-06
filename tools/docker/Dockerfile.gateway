@@ -17,6 +17,7 @@ RUN dnf install -y \
     ${PYTHON}-pip \
     libpq \
     libpq-devel \
+    openldap-devel \
     postgresql \
     less
 
