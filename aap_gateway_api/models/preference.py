@@ -29,10 +29,12 @@ class Preference(models.BasePreferenceModel):
 
     @classmethod
     def from_db(cls, db, field_names, values):
-        from aap_gateway_api.utils import gateway_encryption
+        from aap_gateway_api.utils import ENCRYPTED_STRING, gateway_encryption
 
         instance = super().from_db(db, field_names, values)
-        if instance.preference.encrypted:
+        # We don't want to check the instance.preference.encrypted here because we could have a Fallback
+        # A fall back happens when there is a value in DB but not a corresponding register
+        if type(instance.value) is str and instance.value.startswith(ENCRYPTED_STRING):
             instance.value = gateway_encryption.decrypt_string(instance.value)
         return instance
 
