@@ -3,6 +3,7 @@ from rest_framework import serializers
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 from aap_gateway_api.models.service import API_PREFIX
 from aap_gateway_api.serializers import CommonModelSerializer, NamedCommonModelSerializer
+from aap_gateway_api.serializers.common import NamedCommonModelSerializer
 
 
 class HTTPPortSerializer(CommonModelSerializer):
