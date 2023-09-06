@@ -146,6 +146,10 @@ static_resources:
               domains: ["*"]
               routes:
               - match:
+                  prefix: "/up"
+                direct_response:
+                  status: 200
+              - match:
                   prefix: "{{ services.hub.proxy_root }}"
                 route:
                   prefix_rewrite: "{{ services.hub.service_root }}"

@@ -20,6 +20,7 @@ class V1RootView(APIView):
         data['environment'] = reverse('environment-list', request=request)
         data['me'] = reverse('me-list', request=request)
         data['organization'] = reverse('organization-list', request=request)
+        data['ping'] = reverse('ping-view', request=request)
         data['service'] = reverse('service-list', request=request)
         data['settings'] = reverse('settings-list', request=request)
         data['team'] = reverse('team-list', request=request)
