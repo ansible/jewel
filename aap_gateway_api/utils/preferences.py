@@ -3,6 +3,7 @@ from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
 from aap_gateway_api.models import gateway_preference_registry
+from aap_gateway_api.preference_types import URLPreference
 from aap_gateway_api.utils import ENCRYPTED_STRING
 
 gateway_preference_manager = gateway_preference_registry.manager()
@@ -37,6 +38,7 @@ preference_type_mapping = {
     "string": types.StringPreference,
     "int": types.IntegerPreference,
     "bool": types.BooleanPreference,
+    "url": URLPreference,
 }
 
 

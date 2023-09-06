@@ -29,3 +29,23 @@ register(
     help_text="Enable basic auth to the gateways API",
     encrypted=False,
 )
+
+register(
+    section="proxy",
+    preference_name="gateway_proxy_url",
+    default='https://localhost:8090',
+    required=True,
+    preference_type="url",
+    help_text="URL to the gateway proxy layer",
+    encrypted=False,
+)
+
+register(
+    section="proxy",
+    preference_name="gateway_proxy_url_ignore_cert",
+    default=True,
+    required=True,
+    preference_type="bool",
+    help_text="Ignore certificate to the gateway proxy layer",
+    encrypted=False,
+)
