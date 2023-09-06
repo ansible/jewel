@@ -1,5 +1,5 @@
 from aap_gateway_api.models import Team
-from aap_gateway_api.serializers import NamedCommonModelSerializer
+from aap_gateway_api.serializers.common import NamedCommonModelSerializer
 
 
 class TeamSerializer(NamedCommonModelSerializer):
@@ -8,8 +8,8 @@ class TeamSerializer(NamedCommonModelSerializer):
 
     class Meta:
         model = Team
-        fields = NamedCommonModelSerializer.Meta.fields + (
+        fields = NamedCommonModelSerializer.Meta.fields + [
             'organization',
             'users',
-        )
+        ]
         lookup_field = 'users'

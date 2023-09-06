@@ -1,5 +1,5 @@
 from aap_gateway_api.models import Organization
-from aap_gateway_api.serializers import NamedCommonModelSerializer
+from aap_gateway_api.serializers.common import NamedCommonModelSerializer
 
 
 class OrganizationSerializer(NamedCommonModelSerializer):
@@ -7,4 +7,6 @@ class OrganizationSerializer(NamedCommonModelSerializer):
 
     class Meta:
         model = Organization
-        fields = NamedCommonModelSerializer.Meta.fields + ('environment',)
+        fields = NamedCommonModelSerializer.Meta.fields + [
+            'environment',
+        ]

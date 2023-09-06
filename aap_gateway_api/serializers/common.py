@@ -13,7 +13,7 @@ class CommonModelSerializer(serializers.ModelSerializer):
     summary_fields = serializers.SerializerMethodField('_get_summary_fields')
 
     class Meta:
-        fields = ('id', 'url', 'created_on', 'created_by', 'modified_on', 'modified_by', 'related', 'summary_fields')
+        fields = ['id', 'url', 'created_on', 'created_by', 'modified_on', 'modified_by', 'related', 'summary_fields']
 
     def get_url(self, obj):
         if self.reverse_url_name:
@@ -39,4 +39,6 @@ class CommonModelSerializer(serializers.ModelSerializer):
 
 class NamedCommonModelSerializer(CommonModelSerializer):
     class Meta(CommonModelSerializer.Meta):
-        fields = ('name',) + CommonModelSerializer.Meta.fields
+        fields = [
+            'name',
+        ] + CommonModelSerializer.Meta.fields

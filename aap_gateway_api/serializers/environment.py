@@ -1,5 +1,5 @@
 from aap_gateway_api.models import Environment
-from aap_gateway_api.serializers import NamedCommonModelSerializer
+from aap_gateway_api.serializers.common import NamedCommonModelSerializer
 
 
 class EnvironmentSerializer(NamedCommonModelSerializer):

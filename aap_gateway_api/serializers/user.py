@@ -1,5 +1,5 @@
 from aap_gateway_api.models import User
-from aap_gateway_api.serializers import CommonModelSerializer
+from aap_gateway_api.serializers.common import CommonModelSerializer
 from aap_gateway_api.utils import ENCRYPTED_STRING
 
 
@@ -8,14 +8,14 @@ class UserSerializer(CommonModelSerializer):
 
     class Meta(CommonModelSerializer.Meta):
         model = User
-        fields = CommonModelSerializer.Meta.fields + (
+        fields = CommonModelSerializer.Meta.fields + [
             'username',
             'email',
             'first_name',
             'last_name',
             'password',
             'is_superuser',
-        )
+        ]
 
     def to_representation(self, obj):
         ret = super(UserSerializer, self).to_representation(obj)
