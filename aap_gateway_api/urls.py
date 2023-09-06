@@ -25,6 +25,8 @@ urlpatterns = [
         name='login',
     ),
     path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
+    path('api/gateway/v1/authenticators/', views.AuthenticatorViewSet.as_view(list_actions), name='authenticator-list'),
+    re_path(r'api/gateway/v1/authenticators/(?P<pk>[0-9]+)/$', views.AuthenticatorViewSet.as_view(detail_actions), name='authenticator-detail'),
     path('api/gateway/v1/environments/', views.EnvironmentViewSet.as_view(list_actions), name='environment-list'),
     re_path(r'api/gateway/v1/environments/(?P<pk>[0-9]+)/$', views.EnvironmentViewSet.as_view(detail_actions), name='environment-detail'),
     re_path(

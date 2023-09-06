@@ -83,6 +83,11 @@ INSTALLED_APPS = [
 # User our own user model
 AUTH_USER_MODEL = 'aap_gateway_api.User'
 
+AUTHENTICATION_BACKENDS = [
+    "aap_gateway_api.authentication.backends.GatewayAuth",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
