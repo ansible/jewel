@@ -1,6 +1,7 @@
 cryptography
 Django>=4.2.5,<4.3.0
 djangorestframework
+django-auth-ldap
 django-crum
 django-dynamic-preferences
 django-extensions
@@ -12,6 +13,7 @@ protobuf==4.24.0
 psycopg[binary]
 pyjwt
 requests
+social-auth-app-django
 uwsgi
 xds-protos>=1.58
 PyYAML
