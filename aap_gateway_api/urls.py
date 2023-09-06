@@ -16,7 +16,8 @@ urlpatterns = [
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
     path('api/gateway/v1/', views.V1RootView.as_view(), name='api_gateway_v1_root_view'),
-    path('api/gateway/v1/jwt_key/', views.JWTKeyView.as_view()),
+    path('api/gateway/v1/jwt_key/', views.JWTKeyView.as_view(), name='jwt-key-view'),
+    path('api/gateway/v1/ping/', views.PingView.as_view(), name='ping-view'),
     path(
         'api/gateway/v1/login/',
         views.LoggedLoginView.as_view(template_name='rest_framework/login.html', extra_context={'inside_login_context': True}),
