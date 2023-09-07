@@ -62,14 +62,20 @@ isort:
     - merge_request
 
 service_lib_tests:
+  parallel:
+    matrix:
+      - TOX_PYTHON: "py311"
+        TOX_DJANGO: ["django41", "django42"]
   extends: .before_script_template
   stage: linting & testing
   tags:
     - shared
   script:
-    - make test_service_lib
+    - TOX_ARGS="-e ${TOX_PYTHON}-${TOX_DJANGO} -- --junitxml=results-${TOX_PYTHON}-${TOX_DJANGO}.xml" make test_service_lib
   artifacts:
     untracked: true
+    reports:
+      junit: service_lib/results*.xml
   interruptible: true
   only:
     - merge_request

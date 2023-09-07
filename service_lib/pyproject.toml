@@ -47,7 +47,7 @@ deps =
     pyjwt
     requests
     djangorestframework
-commands = py.test --cov=src --cov-report=xml:coverage.xml
+commands = py.test --cov=src --cov-report=xml:coverage.xml {posargs}
 """
 
 [tool.pytest.ini_options]
