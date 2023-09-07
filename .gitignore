@@ -42,7 +42,7 @@ tools/configs/gateway.csr
 .has_built_proxy
 
 # Service lib temp files
-service_lib/coverage.xml
+service_lib/*.xml
 service_lib/dist
 # Dev env configs
 tools/configs/proxy.yaml
