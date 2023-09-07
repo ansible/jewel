@@ -7,6 +7,7 @@ RM ?= /bin/rm
 SERVICE_LIB_DIR ?= service_lib
 SERVICE_LIB_DIST ?= $(SERVICE_LIB_DIR)/dist
 UID := $(shell id -u)
+TOX_ARGS ?= ""
 
 .PHONY: PYTHON_VERSION clean \
 	check_black check_flake8 check_isort \
@@ -47,7 +48,7 @@ check_isort:
 
 # Run service_lib tests
 test_service_lib:
-	cd service_lib; tox run
+	cd service_lib; tox run ${TOX_ARGS}
 
 check: check_black check_flake8 check_isort
 
