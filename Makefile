@@ -132,7 +132,7 @@ requirements/requirements.txt: requirements/requirements.in
 
 ## Plumb the sidecar containers
 plumb:
-	ansible-playbook tools/ansible/plumb.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml
+	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 docker-reset:
 	docker-compose -f tools/generated/docker-compose.yaml down -v

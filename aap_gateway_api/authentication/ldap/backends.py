@@ -1,10 +1,11 @@
+import inspect
 import logging
 from collections import OrderedDict
 
 import ldap
+from django_auth_ldap import config
 from django_auth_ldap.backend import LDAPBackend
 from django_auth_ldap.backend import LDAPSettings as BaseLDAPSettings
-from django_auth_ldap.config import LDAPSearch
 
 logger = logging.getLogger('aap.gateway.authentication.ldap')
 
@@ -53,7 +54,27 @@ class LDAPSettings(BaseLDAPSettings):
                 if len(data) == 0:
                     setattr(self, field, None)
                 else:
-                    setattr(self, field, LDAPSearch(data[0], data[1], data[2]))
+                    setattr(self, field, config.LDAPSearch(data[0], data[1], data[2]))
+
+        # TODO: Move this into somewhere useful like the others
+        group_type_class_name = getattr(self, 'GROUP_TYPE')
+        if group_type_class_name:
+            group_type_class = getattr(config, group_type_class_name, None)
+            group_type_params = defaults.get('GROUP_TYPE_PARAMS', {})
+            params_sanitized = dict()
+
+            class_args = inspect.getfullargspec(group_type_class.__init__).args[1:]
+
+            if class_args:
+                if not isinstance(group_type_params, dict):
+                    self.fail('invalid_parameters', parameters_type=type(group_type_params))
+
+            for attr in class_args:
+                if attr in group_type_params:
+                    params_sanitized[attr] = group_type_params[attr]
+
+            setattr(self, 'GROUP_TYPE', group_type_class(**params_sanitized))
+            logger.debug(getattr(self, 'GROUP_TYPE'))
 
 
 class BaseLDAPBackend(LDAPBackend):

@@ -9,6 +9,7 @@ django-grpc
 grpcio
 grpcio-tools
 ipython
+python-ldap
 protobuf==4.24.0
 psycopg[binary]
 pyjwt

@@ -29,3 +29,6 @@ class MyAppConfig(AppConfig):
     def ready(self):
         signals.post_migrate.connect(_initialize_preferences, sender=self, weak=False)
         preference_updated.connect(_notify_on_preference_update)
+
+        # Load the signals
+        import aap_gateway_api.signals  # noqa 401
