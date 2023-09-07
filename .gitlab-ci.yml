@@ -76,6 +76,9 @@ service_lib_tests:
     untracked: true
     reports:
       junit: service_lib/results*.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: service_lib/coverage.xml
   interruptible: true
   only:
     - merge_request
