@@ -6,35 +6,7 @@ from django_auth_ldap.backend import LDAPBackend
 from django_auth_ldap.backend import LDAPSettings as BaseLDAPSettings
 from django_auth_ldap.config import LDAPSearch
 
-from aap_gateway_api.authentication.backends import authentication_backends
-from aap_gateway_api.models import Authenticator
-
 logger = logging.getLogger('aap.gateway.authentication.ldap')
-
-
-def build_ldap_authenticators():
-    ldap_authenticators = Authenticator.objects.filter(type='l')
-    for authenticator in ldap_authenticators:
-        create_or_update_adapter(authenticator)
-
-
-def create_or_update_adapter(authenticator):
-    new_settings = LDAPSettings(defaults=authenticator.configuration)
-    authenticator_id = f"{authenticator.id}"
-    if authenticator_id not in authentication_backends:
-        logger.debug(f"Creating LDAP adapter for {authenticator.name}")
-        # Build the new adapter
-        ldap_class = BaseLDAPBackend(authenticator=authenticator, settings=new_settings)
-
-        # Register the new class with our auth class
-        authentication_backends[authenticator_id] = ldap_class
-
-    elif new_settings != authentication_backends[authenticator_id].settings:
-        logger.debug(f"Updating LDAP adapter {authenticator.name}")
-        authentication_backends[authenticator_id].settings = new_settings
-        authentication_backends[authenticator_id].authenticator = authenticator
-    else:
-        logger.debug(f"No updated needed for LDAP adapter {authenticator.name}")
 
 
 class LDAPSettings(BaseLDAPSettings):
