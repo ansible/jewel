@@ -36,7 +36,7 @@ class PingView(ViewWithHeaders):
         ping_url = urljoin(get_preference_value('proxy', 'gateway_proxy_url'), '/up')
         ignore_cert = get_preference_value('proxy', 'gateway_proxy_url_ignore_cert')
         try:
-            proxy_response = requests.request("GET", ping_url, verify=ignore_cert)
+            proxy_response = requests.request("GET", ping_url, verify=(not ignore_cert))
             if proxy_response.status_code == 200:
                 connected = True
             else:
