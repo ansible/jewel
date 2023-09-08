@@ -19,8 +19,8 @@ def get_preference_value_by_preference(preference: object, encrypted: bool = Tru
 
 
 def get_preference_value(section: str, name: str, encrypted: bool = True) -> str:
-    if not section:
-        raise ValueError("You must pass get_preference_value a section")
+    if not section or not name:
+        raise ValueError("You must pass get_preference_value a section and a name")
 
     preference_name = f"{section}{separator}{name}"
     if encrypted and gateway_preference_registry.get(name, section).encrypted:
