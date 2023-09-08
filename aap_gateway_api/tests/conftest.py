@@ -33,3 +33,15 @@ def environment(randname):
     environment = Environment.objects.create(name=random_name)
     yield environment
     environment.delete()
+
+
+@pytest.fixture
+def organization(environment, randname):
+    from aap_gateway_api.models import Organization
+
+    random_name = randname("Test Organization")
+    organization = Organization.objects.create(
+        name=random_name, environment=environment
+    )
+    yield organization
+    organization.delete()
