@@ -47,9 +47,14 @@ def test_set_setting(admin_api_client):
 
 def test_set_setting_unauthenticated(unauthenticated_api_client):
     url = reverse("setting-section-list", kwargs={"category_slug": "all"})
-    response = unauthenticated_api_client.put(url, data={"gateway_token_name": "X-FOO-BAR-UNAUTH"})
+    response = unauthenticated_api_client.put(
+        url, data={"gateway_token_name": "X-FOO-BAR-UNAUTH"}
+    )
     assert response.status_code == 403
-    assert Preference.objects.filter(name="gateway_token_name").first().value != "X-FOO-BAR-UNAUTH"
+    assert (
+        Preference.objects.filter(name="gateway_token_name").first().value
+        != "X-FOO-BAR-UNAUTH"
+    )
 
 
 def test_set_setting_invalid(admin_api_client):

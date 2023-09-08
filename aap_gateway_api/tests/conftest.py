@@ -18,10 +18,18 @@ def admin_api_client(db, admin_user, unauthenticated_api_client):
 
 
 @pytest.fixture
-def environment():
+def randname():
+    def _randname(prefix):
+        return f"{prefix} {uuid.uuid4().hex[:6]}"
+
+    return _randname
+
+
+@pytest.fixture
+def environment(randname):
     from aap_gateway_api.models import Environment
 
-    random_name = f"Test Environment {uuid.uuid4().hex[:6]}"
+    random_name = randname("Test Environment")
     environment = Environment.objects.create(name=random_name)
     yield environment
     environment.delete()
