@@ -6,9 +6,8 @@ def get_api_version():
     Return version as reported by setuptools.
     """
     try:
-        import pkg_resources
-
-        return pkg_resources.require('aap_gateway_api')[0].version
+        from importlib.metadata import version
+        return version('aap_gateway_api')
     except Exception:
         import os
 
