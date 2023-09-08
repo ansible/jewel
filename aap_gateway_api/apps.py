@@ -1,15 +1,13 @@
-import sys
-
 from django.apps import AppConfig
+from django.db.models import signals
 
+def _initialize_preferences(sender, **kwargs):
+    from aap_gateway_api.utils.preferences import initialize_preferences
+    initialize_preferences()
 
 class MyAppConfig(AppConfig):
     name = 'aap_gateway_api'
     verbose_name = "Ansible Automation Platform Gateway"
 
     def ready(self):
-        # Do not run this if we are running a manage command. Otherwise we get chicken and egg issues because the startup calls gateway-manage migrate
-        if not sys.argv[0].endswith(('manage.py', 'pytest')):
-            from aap_gateway_api.utils.preferences import initialize_preferences
-
-            initialize_preferences()
+        signals.post_migrate.connect(_initialize_preferences, sender=self, weak=False)
