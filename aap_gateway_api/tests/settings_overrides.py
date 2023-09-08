@@ -9,3 +9,6 @@ DATABASES = {
         },
     }
 }
+
+for logger in LOGGING["loggers"]:
+    LOGGING["loggers"][logger]["level"] = "ERROR"
