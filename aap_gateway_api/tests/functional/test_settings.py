@@ -2,9 +2,18 @@ import pytest
 
 from django.urls import reverse
 
+from aap_gateway_api.models import Preference
+
 
 def test_get_all_settings(admin_api_client):
     url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    assert "gateway_token_name" in response.data
+
+
+def test_get_proxy_settings(admin_api_client):
+    url = reverse("setting-section-list", kwargs={"category_slug": "proxy"})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert "gateway_token_name" in response.data
@@ -34,3 +43,17 @@ def test_set_setting(admin_api_client):
     response = admin_api_client.put(url, data={"gateway_token_name": original_value})
     assert response.status_code == 200
     assert response.data["gateway_token_name"] == original_value
+
+
+def test_set_setting_unauthenticated(unauthenticated_api_client):
+    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    response = unauthenticated_api_client.put(url, data={"gateway_token_name": "X-FOO-BAR-UNAUTH"})
+    assert response.status_code == 403
+    assert Preference.objects.filter(name="gateway_token_name").first().value != "X-FOO-BAR-UNAUTH"
+
+
+def test_set_setting_invalid(admin_api_client):
+    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    response = admin_api_client.put(url, data={"nonexistent_setting": "X-FOO-BAR"})
+    assert response.status_code == 400
+    assert Preference.objects.filter(name="nonexistent_setting").count() == 0
