@@ -30,7 +30,7 @@ def randname():
 
 
 @pytest.fixture
-def set_preference():
+def set_preference(db):
     """
     This fixture allows you to set preference values for a test and then
     revert all preferences to their original values after the test is

@@ -1,5 +1,7 @@
 import pytest
 
+from dynamic_preferences.serializers import SerializationError
+
 from aap_gateway_api.models import Preference
 from aap_gateway_api.utils import preferences
 from aap_gateway_api.utils import ENCRYPTED_STRING
@@ -26,6 +28,12 @@ def test_get_preference_value_exceptions():
     with pytest.raises(ValueError) as e:
         preferences.get_preference_value("foo", "")
     assert str(e.value) == "You must pass get_preference_value a section and a name"
+
+
+def test_preference_with_invalid_url(set_preference):
+    with pytest.raises(SerializationError) as e:
+        set_preference("proxy", "gateway_proxy_url", "monkey://banana")
+    assert str(e.value) == "monkey://banana is not a valid URL"
 
 
 def test_encrypted_preference():
