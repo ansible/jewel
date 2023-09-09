@@ -49,6 +49,18 @@ def set_preference(db):
 
 
 @pytest.fixture
+def shut_up_logging():
+    """
+    This fixture allows you to temporarily disable logging for a test.
+    """
+    import logging
+
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(logging.NOTSET)
+
+
+@pytest.fixture
 def register_preference(db):
     """
     This fixture allows you to register a preference for a test and then
