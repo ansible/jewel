@@ -12,9 +12,13 @@ def unauthenticated_api_client(db):
 @pytest.fixture
 def admin_api_client(db, admin_user, unauthenticated_api_client):
     client = unauthenticated_api_client
-    client.force_authenticate(user=admin_user)
+    client.login(username="admin", password="password")
     yield client
-    client.force_authenticate(user=None)
+    try:
+        client.logout()
+    except AttributeError:
+        # The test might have logged the user out already (e.g. to test the logout signal)
+        pass
 
 
 @pytest.fixture
