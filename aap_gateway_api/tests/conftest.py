@@ -45,6 +45,56 @@ def set_preference():
 
 
 @pytest.fixture
+def register_preference(db):
+    """
+    This fixture allows you to register a preference for a test and then
+    unregister it (and delete its value in the database) after the test is
+    complete.
+    """
+    from aap_gateway_api.models import Preference, gateway_preference_registry
+    from aap_gateway_api.utils.preferences import register, get_preference_key
+
+    kwargs = {}
+
+    def _register_preference(
+        section="general",
+        preference_name=None,
+        default=None,
+        required=False,
+        encrypted=False,
+        preference_type=None,
+        help_text=None,
+    ):
+        kwargs["section"] = section
+        kwargs["preference_name"] = preference_name
+        kwargs["default"] = default
+        kwargs["required"] = required
+        kwargs["encrypted"] = encrypted
+        kwargs["preference_type"] = preference_type
+        kwargs["help_text"] = help_text
+        ret = register(
+            section,
+            preference_name,
+            default,
+            required,
+            encrypted,
+            preference_type,
+            help_text,
+        )
+        key = get_preference_key(section, preference_name)
+        gateway_preference_registry.manager()[
+            key
+        ]  # Register the preference in the database
+        return ret
+
+    yield _register_preference
+    del gateway_preference_registry[kwargs["section"]][kwargs["preference_name"]]
+    Preference.objects.filter(
+        section=kwargs["section"], name=kwargs["preference_name"]
+    ).delete()
+
+
+@pytest.fixture
 def environment(randname):
     from aap_gateway_api.models import Environment
 

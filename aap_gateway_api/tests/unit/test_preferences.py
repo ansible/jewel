@@ -1,5 +1,6 @@
 import pytest
 
+from aap_gateway_api.models import Preference
 from aap_gateway_api.utils import preferences
 from aap_gateway_api.utils import ENCRYPTED_STRING
 
@@ -40,3 +41,39 @@ def test_encrypted_preference():
 def test_get_preference_sections():
     sections = preferences.get_preference_sections()
     assert "general" in sections
+
+
+def test_meta_register_preference_fixture(register_preference):
+    register_preference(
+        section="general",
+        preference_name="test_preference",
+        default="test",
+        required=False,
+        encrypted=False,
+        preference_type="string",
+        help_text="This is a test preference",
+    )
+    assert preferences.get_preference_value("general", "test_preference") == "test"
+
+
+def test_encrypted_preference(register_preference):
+    register_preference(
+        section="general",
+        preference_name="enc_test",
+        default="hey",
+        encrypted=True,
+        preference_type="string",
+    )
+
+    # Ensure we can encrypt and decrypt
+    assert preferences.get_preference_value("general", "enc_test") == ENCRYPTED_STRING
+    preference = Preference.objects.get(section="general", name="enc_test")
+    assert preference.value == "hey"
+
+    # Ensure we can update the value and still decrypt
+    preference.value = "hello test"
+    preference.save()
+
+    assert preferences.get_preference_value("general", "enc_test") == ENCRYPTED_STRING
+    preference = Preference.objects.get(section="general", name="enc_test")
+    assert preference.value == "hello test"
