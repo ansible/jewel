@@ -26,6 +26,25 @@ def randname():
 
 
 @pytest.fixture
+def set_preference():
+    """
+    This fixture allows you to set preference values for a test and then
+    revert all preferences to their original values after the test is
+    complete.
+    """
+    from aap_gateway_api.models import Preference
+    from aap_gateway_api.utils.preferences import update_preference_value
+
+    def _set_preference(section, name, value):
+        update_preference_value(section, name, value)
+
+    old_prefs = Preference.objects.all()
+    yield _set_preference
+    for pref in old_prefs:
+        update_preference_value(pref.section, pref.name, pref.value)
+
+
+@pytest.fixture
 def environment(randname):
     from aap_gateway_api.models import Environment
 
