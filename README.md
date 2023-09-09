@@ -62,7 +62,7 @@ tools/configs/proxy.yaml
 4. Once the stack has initialized, create a new super user:
 
 ```
-docker exec -it tools_aap_gw_1 /opt/aap_gateway/venv/bin/python /opt/aap_gateway/aap_gateway/manage.py createsuperuser
+$ docker exec -it tools_aap_gw_1 gateway-manage createsuperuser
 Failed to load file /etc/gateway/SECRET_KEY, will use default
 Username: foo
 Email address: foo@bar.com
