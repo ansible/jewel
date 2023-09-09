@@ -7,10 +7,10 @@ class URLSerializer(types.StringSerializer):
     @classmethod
     def to_db(cls, value, **kwargs):
         try:
-            validator = URLValidator(schemes=['https'])
+            validator = URLValidator(schemes=["https"])
             validator(value)
         except ValidationError:
-            raise cls.exception(f"{value} is not a valid url")
+            raise cls.exception(f"{value} is not a valid URL")
 
         value = super().to_db(value, **kwargs)
 
