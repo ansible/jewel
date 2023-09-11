@@ -32,6 +32,10 @@ def create_signed_jwt(user):
     return token
 
 
+def decode_signed_jwt(token):
+    return jwt.decode(token, get_jwt_rsa_key(public=True), algorithms=['RS256'], audience='aap-services')
+
+
 def get_jwt_rsa_key(public=False):
     jwt_key_setting_name = 'JWT_KEY'
     jwt_key = getattr(settings, jwt_key_setting_name, None).strip()
