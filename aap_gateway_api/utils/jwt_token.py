@@ -1,5 +1,6 @@
-import logging
+from cryptography.hazmat.primitives import serialization
 from datetime import datetime, timedelta
+import logging
 
 import jwt
 from django.conf import settings
@@ -31,12 +32,32 @@ def create_signed_jwt(user):
     return token
 
 
-def get_jwt_rsa_key():
+def get_jwt_rsa_key(public=False):
     jwt_key_setting_name = 'JWT_KEY'
     jwt_key = getattr(settings, jwt_key_setting_name, None).strip()
 
     if not jwt_key:
         logger.error(f'{jwt_key_setting_name} setting is not defined')
         raise RuntimeError(f'{jwt_key_setting_name} is not set')
+
+    try:
+        private_key = serialization.load_pem_private_key(bytes(jwt_key, "UTF-8"), password=None)
+    except Exception as e:
+        logger.exception("Unable to load private key from JWT key")
+        raise e
+
+    if public:
+        try:
+            return (
+                private_key.public_key()
+                .public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+                .decode()
+            )
+        except Exception as e:
+            logger.exception("Unable to export public key from JWT key")
+            raise e
 
     return jwt_key
