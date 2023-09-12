@@ -18,7 +18,7 @@ class Team(NamedCommonModel):
     )
     users = models.ManyToManyField(
         User,
-        related_name='users',
+        related_name='teams',
         blank=True,
         help_text="The list of users on this team",
     )
