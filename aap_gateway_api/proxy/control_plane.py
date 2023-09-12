@@ -17,7 +17,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         logger.info("User successfully authenticated")
         return external_auth_pb2.CheckResponse(
             ok_response=external_auth_pb2.OkHttpResponse(
-                headers=[HeaderValueOption(header=HeaderValue(key=get_preference_value('general', 'gateway_token_name'), value=jwt))]
+                headers=[HeaderValueOption(header=HeaderValue(key=get_preference_value('proxy', 'gateway_token_name'), value=jwt))]
             )
         )
 
