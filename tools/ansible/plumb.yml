@@ -1,0 +1,10 @@
+---
+- name: Plumb Gateway for enabled side containers
+  hosts: localhost
+  gather_facts: False
+  tasks:
+    - include_role:
+        name: "{{ item.key }}"
+        tasks_from: plumb
+      loop: "{{ enabled_containers | dict2items }}"
+      when: enabled_containers[item.key] | bool

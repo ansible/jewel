@@ -1,0 +1,7 @@
+---
+gateway_host: https://localhost:8000
+gateway_admin_username: admin
+gateway_admin_password: admin
+container_reference: '10.0.0.2'
+# keycloak_enabled: True
+# ldap_enabled: True
