@@ -16,3 +16,28 @@ extend_skip = [ "aap_gateway_api/migrations" ]
 max-line-length = 160
 extend-ignore = [ "E203" ]
 exclude = [ 'aap_gateway_api/migrations/*' ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
+addopts = "--strict-markers --reuse-db --migrations -s -vvv"
+
+[tool.tox]
+legacy_tox_ini = """
+    [tox]
+    min_version = 4.0
+    env_list =
+        py311
+        py310
+        py39
+
+    [testenv]
+    deps =
+        -r{toxinidir}/requirements/requirements_dev.txt
+        -r{toxinidir}/requirements/requirements.txt
+    commands = pytest --cov=. --cov-report=xml:coverage.xml --cov-report=html aap_gateway_api/tests {posargs}
+
+"""
+
+[tool.coverage.run]
+omit = ["aap_gateway_api/tests/*"]
+relative_files = true
