@@ -33,6 +33,7 @@ htmlcov
 
 # SQLite
 *.sqlite3
+*.sqlite3-journal
 
 # gateway certs
 tools/configs/gateway.crt
