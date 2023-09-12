@@ -1,4 +1,3 @@
-import pytest
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -39,7 +38,4 @@ def test_jwt_key_bad_public_key(logger, unauthenticated_api_client, shut_up_logg
         response = unauthenticated_api_client.get(url)
         assert response.status_code == 500
         assert logger.exception.call_count == 1
-        assert (
-            logger.exception.call_args[0][0]
-            == "Unable to export public key from JWT key"
-        )
+        assert logger.exception.call_args[0][0] == "Unable to export public key from JWT key"

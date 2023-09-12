@@ -1,8 +1,8 @@
-from cryptography.hazmat.primitives import serialization
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 
 import jwt
+from cryptography.hazmat.primitives import serialization
 from django.conf import settings
 
 logger = logging.getLogger('aap.gateway.utils.jwt_token')

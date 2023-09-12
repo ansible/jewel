@@ -15,7 +15,7 @@ extend_skip = [ "aap_gateway_api/migrations" ]
 [tool.flake8]
 max-line-length = 160
 extend-ignore = [ "E203" ]
-exclude = [ 'aap_gateway_api/migrations/*' ]
+exclude = [ 'aap_gateway_api/migrations/*', '.tox' ]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"

@@ -1,12 +1,6 @@
 import pytest
 
-from dynamic_preferences.serializers import SerializationError
-
-from aap_gateway_api.utils.encryption import (
-    ENCRYPTED_STRING,
-    ENCRYPTION_METHOD,
-    Fernet256,
-)
+from aap_gateway_api.utils.encryption import ENCRYPTION_METHOD, Fernet256
 
 
 def test_fernet256_encrypt_is_idempotent():

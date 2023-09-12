@@ -7,6 +7,7 @@ def get_api_version():
     """
     try:
         from importlib.metadata import version
+
         return version('aap_gateway_api')
     except Exception:
         import os
