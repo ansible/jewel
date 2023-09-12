@@ -13,7 +13,7 @@ register(
 register(
     section="proxy",
     preference_name="gateway_access_token_expiration",
-    default=30,
+    default=600,
     required=True,
     preference_type="int",
     help_text="How long the access tokens are valid for",
