@@ -11,6 +11,7 @@ def create_signed_jwt(user):
     from aap_gateway_api.utils import get_preference_value
 
     due_date = datetime.now() + timedelta(seconds=get_preference_value("proxy", "gateway_access_token_expiration"))
+    teams = [{"name": team.name, "organization": team.organization.name} for team in user.teams.select_related("organization").all()]
     payload = {
         "iss": "aap-gateway",
         "exp": int(due_date.timestamp()),
@@ -22,7 +23,7 @@ def create_signed_jwt(user):
         "is_superuser": user.is_superuser,
         # FIXME: what's the flag for system auditor?
         "is_system_auditor": user.is_superuser,
-        "claims": {"organizations": {}, "teams": {}},
+        "claims": {"organizations": {}, "teams": teams},
     }
     if hasattr(user, 'claim'):
         payload["claims"] = user.claim.data
