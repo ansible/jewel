@@ -12,19 +12,19 @@ TOX_ARGS ?= ""
 .PHONY: PYTHON_VERSION clean \
 	check_black check_flake8 check_isort \
 	build_service_lib test_service_lib \
-	docker-compose
+	docker-compose plumb
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
 
-# Install the pre-commit hook in the approprate .git directory structure
+## Install the pre-commit hook in the approprate .git directory structure
 .git/hooks/pre-commit:
 	@echo "if [ -x pre-commit.sh ]; then" > .git/hooks/pre-commit
 	@echo "    ./pre-commit.sh;" >> .git/hooks/pre-commit
 	@echo "fi" >> .git/hooks/pre-commit
 	@chmod +x .git/hooks/pre-commit
 
-# Zero out all of the temp and build files
+## Zero out all of the temp and build files
 clean:
 	@-find . -type f -regex ".*\.py[co]$$" -print0 | xargs -0 $(RM) -f
 	@-find . -type d -name "__pycache__" -print0 \
@@ -34,15 +34,15 @@ clean:
 # Test targets
 # -------------------------------------
 
-# Run black syntax check
+## Run black syntax check
 check_black:
 	black --check $(CHECK_SYNTAX_FILES)
 
-# Run flake8 syntax check
+## Run flake8 syntax check
 check_flake8:
 	flake8 $(CHECK_SYNTAX_FILES)
 
-# Run isort syntax check
+## Run isort syntax check
 check_isort:
 	isort --check $(CHECK_SYNTAX_FILES)
 
@@ -86,27 +86,47 @@ help/generate:
 # Container related targets
 # --------------------------------------
 
-docker-compose: docker-compose-build
-	env UID=${UID} docker-compose -f tools/docker/docker-compose.yaml up --remove-orphans
+## Start the docker container
+docker-compose: tools/generated/docker-compose.yaml docker-compose-build
+	ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
+	env UID=${UID} docker-compose -f tools/generated/docker-compose.yaml up --remove-orphans
 
-docker-compose-build: .has_built_api .has_built_proxy
+## Generate the default container-startup.yml file
+container-startup.yml: tools/configs/container-startup.yml
+	cp tools/configs/container-startup.yml ./container-startup.yml
 
-.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/configs/gateway.crt $(shell find tools -type f -name "*gateway*")
+## Generate the docker-compoe.yaml file
+tools/generated/docker-compose.yaml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
+	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
+
+## Build the docker containers
+docker-compose-build: tools/generated/.has_built_api tools/generated/.has_built_proxy
+
+## Build the API container
+.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/configs/gateway.crt $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 	docker-compose -f tools/docker/docker-compose.yaml build gateway
 	touch $@
 
-.has_built_proxy: tools/docker/envoy.Dockerfile tools/configs/gateway.crt tools/configs/proxy.yaml $(shell find tools -type f -name "*envoy*")
+## Build the proxy container
+.has_built_proxy: tools/docker/envoy.Dockerfile tools/configs/gateway.crt tools/configs/proxy.yaml $(shell find tools -type f -name "*envoy*") $(shell find tools/ansible -type f)
 	docker-compose -f tools/docker/docker-compose.yaml build proxy
 	touch $@
 
-tools/configs/gateway.crt:
-	openssl req -nodes -newkey rsa:2048 -keyout tools/configs/gateway.key -out tools/configs/gateway.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=AWX Development/CN=awx.localhost"
-	openssl x509 -req -days 365 -in tools/configs/gateway.csr -signkey tools/configs/gateway.key -out tools/configs/gateway.crt
+## Build the cert file
+tools/generated/gateway.crt:
+	openssl req -nodes -newkey rsa:2048 -keyout tools/generated/gateway.key -out tools/generated/gateway.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=Gateway Development/CN=localhost"
+	openssl x509 -req -days 365 -in tools/generated/gateway.csr -signkey tools/generated/gateway.key -out tools/generated/gateway.crt
 
-tools/configs/proxy.yaml:
-	cp tools/configs/proxy-config-sample.yaml tools/configs/proxy.yaml
+## Build the proxy config file
+tools/generated/proxy.yaml:
+	cp tools/configs/proxy-config-sample.yaml tools/generated/proxy.yaml
 
+## Build the requirements.txt file
 requirements/requirements.txt: requirements/requirements.in
 	cd requirements && \
 	    ./updater.sh run
 	@-cd .. || true
+
+## Plumb the sidecar containers
+plumb:
+	ansible-playbook tools/ansible/plumb.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml

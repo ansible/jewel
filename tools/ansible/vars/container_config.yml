@@ -1,0 +1,32 @@
+---
+gateway_host: https://localhost:8000
+db_username: gateway
+db_password: gateway
+container_reference: localhost
+# This is where to put all the docker source files relative to the tools/docker-compose/ansible directory
+sources_dest: '../generated'
+
+enabled_containers:
+  keycloak: "{{ keycloak_enabled | default(False) }}"
+  ldap: "{{ ldap_enabled | default(False) }}"
+  tacacs: "{{ tacacs_enabled | default(False) }}"
+
+# Keycloak settings
+keycloak_exposed_port: 8443
+keycloak_container_version: 15.0.2
+keycloak_username: admin
+keycloak_password: admin
+cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN="
+oidc_reference:
+
+# LDAP docker compose settings
+ldap_exposed_ldap_port: 389
+ldap_exposed_ldaps_port: 636
+ldap_image_version: 2
+ldap_admin_username: admin
+ldap_admin_password: admin
+ldap_public_key_file_name: 'ldap.cert'
+ldap_private_key_file_name: 'ldap.key'
+
+# Tacacs plus
+tacacs_container_version: latest

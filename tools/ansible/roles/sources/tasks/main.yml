@@ -1,0 +1,5 @@
+- name: Render Docker-Compose
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ sources_dest }}/docker-compose.yaml"
+    mode: '0600'

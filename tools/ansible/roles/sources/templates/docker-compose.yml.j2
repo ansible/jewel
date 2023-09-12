@@ -1,0 +1,139 @@
+#jinja2: lstrip_blocks: True
+---
+version: '2.1'
+services:
+  gateway:
+    build:
+      context: $PWD
+      dockerfile: tools/docker/Dockerfile.gateway
+    command:
+      - /usr/bin/launch-gateway
+    container_name: aap_gw_1
+    depends_on:
+      - db
+    expose:
+      - "8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+      - SECRET_KEY=${SECRET_KEY:-somesecret}
+      - DATABASE_NAME=gateway
+      - DATABASE_USER={{ db_username }}
+      - DATABASE_PASSWORD={{ db_password }}
+      - DATABASE_HOST=db
+      - SDB_HOST=0.0.0.0
+      - SDB_PORT=7899
+    links:
+      - db
+    networks:
+      - dbnet
+    ports:
+      - "7899-7999:7899-7999"  # sdb-listen
+      - "8000:8000"
+    user: "${UID}"
+    volumes:
+      - $PWD:/opt/aap_gateway/aap_gateway
+      - $PWD/tools/configs/nginx.conf:/etc/gateway/nginx.conf
+      - $PWD/tools/configs/nginx-gateway.conf:/etc/gateway/nginx-gateway.conf
+      - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
+      - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini
+      - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf
+
+  db:
+    container_name: aap_gw_db_pgsql_1
+    command: run-postgresql -c log_destination=stderr -c log_min_messages=info
+    environment:
+      - POSTGRESQL_DATABASE=gateway
+      - POSTGRESQL_USER=gateway
+      - POSTGRESQL_PASSWORD=gateway
+    image: quay.io/sclorg/postgresql-15-c9s
+    networks:
+      - dbnet
+    ports:
+      - "5432:5432"
+    volumes:
+      - "aap_gw_db:/var/lib/psql/data"
+
+  proxy:
+    container_name: aap_gw_proxy_1
+    build:
+      context: $PWD
+      dockerfile: tools/docker/Dockerfile.proxy
+    ports:
+      - "9080:9080"
+      - "9090:19000"
+    # command: --log-level debug
+    volumes:
+      - $PWD/tools/generated/proxy.yaml:/etc/gateway/proxy.yaml:Z
+      - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
+    extra_hosts:
+      localhost: "host-gateway"
+    networks:
+      - dbnet
+
+# Optional containers
+{% if enabled_containers['keycloak']|bool %}
+  keycloak:
+    image: quay.io/keycloak/keycloak:{{ keycloak_container_version }}
+    container_name: aap_gw_keycloak_1
+    hostname: keycloak
+    user: "${UID}"
+    ports:
+      - "{{ keycloak_exposed_port }}:8443"
+    environment:
+      KEYCLOAK_USER: "{{ keycloak_username }}"
+      KEYCLOAK_PASSWORD: "{{ keycloak_password }}"
+      DB_VENDOR: postgres
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: {{ db_username }}
+      DB_PASSWORD: {{ db_password }}
+    depends_on:
+      - db
+{% endif %}
+
+{% if enabled_containers['ldap'] | bool %}
+  ldap:
+    image: bitnami/openldap:{{ ldap_image_version }}
+    container_name: aap_gw_ldap_1
+    hostname: ldap
+    user: "${UID}"
+    ports:
+      - "{{ ldap_exposed_ldap_port }}:1389"
+      - "{{ ldap_exposed_ldaps_port }}:1636"
+    environment:
+      LDAP_ADMIN_USERNAME: {{ ldap_admin_username }}
+      LDAP_ADMIN_PASSWORD: {{ ldap_admin_password }}
+      LDAP_CUSTOM_LDIF_DIR: /opt/bitnami/openldap/ldiffs
+      LDAP_ENABLE_TLS: "yes"
+      LDAP_LDAPS_PORT_NUMBER: 1636
+      LDAP_TLS_CERT_FILE: /opt/bitnami/openldap/certs/{{ ldap_public_key_file_name }}
+      LDAP_TLS_CA_FILE: /opt/bitnami/openldap/certs/{{ ldap_public_key_file_name }}
+      LDAP_TLS_KEY_FILE: /opt/bitnami/openldap/certs/{{ ldap_private_key_file_name }}
+    volumes:
+      - 'aap_gw_openldap_data:/bitnami/openldap'
+      - '$PWD/tools/generated/ldap_certs:/opt/bitnami/openldap/certs'
+      - '$PWD/tools/generated/ldap_diffs:/opt/bitnami/openldap/ldiffs'
+{% endif %}
+
+{% if enabled_containers['tacacs']|bool %}
+  tacacs:
+    image: dchidell/docker-tacacs:{{ tacacs_container_version }}
+    container_name: aap_gw_tacacs_1
+    hostname: tacacs
+    ports:
+      - "49:49"
+{% endif %}
+
+networks:
+  dbnet:
+
+volumes:
+  aap_gw_db:
+    name: aap_gw_db
+{% if enabled_containers['ldap'] | bool %}
+  aap_gw_openldap_data:
+    name: aap_gw_ldap_1
+    driver: local
+{% endif %}

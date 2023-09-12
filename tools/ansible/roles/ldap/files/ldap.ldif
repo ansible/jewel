@@ -1,0 +1,86 @@
+dn: dc=example,dc=org
+objectClass: dcObject
+objectClass: organization
+dc: example
+o: example
+
+dn: ou=users,dc=example,dc=org
+ou: users
+objectClass: organizationalUnit
+
+dn: cn=gateway_ldap_admin,ou=users,dc=example,dc=org
+mail: admin@example.org
+sn: LdapAdmin
+cn: gateway_ldap_admin
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+userPassword: admin123
+givenName: gateway
+
+dn: cn=gateway_ldap_auditor,ou=users,dc=example,dc=org
+mail: auditor@example.org
+sn: LdapAuditor
+cn: gateway_ldap_auditor
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+userPassword: audit123
+givenName: gateway
+
+dn: cn=gateway_ldap_unpriv,ou=users,dc=example,dc=org
+mail: unpriv@example.org
+sn: LdapUnpriv
+cn: gateway_ldap_unpriv
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+givenName: gateway
+userPassword: unpriv123
+
+dn: ou=groups,dc=example,dc=org
+ou: groups
+objectClass: top
+objectClass: organizationalUnit
+
+dn: cn=gateway_users,ou=groups,dc=example,dc=org
+cn: gateway_users
+objectClass: top
+objectClass: groupOfNames
+member: cn=gateway_ldap_admin,ou=users,dc=example,dc=org
+member: cn=gateway_ldap_auditor,ou=users,dc=example,dc=org
+member: cn=gateway_ldap_unpriv,ou=users,dc=example,dc=org
+member: cn=gateway_ldap_org_admin,ou=users,dc=example,dc=org
+
+dn: cn=gateway_admins,ou=groups,dc=example,dc=org
+cn: gateway_admins
+objectClass: top
+objectClass: groupOfNames
+member: cn=gateway_ldap_admin,ou=users,dc=example,dc=org
+
+dn: cn=gateway_auditors,ou=groups,dc=example,dc=org
+cn: gateway_auditors
+objectClass: top
+objectClass: groupOfNames
+member: cn=gateway_ldap_auditor,ou=users,dc=example,dc=org
+
+dn: cn=gateway_ldap_org_admin,ou=users,dc=example,dc=org
+mail: org.admin@example.org
+sn: LdapOrgAdmin
+cn: gateway_ldap_org_admin
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+givenName: gateway
+userPassword: orgadmin123
+
+dn: cn=gateway_org_admins,ou=groups,dc=example,dc=org
+cn: gateway_org_admins
+objectClass: top
+objectClass: groupOfNames
+member: cn=gateway_ldap_org_admin,ou=users,dc=example,dc=org
+
