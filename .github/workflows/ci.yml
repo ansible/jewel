@@ -1,0 +1,72 @@
+---
+name: CI
+env:
+  LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
+on:
+  pull_request:
+  push:
+jobs:
+  common-tests:
+    name: ${{ matrix.tests.name }}
+    container:
+      image: quay.io/centos/centos:stream9-minimal
+    permissions:
+      packages: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tests:
+          - name: api-flake8
+            command: check_flake8
+          - name: api-black
+            command: check_black
+          - name: api-isort
+            command: check_isort
+    steps:
+      - name: Install python and make
+        run: microdnf install -y --nodocs --setopt=install_weak_deps=0 python3.11-pip make
+
+      - name: Install requirments
+        run: pip3.11 install -r requirements/requirements_dev.txt
+
+      - uses: actions/checkout@v2
+
+      - name: Run check ${{ matrix.tests.name }}
+        run: make ${{ matrix.tests.command }}
+
+  sonarqube:
+    name: aap_gateway_api - ${{ matrix.tests.env }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tests:
+          - env: py39
+            python-version: "3.9"
+            sonar: false
+          - env: py310
+            python-version: "3.10"
+            sonar: false
+          - env: py311
+            python-version: "3.11"
+            sonar: true
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install tox
+        run: pip${{ matrix.tests.python-version }} install tox
+
+      - name: Run tox
+        working-directory: aap_gateway_api
+        run: tox -e ${{ matrix.tests.env }}
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        if: matrix.tests.sonar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
