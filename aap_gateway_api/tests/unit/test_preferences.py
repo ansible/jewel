@@ -1,10 +1,8 @@
 import pytest
-
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
-from aap_gateway_api.utils import preferences
-from aap_gateway_api.utils import ENCRYPTED_STRING
+from aap_gateway_api.utils import ENCRYPTED_STRING, preferences
 
 
 def test_register_exceptions():
@@ -14,10 +12,7 @@ def test_register_exceptions():
 
     with pytest.raises(NotImplementedError) as e:
         preferences.register(preference_name="foo", preference_type="some_weird_type")
-    assert (
-        str(e.value)
-        == "Preference type some_weird_type is not yet implemented in preferences utils"
-    )
+    assert str(e.value) == "Preference type some_weird_type is not yet implemented in preferences utils"
 
 
 def test_get_preference_value_exceptions():
@@ -34,16 +29,6 @@ def test_preference_with_invalid_url(set_preference):
     with pytest.raises(SerializationError) as e:
         set_preference("proxy", "gateway_proxy_url", "monkey://banana")
     assert str(e.value) == "monkey://banana is not a valid URL"
-
-
-def test_encrypted_preference():
-    preferences.register(
-        section="general",
-        preference_name="enc_test",
-        encrypted=True,
-        preference_type="string",
-    )
-    assert preferences.get_preference_value("general", "enc_test") == ENCRYPTED_STRING
 
 
 def test_get_preference_sections():

@@ -1,7 +1,4 @@
-import pytest
 from unittest import mock
-
-from django.urls import reverse
 
 
 @mock.patch("aap_gateway_api.signals.user.logger")

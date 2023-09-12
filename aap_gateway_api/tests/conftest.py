@@ -1,5 +1,6 @@
-import pytest
 import uuid
+
+import pytest
 
 
 @pytest.fixture
@@ -68,7 +69,7 @@ def register_preference(db):
     complete.
     """
     from aap_gateway_api.models import Preference, gateway_preference_registry
-    from aap_gateway_api.utils.preferences import register, get_preference_key
+    from aap_gateway_api.utils.preferences import get_preference_key, register
 
     kwargs = {}
 
@@ -98,16 +99,12 @@ def register_preference(db):
             help_text,
         )
         key = get_preference_key(section, preference_name)
-        gateway_preference_registry.manager()[
-            key
-        ]  # Register the preference in the database
+        gateway_preference_registry.manager()[key]  # Register the preference in the database
         return ret
 
     yield _register_preference
     del gateway_preference_registry[kwargs["section"]][kwargs["preference_name"]]
-    Preference.objects.filter(
-        section=kwargs["section"], name=kwargs["preference_name"]
-    ).delete()
+    Preference.objects.filter(section=kwargs["section"], name=kwargs["preference_name"]).delete()
 
 
 @pytest.fixture
@@ -125,8 +122,6 @@ def organization(environment, randname):
     from aap_gateway_api.models import Organization
 
     random_name = randname("Test Organization")
-    organization = Organization.objects.create(
-        name=random_name, environment=environment
-    )
+    organization = Organization.objects.create(name=random_name, environment=environment)
     yield organization
     organization.delete()

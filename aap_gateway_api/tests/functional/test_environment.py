@@ -1,5 +1,3 @@
-import pytest
-
 from django.urls import reverse
 
 from aap_gateway_api.models import Environment
@@ -54,9 +52,7 @@ def test_environments_update(admin_api_client, environment, randname):
     assert response.data["name"] == random_name
 
 
-def test_environments_update_unauthenticated(
-    unauthenticated_api_client, environment, randname
-):
+def test_environments_update_unauthenticated(unauthenticated_api_client, environment, randname):
     url = reverse("environment-detail", kwargs={"pk": environment.pk})
     random_name = randname("Test Environment")
     response = unauthenticated_api_client.put(url, data={"name": random_name})
@@ -115,9 +111,7 @@ def test_environments_partial_update(admin_api_client, environment, randname):
     assert response.data["name"] == random_name
 
 
-def test_environments_partial_update_unauthenticated(
-    unauthenticated_api_client, environment, randname
-):
+def test_environments_partial_update_unauthenticated(unauthenticated_api_client, environment, randname):
     url = reverse("environment-detail", kwargs={"pk": environment.pk})
     random_name = randname("Test Environment")
     response = unauthenticated_api_client.patch(url, data={"name": random_name})

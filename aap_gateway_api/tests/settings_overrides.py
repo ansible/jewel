@@ -1,5 +1,6 @@
-from aap_gateway_api.settings import *
+from aap_gateway_api.settings import *  # noqa: F403
 
+# noqa: F405
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -10,5 +11,5 @@ DATABASES = {
     }
 }
 
-for logger in LOGGING["loggers"]:
-    LOGGING["loggers"][logger]["level"] = "ERROR"
+for logger in LOGGING["loggers"]:  # noqa: F405
+    LOGGING["loggers"][logger]["level"] = "ERROR"  # noqa: F405

@@ -1,5 +1,3 @@
-import pytest
-
 from django.urls import reverse
 
 from aap_gateway_api.models import Organization
@@ -54,9 +52,7 @@ def test_organizations_update(admin_api_client, organization, randname):
     assert response.data["name"] == random_name
 
 
-def test_organizations_update_unauthenticated(
-    unauthenticated_api_client, organization, randname
-):
+def test_organizations_update_unauthenticated(unauthenticated_api_client, organization, randname):
     url = reverse("organization-detail", kwargs={"pk": organization.pk})
     random_name = randname("Test Organization")
     response = unauthenticated_api_client.put(url, data={"name": random_name})

@@ -1,6 +1,3 @@
-import jwt
-import pytest
-
 from aap_gateway_api.utils.jwt_token import create_signed_jwt, decode_signed_jwt
 
 
