@@ -46,18 +46,6 @@ check_flake8:
 check_isort:
 	isort --check $(CHECK_SYNTAX_FILES)
 
-# Run service_lib tests
-test_service_lib:
-	cd service_lib; tox run ${TOX_ARGS}
-
-check: check_black check_flake8 check_isort
-
-# Build targets
-# --------------------------------------
-
-# Build the service_lib library into service_lib/dist
-build_service_lib:
-	python -m build service_lib
 
 # HELP related targets
 # --------------------------------------
@@ -122,16 +110,3 @@ requirements/requirements.txt: requirements/requirements.in
 	cd requirements && \
 	    ./updater.sh run
 	@-cd .. || true
-
-# Use the following proxy.yaml settings to use this server:
-#   hub:
-#     use_tls: true
-#     proxy_root: /api/hub/
-#     service_root: /api/galaxy/
-
-#     load_balance:
-#       - address: "localhost"
-#         port: 5043
-example/hub:
-	docker build . -f tools/docker/hub.Dockerfile -t aap-gateway-hub
-	docker run --rm --add-host=localhost:host-gateway -p 5043:443 --rm aap-gateway-hub
