@@ -1,8 +1,9 @@
-[![Quality Gate Status](https://sonarqube.corp.redhat.com/api/project_badges/measure?project=ansible_aap-gateway&metric=alert_status&token=sqb_19096b3174c8d45029973fd724f27e21efc6b025)](https://sonarqube.corp.redhat.com/dashboard?id=ansible_aap-gateway)
-[![Coverage](https://sonarqube.corp.redhat.com/api/project_badges/measure?project=ansible_aap-gateway&metric=coverage&token=sqb_19096b3174c8d45029973fd724f27e21efc6b025)](https://sonarqube.corp.redhat.com/dashboard?id=ansible_aap-gateway)
-[![Security Hotspots](https://sonarqube.corp.redhat.com/api/project_badges/measure?project=ansible_aap-gateway&metric=security_hotspots&token=sqb_19096b3174c8d45029973fd724f27e21efc6b025)](https://sonarqube.corp.redhat.com/dashboard?id=ansible_aap-gateway)
-[![Bugs](https://sonarqube.corp.redhat.com/api/project_badges/measure?project=ansible_aap-gateway&metric=bugs&token=sqb_19096b3174c8d45029973fd724f27e21efc6b025)](https://sonarqube.corp.redhat.com/dashboard?id=ansible_aap-gateway)
-[![Code Smells](https://sonarqube.corp.redhat.com/api/project_badges/measure?project=ansible_aap-gateway&metric=code_smells&token=sqb_19096b3174c8d45029973fd724f27e21efc6b025)](https://sonarqube.corp.redhat.com/dashboard?id=ansible_aap-gateway)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ansible_aap-gateway-service-lib&metric=alert_status&token=11362cd528d3de9c4f2b13ad415d55c6a468f5ae)](https://sonarcloud.io/summary/new_code?id=ansible_aap-gateway-service-lib)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=ansible_aap-gateway-service-lib&metric=coverage&token=11362cd528d3de9c4f2b13ad415d55c6a468f5ae)](https://sonarcloud.io/summary/new_code?id=ansible_aap-gateway-service-lib)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=ansible_aap-gateway-service-lib&metric=security_rating&token=11362cd528d3de9c4f2b13ad415d55c6a468f5ae)](https://sonarcloud.io/summary/new_code?id=ansible_aap-gateway-service-lib)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=ansible_aap-gateway-service-lib&metric=bugs&token=11362cd528d3de9c4f2b13ad415d55c6a468f5ae)](https://sonarcloud.io/summary/new_code?id=ansible_aap-gateway-service-lib)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=ansible_aap-gateway-service-lib&metric=code_smells&token=11362cd528d3de9c4f2b13ad415d55c6a468f5ae)](https://sonarcloud.io/summary/new_code?id=ansible_aap-gateway-service-lib)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=ansible_aap-gateway-service-lib&metric=sqale_rating&token=11362cd528d3de9c4f2b13ad415d55c6a468f5ae)](https://sonarcloud.io/summary/new_code?id=ansible_aap-gateway-service-lib)
 
 # AAP Services Gateway
 
