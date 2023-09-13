@@ -103,13 +103,13 @@ tools/generated/docker-compose.yaml: container-startup.yml tools/ansible/roles/s
 docker-compose-build: tools/generated/.has_built_api tools/generated/.has_built_proxy
 
 ## Build the API container
-.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/configs/gateway.crt $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
-	docker-compose -f tools/docker/docker-compose.yaml build gateway
+tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+	docker-compose -f tools/generated/docker-compose.yaml build gateway
 	touch $@
 
 ## Build the proxy container
-.has_built_proxy: tools/docker/envoy.Dockerfile tools/configs/gateway.crt tools/configs/proxy.yaml $(shell find tools -type f -name "*envoy*") $(shell find tools/ansible -type f)
-	docker-compose -f tools/docker/docker-compose.yaml build proxy
+tools/generated/.has_built_proxy: tools/docker/Dockerfile.proxy tools/generated/gateway.crt tools/generated/proxy.yaml $(shell find tools -type f -name "*envoy*") $(shell find tools/ansible -type f)
+	docker-compose -f tools/generated/docker-compose.yaml build proxy
 	touch $@
 
 ## Build the cert file
