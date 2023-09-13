@@ -87,7 +87,7 @@ help/generate:
 # --------------------------------------
 
 ## Start the docker container
-docker-compose: tools/generated/docker-compose.yaml docker-compose-build
+docker-compose: tools/generated/docker-compose.yaml docker-compose-build .git/hooks/pre-commit
 	ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} docker-compose -f tools/generated/docker-compose.yaml up --remove-orphans
 
