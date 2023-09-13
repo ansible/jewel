@@ -17,6 +17,8 @@ __pycache__
 *.py[c,o]
 /.eggs
 .coverage
+coverage.xml
+htmlcov
 *.tox
 
 # Mac OS X
@@ -41,8 +43,5 @@ tools/configs/gateway.csr
 .has_built_api
 .has_built_proxy
 
-# Service lib temp files
-service_lib/*.xml
-service_lib/dist
 # Dev env configs
 tools/configs/proxy.yaml

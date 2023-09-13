@@ -1,0 +1,45 @@
+---
+name: CI
+on:
+  pull_request_target:
+  push:
+jobs:
+  tox:
+    name: aap_gateway_api - ${{ matrix.tests.env }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tests:
+          - env: py39
+            python-version: "3.9"
+            sonar: false
+          - env: py310
+            python-version: "3.10"
+            sonar: false
+          - env: py311
+            python-version: "3.11"
+            sonar: true
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install python ${{ matrix.tests.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.tests.python-version }}
+
+      - name: Install tox
+        run: pip${{ matrix.tests.python-version }} install tox
+
+      - name: Run tox
+        run: tox -e ${{ matrix.tests.env }}
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        if: matrix.tests.sonar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
