@@ -3,9 +3,9 @@
 #  set_fact:
 #    private_key: "{{ private_key_content }}"
 #    public_key: "{{ public_key_content }}"
-#    existing_saml: "{{ lookup('awx.awx.controller_api', 'settings/saml', host=awx_host, username=awx_admin_username, password=awx_admin_password, verify_ssl=false) }}"
+#    existing_saml: "{{ lookup('gateway.gateway.controller_api', 'settings/saml', host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=false) }}"
 #    new_saml: "{{ lookup('template', 'saml_settings.json.j2') }}"
-#    existing_oidc: "{{ lookup('awx.awx.controller_api', 'settings/oidc', host=awx_host, username=awx_admin_username, password=awx_admin_password, verify_ssl=false) }}"
+#    existing_oidc: "{{ lookup('gateway.gateway.controller_api', 'settings/oidc', host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=false) }}"
 #    new_oidc: "{{ lookup('template', 'oidc_settings.json.j2') }}"
 #  vars:
 #    # We add the extra \\ in here so that when jinja is templating out the files we end up with \n in the strings.
@@ -32,19 +32,19 @@
 # loop_control:
 #   label: "{{ item.filename }}"
 #
-#- name: Configure AWX SAML adapter
-# awx.awx.settings:
+#- name: Configure Gateway SAML adapter
+# gateway.gateway.settings:
 #   settings: "{{ new_saml }}"
-#   controller_host: "{{ awx_host }}"
-#   controller_username: "{{ awx_admin_username }}"
-#   controller_password: "{{ awx_admin_password }}"
+#   controller_host: "{{ gateway_host }}"
+#   controller_username: "{{ gateway_admin_username }}"
+#   controller_password: "{{ gateway_admin_password }}"
 #   validate_certs: False
 #
-#- name: Configure AWX OIDC adapter
-#  awx.awx.settings:
+#- name: Configure Gateway OIDC adapter
+#  gateway.gateway.settings:
 #   settings: "{{ new_oidc }}"
-#   controller_host: "{{ awx_host }}"
-#   controller_username: "{{ awx_admin_username }}"
-#   controller_password: "{{ awx_admin_password }}"
+#   controller_host: "{{ gateway_host }}"
+#   controller_username: "{{ gateway_admin_username }}"
+#   controller_password: "{{ gateway_admin_password }}"
 #    validate_certs: False
 #
