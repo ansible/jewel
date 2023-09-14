@@ -20,14 +20,11 @@ services:
       - DATABASE_USER={{ db_username }}
       - DATABASE_PASSWORD={{ db_password }}
       - DATABASE_HOST=db
-      - SDB_HOST=0.0.0.0
-      - SDB_PORT=7899
     links:
       - db
     networks:
       - dbnet
     ports:
-      - "7899-7999:7899-7999"  # sdb-listen
       - "8000:8000"
     user: "${UID}"
     volumes:
