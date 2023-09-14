@@ -11,9 +11,9 @@
 	Look at the fields in the JSON and remove any additional fields that comes from your export that you don't need.
 #}
 {
-  "id": "AWX Realm",
-  "realm": "awx",
-  "displayName": "AWX Realm",
+  "id": "Gateway Realm",
+  "realm": "gateway",
+  "displayName": "Gateway Realm",
   "notBefore": 0,
   "defaultSignatureAlgorithm": "RS256",
   "revokeRefreshToken": false,
@@ -60,7 +60,7 @@
     "realm": [
       {
         "id": "b7f7a161-2a18-4b95-b58b-99448b2fc50e",
-        "name": "default-roles-awx realm",
+        "name": "default-roles-gateway realm",
         "description": "${role_default-roles}",
         "composite": true,
         "composites": {
@@ -76,7 +76,7 @@
           }
         },
         "clientRole": false,
-        "containerId": "AWX Realm",
+        "containerId": "Gateway Realm",
         "attributes": {}
       },
       {
@@ -85,7 +85,7 @@
         "description": "${role_uma_authorization}",
         "composite": false,
         "clientRole": false,
-        "containerId": "AWX Realm",
+        "containerId": "Gateway Realm",
         "attributes": {}
       },
       {
@@ -94,23 +94,23 @@
         "description": "${role_offline-access}",
         "composite": false,
         "clientRole": false,
-        "containerId": "AWX Realm",
+        "containerId": "Gateway Realm",
         "attributes": {}
       }
     ],
     "client": {
       "{{ container_reference }}:8043": [],
-      "awx_oidc_client": []
+      "gateway_oidc_client": []
     }
   },
   "groups": [],
   "defaultRole": {
     "id": "b7f7a161-2a18-4b95-b58b-99448b2fc50e",
-    "name": "default-roles-awx realm",
+    "name": "default-roles-gateway realm",
     "description": "${role_default-roles}",
     "composite": true,
     "clientRole": false,
-    "containerId": "AWX Realm"
+    "containerId": "Gateway Realm"
   },
   "requiredCredentials": [
     "password"
@@ -313,7 +313,7 @@
     },
     {
       "id": "525e0eeb-56ee-429f-a040-c6fc18072dc4",
-      "clientId": "awx_oidc_client",
+      "clientId": "gateway_oidc_client",
       "baseUrl": "",
       "surrogateAuthRequired": false,
       "enabled": true,
@@ -367,7 +367,7 @@
       "protocolMappers": [
         {
           "id": "a8f4a0a8-ece4-4a9d-9e7b-830f23ba0067",
-          "name": "AWX OIDC Group Membership",
+          "name": "Gateway OIDC Group Membership",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-group-membership-mapper",
           "consentRequired": false,
@@ -1800,11 +1800,11 @@
   "users" : [ {
     "id" : "32559338-d619-47e5-839c-cd8c70e4221e",
     "createdTimestamp" : 1638304914519,
-    "username" : "awx_unpriv",
+    "username" : "gateway_unpriv",
     "enabled" : true,
     "totp" : false,
     "emailVerified" : true,
-    "firstName" : "AWX",
+    "firstName" : "Gateway",
     "lastName" : "Unpriv",
     "email" : "noone@nowhere.com",
     "credentials" : [ {
@@ -1816,17 +1816,17 @@
     } ],
     "disableableCredentialTypes" : [ ],
     "requiredActions" : [ ],
-    "realmRoles" : [ "default-roles-awx realm" ],
+    "realmRoles" : [ "default-roles-gateway realm" ],
     "notBefore" : 0,
     "groups" : [ ]
   }, {
     "id" : "667ec049-cdf3-45d0-a4dc-0465f7505954",
     "createdTimestamp" : 1638394966440,
-    "username" : "awx_admin",
+    "username" : "gateway_admin",
     "enabled" : true,
     "totp" : false,
     "emailVerified" : true,
-    "firstName" : "AWX",
+    "firstName" : "Gateway",
     "lastName" : "Admin",
     "email" : "no.one@nowhere.com",
     "attributes" : {
@@ -1841,17 +1841,17 @@
     } ],
     "disableableCredentialTypes" : [ ],
     "requiredActions" : [ ],
-    "realmRoles" : [ "default-roles-awx realm" ],
+    "realmRoles" : [ "default-roles-gateway realm" ],
     "notBefore" : 0,
     "groups" : [ ]
   }, {
     "id" : "cbe48149-3bc5-49a1-a616-c8a5c8a3a88f",
     "createdTimestamp" : 1638394708362,
-    "username" : "awx_auditor",
+    "username" : "gateway_auditor",
     "enabled" : true,
     "totp" : false,
     "emailVerified" : true,
-    "firstName" : "AWX",
+    "firstName" : "Gateway",
     "lastName" : "Auditor",
     "email" : "know.one@nowhere.com",
     "attributes" : {
@@ -1866,7 +1866,7 @@
     } ],
     "disableableCredentialTypes" : [ ],
     "requiredActions" : [ ],
-    "realmRoles" : [ "default-roles-awx realm" ],
+    "realmRoles" : [ "default-roles-gateway realm" ],
     "notBefore" : 0,
     "groups" : [ ]
   } ]
