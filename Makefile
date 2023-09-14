@@ -111,7 +111,7 @@ tools/generated/docker-compose.yaml: container-startup.yml tools/ansible/roles/s
 docker-compose-build: tools/generated/.has_built_api
 
 ## Build the API container
-tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yaml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yaml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 	docker-compose -f tools/generated/docker-compose.yaml build gateway
 	touch $@
 
