@@ -24,15 +24,15 @@ class GatewayAuth(ModelBackend):
     def create_or_update_ldap_adapter(self, authenticator):
         needs_change = False
         if authenticator.id not in authentication_backends:
-            logger.debug(f"Creating LDAP adapter for {authenticator.name}")
+            logger.info(f"Creating LDAP adapter for {authenticator.name}")
             authentication_backends[authenticator.id] = BaseLDAPBackend(authenticator=authenticator)
             needs_change = True
 
         if needs_change or authenticator.modified_on != authentication_backends[authenticator.id].authenticator.modified_on:
             if not needs_change:
-                logger.debug(f"Updating LDAP adapter {authenticator.name}")
+                logger.info(f"Updating LDAP adapter {authenticator.name}")
 
             authentication_backends[authenticator.id].settings = LDAPSettings(defaults=authenticator.configuration)
             authentication_backends[authenticator.id].authenticator = authenticator
         else:
-            logger.debug(f"No updated needed for LDAP adapter {authenticator.name}")
+            logger.info(f"No updated needed for LDAP adapter {authenticator.name}")
