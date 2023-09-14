@@ -48,6 +48,8 @@ jobs:
         run: |
           gh pr checkout ${{ env.PR_NUMBER }}
           git checkout -
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
