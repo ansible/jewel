@@ -16,13 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Always use a full sha here to protect tokens, it's a third-party action
       - name: Download coverage artifact
-        uses: actions/download-artifact@v2
+        uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: CI
+          run_id: ${{ github.event.workflow_run.id }}
           name: coverage
-
-      - name: Move coverage.xml to root
-        run: mv coverage/coverage.xml coverage.xml && rm -rf coverage
 
       - name: Extract PR number from coverage.xml
         run: |
