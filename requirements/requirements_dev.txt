@@ -1,4 +1,5 @@
 build
+ipython
 tox
 PyYAML==5.3.1  # We have to pin PyYAML because newer versions can't compile wth the latest Cython
 ansible  # Used in build process to generate some configs
