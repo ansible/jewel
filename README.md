@@ -184,10 +184,10 @@ The plumb playbook for OpenLDAP will:
 Note: The default configuration will utilize the non-tls connection. If you want to use the tls configuration you will need to work through TLS negotiation issues because the LDAP server is using a self signed certificate.
 
 Once the playbook is done running LDAP should now be setup in your development environment. This realm has four users with the following username/passwords:
-1. gateway_ldap_unpriv:unpriv123
-2. gateway_ldap_admin:admin123
-3. gatewayldap_auditor:audit123
-4. gatewayldap_org_admin:orgadmin123
+1. ldap_unpriv:unpriv123
+2. ldap_admin:admin123
+3. ldap_auditor:audit123
+4. ldap_org_admin:orgadmin123
 
 The first account is a normal user. The second account will be a super user in Gateway. The third account will be a system auditor in Gateway. The fourth account is an org admin. All users belong to an org called "LDAP Organization". To log in with one of these users go to the Gateway login screen enter the username/password.
 
