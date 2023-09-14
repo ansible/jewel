@@ -27,7 +27,7 @@ jobs:
 
       - name: Extract PR number from coverage.xml
         run: |
-          echo "PR_NUMBER=$(grep -m 1 '<!-- PR' coverage.xml | awk '{print $3}' coverage.xml)" >> $GITHUB_ENV
+          echo "PR_NUMBER=$(grep -m 1 '<!-- PR' coverage.xml | awk '{print $3}')" >> $GITHUB_ENV
 
       - name: Get PR info
         uses: octokit/request-action@v2.x
