@@ -46,6 +46,13 @@ LOGGING = {
             ],
             'level': 'WARNING',
         },
+        "django_auth_ldap": {
+            'handlers': [
+                'console',
+            ],
+            'level': 'INFO',
+            'propagate': True,
+        },
         'rest_framework.request': {
             'handlers': [
                 'console',

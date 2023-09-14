@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 from aap_gateway_api.utils.jwt_cache import JWTSessionCache
 
-logger = logging.getLogger('aap.gateway.local_login')
+logger = logging.getLogger('aap.gateway.authentication.local_login')
 
 
 class LoggedLoginView(views.LoginView):

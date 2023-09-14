@@ -74,7 +74,6 @@ class LDAPSettings(BaseLDAPSettings):
                     params_sanitized[attr] = group_type_params[attr]
 
             setattr(self, 'GROUP_TYPE', group_type_class(**params_sanitized))
-            logger.debug(getattr(self, 'GROUP_TYPE'))
 
 
 class BaseLDAPBackend(LDAPBackend):
@@ -88,19 +87,20 @@ class BaseLDAPBackend(LDAPBackend):
 
     def authenticate(self, request, username, password):
         if not self.authenticator.enabled:
-            logger.debug(f"LDAP authenticator {self.authenticator.name} is disabled, skipping")
+            logger.info(f"LDAP authenticator {self.authenticator.name} is disabled, skipping")
             return None
 
         configuration_errors = []
         if not self.settings.SERVER_URI:
             configuration_errors.append("Server URI must be a valid URL")
 
+        # TODO: Check configuration
         # for setting_name, type_ in [('GROUP_SEARCH', 'LDAPSearch'), ('GROUP_TYPE', 'LDAPGroupType')]:
         #    if getattr(self.settings, setting_name) is None:
         #        configuration_errors.append("{} must be an {} instance.".format(setting_name, type_))
 
         if configuration_errors:
-            logger.debug(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors:\n{','.join(configuration_errors)}")
+            logger.error(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors:\n{','.join(configuration_errors)}")
             return None
 
         if self.settings.START_TLS and ldap.OPT_X_TLS_REQUIRE_CERT in self.settings.CONNECTION_OPTIONS:
@@ -121,8 +121,15 @@ class BaseLDAPBackend(LDAPBackend):
                     ldap_user.ldap_user._connection_bound = False
                 except Exception:
                     logger.exception(f"Got unexpected LDAP exception when forcing LDAP disconnect for user {ldap_user}, login will still proceed")
+            # TODO move this into common code for all adapters
             if ldap_user is None:
-                logger.debug(f"User {username} could not be authenticated by LDAP {self.authenticator.name}")
+                logger.info(f"User {username} could not be authenticated by LDAP {self.authenticator.name}")
+                if self.settings.REQUIRE_GROUP and self.settings.DENY_GROUP:
+                    logger.info("Hint: is user missing required group or in deny group?")
+                elif self.settings.REQUIRE_GROUP:
+                    logger.info("Hint: is user missing required group?")
+                elif self.settings.DENY_GROUP:
+                    logger.info("Hint: is user in deny group?")
             return ldap_user
         except Exception:
             logger.exception(f"Encountered an error authenticating to LDAP {self.authenticator.name}")
