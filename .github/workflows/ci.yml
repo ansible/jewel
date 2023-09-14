@@ -37,9 +37,20 @@ jobs:
       - name: Run tox
         run: tox -e ${{ matrix.tests.env }}
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+      - name: Inject PR number into coverage.xml
         if: matrix.tests.sonar
+        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage.xml
+
+      - name: Upload coverage as artifact
+        uses: actions/upload-artifact@v2
+        if: matrix.tests.sonar
+        with:
+          name: coverage
+          path: coverage.xml
+
+      - name: SonarCloud Scan (on push)
+        uses: SonarSource/sonarcloud-github-action@master
+        if: matrix.tests.sonar && github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: f93387278a506f9c2835607552a1ce651f5f55c6
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
