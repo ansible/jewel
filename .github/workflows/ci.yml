@@ -42,4 +42,4 @@ jobs:
         if: matrix.tests.sonar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: f93387278a506f9c2835607552a1ce651f5f55c6
