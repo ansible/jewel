@@ -23,7 +23,7 @@ services:
 
     load_balance:
       - address: "localhost"
-        port: 5001
+        port: 5043
 
   controller:
     use_tls: true
