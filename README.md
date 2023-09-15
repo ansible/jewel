@@ -54,7 +54,7 @@ services:
 2. Configure the proxy to talk to the Hub example container:
 
 ```yaml
-tools/configs/proxy.yaml
+tools/generated/proxy.yaml
 [...]
   hub:
     use_tls: true
