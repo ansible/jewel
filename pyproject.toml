@@ -24,7 +24,6 @@ addopts = "--strict-markers --reuse-db --migrations -s -vvv"
 [tool.tox]
 legacy_tox_ini = """
     [tox]
-    no_package = true
     min_version = 4.0
     no_package = true
     env_list =
