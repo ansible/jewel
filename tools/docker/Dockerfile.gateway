@@ -47,6 +47,7 @@ RUN dnf module install -y nginx/common && \
     postgresql \
     ${PYTHON} \
     ${PYTHON}-pip \
+    socat \
     supervisor
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway

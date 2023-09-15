@@ -20,12 +20,16 @@ services:
       - DATABASE_USER={{ db_username }}
       - DATABASE_PASSWORD={{ db_password }}
       - DATABASE_HOST=db
+      - PYTHONBREAKPOINT=remote_pdb.set_trace
+      - REMOTE_PDB_HOST=127.0.0.1
+      - REMOTE_PDB_PORT=4444
     links:
       - db
     networks:
       - dbnet
     ports:
       - "8000:8000"
+      - "4444:4444"
     user: "${UID}"
     volumes:
       - $PWD:/opt/aap_gateway/aap_gateway
