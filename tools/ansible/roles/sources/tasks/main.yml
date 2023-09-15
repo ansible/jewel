@@ -1,5 +1,7 @@
-- name: Render Docker-Compose
+- name: Render docker templates
   template:
-    src: docker-compose.yml.j2
-    dest: "{{ sources_dest }}/docker-compose.yaml"
+    src: "{{ item }}.j2"
+    dest: "{{ sources_dest }}/{{ item }}"
     mode: '0600'
+  loop:
+    - docker-compose.yml

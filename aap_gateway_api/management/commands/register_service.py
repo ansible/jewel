@@ -12,10 +12,10 @@ SERVICE_MAP = {
 
 
 class Command(BaseCommand):
-    help = "Initialize Gateway service configuration from a proxy.yaml file."
+    help = "Initialize Gateway service configuration from a proxy.yml file."
 
     def add_arguments(self, parser):
-        parser.add_argument("--config", type=str, help="Service configuration yaml file.", required=True)
+        parser.add_argument("--config", type=str, help="Service configuration yml file.", required=True)
 
     def handle(self, *args, **options):
         config = {}
