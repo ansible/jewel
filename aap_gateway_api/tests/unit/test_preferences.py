@@ -70,3 +70,38 @@ def test_encrypted_preference(register_preference):
     assert preferences.get_preference_value("general", "enc_test") == ENCRYPTED_STRING
     preference = Preference.objects.get(section="general", name="enc_test")
     assert preference.value == "hello test"
+
+
+@pytest.mark.parametrize(
+    "preference_type, default, value, err_substring",
+    [
+        # NOTE: If you add cases to this matrix, add them in functional/test_settings.py, too.
+        ("string", "foo", 1234, "Cannot serialize, value 1234 is not a string"),  # In the API this gets coerced and works
+        ("string", "foo", True, "Cannot serialize, value True is not a string"),  # In the API this gets coerced and works
+        ("bool", False, "true", "true is not a boolean"),
+        ("bool", False, 1, "1 is not a boolean"),
+        ("int", 0, "not an int", "IntSerializer can only serialize int values"),
+        ("int", 0, False, None),  # In the API this does *not* work. But it does here.
+        ("url", "https://example.com", 1337, "1337 is not a valid URL"),
+    ],
+)
+def test_preference_update_with_bad_type(register_preference, preference_type, default, value, err_substring):
+    """
+    Test setting a preference with a bad type.
+    """
+    register_preference(
+        section="general",
+        preference_name="bad_type",
+        default=default,
+        encrypted=False,
+        preference_type=preference_type,
+    )
+
+    if err_substring is not None:
+        with pytest.raises(SerializationError) as e:
+            preferences.update_preference_value("general", "bad_type", value)
+
+        assert err_substring in str(e.value)
+    else:
+        # Just make sure this doesn't raise an exception
+        preferences.update_preference_value("general", "bad_type", value)
