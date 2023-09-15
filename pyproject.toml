@@ -25,6 +25,7 @@ addopts = "--strict-markers --reuse-db --migrations -s -vvv"
 legacy_tox_ini = """
     [tox]
     min_version = 4.0
+    no_package = true
     env_list =
         py311
         py310
