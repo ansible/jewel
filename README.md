@@ -26,7 +26,7 @@ This repo is internal only at this time.
 
 ## Proxy Configuration
 
-Configure your local controller and hub instances in tools/configs/proxy.yaml. This will be used to create the envoy configuration from tools/templates/envoy.yaml.j2.
+Configure your local controller and hub instances in tools/configs/proxy.yml. This will be used to create the envoy configuration from tools/templates/envoy.yml.j2.
 
 
 ```
@@ -53,8 +53,8 @@ services:
 1. Build the dev env: `make docker-compose-build`
 2. Configure the proxy to talk to the Hub example container:
 
-```yaml
-tools/generated/proxy.yaml
+```yml
+tools/configs/proxy.yml
 [...]
   hub:
     use_tls: true
@@ -125,7 +125,7 @@ In the following sections of this document we will discuss individual integratio
 ### SAML and OIDC Integration
 Keycloak can be used as both a SAML and OIDC provider and can be used to test Gateway social auth. This section describes how to build a reference Keycloak instance and plumb it with Gateway for testing purposes.
 
-Once the containers come up a new port (8443 by default) should be exposed and the Keycloak interface should be running on that port. Connect to this through a url like `https://localhost:8443` to confirm that Keycloak has stared. If you wanted to login and look at Keycloak itself you could select the "Administration console" link and log into the UI the username/password set in the container_config.yaml file. For more information about Keycloak and links to their documentation see their project at https://github.com/keycloak/keycloak.
+Once the containers come up a new port (8443 by default) should be exposed and the Keycloak interface should be running on that port. Connect to this through a url like `https://localhost:8443` to confirm that Keycloak has stared. If you wanted to login and look at Keycloak itself you could select the "Administration console" link and log into the UI the username/password set in the container_config.yml file. For more information about Keycloak and links to their documentation see their project at https://github.com/keycloak/keycloak.
 
 #### Additional Configuration
 ```

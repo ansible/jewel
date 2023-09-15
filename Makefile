@@ -95,24 +95,24 @@ help/generate:
 # --------------------------------------
 
 ## Start the docker container
-docker-compose: tools/generated/docker-compose.yaml docker-compose-build .git/hooks/pre-commit
+docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
 	ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} docker-compose -f tools/generated/docker-compose.yaml up --remove-orphans
+	env UID=${UID} docker-compose -f tools/generated/docker-compose.yml up --remove-orphans
 
 ## Generate the default container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
 	cp tools/configs/container-startup.yml ./container-startup.yml
 
-## Generate the docker-compoe.yaml file
-tools/generated/docker-compose.yaml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
+## Generate the docker-compoe.yml file
+tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
 	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the docker containers
 docker-compose-build: tools/generated/.has_built_api
 
 ## Build the API container
-tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yaml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
-	docker-compose -f tools/generated/docker-compose.yaml build gateway
+tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+	docker-compose -f tools/generated/docker-compose.yml build gateway
 	touch $@
 
 ## Build the cert file
@@ -121,8 +121,8 @@ tools/generated/gateway.crt:
 	openssl x509 -req -days 365 -in tools/generated/gateway.csr -signkey tools/generated/gateway.key -out tools/generated/gateway.crt
 
 ## Build the proxy config file
-tools/generated/proxy.yaml:
-	cp tools/configs/proxy-config-sample.yaml tools/generated/proxy.yaml
+tools/generated/proxy.yml:
+	cp tools/configs/proxy-config-sample.yml tools/generated/proxy.yml
 
 ## Build the requirements.txt file
 requirements/requirements.txt: requirements/requirements.in
@@ -135,6 +135,6 @@ plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 docker-reset:
-	docker-compose -f tools/generated/docker-compose.yaml down -v
+	docker-compose -f tools/generated/docker-compose.yml down -v
 	rm -f tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep

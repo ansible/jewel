@@ -57,9 +57,8 @@ services:
     ports:
       - "9080:9080"
       - "9090:19000"
-    # command: -c /etc/envoy/envoy.yaml --log-level debug
     volumes:
-      - $PWD/tools/configs/envoy.yaml:/etc/envoy/envoy.yaml:Z
+      - $PWD/tools/configs/envoy.yml:/etc/envoy/envoy.yaml:Z
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:Z
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
