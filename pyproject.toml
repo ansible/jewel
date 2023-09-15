@@ -24,19 +24,40 @@ addopts = "--strict-markers --reuse-db --migrations -s -vvv"
 [tool.tox]
 legacy_tox_ini = """
     [tox]
+    no_package = true
     min_version = 4.0
     no_package = true
     env_list =
         py311
         py310
         py39
+    labels =
+        test = py39, py310, py311
+        lint = flake8, black, isort
 
     [testenv]
     deps =
-        -r{toxinidir}/requirements/requirements_dev.txt
         -r{toxinidir}/requirements/requirements.txt
+        pytest
+        pytest-cov
+        pytest-django
     commands = pytest --cov=. --cov-report=xml:coverage.xml --cov-report=html aap_gateway_api/tests {posargs}
 
+    [testenv:flake8]
+    deps =
+        flake8
+        Flake8-pyproject
+    commands = flake8 {posargs:.}
+
+    [testenv:black]
+    deps =
+        black
+    commands = black {posargs:.}
+
+    [testenv:isort]
+    deps =
+        isort
+    commands = isort {posargs:.}
 """
 
 [tool.coverage.run]

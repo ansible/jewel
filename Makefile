@@ -10,7 +10,7 @@ UID := $(shell id -u)
 TOX_ARGS ?= ""
 
 .PHONY: PYTHON_VERSION clean \
-	check_black check_flake8 check_isort \
+	check lint check_black check_flake8 check_isort \
 	build_service_lib test_service_lib \
 	docker-compose plumb
 
@@ -34,17 +34,25 @@ clean:
 # Test targets
 # -------------------------------------
 
+## Run test suite
+check:
+	tox
+
+## Run linters (and modify files if necessary)
+lint:
+	tox -m lint
+
 ## Run black syntax check
 check_black:
-	black --check $(CHECK_SYNTAX_FILES)
+	tox -e black -- --check $(CHECK_SYNTAX_FILES)
 
 ## Run flake8 syntax check
 check_flake8:
-	flake8 $(CHECK_SYNTAX_FILES)
+	tox -e flake8 -- $(CHECK_SYNTAX_FILES)
 
 ## Run isort syntax check
 check_isort:
-	isort --check $(CHECK_SYNTAX_FILES)
+	tox -e isort -- --check $(CHECK_SYNTAX_FILES)
 
 
 # HELP related targets
