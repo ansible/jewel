@@ -107,6 +107,14 @@ class SettingSingletonSerializer(serializers.Serializer):
                     new_value = registered_preference.serializer.to_python(new_value)
                     registered_preference.validate(new_value)
 
+                    # There are a couple scenarios this does not catch
+                    if issubclass(registered_preference.__class__, types.IntegerPreference):
+                        if type(new_value) is not int:
+                            raise SerializationError("Must be an integer")
+                    elif issubclass(registered_preference.__class__, types.StringPreference):
+                        if type(new_value) is not str:
+                            raise SerializationError("Must be a string")
+
                     # Mark the setting to be saved
                     values_to_save[registered_preference.name] = {'value': new_value, 'section': registered_preference.section.name}
                     validated_fields[registered_preference.name] = masked_value
