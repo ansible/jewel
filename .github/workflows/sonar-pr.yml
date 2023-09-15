@@ -47,7 +47,6 @@ jobs:
       - name: Add base branch
         run: |
           gh pr checkout ${{ env.PR_NUMBER }}
-          git checkout -
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
