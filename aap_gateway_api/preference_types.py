@@ -3,19 +3,14 @@ from django.core.validators import URLValidator
 from dynamic_preferences import types
 
 
-class URLSerializer(types.StringSerializer):
-    @classmethod
-    def to_db(cls, value, **kwargs):
+class URLPreference(types.StringPreference):
+    def validate(self, value):
         try:
             validator = URLValidator(schemes=["https"])
             validator(value)
         except ValidationError:
-            raise cls.exception(f"{value} is not a valid URL")
-
-        value = super().to_db(value, **kwargs)
+            raise ValidationError(f"{value} is not a valid URL")
 
         return value
 
 
-class URLPreference(types.StringPreference):
-    serializer = URLSerializer

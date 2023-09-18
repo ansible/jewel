@@ -59,19 +59,23 @@ def test_set_setting_invalid(admin_api_client):
 
 
 @pytest.mark.parametrize(
-    "preference_type, default, value, err_substring",
+    "preference_type, default, value, err_substring, new_value",
     [
         # NOTE: If you add cases to this matrix, add them to in unit/test_preferences.py, too.
-        ("string", "foo", 1234, None),  # Apparently this gets coerced to a string
-        ("string", "foo", True, None),  # Apparently this gets coerced to a string
-        ("bool", False, "true", "true is not a boolean"),
-        ("bool", False, 1, "1 is not a boolean"),
-        ("int", 0, "not an int", "IntSerializer can only serialize int values"),
-        ("int", 0, False, "IntSerializer can only serialize int values"),
-        ("url", "https://example.com", 1337, "1337 is not a valid URL"),
+        ("string", "foo", 1234, None, "1234"),
+        ("string", "foo", True, None, "True"),
+        ("bool", False, "true", None, True),
+        ("bool", False, 1, None, True),
+        ("bool", False, "1", None, True),
+        ("bool", False, "false", None, False),
+        ("bool", False, 0, None, False),
+        ("bool", False, "0", None, False),
+        ("int", 0, "not an int", "Value not an int cannot be converted to int", 0),
+        ("int", 0, False, "Value False cannot be converted to int", 0),
+        ("url", "https://example.com", 1337, "1337 is not a valid URL", "https://example.com"),
     ],
 )
-def test_set_setting_bad_type(admin_api_client, register_preference, preference_type, default, value, err_substring):
+def test_set_setting_bad_type(admin_api_client, register_preference, preference_type, default, value, err_substring, new_value):
     """
     Test setting a preference via the API with a value of the wrong type.
     """
@@ -85,8 +89,10 @@ def test_set_setting_bad_type(admin_api_client, register_preference, preference_
 
     url = reverse("setting-section-list", kwargs={"category_slug": "general"})
     response = admin_api_client.put(url, data={"bad_type": value})
+
     assert response.status_code == 200 if err_substring is None else 400
 
     if err_substring is not None:
-        assert response.data["bad_type"].code == "invalid"
         assert str(response.data["bad_type"]) == err_substring
+
+    assert Preference.objects.filter(name="bad_type").first().value == new_value

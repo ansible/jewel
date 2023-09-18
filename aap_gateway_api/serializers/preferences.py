@@ -1,5 +1,6 @@
 import logging
 
+from django.core.exceptions import ValidationError
 from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
@@ -99,13 +100,16 @@ class SettingSingletonSerializer(serializers.Serializer):
                 logger.debug(f"Validating value change from {current_value} to {masked_value} for {registered_preference.name}")
                 try:
                     # Try to let the preference's class serializer convert the value (will raise if not valid)
-                    registered_preference.serializer.to_db(new_value)
+                    new_value = registered_preference.serializer.to_python(new_value)
+                    registered_preference.validate(new_value)
+
                     # Mark the setting to be saved
                     values_to_save[registered_preference.name] = {'value': new_value, 'section': registered_preference.section.name}
                     validated_fields[registered_preference.name] = masked_value
-                except SerializationError as e:
-                    # If we failed append to our errors
-                    errors[registered_preference.name] = e
+                except (SerializationError, serializers.ValidationError, ValidationError) as e:
+                    if isinstance(e, ValidationError):
+                        e = ', '.join(e.messages)
+                    errors[registered_preference.name] = str(e)
 
         return validated_fields, errors, values_to_save
 
@@ -124,6 +128,7 @@ class SettingSingletonSerializer(serializers.Serializer):
 
         # Since we have made it here w/o errors we are cleared to save the values
         for key, value in values_to_save.items():
-            update_preference_value(value['section'], key, value['value'])
+            # We are not validating the value again because we already did that above
+            update_preference_value(value['section'], key, value['value'], validate=False)
 
         return validated_fields
