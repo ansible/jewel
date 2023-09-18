@@ -58,6 +58,7 @@ def register(
     preference_type="string",
     help_text="No help text specified",
     read_only=False,
+    on_update=None,
 ):
     if not preference_name:
         raise NameError("A preference must have a name")
@@ -84,6 +85,7 @@ def register(
             "field_type": type_class,
             "help_text": help_text,
             "read_only": read_only,
+            "on_update": on_update,
         },
     )
     gateway_preference_registry.register(my_transient_class)
