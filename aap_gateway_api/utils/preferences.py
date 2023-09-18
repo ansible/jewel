@@ -10,7 +10,10 @@ gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
 
 
-def update_preference_value(section: str, name: str, value: str) -> None:
+def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
+    if validate:
+        preference = gateway_preference_registry.get(name, section)
+        preference.validate(value)
     gateway_preference_registry.manager().update_db_pref(section, name, value)
 
 

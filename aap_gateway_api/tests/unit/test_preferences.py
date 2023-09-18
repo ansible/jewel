@@ -1,4 +1,5 @@
 import pytest
+from django.core.exceptions import ValidationError
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
@@ -26,9 +27,9 @@ def test_get_preference_value_exceptions():
 
 
 def test_preference_with_invalid_url(set_preference):
-    with pytest.raises(SerializationError) as e:
+    with pytest.raises(ValidationError) as e:
         set_preference("proxy", "gateway_proxy_url", "monkey://banana")
-    assert str(e.value) == "monkey://banana is not a valid URL"
+    assert str(e.value.message) == "monkey://banana is not a valid URL"
 
 
 def test_get_preference_sections():
@@ -80,6 +81,12 @@ def test_encrypted_preference(register_preference):
         ("string", "foo", True, "Cannot serialize, value True is not a string"),  # In the API this gets coerced and works
         ("bool", False, "true", "true is not a boolean"),
         ("bool", False, 1, "1 is not a boolean"),
+        ("bool", False, "true", "true is not a boolean"),
+        ("bool", False, 1, "1 is not a boolean"),
+        ("bool", False, "1", "1 is not a boolean"),
+        ("bool", False, "false", "false is not a boolean"),
+        ("bool", False, 0, "0 is not a boolean"),
+        ("bool", False, "0", "0 is not a boolean"),
         ("int", 0, "not an int", "IntSerializer can only serialize int values"),
         ("int", 0, False, None),  # In the API this does *not* work. But it does here.
         ("url", "https://example.com", 1337, "1337 is not a valid URL"),
@@ -98,10 +105,13 @@ def test_preference_update_with_bad_type(register_preference, preference_type, d
     )
 
     if err_substring is not None:
-        with pytest.raises(SerializationError) as e:
+        with pytest.raises((ValidationError, SerializationError)) as e:
             preferences.update_preference_value("general", "bad_type", value)
 
-        assert err_substring in str(e.value)
+        if isinstance(e.value, ValidationError):
+            assert err_substring in e.value.message
+        else:
+            assert err_substring in str(e.value)
     else:
         # Just make sure this doesn't raise an exception
         preferences.update_preference_value("general", "bad_type", value)
