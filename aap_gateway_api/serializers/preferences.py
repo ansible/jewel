@@ -1,9 +1,11 @@
 import logging
 
+from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.models import gateway_preference_registry
+from aap_gateway_api.preference_types import URLPreference
 from aap_gateway_api.utils import ENCRYPTED_STRING, get_preference_value_by_preference, update_preference_value
 
 logger = logging.getLogger('aap.gateway.serializers')
@@ -25,16 +27,38 @@ class SettingSingletonSerializer(serializers.Serializer):
         super().__init__(None, *args, **kwargs)
 
     def get_fields(self) -> dict:
-        from rest_framework.fields import Field
+        # TODO: Maybe move this somewhere
+        preference_type_to_field_mapping = {
+            types.StringPreference: serializers.CharField,
+            types.IntegerPreference: serializers.IntegerField,
+            types.BooleanPreference: serializers.BooleanField,
+            types.DecimalPreference: serializers.DecimalField,
+            types.FloatPreference: serializers.FloatField,
+            types.LongStringPreference: serializers.CharField,
+            types.ChoicePreference: serializers.ChoiceField,
+            types.ModelChoicePreference: serializers.PrimaryKeyRelatedField,
+            types.ModelMultipleChoicePreference: serializers.PrimaryKeyRelatedField,
+            types.FilePreference: serializers.FileField,
+            types.DurationPreference: serializers.DurationField,
+            types.DatePreference: serializers.DateField,
+            types.DateTimePreference: serializers.DateTimeField,
+            types.TimePreference: serializers.TimeField,
+            types.MultipleChoicePreference: serializers.MultipleChoiceField,
+            URLPreference: serializers.URLField,
+        }
+
+        long_string_fields = (types.LongStringPreference,)
 
         fields = super().get_fields()
         for registered_preference in gateway_preference_registry.preferences(self.category_slug):
-            fields[registered_preference.name] = Field(
+            constructor = preference_type_to_field_mapping.get(registered_preference.field_type, serializers.Field)
+            fields[registered_preference.name] = constructor(
                 initial=get_preference_value_by_preference(registered_preference),
                 help_text=registered_preference.help_text,
                 # No option being passed through the category is required because we might only be updating one.
                 required=False,
                 default=registered_preference.default,
+                style={"base_template": "textarea.html"} if registered_preference.field_type in long_string_fields else None,
                 read_only=registered_preference.read_only,
             )
 
