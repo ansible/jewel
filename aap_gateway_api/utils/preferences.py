@@ -3,7 +3,7 @@ from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
 from aap_gateway_api.models import gateway_preference_registry
-from aap_gateway_api.preference_types import URLPreference
+from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import ENCRYPTED_STRING
 
 gateway_preference_manager = gateway_preference_registry.manager()
@@ -43,9 +43,11 @@ def get_preference_sections() -> [Section]:
 sections = {}
 preference_type_mapping = {
     "string": types.StringPreference,
+    "longstring": types.LongStringPreference,
     "int": types.IntegerPreference,
     "bool": types.BooleanPreference,
     "url": URLPreference,
+    "pem_private_key": PEMPrivateKeyPreference,
 }
 
 

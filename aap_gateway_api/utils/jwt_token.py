@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 
 import jwt
 from cryptography.hazmat.primitives import serialization
-from django.conf import settings
+
+from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
 
 logger = logging.getLogger('aap.gateway.utils.jwt_token')
 
@@ -37,12 +38,7 @@ def decode_signed_jwt(token):
 
 
 def get_jwt_rsa_key(public=False):
-    jwt_key_setting_name = 'JWT_KEY'
-    jwt_key = getattr(settings, jwt_key_setting_name, None).strip()
-
-    if not jwt_key:
-        logger.error(f'{jwt_key_setting_name} setting is not defined')
-        raise RuntimeError(f'{jwt_key_setting_name} is not set')
+    jwt_key = get_preference_value("proxy", "jwt_private_key", encrypted=False)
 
     try:
         private_key = serialization.load_pem_private_key(bytes(jwt_key, "UTF-8"), password=None)
@@ -65,3 +61,13 @@ def get_jwt_rsa_key(public=False):
             raise e
 
     return jwt_key
+
+
+def update_jwt_public_key(new_private_key):
+    # For now, private key can be empty (think: brand new installation, no key yet)
+    # TODO: Maybe there's a better solution for the initial setup so we can always require a key?
+    if new_private_key:
+        public_key = get_jwt_rsa_key(public=True)
+    else:
+        public_key = ""
+    update_preference_value("proxy", "jwt_public_key", public_key)

@@ -3,26 +3,43 @@ from unittest.mock import MagicMock
 
 from django.urls import reverse
 
+from aap_gateway_api.utils.encryption import ENCRYPTED_STRING
+from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key
 
-def test_jwt_key(unauthenticated_api_client):
+
+@mock.patch("aap_gateway_api.views.api.v1.jwt_key.logger")
+def test_jwt_key_default_empty(logger, unauthenticated_api_client, shut_up_logging):
     url = reverse("jwt-key-view")
-    response = unauthenticated_api_client.get(url)
-    assert response.status_code == 200
 
-    body = response.content.decode("utf-8")
-    assert body.startswith("-----BEGIN PUBLIC KEY-----")
-    assert body.endswith("-----END PUBLIC KEY-----\n")
-
-
-@mock.patch("aap_gateway_api.utils.jwt_token.logger")
-def test_jwt_key_bad_key(logger, unauthenticated_api_client, settings, shut_up_logging):
-    settings.JWT_KEY = "bad key"
-    unauthenticated_api_client.raise_request_exception = False
-    url = reverse("jwt-key-view")
+    # By default there will be no key, so this page will return a 500.
+    # Perhaps we should make this do something else instead.
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 500
     assert logger.exception.call_count == 1
-    assert logger.exception.call_args[0][0] == "Unable to load private key from JWT key"
+    assert "Could not deserialize key data." in logger.exception.call_args[0][0].args[0]
+
+
+def test_jwt_key_set_via_api(admin_api_client, unauthenticated_api_client, shut_up_logging, rsa_keypair):
+    """
+    Test that the JWT key can be set via the API.
+    When setting the private key, the public key should be
+    automatically extracted and stored as its own preference (proxy__jwt_public_key).
+
+    Note that proxy__jwt_public_key is not a user-editable preference, but its read-only
+    property is tested in test_set_readonly_setting in test_settings.py.
+    """
+    url = reverse("setting-section-list", kwargs={"category_slug": "proxy"})
+    response = admin_api_client.put(url, data={"jwt_private_key": rsa_keypair.private})
+    assert response.status_code == 200
+    assert response.data["jwt_private_key"] == ENCRYPTED_STRING
+    assert get_jwt_rsa_key() == rsa_keypair.private
+
+    url = reverse("jwt-key-view")
+    response = unauthenticated_api_client.get(url)
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert body == rsa_keypair.public
+    assert get_jwt_rsa_key(public=True) == rsa_keypair.public
 
 
 @mock.patch("aap_gateway_api.utils.jwt_token.logger")

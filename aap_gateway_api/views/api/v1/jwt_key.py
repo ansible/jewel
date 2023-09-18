@@ -10,4 +10,8 @@ logger = logging.getLogger('jwt_key')
 
 class JWTKeyView(View):
     def get(self, request, *args, **kwargs):
-        return HttpResponse(get_jwt_rsa_key(public=True))
+        try:
+            return HttpResponse(get_jwt_rsa_key(public=True))
+        except ValueError as e:
+            logger.exception(e)
+            return HttpResponse(status=500)

@@ -1,4 +1,5 @@
 from aap_gateway_api.utils import register
+from aap_gateway_api.utils.jwt_token import update_jwt_public_key
 
 register(
     section="proxy",
@@ -48,4 +49,26 @@ register(
     preference_type="bool",
     help_text="Ignore certificate to the Gateway proxy layer",
     encrypted=False,
+)
+
+register(
+    section="proxy",
+    preference_name="jwt_private_key",
+    default="",
+    required=False,
+    preference_type="pem_private_key",
+    help_text="JWT private key",
+    encrypted=True,
+    on_update=lambda preference, old, new: update_jwt_public_key(new),
+)
+
+register(
+    section="proxy",
+    preference_name="jwt_public_key",
+    default="<key not configured>",
+    required=False,
+    preference_type="longstring",
+    help_text="JWT public key (read-only)",
+    encrypted=False,
+    read_only=True,
 )
