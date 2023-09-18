@@ -47,7 +47,14 @@ preference_type_mapping = {
 
 
 def register(
-    section="general", preference_name=None, default=None, required=False, encrypted=False, preference_type="string", help_text="No help text specified"
+    section="general",
+    preference_name=None,
+    default=None,
+    required=False,
+    encrypted=False,
+    preference_type="string",
+    help_text="No help text specified",
+    read_only=False,
 ):
     if not preference_name:
         raise NameError("A preference must have a name")
@@ -73,6 +80,7 @@ def register(
             "encrypted": encrypted,
             "field_type": type_class,
             "help_text": help_text,
+            "read_only": read_only,
         },
     )
     gateway_preference_registry.register(my_transient_class)
