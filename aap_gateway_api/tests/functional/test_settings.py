@@ -96,3 +96,17 @@ def test_set_setting_bad_type(admin_api_client, register_preference, preference_
         assert str(response.data["bad_type"]) == err_substring
 
     assert Preference.objects.filter(name="bad_type").first().value == new_value
+
+
+@pytest.mark.parametrize(
+    "preference",
+    [
+        ("proxy", "jwt_public_key"),
+    ],
+)
+def test_set_readonly_setting(admin_api_client, preference):
+    url = reverse("setting-section-list", kwargs={"category_slug": preference[0]})
+    response = admin_api_client.put(url, data={preference[1]: "This should not work"})
+    assert response.status_code == 400
+    assert str(response.data[preference[1]]) == f"Cannot change read-only setting {preference[1]}"
+    assert Preference.objects.filter(name=preference[1]).first().value != "This should not work"

@@ -6,7 +6,7 @@ from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.models import gateway_preference_registry
-from aap_gateway_api.preference_types import URLPreference
+from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import ENCRYPTED_STRING, get_preference_value_by_preference, update_preference_value
 
 logger = logging.getLogger('aap.gateway.serializers')
@@ -46,9 +46,13 @@ class SettingSingletonSerializer(serializers.Serializer):
             types.TimePreference: serializers.TimeField,
             types.MultipleChoicePreference: serializers.MultipleChoiceField,
             URLPreference: serializers.URLField,
+            PEMPrivateKeyPreference: serializers.CharField,
         }
 
-        long_string_fields = (types.LongStringPreference,)
+        long_string_fields = (
+            types.LongStringPreference,
+            PEMPrivateKeyPreference,
+        )
 
         fields = super().get_fields()
         for registered_preference in gateway_preference_registry.preferences(self.category_slug):
