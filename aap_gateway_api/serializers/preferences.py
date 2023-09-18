@@ -32,9 +32,10 @@ class SettingSingletonSerializer(serializers.Serializer):
             fields[registered_preference.name] = Field(
                 initial=get_preference_value_by_preference(registered_preference),
                 help_text=registered_preference.help_text,
-                # No option being passed through the category is required because we might on;y be updating one.
+                # No option being passed through the category is required because we might only be updating one.
                 required=False,
                 default=registered_preference.default,
+                read_only=registered_preference.read_only,
             )
 
         return fields
@@ -61,6 +62,11 @@ class SettingSingletonSerializer(serializers.Serializer):
                 # We were not passed this variable so we can skip it
                 continue
             new_value = data[registered_preference.name]
+
+            if current_value != new_value and registered_preference.read_only:
+                # We are trying to change a read only setting
+                errors[registered_preference.name] = f"Cannot change read-only setting {registered_preference.name}"
+                continue
 
             if current_value != new_value and new_value != ENCRYPTED_STRING:
                 masked_value = new_value
