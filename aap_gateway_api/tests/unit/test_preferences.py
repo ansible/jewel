@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 from django.core.exceptions import ValidationError
 from dynamic_preferences.serializers import SerializationError
@@ -115,3 +117,32 @@ def test_preference_update_with_bad_type(register_preference, preference_type, d
     else:
         # Just make sure this doesn't raise an exception
         preferences.update_preference_value("general", "bad_type", value)
+
+
+def test_preference_on_update(register_preference):
+    on_update_callback = MagicMock()
+
+    register_preference(
+        section="general",
+        preference_name="on_update_test",
+        default="hey",
+        encrypted=False,
+        preference_type="string",
+        on_update=on_update_callback,
+    )
+
+    assert on_update_callback.call_count == 0
+
+    # Ensure the callback is called even if the value is the same
+    preferences.update_preference_value("general", "on_update_test", "hey")
+    assert on_update_callback.call_count == 1
+
+    on_update_callback.reset_mock()
+
+    # Change the value and ensure the callback is called
+    preferences.update_preference_value("general", "on_update_test", "hello test")
+    assert on_update_callback.call_count == 1
+
+    # The callback gets 2 parameters, the old value, and the new value
+    assert on_update_callback.call_args[0][0] == "hey"
+    assert on_update_callback.call_args[0][1] == "hello test"
