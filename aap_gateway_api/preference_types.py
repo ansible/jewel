@@ -22,10 +22,6 @@ class URLPreference(types.StringPreference):
 class PEMPrivateKeyPreference(types.LongStringPreference):
     def validate(self, value):
         logger.debug("Validating PEM private key")
-        if value == "":
-            # TODO: Do we want to allow this case?
-            logger.debug("PEM private key is empty")
-            return value
         try:
             serialization.load_pem_private_key(bytes(value, "UTF-8"), password=None)
         except Exception:

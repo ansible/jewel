@@ -1,5 +1,5 @@
 from aap_gateway_api.utils import register
-from aap_gateway_api.utils.jwt_token import update_jwt_public_key
+from aap_gateway_api.utils.jwt_token import generate_jwt_keypair, update_jwt_public_key
 
 register(
     section="proxy",
@@ -54,8 +54,8 @@ register(
 register(
     section="proxy",
     preference_name="jwt_private_key",
-    default="",
-    required=False,
+    default=generate_jwt_keypair().private,
+    required=True,
     preference_type="pem_private_key",
     help_text="JWT private key",
     encrypted=True,

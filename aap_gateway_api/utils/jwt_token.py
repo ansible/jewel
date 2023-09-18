@@ -1,8 +1,10 @@
 import logging
+from collections import namedtuple
 from datetime import datetime, timedelta
 
 import jwt
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
 
@@ -64,10 +66,21 @@ def get_jwt_rsa_key(public=False):
 
 
 def update_jwt_public_key(new_private_key):
-    # For now, private key can be empty (think: brand new installation, no key yet)
-    # TODO: Maybe there's a better solution for the initial setup so we can always require a key?
-    if new_private_key:
-        public_key = get_jwt_rsa_key(public=True)
-    else:
-        public_key = ""
+    public_key = get_jwt_rsa_key(public=True)
     update_preference_value("proxy", "jwt_public_key", public_key)
+
+
+def generate_jwt_keypair():
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    private_key_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_key_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+    RSAKeyPair = namedtuple("RSAKeyPair", ["private", "public"])
+    return RSAKeyPair(private=private_key_bytes, public=public_key_bytes)
