@@ -18,3 +18,29 @@ class Authenticator(NamedCommonModel):
         ],
         help_text="The type of authentication service this is",
     )
+
+    def save(self, *args, **kwargs):
+        from aap_gateway_api.utils import gateway_encryption
+
+        if self.type == 'l':
+            from aap_gateway_api.authentication.ldap import configuration_encrypted_fields
+
+            for field in configuration_encrypted_fields:
+                if field in self.configuration:
+                    self.configuration[field] = gateway_encryption.encrypt_string(self.configuration[field])
+
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        from aap_gateway_api.utils import ENCRYPTED_STRING, gateway_encryption
+
+        instance = super().from_db(db, field_names, values)
+        if instance.type == 'l':
+            from aap_gateway_api.authentication.ldap import configuration_encrypted_fields
+
+            for field in configuration_encrypted_fields:
+                if field in instance.configuration and instance.configuration[field].startswith(ENCRYPTED_STRING):
+                    instance.configuration[field] = gateway_encryption.decrypt_string(instance.configuration[field])
+
+        return instance

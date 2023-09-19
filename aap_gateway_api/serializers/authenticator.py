@@ -15,19 +15,25 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         model = Authenticator
         fields = NamedCommonModelSerializer.Meta.fields + [x.name for x in Authenticator._meta.concrete_fields]
 
-    # TODO: Ensure that encrypted strings are masked.... do we need/want to delve into dicts and search their keys?
+    # TODO: Do we need/want to delve into dicts and search their keys?
     def to_representation(self, authenticator):
         ret = super().to_representation(authenticator)
         configuration = authenticator.configuration
         masked_configuration = OrderedDict()
         keys = list(configuration.keys())
+        encrypted_keys = []
+        if authenticator.type == 'l':
+            from aap_gateway_api.authentication.ldap import configuration_encrypted_fields as encrypted_keys
+
         keys.sort()
+        # Mask any keys in the encryption that should be masked
         for key in keys:
-            if type(configuration[key]) is str and configuration[key].startswith(ENCRYPTED_STRING):
+            if key in encrypted_keys:
                 masked_configuration[key] = ENCRYPTED_STRING
             else:
                 masked_configuration[key] = configuration[key]
         ret['configuration'] = masked_configuration
+
         return ret
 
     def validate(self, data) -> dict:
@@ -44,6 +50,13 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         return data
 
     def validate_ldap_configuration(self, data: dict) -> None:
+        from aap_gateway_api.authentication.ldap import configuration_encrypted_fields
+
+        # If there are any encrypted keys we don't want to use ENCRYPTED_STRING if they were not updated
+        for key in configuration_encrypted_fields:
+            if key in data and data[key] == ENCRYPTED_STRING:
+                data[key] = self.instance.configuration.get(key, None)
+
         settings = LDAPSettings(defaults=data)
 
         if settings.errors:
