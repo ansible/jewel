@@ -2,7 +2,6 @@ import collections
 import logging
 
 from django.utils.translation import gettext_lazy as _
-from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
@@ -15,8 +14,6 @@ logger = logging.getLogger('aap.gateway.views.preference')
 
 
 class PreferenceSingletonView(ViewWithHeaders):
-    permission_classes = [permissions.IsAuthenticated]
-
     def get_serializer(self, *args, **kwargs):
         return self.serializer
 
@@ -57,7 +54,3 @@ class PreferenceListView(GatewayModelViewSet):
             url = reverse('setting-section-list', kwargs={'category_slug': section}, request=self.request)
             setting_categories.append(PreferenceSection(url, section))
         return setting_categories
-
-    def check_permissions(self, request):
-        # TODO: Make sure we can see this view
-        return True
