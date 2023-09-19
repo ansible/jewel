@@ -1,36 +1,108 @@
 import inspect
 import logging
+import re
 from collections import OrderedDict
+from typing import Any
 
 import ldap
+from django.utils.translation import gettext_lazy as _
 from django_auth_ldap import config
 from django_auth_ldap.backend import LDAPBackend
 from django_auth_ldap.backend import LDAPSettings as BaseLDAPSettings
+from rest_framework.serializers import ValidationError
+
+from aap_gateway_api.authentication.common import check_user_attribute_map
+from aap_gateway_api.utils import VALID_STRING, validate_url_list
 
 logger = logging.getLogger('aap.gateway.authentication.ldap')
 
 
-class LDAPSettings(BaseLDAPSettings):
-    defaults = dict(list(BaseLDAPSettings.defaults.items()) + list({'ORGANIZATION_MAP': {}, 'TEAM_MAP': {}, 'GROUP_TYPE_PARAMS': {}}.items()))
+user_search_string = '%(user)s'
 
-    def __init__(self, prefix='AUTH_LDAP_', defaults={}):
+
+class LDAPSettings(BaseLDAPSettings):
+    # We add group type params to our list of valid settings
+    defaults = dict(list(BaseLDAPSettings.defaults.items()) + list({'GROUP_TYPE_PARAMS': {}}.items()))
+
+    def __init__(self, prefix: str = 'AUTH_LDAP_', defaults: dict = {}):
+        # This init method double checks the passed defaults while initializing a settings objects
         super(LDAPSettings, self).__init__(prefix, defaults)
 
-        # TODO: move this into a serializer or something
-        # Make sure connections options are legit
-        if getattr(self, 'CONNECTION_OPTIONS'):
-            valid_options = dict([(v, k) for k, v in ldap.OPT_NAMES_DICT.items()])
-            internal_data = {}
-            for opt_name, opt_value in getattr(self, 'CONNECTION_OPTIONS').items():
-                internal_data[valid_options[opt_name]] = opt_value
-            setattr(self, 'CONNECTION_OPTIONS', internal_data)
+        self.errors = {}
+        # We track these separate because there may be cases where we have errors but it would still yield a valid configuration
+        self.configuration_valid = False
+
+        # Check BindDN
+        self.validate_ldap_dn(defaults.get('BIND_DN', None), error_entry_label='BIND_DN', with_user=False, required=False)
+
+        # Ensure all options specified in CONNECTION_OPTIONS are valid options
+        # Connection options need to be set as {"integer": "value"} but our configuration has {"friendly_name": "value"} so we need to convert them
+        self.validate_connection_options(defaults.get('CONNECTION_OPTIONS', None))
+
+        # Ensure GROUP_TYPE is a valid option and that GROUP_TYPE_PARAMS matches it
+        self.validate_group_type(defaults.get('GROUP_TYPE', None), defaults.get('GROUP_TYPE_PARAMS', None))
+
+        # Validate USER_SEARCH is a valid search (list of 3, with valid information)
+        # Ensure GROUP_SEARCH is valid (list of 3, with valid information)
+        for field, search_must_have_user in [('GROUP_SEARCH', False), ('USER_SEARCH', True)]:
+            self.validate_ldap_search_field(field, defaults.get(field, None), search_must_have_user)
+
+        # Ensure SERVER_URI is valid
+        if 'SERVER_URI' in defaults:
+            valid_schemes = ['ldap', 'ldaps']
+            try:
+                validate_url_list(defaults['SERVER_URI'], schemes=valid_schemes, allow_plain_hostname=True)
+            except ValidationError as e:
+                self.set_error(
+                    'SERVER_URI',
+                    f"SERVER_URI must contain only valid urls with schemes {', '.join(valid_schemes)}, the following are invalid: {e.args[0]}",
+                    True,
+                )
+
+        # Make sure START_TLS is a valid boolean
+        if 'START_TLS' in defaults and type(defaults['START_TLS']) is not bool:
+            self.set_error('START_TLS', 'Must be a boolean value', True)
+
+        # Make sure USER_DN_TEMPLATE is a valid template
+        self.validate_ldap_dn(defaults.get('USER_DN_TEMPLATE', None), error_entry_label='USER_DN_TEMPLATE', with_user=True, required=True)
+
+        if 'USER_ATTR_MAP' in defaults:
+            for key, value in check_user_attribute_map(defaults['USER_ATTR_MAP']):
+                self.set_error(key, value, True)
+        else:
+            self.configuration_valid = False
+
+        # Make sure no other parameters are set unless they are valid LDAP settings
+        for option in defaults.keys():
+            if option not in LDAPSettings.defaults:
+                self.set_error(option, 'Is not a valid setting for an LDAP authenticator', False)
+
+    def set_error(self, option_name: str, message: str, fail_configuration: bool) -> None:
+        logger.debug(f"{option_name} {message}")
+        self.errors[option_name] = message
+        if fail_configuration:
+            self.configuration_valid = False
+
+    def validate_connection_options(self, connection_options: Any) -> None:
+        if not connection_options:
+            return
+
+        if type(connection_options) is not dict:
+            self.set_error('CONNECTION_OPTIONS', 'Must be a dict of options', True)
+            return
+
+        valid_options = dict([(v, k) for k, v in ldap.OPT_NAMES_DICT.items()])
+        internal_data = {}
+        for key in connection_options:
+            if key not in valid_options:
+                self.set_error(f'CONNECTION_OPTIONS.{key}', 'Not a valid connection option', True)
+            else:
+                internal_data[valid_options[key]] = connection_options[key]
 
         # If a DB-backed setting is specified that wipes out the
         # OPT_NETWORK_TIMEOUT, fall back to a sane default
-        if ldap.OPT_NETWORK_TIMEOUT not in getattr(self, 'CONNECTION_OPTIONS', {}):
-            options = getattr(self, 'CONNECTION_OPTIONS', {})
-            options[ldap.OPT_NETWORK_TIMEOUT] = 30
-            self.CONNECTION_OPTIONS = options
+        if ldap.OPT_NETWORK_TIMEOUT not in internal_data:
+            internal_data[ldap.OPT_NETWORK_TIMEOUT] = 30
 
         # when specifying `.set_option()` calls for TLS in python-ldap, the
         # *order* in which you invoke them *matters*, particularly in Python3,
@@ -41,39 +113,141 @@ class LDAPSettings(BaseLDAPSettings):
         # options
         #
         # see: https://github.com/python-ldap/python-ldap/issues/55
-        newctx_option = self.CONNECTION_OPTIONS.pop(ldap.OPT_X_TLS_NEWCTX, None)
-        self.CONNECTION_OPTIONS = OrderedDict(self.CONNECTION_OPTIONS)
+        newctx_option = internal_data.pop(ldap.OPT_X_TLS_NEWCTX, None)
+        internal_data = OrderedDict(internal_data)
         if newctx_option is not None:
-            self.CONNECTION_OPTIONS[ldap.OPT_X_TLS_NEWCTX] = newctx_option
+            internal_data[ldap.OPT_X_TLS_NEWCTX] = newctx_option
 
-        # TODO: Move these to somewhere they are processing on setting
-        # Sanitize two LDAP fields
-        for field in ['GROUP_SEARCH', 'USER_SEARCH']:
-            data = getattr(self, field)
-            if data:
-                if len(data) == 0:
-                    setattr(self, field, None)
-                else:
-                    setattr(self, field, config.LDAPSearch(data[0], data[1], data[2]))
+        setattr(self, 'CONNECTION_OPTIONS', internal_data)
 
-        # TODO: Move this into somewhere useful like the others
-        group_type_class_name = getattr(self, 'GROUP_TYPE')
-        if group_type_class_name:
-            group_type_class = getattr(config, group_type_class_name, None)
-            group_type_params = defaults.get('GROUP_TYPE_PARAMS', {})
-            params_sanitized = dict()
+    def validate_group_type(self, group_type_class_name: Any, group_type_params: Any) -> None:
+        if not group_type_class_name:
+            self.set_error('GROUP_TYPE', 'Must be present', True)
+            return
 
-            class_args = inspect.getfullargspec(group_type_class.__init__).args[1:]
+        if type(group_type_class_name) is not str:
+            self.set_error('GROUP_TYPE', 'Must be string', True)
+            return
 
-            if class_args:
-                if not isinstance(group_type_params, dict):
-                    self.fail('invalid_parameters', parameters_type=type(group_type_params))
+        group_type_class = getattr(config, group_type_class_name, None)
+        if not group_type_class:
+            self.set_error('GROUP_TYPE', 'Specified group type is invalid', True)
+            return
 
-            for attr in class_args:
-                if attr in group_type_params:
-                    params_sanitized[attr] = group_type_params[attr]
+        if not isinstance(group_type_params, dict):
+            self.set_error('GROUP_TYPE_PARAMS', "Must be a dict object", True)
+            return
 
-            setattr(self, 'GROUP_TYPE', group_type_class(**params_sanitized))
+        class_args = inspect.getfullargspec(group_type_class.__init__).args[1:]
+        invalid_keys = set(group_type_params) - set(class_args)
+        missing_keys = set(class_args) - set(group_type_params)
+        if invalid_keys:
+            invalid_keys = sorted(list(invalid_keys))
+            for key in invalid_keys:
+                self.set_error(f'GROUP_TYPE_PARAMS.{key}', "Invalid option for specified GROUP_TYPE", True)
+
+        if missing_keys:
+            missing_keys = sorted(list(missing_keys))
+            for key in missing_keys:
+                self.set_error(f'GROUP_TYPE_PARAMS.{key}', "Missing required field for GROUP_TYPE", True)
+
+        if not missing_keys and not invalid_keys:
+            # Group type needs to be an object instead of a String so instantiate it
+            setattr(self, 'GROUP_TYPE', group_type_class(**group_type_params))
+
+    def validate_ldap_search_field(self, search_field: str, data: Any, search_must_have_user: bool) -> None:
+        if not data:
+            return
+
+        LIST_MESSAGE = 'Must be an array of 3 items: search DN, search scope and a filter'
+
+        if type(data) is not list:
+            self.set_error(search_field, LIST_MESSAGE, True)
+            return
+
+        if len(data) == 0:
+            setattr(self, search_field, None)
+            return
+
+        if len(data) != 3:
+            self.set_error(search_field, LIST_MESSAGE, True)
+            return
+
+        config_good = True
+        if not self.validate_ldap_dn(data[0], error_entry_label=f'{search_field}.0', with_user=False, required=True):
+            config_good = False
+
+        if type(data[1]) is not str or not data[1].startswith('SCOPE_') or not getattr(ldap, data[1], None):
+            self.set_error(f'{search_field}.1', 'Must be a string representing an LDAP scope object', False)
+            config_good = False
+
+        if not self.validate_ldap_filter(data[2], f'{search_field}.2', with_user=search_must_have_user):
+            config_good = False
+
+        # If any of the above steps failed then make configuration_valid false
+        self.configuration_valid = config_good or self.configuration_valid
+
+        if config_good:
+            try:
+                # Search fields should be LDAPSearch objects, so we need to convert them from [] to these objects
+                search_object = config.LDAPSearch(data[0], data[1], data[2])
+                setattr(self, search_field, search_object)
+            except Exception as e:
+                self.set_error(search_field, f'Failed to instantiate LDAPSearch object: {e}', True)
+
+    def validate_ldap_filter(self, value: Any, error_entry_label: str, with_user: bool = False) -> bool:
+        # True = valid filter
+        # False = invalid filter
+        value = value.strip()
+        if type(value) is not str:
+            self.set_error(error_entry_label, VALID_STRING, False)
+            return False
+
+        dn_value = value
+        if with_user:
+            if user_search_string not in value:
+                self.set_error(error_entry_label, _('DN must include "{}" placeholder for username: {}').format(user_search_string, value), False)
+                return False
+            dn_value = value.replace(user_search_string, 'USER')
+
+        if re.match(r'^\([A-Za-z0-9-]+?=[^()]+?\)$', dn_value):
+            return True
+        elif re.match(r'^\([&|!]\(.*?\)\)$', dn_value):
+            try:
+                for sub_filter in dn_value[3:-2].split(')('):
+                    # We only need to check with_user at the top of the recursion stack
+                    self.validate_ldap_filter(f'({sub_filter})', error_entry_label, with_user=False)
+                return True
+            except ValidationError:
+                pass
+        self.set_error(error_entry_label, _('Invalid filter: %s') % value, False)
+        return False
+
+    def validate_ldap_dn(self, value: Any, error_entry_label: str, with_user: bool = False, required: bool = True) -> bool:
+        # True is a valid DN
+        # False means the DN is invalid
+
+        if not value and not required:
+            return True
+
+        if type(value) is not str:
+            self.set_error(error_entry_label, VALID_STRING, True)
+            return False
+
+        dn_value = value
+        if with_user:
+            if user_search_string not in value:
+                self.set_error(error_entry_label, _('DN must include "{}" placeholder for username: {}').format(user_search_string, value), True)
+                return False
+
+            dn_value = value.replace(user_search_string, 'USER')
+
+        try:
+            ldap.dn.str2dn(dn_value.encode('utf-8'))
+            return True
+        except ldap.DECODING_ERROR:
+            self.set_error(error_entry_label, _('Invalid DN: %s') % value, True)
+            return False
 
 
 class BaseLDAPBackend(LDAPBackend):
@@ -90,17 +264,12 @@ class BaseLDAPBackend(LDAPBackend):
             logger.info(f"LDAP authenticator {self.authenticator.name} is disabled, skipping")
             return None
 
-        configuration_errors = []
-        if not self.settings.SERVER_URI:
-            configuration_errors.append("Server URI must be a valid URL")
+        if not self.settings:
+            logger.info(f"LDAP authenticator {self.authenticator.name} has no settings")
+            return None
 
-        # TODO: Check configuration
-        # for setting_name, type_ in [('GROUP_SEARCH', 'LDAPSearch'), ('GROUP_TYPE', 'LDAPGroupType')]:
-        #    if getattr(self.settings, setting_name) is None:
-        #        configuration_errors.append("{} must be an {} instance.".format(setting_name, type_))
-
-        if configuration_errors:
-            logger.error(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors:\n{','.join(configuration_errors)}")
+        if not self.settings.configuration_valid:
+            logger.error(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors.")
             return None
 
         if self.settings.START_TLS and ldap.OPT_X_TLS_REQUIRE_CERT in self.settings.CONNECTION_OPTIONS:
@@ -121,16 +290,24 @@ class BaseLDAPBackend(LDAPBackend):
                     ldap_user.ldap_user._connection_bound = False
                 except Exception:
                     logger.exception(f"Got unexpected LDAP exception when forcing LDAP disconnect for user {ldap_user}, login will still proceed")
-            # TODO move this into common code for all adapters
-            if ldap_user is None:
-                logger.info(f"User {username} could not be authenticated by LDAP {self.authenticator.name}")
-                if self.settings.REQUIRE_GROUP and self.settings.DENY_GROUP:
-                    logger.info("Hint: is user missing required group or in deny group?")
-                elif self.settings.REQUIRE_GROUP:
-                    logger.info("Hint: is user missing required group?")
-                elif self.settings.DENY_GROUP:
-                    logger.info("Hint: is user in deny group?")
+
+            self.process_login_messages(ldap_user, username)
+
             return ldap_user
         except Exception:
             logger.exception(f"Encountered an error authenticating to LDAP {self.authenticator.name}")
             return None
+
+    def process_login_messages(self, ldap_user, username: str) -> None:
+        if ldap_user is None:
+            logger.info(f"User {username} could not be authenticated by LDAP {self.authenticator.name}")
+
+            # If our login failed and we have REQUIRE or DENY group we can't tell that the user is in that but we want inform the admin via a log as a hint
+            if self.settings.REQUIRE_GROUP and self.settings.DENY_GROUP:
+                logger.info("Hint: is user missing required group or in deny group?")
+            elif self.settings.REQUIRE_GROUP:
+                logger.info("Hint: is user missing required group?")
+            elif self.settings.DENY_GROUP:
+                logger.info("Hint: is user in deny group?")
+        else:
+            logger.info(f"User {username} authenticated by LDAP {self.authenticator.name}")
