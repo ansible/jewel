@@ -96,7 +96,11 @@ MIDDLEWARE = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
+        # NOTE: Do NOT put the built-in DRF SessionAuthentication here first,
+        # or anything that doesn't return a string from its authenticate_header.
+        # DRF uses the first thing here to determine if invalid auth should be
+        # 401 or 403. The UI expects 401.
+        'aap_gateway_api.authentication.session.SessionAuthentication',
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],

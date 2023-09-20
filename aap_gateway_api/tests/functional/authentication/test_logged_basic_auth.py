@@ -26,7 +26,7 @@ def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, ad
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:password".encode("utf-8")).decode("utf-8"))
     url = reverse("organization-list")
     response = client.get(url)
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 # There is really no better way to do this. I tried. Really hard.

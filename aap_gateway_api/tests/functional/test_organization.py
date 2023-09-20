@@ -15,7 +15,7 @@ def test_organizations_list(admin_api_client, organization):
 def test_organizations_list_unauthenticated(unauthenticated_api_client):
     url = reverse("organization-list")
     response = unauthenticated_api_client.get(url)
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_organizations_create(admin_api_client, randname):
@@ -36,7 +36,7 @@ def test_organizations_create_unauthenticated(unauthenticated_api_client, randna
     url = reverse("organization-list")
     random_name = randname("Test Organization")
     response = unauthenticated_api_client.post(url, data={"name": random_name})
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert Organization.objects.filter(name=random_name).count() == 0
 
 
@@ -56,7 +56,7 @@ def test_organizations_update_unauthenticated(unauthenticated_api_client, organi
     url = reverse("organization-detail", kwargs={"pk": organization.pk})
     random_name = randname("Test Organization")
     response = unauthenticated_api_client.put(url, data={"name": random_name})
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_organizations_delete(admin_api_client, organization):
@@ -71,7 +71,7 @@ def test_organizations_delete(admin_api_client, organization):
 def test_organizations_delete_unauthenticated(unauthenticated_api_client, organization):
     url = reverse("organization-detail", kwargs={"pk": organization.pk})
     response = unauthenticated_api_client.delete(url)
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_organizations_delete_nonexistent(admin_api_client):
