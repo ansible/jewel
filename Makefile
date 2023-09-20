@@ -134,7 +134,8 @@ requirements/requirements.txt: requirements/requirements.in
 plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
+## Remove all generated files when starting up docker
 docker-reset:
-	docker-compose -f tools/generated/docker-compose.yml down -v
-	rm -f tools/generated/{,.[!.],..?}*
+	if [ -f tools/generated/docker-compose.yaml ] ; then docker-compose -f tools/generated/docker-compose.yaml down -v ; fi
+	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
