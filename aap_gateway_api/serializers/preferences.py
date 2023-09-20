@@ -135,4 +135,6 @@ class SettingSingletonSerializer(serializers.Serializer):
             # We are not validating the value again because we already did that above
             update_preference_value(value['section'], key, value['value'], validate=False)
 
-        return validated_fields
+        # It is not enough to return validated_fields, since on_update might have changed some other fields
+        # Re-fetch the whole section
+        return self.to_representation()

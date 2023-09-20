@@ -2,6 +2,7 @@ import pytest
 from django.urls import reverse
 
 from aap_gateway_api.models import Preference
+from aap_gateway_api.utils.preferences import update_preference_value
 
 
 def test_get_all_settings(admin_api_client):
@@ -110,3 +111,30 @@ def test_set_readonly_setting(admin_api_client, preference):
     assert response.status_code == 400
     assert str(response.data[preference[1]]) == f"Cannot change read-only setting {preference[1]}"
     assert Preference.objects.filter(name=preference[1]).first().value != "This should not work"
+
+
+def test_on_update_changes_reflected_in_put(admin_api_client, register_preference):
+    """
+    When a preference is updated, its on_update callback might change other preferences
+    in the same section. Ensure that those changes are reflected in the response from
+    the PUT request.
+    """
+
+    register_preference(
+        section="general",
+        preference_name="soda",
+        default="root beer",
+        on_update=lambda preference, old, new: update_preference_value("general", "soda_but_uppercase", new.upper()),
+    )
+
+    register_preference(
+        section="general",
+        default="root beer",
+        preference_name="soda_but_uppercase",
+    )
+
+    url = reverse("setting-section-list", kwargs={"category_slug": "general"})
+    response = admin_api_client.put(url, data={"soda": "orange"})
+    assert response.status_code == 200
+    assert response.data["soda"] == "orange"
+    assert response.data["soda_but_uppercase"] == "ORANGE"
