@@ -11,4 +11,4 @@ def test_me(admin_api_client):
 def test_me_unauthenticated(unauthenticated_api_client):
     url = reverse("me-list")
     response = unauthenticated_api_client.get(url)
-    assert response.status_code == 403
+    assert response.status_code == 401

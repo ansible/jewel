@@ -15,7 +15,7 @@ def test_environments_list(admin_api_client, environment):
 def test_environments_list_unauthenticated(unauthenticated_api_client):
     url = reverse("environment-list")
     response = unauthenticated_api_client.get(url)
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_environments_create(admin_api_client, randname):
@@ -36,7 +36,7 @@ def test_environments_create_unauthenticated(unauthenticated_api_client, randnam
     url = reverse("environment-list")
     random_name = randname("Test Environment")
     response = unauthenticated_api_client.post(url, data={"name": random_name})
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert Environment.objects.filter(name=random_name).count() == 0
 
 
@@ -56,7 +56,7 @@ def test_environments_update_unauthenticated(unauthenticated_api_client, environ
     url = reverse("environment-detail", kwargs={"pk": environment.pk})
     random_name = randname("Test Environment")
     response = unauthenticated_api_client.put(url, data={"name": random_name})
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert Environment.objects.filter(name=random_name).count() == 0
 
 
@@ -70,7 +70,7 @@ def test_environments_delete(admin_api_client, environment):
 def test_environments_delete_unauthenticated(unauthenticated_api_client, environment):
     url = reverse("environment-detail", kwargs={"pk": environment.pk})
     response = unauthenticated_api_client.delete(url)
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert Environment.objects.filter(pk=environment.pk).count() == 1
 
 
@@ -90,7 +90,7 @@ def test_environments_retrieve(admin_api_client, environment):
 def test_environments_retrieve_unauthenticated(unauthenticated_api_client, environment):
     url = reverse("environment-detail", kwargs={"pk": environment.pk})
     response = unauthenticated_api_client.get(url)
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_environments_retrieve_nonexistent(admin_api_client):
@@ -115,7 +115,7 @@ def test_environments_partial_update_unauthenticated(unauthenticated_api_client,
     url = reverse("environment-detail", kwargs={"pk": environment.pk})
     random_name = randname("Test Environment")
     response = unauthenticated_api_client.patch(url, data={"name": random_name})
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert Environment.objects.filter(name=random_name).count() == 0
 
 
@@ -139,7 +139,7 @@ def test_environments_filter(admin_api_client, environment):
 def test_environments_filter_unauthenticated(unauthenticated_api_client, environment):
     url = reverse("environment-list")
     response = unauthenticated_api_client.get(url, data={"name": environment.name})
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_environments_filter_nonexistent(admin_api_client):
