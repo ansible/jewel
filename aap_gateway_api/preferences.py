@@ -51,10 +51,12 @@ register(
     encrypted=False,
 )
 
+default_keypair = generate_jwt_keypair()
+
 register(
     section="proxy",
     preference_name="jwt_private_key",
-    default=generate_jwt_keypair().private,
+    default=default_keypair.private,
     required=True,
     preference_type="pem_private_key",
     help_text="JWT private key",
@@ -65,7 +67,7 @@ register(
 register(
     section="proxy",
     preference_name="jwt_public_key",
-    default="<key not configured>",
+    default=default_keypair.public,
     required=False,
     preference_type="longstring",
     help_text="JWT public key (read-only)",

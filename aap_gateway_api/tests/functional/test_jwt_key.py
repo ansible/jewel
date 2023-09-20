@@ -13,6 +13,7 @@ def test_jwt_key_unauthenticated(unauthenticated_api_client, shut_up_logging):
     # By default there will be a random key, so this page should always return 200.
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 200
+    assert response["Content-Type"] == "text/plain"
 
 
 def test_jwt_key_set_via_api(admin_api_client, unauthenticated_api_client, rsa_keypair):

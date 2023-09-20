@@ -11,7 +11,8 @@ logger = logging.getLogger('jwt_key')
 class JWTKeyView(View):
     def get(self, request, *args, **kwargs):
         try:
-            return HttpResponse(get_jwt_rsa_key(public=True))
+            # Return this as text/plain, as it is a PEM file.
+            return HttpResponse(get_jwt_rsa_key(public=True), content_type="text/plain")
         except ValueError as e:
             logger.exception(e)
             return HttpResponse(status=500)
