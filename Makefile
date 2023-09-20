@@ -108,16 +108,11 @@ tools/generated/docker-compose.yaml: container-startup.yml tools/ansible/roles/s
 	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the docker containers
-docker-compose-build: tools/generated/.has_built_api tools/generated/.has_built_proxy
+docker-compose-build: tools/generated/.has_built_api
 
 ## Build the API container
-tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yaml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 	docker-compose -f tools/generated/docker-compose.yaml build gateway
-	touch $@
-
-## Build the proxy container
-tools/generated/.has_built_proxy: tools/docker/Dockerfile.proxy tools/generated/gateway.crt tools/generated/proxy.yaml $(shell find tools -type f -name "*envoy*") $(shell find tools/ansible -type f)
-	docker-compose -f tools/generated/docker-compose.yaml build proxy
 	touch $@
 
 ## Build the cert file
@@ -138,3 +133,8 @@ requirements/requirements.txt: requirements/requirements.in
 ## Plumb the sidecar containers
 plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml
+
+docker-reset:
+	docker-compose -f tools/generated/docker-compose.yaml down -v
+	rm -f tools/generated/{,.[!.],..?}*
+	touch tools/generated/.gitkeep

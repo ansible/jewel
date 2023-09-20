@@ -13,4 +13,5 @@ psycopg[binary]
 pyjwt
 requests
 uwsgi
-xds-protos
+xds-protos>=1.58
+PyYAML

@@ -70,6 +70,9 @@ class CommonModel(models.Model):
         response = {}
         for field in self._meta.concrete_fields:
             if isinstance(field, models.ForeignKey) and getattr(self, field.name):
+                # ignore relations on inherited django models
+                if field.name.endswith("_ptr"):
+                    continue
                 response[field.name] = getattr(self, field.name).summary_fields()
         return response
 
@@ -78,6 +81,9 @@ class CommonModel(models.Model):
         # Automatically add all of the ForeignKeys for the model as related fields
         for field in self._meta.concrete_fields:
             if isinstance(field, models.ForeignKey) and getattr(self, field.name):
+                # ignore relations on inherited django models
+                if field.name.endswith("_ptr"):
+                    continue
                 pk = getattr(self, field.name).pk
                 if pk:
                     reverse_view = f"{field.related_model.__name__.lower()}-detail"

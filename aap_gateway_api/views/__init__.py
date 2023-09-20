@@ -10,14 +10,20 @@ from rest_framework.views import APIView
 
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
 from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
-from aap_gateway_api.views.api.v1.environment import EnvironmentOrganizationViewSet, EnvironmentServiceViewSet, EnvironmentViewSet  # noqa: F401
+from aap_gateway_api.views.api.v1.environment import EnvironmentOrganizationViewSet, EnvironmentViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_key import JWTKeyView  # noqa: F401
 from aap_gateway_api.views.api.v1.local_login import LoggedLoginView, LoggedLogoutView  # noqa: F401
 from aap_gateway_api.views.api.v1.me import MeViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.organization import OrganizationTeamViewSet, OrganizationViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.ping import PingView  # noqa: 401
 from aap_gateway_api.views.api.v1.preference import PreferenceListView, PreferenceSingletonView  # noqa: F401
-from aap_gateway_api.views.api.v1.service import ServiceViewSet  # noqa: F401
+from aap_gateway_api.views.api.v1.service import (  # noqa: F401
+    AdditionalRouteViewSet,
+    HTTPPortViewSet,
+    ServiceAPIRouteViewSet,
+    ServiceClusterViewSet,
+    ServiceNodeViewSet,
+)
 from aap_gateway_api.views.api.v1.team import TeamViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.user import UserViewSet  # noqa: F401
 

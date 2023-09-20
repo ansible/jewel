@@ -1,35 +1,42 @@
 proxy:
-  enable_admin_interface: true
-  admin_address: 0.0.0.0
-  admin_port: 19000
   use_tls: true
-  ssl_certificate: /etc/gateway/gateway.crt
-  ssl_certificate_key: /etc/gateway/gateway.key
+  api_port: 9080
 
+# Dictionary of services to be served under /api/<key>/.
 services:
   gateway:
     use_tls: true
-    proxy_root: /api/gateway/
+    api_port: 8000
+    control_plane_port: 50051
+    service_root: /api/gateway/
+    type: gateway
 
-    load_balance:
-      - address: gateway
-        port: 8000
-        control_plane_port: 50051
+    nodes:
+      - address: "gateway"
 
   hub:
-    use_tls: false
-    proxy_root: /api/hub/
+    use_tls: true
     service_root: /api/galaxy/
+    api_port: 5001
+    type: hub
 
-    load_balance:
+    nodes:
       - address: "localhost"
-        port: 5043
 
   controller:
     use_tls: true
-    proxy_root: /api/controller/
     service_root: /api/
+    api_port: 8043
+    type: controller
 
-    load_balance:
-      - address: localhost
-        port: 8043
+    nodes:
+      - address: "localhost"
+
+  eda:
+    use_tls: true
+    service_root: /api/
+    api_port: 8000
+    type: eda
+
+    nodes:
+      - address: "localhost"

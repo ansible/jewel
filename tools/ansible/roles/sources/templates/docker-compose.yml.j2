@@ -56,15 +56,14 @@ services:
 
   proxy:
     container_name: aap_gw_proxy_1
-    build:
-      context: $PWD
-      dockerfile: tools/docker/Dockerfile.proxy
+    image: envoyproxy/envoy:v1.24-latest
     ports:
       - "9080:9080"
       - "9090:19000"
-    # command: --log-level debug
+    # command: -c /etc/envoy/envoy.yaml --log-level debug
     volumes:
-      - $PWD/tools/generated/proxy.yaml:/etc/gateway/proxy.yaml:Z
+      - $PWD/tools/configs/envoy.yaml:/etc/envoy/envoy.yaml:Z
+      - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:Z
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
     extra_hosts:
