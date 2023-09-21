@@ -35,6 +35,9 @@ class LDAPSettings(BaseLDAPSettings):
         # Check BindDN
         self.validate_ldap_dn(defaults.get('BIND_DN', None), error_entry_label='BIND_DN', with_user=False, required=False)
 
+        if type(defaults['BIND_PASSWORD']) is not str:
+            self.set_error('BIND_PASSWORD', VALID_STRING, True)
+
         # Ensure all options specified in CONNECTION_OPTIONS are valid options
         # Connection options need to be set as {"integer": "value"} but our configuration has {"friendly_name": "value"} so we need to convert them
         self.validate_connection_options(defaults.get('CONNECTION_OPTIONS', None))
@@ -58,6 +61,8 @@ class LDAPSettings(BaseLDAPSettings):
                     f"SERVER_URI must contain only valid urls with schemes {', '.join(valid_schemes)}, the following are invalid: {e.args[0]}",
                     True,
                 )
+        # SERVER_URI needs to be a comma delineated string
+        setattr(self, 'SERVER_URI', ', '.join(defaults['SERVER_URI']))
 
         # Make sure START_TLS is a valid boolean
         if 'START_TLS' in defaults and type(defaults['START_TLS']) is not bool:
