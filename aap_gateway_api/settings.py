@@ -228,9 +228,6 @@ DYNAMIC_PREFERENCES = {
     'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
 }
 
-JWT_KEY = '''
-REDACTED'''
-
 GRPCSERVER = {
     'servicers': ['aap_gateway_api.proxy.control_plane.grpc_hook'],  # see `grpc_hook()` below
     # 'interceptors': ['dotted.path.to.interceptor_class',],  # optional, interceprots are similar to middleware in Django
