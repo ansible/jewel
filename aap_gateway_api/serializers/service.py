@@ -2,8 +2,7 @@ from rest_framework import serializers
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 from aap_gateway_api.models.service import API_PREFIX
-from aap_gateway_api.serializers import CommonModelSerializer, NamedCommonModelSerializer
-from aap_gateway_api.serializers.common import NamedCommonModelSerializer
+from aap_gateway_api.serializers.common import CommonModelSerializer, NamedCommonModelSerializer
 
 
 class HTTPPortSerializer(CommonModelSerializer):
@@ -11,7 +10,7 @@ class HTTPPortSerializer(CommonModelSerializer):
 
     class Meta:
         model = HTTPPort
-        fields = CommonModelSerializer.Meta.fields + ('number', 'use_https', 'is_api_port')
+        fields = CommonModelSerializer.Meta.fields + ['number', 'use_https', 'is_api_port']
 
 
 class ServiceClusterSerializer(CommonModelSerializer):
@@ -19,7 +18,9 @@ class ServiceClusterSerializer(CommonModelSerializer):
 
     class Meta:
         model = ServiceCluster
-        fields = CommonModelSerializer.Meta.fields + ('service_type',)
+        fields = CommonModelSerializer.Meta.fields + [
+            'service_type',
+        ]
 
 
 class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
@@ -27,7 +28,7 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
 
     class Meta:
         model = ServiceAPIRoute
-        fields = NamedCommonModelSerializer.Meta.fields + (
+        fields = NamedCommonModelSerializer.Meta.fields + [
             'port',
             'service_cluster',
             'service_port',
@@ -36,7 +37,7 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
             'gateway_path',
             'description',
             'api_slug',
-        )
+        ]
 
         read_only_fields = ('gateway_path',)
 
@@ -46,7 +47,7 @@ class ServiceNodeSerializer(CommonModelSerializer):
 
     class Meta:
         model = ServiceNode
-        fields = CommonModelSerializer.Meta.fields + ('address', 'service')
+        fields = CommonModelSerializer.Meta.fields + ['address', 'service']
 
 
 class AdditionalRouteSerializer(NamedCommonModelSerializer):
@@ -54,7 +55,7 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
 
     class Meta:
         model = AdditionalRoute
-        fields = NamedCommonModelSerializer.Meta.fields + (
+        fields = NamedCommonModelSerializer.Meta.fields + [
             'port',
             'service_cluster',
             'service_port',
@@ -62,7 +63,7 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
             'service_path',
             'gateway_path',
             'description',
-        )
+        ]
 
     def validate(self, attrs):
         if attrs["port"].is_api_port and attrs["gateway_path"].startswith(API_PREFIX):
