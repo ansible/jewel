@@ -1,4 +1,3 @@
-import re
 from urllib.parse import urlparse, urlunsplit
 
 from django.core.exceptions import ValidationError as LowLevelValidationError
@@ -9,11 +8,14 @@ from rest_framework.serializers import ValidationError
 VALID_STRING = _('Must be a valid string')
 
 
-def validate_url_list(url: str, schemes: list = ['https'], allow_plain_hostname: bool = False) -> None:
-    if type(url) is not str:
-        raise ValidationError(VALID_STRING)
+def validate_url_list(urls: list, schemes: list = ['https'], allow_plain_hostname: bool = False) -> None:
+    if type(urls) is not list:
+        raise ValidationError("Must be a list of urls")
     errors = []
-    for a_url in re.split(r'[, ] *', url):
+    for a_url in urls:
+        if type(a_url) is not str:
+            errors.append(f"{a_url} must be a valid url")
+            continue
         try:
             validate_url(a_url, schemes=schemes, allow_plain_hostname=allow_plain_hostname)
         except ValidationError:
