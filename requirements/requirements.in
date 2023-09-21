@@ -16,4 +16,4 @@ requests
 social-auth-app-django
 uwsgi
 xds-protos>=1.58
-PyYAML
+PyYAML==5.3.1  # We have to pin PyYAML because newer versions can't compile wth the latest Cython
