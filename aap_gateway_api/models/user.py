@@ -1,6 +1,7 @@
 import logging
 
 from crum import get_current_user
+from django.contrib.auth.hashers import is_password_usable, make_password
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.timezone import now
@@ -41,6 +42,13 @@ class User(AbstractUser):
             self.modified_by = user.username if user else 'System'
             update_fields.append('modified_on')
             update_fields.append('modified_by')
+
+        # If the password is not already encrypted we need to do that.
+        # If we ever change the algorithm for the password encryption this might break
+        # The is_password_usable check will prevent us from overwriting an unusable password from an external account
+        if is_password_usable(self.password) and not self.password.startswith("pbkdf2_sha256$"):
+            self.password = make_password(self.password)
+
         super().save(*args, **kwargs)
 
     def logout(self):
