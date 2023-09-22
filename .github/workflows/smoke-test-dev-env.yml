@@ -1,0 +1,49 @@
+---
+name: Smoke-test dev env
+on:
+  pull_request:
+  push:
+jobs:
+  tox:
+    name: smoke-test dev env
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Upgrade ansible-core
+        run: python3 -m pip install --upgrade ansible-core
+
+      - name: Build the image
+        run: make docker-compose-build
+
+      - name: Try out the dev env
+        run: |
+          COMPOSE_UP_OPTS=--abort-on-container-exit make docker-compose & GATEWAY_PID=$!
+
+          SECONDS=0
+          while ! curl -sk https://localhost:8000/api/gateway/v1/ping/ | grep -q '"pong"'; do
+            # Make sure we are still running
+            if ! kill -0 $GATEWAY_PID; then
+              echo -e "\033[0;35m*** Gateway failed to start ***\033[0m"
+              exit 1
+            fi
+
+            if [ $SECONDS -gt 240 ]; then
+            echo -e "\033[0;35m*** Gateway failed to start after 240 seconds ***\033[0m"
+              exit 1
+            fi
+
+            echo -e "\033[0;35m*** Waiting for Gateway to be ready... (waited $SECONDS seconds so far) ***\033[0m"
+            sleep 5
+          done
+
+          docker exec -ie DJANGO_SUPERUSER_PASSWORD=admin aap_gw_1 \
+            gateway-manage createsuperuser --username admin --email=none@example.com --noinput
+
+          curl -k https://localhost:8000/api/gateway/v1/me | grep -q 'credentials were not provided'
+
+          curl -k https://admin:admin@localhost:8000/api/gateway/v1/me | grep -q '"username":"admin"'
+
+          make docker-reset

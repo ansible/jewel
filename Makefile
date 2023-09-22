@@ -105,12 +105,12 @@ docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hoo
 container-startup.yml: tools/configs/container-startup.yml
 	cp tools/configs/container-startup.yml ./container-startup.yml
 
-## Generate the docker-compoe.yml file
+## Generate the docker-compose.yml file
 tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
 	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the docker containers
-docker-compose-build: tools/generated/.has_built_api
+docker-compose-build: tools/generated/docker-compose.yml tools/generated/.has_built_api
 
 ## Build the API container
 tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
