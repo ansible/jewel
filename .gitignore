@@ -38,3 +38,6 @@ htmlcov
 # Container customizations
 container-startup.yml
 tools/generated/*
+
+# Gets created when testing sonar-scanner locally
+.scannerwork
