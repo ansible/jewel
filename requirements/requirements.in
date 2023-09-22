@@ -6,6 +6,7 @@ django-crum
 django-dynamic-preferences
 django-extensions
 django-grpc
+django-split-settings
 grpcio
 grpcio-tools
 python-ldap
