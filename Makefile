@@ -138,6 +138,6 @@ plumb:
 
 ## Remove all generated files when starting up docker
 docker-reset:
-	if [ -f tools/generated/docker-compose.yaml ] ; then docker-compose -f tools/generated/docker-compose.yaml down -v ; fi
+	if [ -f tools/generated/docker-compose.yml ] ; then docker-compose -f tools/generated/docker-compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
