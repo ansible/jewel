@@ -13,7 +13,8 @@ ldap_configuration:
   users_unique: False
   remove_users: True
   configuration:
-    SERVER_URI: "ldap://{{ container_reference }}:{{ ldap_exposed_ldap_port }}"
+    SERVER_URI:
+      - "ldap://{{ container_reference }}:{{ ldap_exposed_ldap_port }}"
     BIND_DN: "cn={{ ldap_admin_username }},dc=example,dc=org"
     BIND_PASSWORD: "{{ ldap_admin_password }}"
     START_TLS: False
