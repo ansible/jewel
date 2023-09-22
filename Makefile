@@ -8,6 +8,8 @@ SERVICE_LIB_DIR ?= service_lib
 SERVICE_LIB_DIST ?= $(SERVICE_LIB_DIR)/dist
 UID := $(shell id -u)
 TOX_ARGS ?= ""
+COMPOSE_OPTS ?=
+COMPOSE_UP_OPTS ?=
 
 .PHONY: PYTHON_VERSION clean \
 	check lint check_black check_flake8 check_isort \
@@ -97,7 +99,7 @@ help/generate:
 ## Start the docker container
 docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
 	ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} docker-compose -f tools/generated/docker-compose.yml up --remove-orphans
+	env UID=${UID} docker-compose -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Generate the default container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
