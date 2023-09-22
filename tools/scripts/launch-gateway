@@ -25,7 +25,7 @@ done
 
 ${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py migrate --noinput
 ${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py collectstatic --noinput
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yaml
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
 
 cd ${GATEWAY_APP_DIR}
 exec supervisord -n
