@@ -61,8 +61,10 @@ class LDAPSettings(BaseLDAPSettings):
                     f"SERVER_URI must contain only valid urls with schemes {', '.join(valid_schemes)}, the following are invalid: {e.args[0]}",
                     True,
                 )
-        # SERVER_URI needs to be a comma delineated string
-        setattr(self, 'SERVER_URI', ', '.join(defaults['SERVER_URI']))
+                # SERVER_URI needs to be a comma delineated string
+                setattr(self, 'SERVER_URI', ', '.join(defaults['SERVER_URI']))
+        else:
+            self.set_error('SERVER_URI', 'Must be a list of valid LDAP URLs', True)
 
         # Make sure START_TLS is a valid boolean
         if 'START_TLS' in defaults and type(defaults['START_TLS']) is not bool:
@@ -72,7 +74,7 @@ class LDAPSettings(BaseLDAPSettings):
         self.validate_ldap_dn(defaults.get('USER_DN_TEMPLATE', None), error_entry_label='USER_DN_TEMPLATE', with_user=True, required=True)
 
         if 'USER_ATTR_MAP' in defaults:
-            for key, value in check_user_attribute_map(defaults['USER_ATTR_MAP']):
+            for key, value in check_user_attribute_map(defaults['USER_ATTR_MAP']).items():
                 self.set_error(key, value, True)
         else:
             self.configuration_valid = False
@@ -161,17 +163,14 @@ class LDAPSettings(BaseLDAPSettings):
             setattr(self, 'GROUP_TYPE', group_type_class(**group_type_params))
 
     def validate_ldap_search_field(self, search_field: str, data: Any, search_must_have_user: bool) -> None:
-        if not data:
-            return
-
         LIST_MESSAGE = 'Must be an array of 3 items: search DN, search scope and a filter'
+
+        if not data:
+            setattr(self, search_field, None)
+            return
 
         if type(data) is not list:
             self.set_error(search_field, LIST_MESSAGE, True)
-            return
-
-        if len(data) == 0:
-            setattr(self, search_field, None)
             return
 
         if len(data) != 3:
@@ -203,10 +202,11 @@ class LDAPSettings(BaseLDAPSettings):
     def validate_ldap_filter(self, value: Any, error_entry_label: str, with_user: bool = False) -> bool:
         # True = valid filter
         # False = invalid filter
-        value = value.strip()
         if type(value) is not str:
             self.set_error(error_entry_label, VALID_STRING, False)
             return False
+
+        value = value.strip()
 
         dn_value = value
         if with_user:
@@ -218,13 +218,12 @@ class LDAPSettings(BaseLDAPSettings):
         if re.match(r'^\([A-Za-z0-9-]+?=[^()]+?\)$', dn_value):
             return True
         elif re.match(r'^\([&|!]\(.*?\)\)$', dn_value):
-            try:
-                for sub_filter in dn_value[3:-2].split(')('):
-                    # We only need to check with_user at the top of the recursion stack
-                    self.validate_ldap_filter(f'({sub_filter})', error_entry_label, with_user=False)
-                return True
-            except ValidationError:
-                pass
+            for sub_filter in dn_value[3:-2].split(')('):
+                # We only need to check with_user at the top of the recursion stack
+                sub_filter_valid = self.validate_ldap_filter(f'({sub_filter})', error_entry_label, with_user=False)
+                if not sub_filter_valid:
+                    return False
+            return True
         self.set_error(error_entry_label, _('Invalid filter: %s') % value, False)
         return False
 
