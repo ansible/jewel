@@ -19,7 +19,7 @@ exclude = [ 'aap_gateway_api/migrations/*', '.tox' ]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
-addopts = "--strict-markers --reuse-db --migrations -s -vvv"
+addopts = "--strict-markers --reuse-db --create-db --migrations -s -vvv"
 
 [tool.tox]
 legacy_tox_ini = """
@@ -38,9 +38,10 @@ legacy_tox_ini = """
     deps =
         -r{toxinidir}/requirements/requirements.txt
         pytest
+        pytest-xdist
         pytest-cov
         pytest-django
-    commands = pytest --cov=. --cov-report=xml:coverage.xml --cov-report=html aap_gateway_api/tests {posargs}
+    commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html aap_gateway_api/tests {posargs}
 
     [testenv:flake8]
     deps =
