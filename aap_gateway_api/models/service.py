@@ -33,6 +33,13 @@ class HTTPPort(CommonModel):
 
     envoy_listener_name = models.CharField(max_length=255)
 
+    def __str__(self):
+        protocol = "https" if self.use_https else "http"
+        out = f"{self.number}/{protocol}"
+        if self.is_api_port:
+            out += " (API port)"
+        return out
+
     def save(self, *args, **kwargs):
         self.envoy_listener_name = f"port-{self.number}"
 
@@ -93,6 +100,9 @@ class ServiceCluster(CommonModel):
         response['id'] = self.id
         response['service_type'] = self.get_service_type_display()
         return response
+
+    def __str__(self):
+        return self.get_service_type_display()
 
 
 class ServiceNode(CommonModel):

@@ -116,3 +116,6 @@ class NamedCommonModel(CommonModel):
         res = super().summary_fields()
         res['name'] = self.name
         return res
+
+    def __str__(self):
+        return self.name
