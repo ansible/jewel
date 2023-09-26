@@ -10,11 +10,10 @@ django-split-settings
 grpcio
 grpcio-tools
 python-ldap
-protobuf==4.24.0
-psycopg[binary]
+protobuf>=4.21
 pyjwt
 requests
 social-auth-app-django
 uwsgi
 xds-protos>=1.58
-PyYAML==5.3.1  # We have to pin PyYAML because newer versions can't compile wth the latest Cython
+PyYAML>=5.3.1, <5.5
