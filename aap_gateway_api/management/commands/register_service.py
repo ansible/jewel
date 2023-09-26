@@ -29,7 +29,7 @@ class Command(BaseCommand):
         if type(config) is not dict:
             raise CommandError(f"{options['config']} is not valid YAML.")
 
-        print(f'Creating listener on port {config["proxy"]["api_port"]}')
+        self.stdout.write(f'Creating listener on port {config["proxy"]["api_port"]}')
         api_port, _ = HTTPPort.objects.update_or_create(
             is_api_port=True, defaults={"number": config["proxy"]["api_port"], "use_https": config["proxy"]["use_tls"]}
         )
@@ -42,7 +42,7 @@ class Command(BaseCommand):
             if service_type not in SERVICE_MAP:
                 raise CommandError(f"{service_type} is not allowed.")
 
-            print(f'Creating cluster for {service_type}')
+            self.stdout.write(f'Creating cluster for {service_type}')
             service, _ = ServiceCluster.objects.get_or_create(service_type=SERVICE_MAP[service_type])
 
             api_route, _ = ServiceAPIRoute.objects.update_or_create(
@@ -63,7 +63,7 @@ class Command(BaseCommand):
 
             # create /static/ route
             if service_type == "gateway":
-                print(f'Creating /static/ route for {service_type}')
+                self.stdout.write(f'Creating /static/ route for {service_type}')
                 AdditionalRoute.objects.update_or_create(
                     port=api_port,
                     gateway_path="/static/",
@@ -78,7 +78,7 @@ class Command(BaseCommand):
                     },
                 )
             elif service_type == "hub":
-                print(f'Creating /v2/ route for {service_type}')
+                self.stdout.write(f'Creating /v2/ route for {service_type}')
                 AdditionalRoute.objects.update_or_create(
                     port=api_port,
                     gateway_path="/v2/",
