@@ -1,0 +1,42 @@
+proxy:
+  use_tls: true
+  api_port: 9080
+
+# Dictionary of services to be served under /api/<key>/.
+services:
+  gateway:
+    use_tls: true
+    api_port: 8000
+    control_plane_port: 50051
+    service_root: /api/gateway/
+    type: gateway
+
+    nodes:
+      - address: "gateway"
+
+  hub:
+    use_tls: true
+    service_root: /api/galaxy/
+    api_port: 5001
+    type: hub
+
+    nodes:
+      - address: "localhost"
+
+  controller:
+    use_tls: true
+    service_root: /api/
+    api_port: 8043
+    type: controller
+
+    nodes:
+      - address: "localhost"
+
+  eda:
+    use_tls: true
+    service_root: /api/
+    api_port: 8000
+    type: eda
+
+    nodes:
+      - address: "localhost"
