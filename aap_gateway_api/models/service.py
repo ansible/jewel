@@ -74,13 +74,25 @@ class ServiceCluster(CommonModel):
     Represents an Ansible service which can be comprised of multiple load balanced nodes.
     """
 
+    class ServiceType(models.TextChoices):
+        HUB = "h", "hub"
+        CONTROLLER = "c", "controller"
+        EDA = "e", "eda"
+        GATEWAY = "g", "gateway"
+
     service_type = models.CharField(
         # We can remove this if/when we add support for multiple services of each type.
         unique=True,
         max_length=1,
-        choices=[('g', 'gateway'), ('c', 'controller'), ('h', 'hub'), ('e', 'eda')],
+        choices=ServiceType.choices,
         help_text="The type of service for this cluster.",
     )
+
+    def summary_fields(self):
+        response = {}
+        response['id'] = self.id
+        response['service_type'] = self.get_service_type_display()
+        return response
 
 
 class ServiceNode(CommonModel):

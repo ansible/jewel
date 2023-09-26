@@ -26,10 +26,27 @@ end
 function envoy_on_request(handle)
     -- Translate urls in the request body back to the service's base path.
     -- ex: translates /gateway-path/hub/ to /service-path/galaxy/ in service request bodies
-    handle:logInfo("Running lua script to rewrite request body.")
+    handle:logDebug("Running lua script to rewrite request body.")
 
     local prefix_rewrite = handle:metadata():get("prefix")
     local prefix = handle:metadata():get("prefix_rewrite")
+
+    local path = handle:headers():get(":path")
+    if string.match(path, "=") then
+        -- need to escape "-"
+        local match = "%=" .. string.gsub(prefix_rewrite, "%-", "%%-")
+        local replace = "%=" .. string.gsub(prefix, "%-", "%%-")
+
+        handle:logInfo(match)
+        handle:logInfo(replace)
+
+        local new_path = string.gsub(path, match, replace)
+
+        -- if the query param is urlencoded, replace those instead
+        new_path = string.gsub(new_path, string.gsub(match, "/", "%%%%2F"), string.gsub(replace, "/", "%%%%2F"))
+
+        handle:headers():replace(":path", new_path)
+    end
 
     local body = handle:body()
     if body then
