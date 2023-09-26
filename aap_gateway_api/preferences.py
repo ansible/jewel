@@ -44,7 +44,7 @@ register(
 register(
     section="proxy",
     preference_name="gateway_proxy_url_ignore_cert",
-    default=True,
+    default=False,
     required=True,
     preference_type="bool",
     help_text="Ignore certificate to the gateway proxy layer",
