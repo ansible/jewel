@@ -7,3 +7,4 @@ tox
 PyYAML==5.3.1  # We have to pin PyYAML because newer versions can't compile wth the latest Cython
 colorama
 logutils
+psycopg[binary]
