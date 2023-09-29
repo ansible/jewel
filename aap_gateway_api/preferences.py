@@ -74,3 +74,53 @@ register(
     encrypted=False,
     read_only=True,
 )
+
+register(
+    section="local_login",
+    preference_name="password_min_length",
+    default=0,
+    required=False,
+    preference_type="int",
+    help_text="How long does a local password have to be",
+    encrypted=False,
+)
+
+register(
+    section="local_login",
+    preference_name="password_min_digits",
+    default=0,
+    required=False,
+    preference_type="int",
+    help_text="How many numerical characters need to be in a local password",
+    encrypted=False,
+)
+
+register(
+    section="local_login",
+    preference_name="password_min_upper",
+    default=0,
+    required=False,
+    preference_type="int",
+    help_text="How many upper case characters need to be in a local password",
+    encrypted=False,
+)
+
+register(
+    section="local_login",
+    preference_name="password_min_special",
+    default=0,
+    required=False,
+    preference_type="int",
+    help_text="How many special characters need to be in a local password",
+    encrypted=False,
+)
+
+register(
+    section="local_login",
+    preference_name="allow_admins_to_set_insecure",
+    default=False,
+    required=False,
+    preference_type="bool",
+    help_text="Can a superuser account save an insecure password",
+    encrypted=False,
+)

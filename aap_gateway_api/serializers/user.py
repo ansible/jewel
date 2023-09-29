@@ -1,8 +1,15 @@
+import logging
+
+from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
+from django.utils.translation import gettext_lazy as _
+from rest_framework.serializers import ValidationError
 
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers.common import CommonModelSerializer
-from aap_gateway_api.utils import ENCRYPTED_STRING
+from aap_gateway_api.utils import ENCRYPTED_STRING, get_preference_value
+
+logger = logging.getLogger('aap.gateway.serializer.user')
 
 
 class UserSerializer(CommonModelSerializer):
@@ -28,6 +35,41 @@ class UserSerializer(CommonModelSerializer):
         if request and getattr(request, 'method', None) != "POST":
             fields['password'].required = False
         return fields
+
+    def validate(self, data):
+        # Validate the password
+        if data.get('password') and data.get('password') != ENCRYPTED_STRING:
+            password_min_length = get_preference_value('local_login', 'password_min_length')
+            password_min_digits = get_preference_value('local_login', 'password_min_digits')
+            password_min_upper = get_preference_value('local_login', 'password_min_upper')
+            password_min_special = get_preference_value('local_login', 'password_min_special')
+
+            errors = []
+            if password_min_length > 0 and len(data['password']) < password_min_length:
+                errors.append(_('Password must be at least {} characters long.'.format(password_min_length)))
+            if password_min_digits > 0 and sum(c.isdigit() for c in data['password']) < password_min_digits:
+                errors.append(_('Password must contain at least {} digits.'.format(password_min_digits)))
+            if password_min_upper > 0 and sum(c.isupper() for c in data['password']) < password_min_upper:
+                errors.append(_('Password must contain at least {} uppercase characters.'.format(password_min_upper)))
+            if password_min_special > 0 and sum(not c.isalnum() for c in data['password']) < password_min_special:
+                errors.append(_('Password must contain at least {} special characters.'.format(password_min_special)))
+
+            if errors:
+                request = self.context.get('request', None)
+                allow_admins_to_set_insecure = get_preference_value('local_login', 'allow_admins_to_set_insecure')
+                if request and request.user and request.user.is_superuser and allow_admins_to_set_insecure:
+                    user = get_current_user()
+                    username = data.get('username', None)
+                    if username is None:
+                        instance = getattr(self, 'instance', None)
+                        if instance is None:
+                            raise ValidationError("Either username needs to be present or we need an active instance")
+                        username = instance.username
+                    logger.warning(f"User {user.username} was allowed to save an insecure password for user {username}")
+                else:
+                    raise ValidationError({'password': errors})
+
+        return data
 
     def update(self, instance, validated_data):
         # We don't want the $encrypted$ password going back to the model
