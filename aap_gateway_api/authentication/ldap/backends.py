@@ -258,16 +258,19 @@ class BaseLDAPBackend(LDAPBackend):
     def __init__(self, authenticator=None, settings=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.authenticator = authenticator
-        self.settings = settings
+        if settings:
+            self.settings = settings
 
     def authenticate(self, request, username, password):
+        if not self.authenticator:
+            logger.error("BaseLDAPBackend was missing an authenticator")
+            return None
+
         if not self.authenticator.enabled:
             logger.info(f"LDAP authenticator {self.authenticator.name} is disabled, skipping")
             return None
 
-        if not self.settings:
-            logger.info(f"LDAP authenticator {self.authenticator.name} has no settings")
-            return None
+        # We don't have to check if settings is None because it can never happen, the parent object will always return something
 
         if not self.settings.configuration_valid:
             logger.error(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors.")
