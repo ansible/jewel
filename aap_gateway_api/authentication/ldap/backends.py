@@ -255,9 +255,6 @@ class LDAPSettings(BaseLDAPSettings):
 
 
 class BaseLDAPBackend(LDAPBackend):
-    authenticator = None
-    settings = None
-
     def __init__(self, authenticator=None, settings=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.authenticator = authenticator
