@@ -71,14 +71,14 @@ def test_BaseLDAPBackend_authenticate_authenticator_disabled(logger, ldap_authen
 
 @pytest.mark.django_db
 @mock.patch("aap_gateway_api.authentication.ldap.backends.logger")
-def test_BaseLDAPBackend_authenticate_no_settings(logger, ldap_authenticator):
+def test_BaseLDAPBackend_authenticate_no_authenticator(logger):
     """
-    Test how BaseLDAPBackend.authenticate handles no settings.
+    Test how BaseLDAPBackend.authenticate handles no authenticator.
     """
-    backend = BaseLDAPBackend(authenticator=ldap_authenticator, settings=None)
+    backend = BaseLDAPBackend(authenticator=None, settings=None)
     request = MagicMock()
     assert backend.authenticate(request, username="foo", password="bar") is None
-    logger.info.assert_called_with(f"LDAP authenticator {ldap_authenticator.name} has no settings")
+    logger.error.assert_called_with("BaseLDAPBackend was missing an authenticator")
 
 
 @pytest.mark.django_db
