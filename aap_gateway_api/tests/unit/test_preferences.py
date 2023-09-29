@@ -36,7 +36,7 @@ def test_preference_with_invalid_url(set_preference):
 
 def test_get_preference_sections():
     sections = preferences.get_preference_sections()
-    assert "general" in sections
+    assert "proxy" in sections
 
 
 def test_meta_register_preference_fixture(register_preference):
