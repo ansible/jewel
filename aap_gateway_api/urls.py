@@ -50,7 +50,7 @@ urlpatterns = [
     re_path(r'api/gateway/v1/services/(?P<pk>[0-9]+)/$', views.ServiceAPIRouteViewSet.as_view(detail_actions), name='service-detail'),
     # settings
     path('api/gateway/v1/settings/', views.PreferenceListView.as_view(view_only_list), name='settings-list'),
-    re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9-]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
+    re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
     # teams
     path('api/gateway/v1/teams/', views.TeamViewSet.as_view(list_actions), name='team-list'),
     re_path(r'api/gateway/v1/teams/(?P<pk>[0-9]+)/$', views.TeamViewSet.as_view(detail_actions), name='team-detail'),
