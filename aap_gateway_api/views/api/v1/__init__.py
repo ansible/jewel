@@ -29,6 +29,7 @@ class V1RootView(APIView):
         data['service-nodes'] = reverse('servicenode-list', request=request)
         data['service-clusters'] = reverse('servicecluster-list', request=request)
         data['settings'] = reverse('settings-list', request=request)
+        data['status'] = reverse('status-view', request=request)
         data['trigger_definition'] = reverse('trigger-definition-view', request=request)
         data['teams'] = reverse('team-list', request=request)
         data['users'] = reverse('user-list', request=request)
