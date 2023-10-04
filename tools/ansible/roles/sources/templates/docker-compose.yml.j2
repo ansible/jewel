@@ -32,13 +32,17 @@ services:
       - "4444:4444"
     user: "${UID}"
     volumes:
-      - $PWD:/opt/aap_gateway/aap_gateway
-      - $PWD/tools/configs/nginx.conf:/etc/gateway/nginx.conf
-      - $PWD/tools/configs/nginx-gateway.conf:/etc/gateway/nginx-gateway.conf
+      - $PWD:/opt/aap_gateway/aap_gateway:z
+      - $PWD/tools/configs/nginx.conf:/etc/gateway/nginx.conf:z
+      - $PWD/tools/configs/nginx-gateway.conf:/etc/gateway/nginx-gateway.conf:z
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
-      - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini
-      - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf
+      - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini:z
+      - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf:z
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 4096
 
   db:
     container_name: aap_gw_db_pgsql_1
@@ -58,12 +62,14 @@ services:
   proxy:
     container_name: aap_gw_proxy_1
     image: envoyproxy/envoy:v1.24-latest
+    environment:
+      - ENVOY_UID=0
     ports:
       - "9080:9080"
       - "9090:19000"
     volumes:
-      - $PWD/tools/configs/envoy.yml:/etc/envoy/envoy.yaml:Z
-      - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:Z
+      - $PWD/tools/configs/envoy.yml:/etc/envoy/envoy.yaml:z
+      - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
     extra_hosts:
