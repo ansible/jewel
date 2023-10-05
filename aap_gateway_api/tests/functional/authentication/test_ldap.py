@@ -16,7 +16,7 @@ def test_ldap_auth_successful(authenticate, unauthenticated_api_client, ldap_aut
     Here we mock the LDAP authentication backend to return a user.
     """
     client = unauthenticated_api_client
-    authenticate.return_value = user
+    authenticate.return_value = (user, {}, [])
     client.login()
 
     url = reverse("me-list")
@@ -25,7 +25,7 @@ def test_ldap_auth_successful(authenticate, unauthenticated_api_client, ldap_aut
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("aap_gateway_api.authentication.backends.BaseLDAPBackend.authenticate", return_value=None)
+@mock.patch("aap_gateway_api.authentication.backends.BaseLDAPBackend.authenticate", return_value=(None, {}, []))
 def test_ldap_auth_failed(authenticate, unauthenticated_api_client, ldap_authenticator):
     """
     Test that a failed LDAP authentication returns a 401 on the /me endpoint.

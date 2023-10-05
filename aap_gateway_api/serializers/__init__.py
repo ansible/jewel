@@ -1,4 +1,5 @@
 from aap_gateway_api.serializers.authenticator import AuthenticatorSerializer  # noqa: 401
+from aap_gateway_api.serializers.authenticator_map import AuthenticatorMapSerializer  # noqa: 401
 from aap_gateway_api.serializers.environment import EnvironmentSerializer  # noqa: 401
 from aap_gateway_api.serializers.organization import OrganizationSerializer  # noqa: 401
 from aap_gateway_api.serializers.preferences import SettingSectionSerializer, SettingSingletonSerializer  # noqa: 401

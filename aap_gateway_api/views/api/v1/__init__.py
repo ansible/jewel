@@ -18,6 +18,7 @@ class V1RootView(APIView):
     def get(self, request, format=None):
         data = OrderedDict()
         data['authenticators'] = reverse('authenticator-list', request=request)
+        data['authenticator_maps'] = reverse('authenticator-map-list', request=request)
         data['environments'] = reverse('environment-list', request=request)
         data['http-ports'] = reverse('httpport-list', request=request)
         data['me'] = reverse('me-list', request=request)
@@ -28,6 +29,7 @@ class V1RootView(APIView):
         data['service-nodes'] = reverse('servicenode-list', request=request)
         data['service-clusters'] = reverse('servicecluster-list', request=request)
         data['settings'] = reverse('settings-list', request=request)
+        data['trigger_definition'] = reverse('trigger-definition-view', request=request)
         data['teams'] = reverse('team-list', request=request)
         data['users'] = reverse('user-list', request=request)
         return Response(data)

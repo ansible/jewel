@@ -17,6 +17,8 @@ class UserSerializer(CommonModelSerializer):
             'last_name',
             'password',
             'is_superuser',
+            'is_system_auditor',
+            'last_login_map_results',
         ]
 
     def get_fields(self, *args, **kwargs):

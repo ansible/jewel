@@ -20,6 +20,8 @@ class Authenticator(NamedCommonModel):
         help_text="The type of authentication service this is",
     )
 
+    reverse_foreign_key_fields = ['authenticator-map']
+
     def save(self, *args, **kwargs):
         from aap_gateway_api.utils import gateway_encryption
 
