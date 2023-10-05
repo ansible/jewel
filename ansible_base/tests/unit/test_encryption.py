@@ -1,6 +1,6 @@
 import pytest
 
-from aap_gateway_api.utils.encryption import ENCRYPTION_METHOD, Fernet256
+from ansible_base.utils.encryption import ENCRYPTION_METHOD, Fernet256
 
 
 def test_fernet256_encrypt_is_idempotent():

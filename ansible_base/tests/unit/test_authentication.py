@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import ldap
 import pytest
 
-from aap_gateway_api.authentication.common import check_user_attribute_map
-from aap_gateway_api.authentication.ldap.backends import BaseLDAPBackend, LDAPSettings
+from ansible_base.authentication.common import check_user_attribute_map
+from ansible_base.authentication.ldap.backends import BaseLDAPBackend, LDAPSettings
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_ldap_validate_ldap_filter(ldap_configuration, ldap_settings):
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authentication.ldap.backends.logger")
 def test_BaseLDAPBackend_authenticate_authenticator_disabled(logger, ldap_authenticator, ldap_settings):
     """
     Ensure we handle disabled authenticators correctly in BaseLDAPBackend.authenticate.
@@ -70,7 +70,7 @@ def test_BaseLDAPBackend_authenticate_authenticator_disabled(logger, ldap_authen
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authentication.ldap.backends.logger")
 def test_BaseLDAPBackend_authenticate_no_authenticator(logger):
     """
     Test how BaseLDAPBackend.authenticate handles no authenticator.
@@ -82,7 +82,7 @@ def test_BaseLDAPBackend_authenticate_no_authenticator(logger):
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.authentication.ldap.backends.LDAPBackend.authenticate", return_value=None)
+@mock.patch("ansible_base.authentication.ldap.backends.LDAPBackend.authenticate", return_value=None)
 @pytest.mark.parametrize(
     "extra_settings, newctx_value",
     [
