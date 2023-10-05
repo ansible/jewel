@@ -1,12 +1,17 @@
+import logging
 from collections import OrderedDict
 
+from django.urls.exceptions import NoReverseMatch
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from rest_framework.schemas.generators import EndpointEnumerator
 from rest_framework.views import APIView
+
+logger = logging.getLogger('aap.view')
 
 
 class V1RootView(APIView):
@@ -17,20 +22,26 @@ class V1RootView(APIView):
     @method_decorator(ensure_csrf_cookie)
     def get(self, request, format=None):
         data = OrderedDict()
-        data['authenticators'] = reverse('authenticator-list', request=request)
-        data['authenticator_maps'] = reverse('authenticator-map-list', request=request)
-        data['environments'] = reverse('environment-list', request=request)
-        data['http-ports'] = reverse('httpport-list', request=request)
-        data['me'] = reverse('me-list', request=request)
-        data['organization'] = reverse('organization-list', request=request)
-        data['ping'] = reverse('ping-view', request=request)
-        data['routes'] = reverse('route-list', request=request)
-        data['services'] = reverse('service-list', request=request)
-        data['service-nodes'] = reverse('servicenode-list', request=request)
-        data['service-clusters'] = reverse('servicecluster-list', request=request)
-        data['settings'] = reverse('settings-list', request=request)
-        data['status'] = reverse('status-view', request=request)
-        data['trigger_definition'] = reverse('trigger-definition-view', request=request)
-        data['teams'] = reverse('team-list', request=request)
-        data['users'] = reverse('user-list', request=request)
+        enumerator = EndpointEnumerator()
+        endpoints = []
+        for endpoint, junk, junk in enumerator.get_api_endpoints():
+            if not endpoint.startswith('/api/gateway/v1'):
+                continue
+
+            endpoint = endpoint.replace('/api/gateway/v1/', '').split('/')[0]
+            if endpoint and endpoint not in endpoints:
+                endpoints.append(endpoint)
+
+        endpoints.sort()
+        for endpoint in endpoints:
+            if endpoint != 'status':
+                singular_endpoint = endpoint.rstrip('s')
+            try:
+                data[endpoint] = reverse(f'{singular_endpoint}-list', request=request)
+            except NoReverseMatch:
+                try:
+                    data[endpoint] = reverse(f'{singular_endpoint}-view', request=request)
+                except NoReverseMatch:
+                    logger.error(f'{singular_endpoint} had neither a -list nor -view reverse lookup method, ignoring')
+
         return Response(data)

@@ -1,10 +1,15 @@
 import logging
 import re
 
-from aap_gateway_api.authentication.trigger_definition import TRIGGER_DEFINITION
-from aap_gateway_api.models import Authenticator, AuthenticatorMap, User
+from django.contrib.auth import get_user_model
 
-logger = logging.getLogger('aap.gateway.authentication.common')
+from ansible_base.models import Authenticator, AuthenticatorMap
+
+from .trigger_definition import TRIGGER_DEFINITION
+
+User = get_user_model()
+
+logger = logging.getLogger('ansible_base.authentication.common')
 
 
 def check_user_attribute_map(user_attr_map: dict, name: str = 'USER_ATTR_MAP') -> dict:

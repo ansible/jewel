@@ -87,13 +87,14 @@ INSTALLED_APPS = [
     'rest_framework',
     'aap_gateway_api',
     'django_grpc',
+    'ansible_base',
 ]
 
 # User our own user model
 AUTH_USER_MODEL = 'aap_gateway_api.User'
 
 AUTHENTICATION_BACKENDS = [
-    "aap_gateway_api.authentication.backends.GatewayAuth",
+    "ansible_base.authentication.backends.GatewayAuth",
     "django.contrib.auth.backends.ModelBackend",
 ]
 

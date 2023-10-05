@@ -7,7 +7,8 @@ from rest_framework.serializers import ValidationError
 
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers.common import CommonModelSerializer
-from aap_gateway_api.utils import ENCRYPTED_STRING, get_preference_value
+from aap_gateway_api.utils import get_preference_value
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 
 logger = logging.getLogger('aap.gateway.serializer.user')
 

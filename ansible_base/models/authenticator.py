@@ -1,6 +1,6 @@
 from django.db.models import JSONField, fields
 
-from aap_gateway_api.models.common import NamedCommonModel
+from .common import NamedCommonModel
 
 
 class Authenticator(NamedCommonModel):
@@ -23,27 +23,27 @@ class Authenticator(NamedCommonModel):
     reverse_foreign_key_fields = ['authenticator-map']
 
     def save(self, *args, **kwargs):
-        from aap_gateway_api.utils import gateway_encryption
+        from ansible_base.utils.encryption import ansible_encryption
 
-        if self.type == 'l':
-            from aap_gateway_api.authentication.ldap import configuration_encrypted_fields
+        if self.type == 'ldap':
+            from ansible_base.authentication.ldap import configuration_encrypted_fields
 
             for field in configuration_encrypted_fields:
                 if field in self.configuration:
-                    self.configuration[field] = gateway_encryption.encrypt_string(self.configuration[field])
+                    self.configuration[field] = ansible_encryption.encrypt_string(self.configuration[field])
 
         super().save(*args, **kwargs)
 
     @classmethod
     def from_db(cls, db, field_names, values):
-        from aap_gateway_api.utils import ENCRYPTED_STRING, gateway_encryption
+        from ansible_base.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 
         instance = super().from_db(db, field_names, values)
-        if instance.type == 'l':
-            from aap_gateway_api.authentication.ldap import configuration_encrypted_fields
+        if instance.type == 'ldap':
+            from ansible_base.authentication.ldap import configuration_encrypted_fields
 
             for field in configuration_encrypted_fields:
                 if field in instance.configuration and instance.configuration[field].startswith(ENCRYPTED_STRING):
-                    instance.configuration[field] = gateway_encryption.decrypt_string(instance.configuration[field])
+                    instance.configuration[field] = ansible_encryption.decrypt_string(instance.configuration[field])
 
         return instance

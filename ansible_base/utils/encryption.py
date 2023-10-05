@@ -8,7 +8,7 @@ from django.utils.encoding import smart_bytes, smart_str
 
 __all__ = [
     'ENCRYPTED_STRING',
-    'gateway_encryption',
+    'ansible_encryption',
 ]
 
 
@@ -62,4 +62,4 @@ class Fernet256(Fernet):
         return smart_str(value)
 
 
-gateway_encryption = Fernet256()
+ansible_encryption = Fernet256()
