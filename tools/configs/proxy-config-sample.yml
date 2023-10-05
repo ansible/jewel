@@ -17,7 +17,7 @@ services:
   hub:
     use_tls: true
     service_root: /api/galaxy/
-    api_port: 5001
+    api_port: 5043
     type: hub
 
     nodes:
