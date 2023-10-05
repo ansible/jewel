@@ -41,7 +41,7 @@ legacy_tox_ini = """
         pytest-xdist
         pytest-cov
         pytest-django
-    commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-branch aap_gateway_api/tests {posargs}
+    commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch aap_gateway_api/tests {posargs}
 
     [testenv:flake8]
     deps =
