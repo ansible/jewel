@@ -11,10 +11,10 @@ from django_auth_ldap.backend import LDAPBackend
 from django_auth_ldap.backend import LDAPSettings as BaseLDAPSettings
 from rest_framework.serializers import ValidationError
 
-from aap_gateway_api.authentication.common import check_user_attribute_map
-from aap_gateway_api.utils import VALID_STRING, validate_url_list
+from ansible_base.authentication.common import check_user_attribute_map
+from ansible_base.utils.validation import VALID_STRING, validate_url_list
 
-logger = logging.getLogger('aap.gateway.authentication.ldap')
+logger = logging.getLogger('ansible_base.authentication.ldap')
 
 
 user_search_string = '%(user)s'

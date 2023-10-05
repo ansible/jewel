@@ -3,11 +3,12 @@ from collections import OrderedDict
 
 from django.contrib.auth.backends import ModelBackend
 
-from aap_gateway_api.authentication.common import create_claims
-from aap_gateway_api.authentication.ldap.backends import BaseLDAPBackend, LDAPSettings
-from aap_gateway_api.models import Authenticator
+from ansible_base.authentication.ldap.backends import BaseLDAPBackend, LDAPSettings
+from ansible_base.models import Authenticator
 
-logger = logging.getLogger('aap.gateway.authentication.backend')
+from .common import create_claims
+
+logger = logging.getLogger('ansible_base.authentication.backend')
 
 authentication_backends = OrderedDict()
 

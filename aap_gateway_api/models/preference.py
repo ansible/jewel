@@ -21,21 +21,21 @@ class Preference(models.BasePreferenceModel):
         unique_together = ("section", "name")
 
     def save(self, *args, **kwargs):
-        from aap_gateway_api.utils import gateway_encryption
+        from ansible_base.utils.encryption import ansible_encryption
 
         if self.preference.encrypted:
-            self.value = gateway_encryption.encrypt_string(self.value)
+            self.value = ansible_encryption.encrypt_string(self.value)
         super().save(*args, **kwargs)
 
     @classmethod
     def from_db(cls, db, field_names, values):
-        from aap_gateway_api.utils import ENCRYPTED_STRING, gateway_encryption
+        from ansible_base.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 
         instance = super().from_db(db, field_names, values)
         # We don't want to check the instance.preference.encrypted here because we could have a Fallback
         # A fall back happens when there is a value in DB but not a corresponding register
         if type(instance.value) is str and instance.value.startswith(ENCRYPTED_STRING):
-            instance.value = gateway_encryption.decrypt_string(instance.value)
+            instance.value = ansible_encryption.decrypt_string(instance.value)
         return instance
 
 

@@ -1,8 +1,9 @@
 from rest_framework.serializers import ValidationError
 
-from aap_gateway_api.authentication.trigger_definition import TRIGGER_DEFINITION
-from aap_gateway_api.models import AuthenticatorMap
-from aap_gateway_api.serializers.common import CommonModelSerializer
+from ansible_base.authentication.trigger_definition import TRIGGER_DEFINITION
+from ansible_base.models import AuthenticatorMap
+
+from .common import CommonModelSerializer
 
 
 class AuthenticatorMapSerializer(CommonModelSerializer):

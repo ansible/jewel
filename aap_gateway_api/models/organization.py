@@ -1,7 +1,7 @@
 from django.db import models
 
-from aap_gateway_api.models.common import NamedCommonModel
 from aap_gateway_api.models.environment import Environment
+from ansible_base.models.common import NamedCommonModel
 
 
 class Organization(NamedCommonModel):

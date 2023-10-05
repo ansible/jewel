@@ -1,11 +1,11 @@
 from rest_framework import permissions
+from rest_framework.viewsets import ModelViewSet
 
-from aap_gateway_api.models import Authenticator, AuthenticatorMap
-from aap_gateway_api.serializers import AuthenticatorMapSerializer, AuthenticatorSerializer
-from aap_gateway_api.views.api.v1.common import GatewayModelViewSet
+from ansible_base.models import Authenticator, AuthenticatorMap
+from ansible_base.serializers import AuthenticatorMapSerializer, AuthenticatorSerializer
 
 
-class AuthenticatorViewSet(GatewayModelViewSet):
+class AuthenticatorViewSet(ModelViewSet):
     """
     API endpoint that allows groups to be viewed or edited.
     """
@@ -15,7 +15,7 @@ class AuthenticatorViewSet(GatewayModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-class AuthenticatorAuthenticatorMapViewSet(GatewayModelViewSet):
+class AuthenticatorAuthenticatorMapViewSet(ModelViewSet):
     serializer_class = AuthenticatorMapSerializer
 
     def get_queryset(self):

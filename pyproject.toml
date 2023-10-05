@@ -3,19 +3,19 @@ line-length = 160
 fast = true
 skip-string-normalization = true
 force-exclude = '''
-aap_gateway_api/migrations/
+.*/migrations/
 '''
 
 [tool.isort]
 profile = "black"
 line_length = 160
-extend_skip = [ "aap_gateway_api/migrations" ]
+extend_skip = [ "aap_gateway_api/migrations", "ansible_base/migrations" ]
 
 
 [tool.flake8]
 max-line-length = 160
 extend-ignore = [ "E203" ]
-exclude = [ 'aap_gateway_api/migrations/*', '.tox' ]
+exclude = [ 'aap_gateway_api/migrations/*', 'ansible_base/migrations/*', '.tox' ]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"

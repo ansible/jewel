@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
-from aap_gateway_api.utils import ENCRYPTED_STRING, preferences
+from ansible_base.utils.encryption import ENCRYPTED_STRING, preferences
 
 
 def test_register_exceptions():

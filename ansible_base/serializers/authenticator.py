@@ -2,10 +2,11 @@ from collections import OrderedDict
 
 from rest_framework.serializers import ValidationError
 
-from aap_gateway_api.authentication.ldap.backends import LDAPSettings
-from aap_gateway_api.models import Authenticator
-from aap_gateway_api.serializers.common import NamedCommonModelSerializer
-from aap_gateway_api.utils import ENCRYPTED_STRING
+from ansible_base.authentication.ldap.backends import LDAPSettings
+from ansible_base.models import Authenticator
+from ansible_base.utils.encryption import ENCRYPTED_STRING
+
+from .common import NamedCommonModelSerializer
 
 
 class AuthenticatorSerializer(NamedCommonModelSerializer):
@@ -22,8 +23,8 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         masked_configuration = OrderedDict()
         keys = list(configuration.keys())
         encrypted_keys = []
-        if authenticator.type == 'l':
-            from aap_gateway_api.authentication.ldap import configuration_encrypted_fields as encrypted_keys
+        if authenticator.type == 'ldap':
+            from ansible_base.authentication.ldap import configuration_encrypted_fields as encrypted_keys
 
         keys.sort()
         # Mask any keys in the encryption that should be masked
@@ -50,7 +51,7 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         return data
 
     def validate_ldap_configuration(self, data: dict) -> None:
-        from aap_gateway_api.authentication.ldap import configuration_encrypted_fields
+        from ansible_base.authentication.ldap import configuration_encrypted_fields
 
         # If there are any encrypted keys we don't want to use ENCRYPTED_STRING if they were not updated
         for key in configuration_encrypted_fields:

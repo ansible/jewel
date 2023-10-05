@@ -1,12 +1,12 @@
 from django.db import models
 
-from aap_gateway_api.models import Authenticator
-from aap_gateway_api.models.common import CommonModel
+from .authenticator import Authenticator
+from .common import CommonModel
 
 
 class AuthenticatorMap(CommonModel):
     class Meta:
-        app_label = 'aap_gateway_api'
+        app_label = 'ansible_base'
         # If he map type is a team than we must have an org/team
         constraints = [
             models.CheckConstraint(

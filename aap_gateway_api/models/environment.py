@@ -1,4 +1,4 @@
-from aap_gateway_api.models.common import NamedCommonModel
+from ansible_base.models.common import NamedCommonModel
 
 
 class Environment(NamedCommonModel):

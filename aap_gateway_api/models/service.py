@@ -2,8 +2,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from aap_gateway_api.models.common import CommonModel, NamedCommonModel
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
+from ansible_base.models.common import CommonModel, NamedCommonModel
 
 API_PREFIX = "/api/"
 

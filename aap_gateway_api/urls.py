@@ -1,10 +1,11 @@
 import logging
 
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 
 from aap_gateway_api import views
 from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView
+from ansible_base.urls import urls as base_urls
 
 logger = logging.getLogger('aap.gateway.urls')
 
@@ -17,6 +18,7 @@ urlpatterns = [
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
     path('api/gateway/v1/', views.V1RootView.as_view(), name='api_gateway_v1_root_view'),
+    re_path(r'api/gateway/v1/', include(base_urls)),
     path('api/gateway/v1/jwt_key/', views.JWTKeyView.as_view(), name='jwt-key-view'),
     path('api/gateway/v1/ping/', views.PingView.as_view(), name='ping-view'),
     path('api/gateway/v1/status/', views.StatusView.as_view(), name='status-view'),
@@ -26,15 +28,6 @@ urlpatterns = [
         name='login',
     ),
     path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
-    path('api/gateway/v1/authenticators/', views.AuthenticatorViewSet.as_view(list_actions), name='authenticator-list'),
-    re_path(r'api/gateway/v1/authenticators/(?P<pk>[0-9]+)/$', views.AuthenticatorViewSet.as_view(detail_actions), name='authenticator-detail'),
-    re_path(
-        r'api/gateway/v1/authenticators/(?P<pk>[0-9]+)/authenticator_maps/$',
-        views.AuthenticatorAuthenticatorMapViewSet.as_view(view_only_list),
-        name='authenticator-authenticator-map',
-    ),
-    path('api/gateway/v1/authenticator_maps/', views.AuthenticatorMapViewSet.as_view(list_actions), name='authenticator-map-list'),
-    re_path(r'api/gateway/v1/authenticator_maps/(?P<pk>[0-9]+)/$', views.AuthenticatorMapViewSet.as_view(detail_actions), name='authenticator-map-detail'),
     path('api/gateway/v1/environments/', views.EnvironmentViewSet.as_view(list_actions), name='environment-list'),
     re_path(r'api/gateway/v1/environments/(?P<pk>[0-9]+)/$', views.EnvironmentViewSet.as_view(detail_actions), name='environment-detail'),
     re_path(
@@ -50,7 +43,7 @@ urlpatterns = [
     path('api/gateway/v1/services/', views.ServiceAPIRouteViewSet.as_view(list_actions), name='service-list'),
     re_path(r'api/gateway/v1/services/(?P<pk>[0-9]+)/$', views.ServiceAPIRouteViewSet.as_view(detail_actions), name='service-detail'),
     # settings
-    path('api/gateway/v1/settings/', views.PreferenceListView.as_view(view_only_list), name='settings-list'),
+    path('api/gateway/v1/settings/', views.PreferenceListView.as_view(view_only_list), name='setting-list'),
     re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
     # teams
     path('api/gateway/v1/teams/', views.TeamViewSet.as_view(list_actions), name='team-list'),
@@ -59,19 +52,17 @@ urlpatterns = [
     path('api/gateway/v1/user/', views.UserViewSet.as_view(list_actions), name='user-list'),
     re_path(r'api/gateway/v1/users/(?P<pk>[0-9]+)/$', views.UserViewSet.as_view(detail_actions), name='user-detail'),
     # service nodes
-    path('api/gateway/v1/service-nodes/', views.ServiceNodeViewSet.as_view(list_actions), name='servicenode-list'),
-    re_path(r'api/gateway/v1/service-nodes/(?P<pk>[0-9]+)/$', views.ServiceNodeViewSet.as_view(detail_actions), name='servicenode-detail'),
+    path('api/gateway/v1/service_nodes/', views.ServiceNodeViewSet.as_view(list_actions), name='service_node-list'),
+    re_path(r'api/gateway/v1/service_nodes/(?P<pk>[0-9]+)/$', views.ServiceNodeViewSet.as_view(detail_actions), name='service_node-detail'),
     # http ports
-    path('api/gateway/v1/http-ports/', views.HTTPPortViewSet.as_view(list_actions), name='httpport-list'),
-    re_path(r'api/gateway/v1/http-ports/(?P<pk>[0-9]+)/$', views.HTTPPortViewSet.as_view(detail_actions), name='httpport-detail'),
+    path('api/gateway/v1/http_ports/', views.HTTPPortViewSet.as_view(list_actions), name='http_port-list'),
+    re_path(r'api/gateway/v1/http_ports/(?P<pk>[0-9]+)/$', views.HTTPPortViewSet.as_view(detail_actions), name='http_port-detail'),
     # service clusters
-    path('api/gateway/v1/service-clusters/', views.ServiceClusterViewSet.as_view(list_actions), name='servicecluster-list'),
-    re_path(r'api/gateway/v1/service-clusters/(?P<pk>[0-9]+)/$', views.ServiceClusterViewSet.as_view(detail_actions), name='servicecluster-detail'),
+    path('api/gateway/v1/service_clusters/', views.ServiceClusterViewSet.as_view(list_actions), name='service_cluster-list'),
+    re_path(r'api/gateway/v1/service_clusters/(?P<pk>[0-9]+)/$', views.ServiceClusterViewSet.as_view(detail_actions), name='service_cluster-detail'),
     # routes
     path('api/gateway/v1/routes/', views.AdditionalRouteViewSet.as_view(list_actions), name='route-list'),
     re_path(r'api/gateway/v1/routes/(?P<pk>[0-9]+)/$', views.AdditionalRouteViewSet.as_view(detail_actions), name='route-detail'),
-    # Trigger definition
-    path('api/gateway/v1/trigger_definition/', views.TriggerDefinitionView.as_view(), name='trigger-definition-view'),
     # xDS
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),

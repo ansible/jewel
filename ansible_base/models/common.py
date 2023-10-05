@@ -1,13 +1,12 @@
 import logging
 
 from crum import get_current_user
+from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils.timezone import now
 from rest_framework.reverse import reverse_lazy
 
-from aap_gateway_api.models.user import User
-
-logger = logging.getLogger('aap.gateway.models.common')
+logger = logging.getLogger('ansible_base.models.common')
 
 
 class CommonModel(models.Model):
@@ -25,7 +24,7 @@ class CommonModel(models.Model):
         help_text="The date/time this resource was created",
     )
     created_by = models.ForeignKey(
-        User,
+        get_user_model(),
         related_name='%(app_label)s_%(class)s_created+',
         default=None,
         null=True,
@@ -39,7 +38,7 @@ class CommonModel(models.Model):
         help_text="The date/time this resource was created",
     )
     modified_by = models.ForeignKey(
-        User,
+        get_user_model(),
         related_name='%(app_label)s_%(class)s_modified+',
         default=None,
         null=True,
