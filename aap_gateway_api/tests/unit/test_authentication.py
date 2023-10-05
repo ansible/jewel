@@ -65,7 +65,7 @@ def test_BaseLDAPBackend_authenticate_authenticator_disabled(logger, ldap_authen
     ldap_authenticator.save()
     backend = BaseLDAPBackend(authenticator=ldap_authenticator, settings=ldap_settings)
     request = MagicMock()
-    assert backend.authenticate(request, username="foo", password="bar") is None
+    assert backend.authenticate(request, username="foo", password="bar") == (None, {}, [])
     logger.info.assert_called_with(f"LDAP authenticator {ldap_authenticator.name} is disabled, skipping")
 
 
@@ -77,7 +77,7 @@ def test_BaseLDAPBackend_authenticate_no_authenticator(logger):
     """
     backend = BaseLDAPBackend(authenticator=None, settings=None)
     request = MagicMock()
-    assert backend.authenticate(request, username="foo", password="bar") is None
+    assert backend.authenticate(request, username="foo", password="bar") == (None, {}, [])
     logger.error.assert_called_with("BaseLDAPBackend was missing an authenticator")
 
 
@@ -121,7 +121,7 @@ def test_BaseLDAPBackend_authenticate_start_tls(authenticate, ldap_authenticator
     settings = LDAPSettings(defaults=ldap_authenticator.configuration)
     backend = BaseLDAPBackend(authenticator=ldap_authenticator, settings=settings)
     request = MagicMock()
-    assert backend.authenticate(request, username="foo", password="bar") is None
+    assert backend.authenticate(request, username="foo", password="bar") == (None, {}, [])
     if newctx_value is not None:
         assert backend.settings.CONNECTION_OPTIONS[ldap.OPT_X_TLS_NEWCTX] == newctx_value
     else:

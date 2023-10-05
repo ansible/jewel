@@ -27,6 +27,13 @@ urlpatterns = [
     path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
     path('api/gateway/v1/authenticators/', views.AuthenticatorViewSet.as_view(list_actions), name='authenticator-list'),
     re_path(r'api/gateway/v1/authenticators/(?P<pk>[0-9]+)/$', views.AuthenticatorViewSet.as_view(detail_actions), name='authenticator-detail'),
+    re_path(
+        r'api/gateway/v1/authenticators/(?P<pk>[0-9]+)/authenticator_maps/$',
+        views.AuthenticatorAuthenticatorMapViewSet.as_view(view_only_list),
+        name='authenticator-authenticator-map',
+    ),
+    path('api/gateway/v1/authenticator_maps/', views.AuthenticatorMapViewSet.as_view(list_actions), name='authenticator-map-list'),
+    re_path(r'api/gateway/v1/authenticator_maps/(?P<pk>[0-9]+)/$', views.AuthenticatorMapViewSet.as_view(detail_actions), name='authenticator-map-detail'),
     path('api/gateway/v1/environments/', views.EnvironmentViewSet.as_view(list_actions), name='environment-list'),
     re_path(r'api/gateway/v1/environments/(?P<pk>[0-9]+)/$', views.EnvironmentViewSet.as_view(detail_actions), name='environment-detail'),
     re_path(
@@ -62,6 +69,8 @@ urlpatterns = [
     # routes
     path('api/gateway/v1/routes/', views.AdditionalRouteViewSet.as_view(list_actions), name='route-list'),
     re_path(r'api/gateway/v1/routes/(?P<pk>[0-9]+)/$', views.AdditionalRouteViewSet.as_view(detail_actions), name='route-detail'),
+    # Trigger definition
+    path('api/gateway/v1/trigger_definition/', views.TriggerDefinitionView.as_view(), name='trigger-definition-view'),
     # xDS
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),

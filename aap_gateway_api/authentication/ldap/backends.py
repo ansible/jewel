@@ -35,7 +35,7 @@ class LDAPSettings(BaseLDAPSettings):
         # Check BindDN
         self.validate_ldap_dn(defaults.get('BIND_DN', None), error_entry_label='BIND_DN', with_user=False, required=False)
 
-        if type(defaults['BIND_PASSWORD']) is not str:
+        if 'BIND_PASSWORD' in defaults and type(defaults['BIND_PASSWORD']) is not str:
             self.set_error('BIND_PASSWORD', VALID_STRING, True)
 
         # Ensure all options specified in CONNECTION_OPTIONS are valid options
@@ -61,8 +61,8 @@ class LDAPSettings(BaseLDAPSettings):
                     f"SERVER_URI must contain only valid urls with schemes {', '.join(valid_schemes)}, the following are invalid: {e.args[0]}",
                     True,
                 )
-                # SERVER_URI needs to be a comma delineated string
-                setattr(self, 'SERVER_URI', ', '.join(defaults['SERVER_URI']))
+            # SERVER_URI needs to be a comma delineated string
+            setattr(self, 'SERVER_URI', ', '.join(defaults['SERVER_URI']))
         else:
             self.set_error('SERVER_URI', 'Must be a list of valid LDAP URLs', True)
 
@@ -194,7 +194,7 @@ class LDAPSettings(BaseLDAPSettings):
         if config_good:
             try:
                 # Search fields should be LDAPSearch objects, so we need to convert them from [] to these objects
-                search_object = config.LDAPSearch(data[0], data[1], data[2])
+                search_object = config.LDAPSearch(data[0], getattr(ldap, data[1]), data[2])
                 setattr(self, search_field, search_object)
             except Exception as e:
                 self.set_error(search_field, f'Failed to instantiate LDAPSearch object: {e}', True)
@@ -261,20 +261,23 @@ class BaseLDAPBackend(LDAPBackend):
         if settings:
             self.settings = settings
 
-    def authenticate(self, request, username, password):
+    def authenticate(self, request, username, password) -> (object, dict, list):
+        users_attrs = {}
+        users_groups = []
+
         if not self.authenticator:
             logger.error("BaseLDAPBackend was missing an authenticator")
-            return None
+            return None, users_attrs, users_groups
 
         if not self.authenticator.enabled:
             logger.info(f"LDAP authenticator {self.authenticator.name} is disabled, skipping")
-            return None
+            return None, users_attrs, users_groups
 
         # We don't have to check if settings is None because it can never happen, the parent object will always return something
 
         if not self.settings.configuration_valid:
             logger.error(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors.")
-            return None
+            return None, users_attrs, users_groups
 
         if self.settings.START_TLS and ldap.OPT_X_TLS_REQUIRE_CERT in self.settings.CONNECTION_OPTIONS:
             # with python-ldap, if you want to set connection-specific TLS
@@ -284,23 +287,30 @@ class BaseLDAPBackend(LDAPBackend):
             self.settings.CONNECTION_OPTIONS[ldap.OPT_X_TLS_NEWCTX] = 0
 
         try:
-            ldap_user = super().authenticate(request, username, password)
-            # If we have an LDAP user and that user we found has an ldap_user internal object and that object has a bound connection
-            # Then we can try and force an unbind to close the sticky connection
-            if ldap_user and ldap_user.ldap_user and ldap_user.ldap_user._connection_bound:
-                logger.debug(f"Forcing LDAP connection to close for {self.authenticator.name}")
-                try:
-                    ldap_user.ldap_user._connection.unbind_s()
-                    ldap_user.ldap_user._connection_bound = False
-                except Exception:
-                    logger.exception(f"Got unexpected LDAP exception when forcing LDAP disconnect for user {ldap_user}, login will still proceed")
+            user_from_ldap = super().authenticate(request, username, password)
 
-            self.process_login_messages(ldap_user, username)
+            if user_from_ldap and user_from_ldap.ldap_user:
+                users_attrs = user_from_ldap.ldap_user.attrs.data
+                users_groups = list(user_from_ldap.ldap_user._get_groups().get_group_dns())
 
-            return ldap_user
+                # If we have an LDAP user and that user we found has an user_from_ldap internal object and that object has a bound connection
+                # Then we can try and force an unbind to close the sticky connection
+                if user_from_ldap.ldap_user._connection_bound:
+                    logger.debug(f"Forcing LDAP connection to close for {self.authenticator.name}")
+                    try:
+                        user_from_ldap.ldap_user._connection.unbind_s()
+                        user_from_ldap.ldap_user._connection_bound = False
+                    except Exception:
+                        logger.exception(
+                            f"Got unexpected LDAP exception when forcing LDAP disconnect for user {user_from_ldap.username}, login will still proceed"
+                        )
+
+            self.process_login_messages(user_from_ldap, username)
+
+            return user_from_ldap, users_attrs, users_groups
         except Exception:
             logger.exception(f"Encountered an error authenticating to LDAP {self.authenticator.name}")
-            return None
+            return None, users_attrs, users_groups
 
     def process_login_messages(self, ldap_user, username: str) -> None:
         if ldap_user is None:

@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 from django.contrib.auth.backends import ModelBackend
 
+from aap_gateway_api.authentication.common import create_claims
 from aap_gateway_api.authentication.ldap.backends import BaseLDAPBackend, LDAPSettings
 from aap_gateway_api.models import Authenticator
 
@@ -15,8 +16,24 @@ class GatewayAuth(ModelBackend):
     def authenticate(self, request, username=None, password=None):
         for backend in Authenticator.objects.filter(type='l', enabled=True):
             self.create_or_update_ldap_adapter(backend)
-            user = authentication_backends[backend.id].authenticate(request, username=username, password=password)
+            user, attrs, groups = authentication_backends[backend.id].authenticate(request, username=username, password=password)
             if user:
+                results = create_claims(backend, user.username, attrs, groups)
+                needs_save = False
+                for attribute, attr_value in results.items():
+                    logger.debug(f"{attribute}: {attr_value}")
+                    if getattr(user, attribute) != attr_value:
+                        logger.debug(f"Setting new attribute {attribute} for {user.username}")
+                        setattr(user, attribute, attr_value)
+                        needs_save = True
+
+                if needs_save:
+                    logger.info(f"Saving user {user.username}")
+                    user.save()
+
+                if results['access_allowed'] is not True:
+                    logger.warning(f"User {user.username} failed an allow map and was denied access")
+                    return None
                 return user
 
         return None
