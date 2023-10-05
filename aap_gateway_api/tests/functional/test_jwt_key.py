@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 from django.urls import reverse
 
-from aap_gateway_api.utils.encryption import ENCRYPTED_STRING
 from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 
 
 def test_jwt_key_unauthenticated(unauthenticated_api_client, shut_up_logging):

@@ -138,7 +138,7 @@ def ldap_configuration():
 
 @pytest.fixture
 def ldap_authenticator(ldap_configuration):
-    from aap_gateway_api.models import Authenticator
+    from ansible_base.models import Authenticator
 
     authenticator = Authenticator.objects.create(
         name="Test LDAP Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="l", configuration=ldap_configuration
