@@ -37,10 +37,10 @@ class V1RootView(APIView):
             if endpoint != 'status':
                 singular_endpoint = endpoint.rstrip('s')
             try:
-                data[endpoint] = reverse(f'{singular_endpoint}-list', request=request)
+                data[endpoint] = reverse(f'{singular_endpoint}-list')
             except NoReverseMatch:
                 try:
-                    data[endpoint] = reverse(f'{singular_endpoint}-view', request=request)
+                    data[endpoint] = reverse(f'{singular_endpoint}-view')
                 except NoReverseMatch:
                     logger.error(f'{singular_endpoint} had neither a -list nor -view reverse lookup method, ignoring')
 

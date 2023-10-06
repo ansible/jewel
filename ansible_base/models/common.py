@@ -87,12 +87,12 @@ class CommonModel(models.Model):
                 pk = getattr(self, field.name).pk
                 if pk:
                     reverse_view = f"{underscore(field.related_model.__name__)}-detail"
-                    response[field.name] = reverse_lazy(reverse_view, kwargs={'pk': pk}, request=request)
+                    response[field.name] = reverse_lazy(reverse_view, kwargs={'pk': pk})
 
         # Add any reverse relations required
         for field in getattr(self, 'reverse_foreign_key_fields', []):
             reverse_view = f"{underscore(self.__class__.__name__)}-{field}"
-            response[field] = reverse_lazy(reverse_view, kwargs={'pk': self.pk}, request=request)
+            response[field] = reverse_lazy(reverse_view, kwargs={'pk': self.pk})
 
         return response
 

@@ -51,6 +51,6 @@ class PreferenceListView(GatewayModelViewSet):
         sorted_sections = ['all']
         sorted_sections.extend(sorted(sections))
         for section in sorted_sections:
-            url = reverse('setting-section-list', kwargs={'category_slug': section}, request=self.request)
+            url = reverse('setting-section-list', kwargs={'category_slug': section})
             setting_categories.append(PreferenceSection(url, section))
         return setting_categories
