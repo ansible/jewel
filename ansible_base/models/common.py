@@ -4,6 +4,7 @@ from crum import get_current_user
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils.timezone import now
+from inflection import underscore
 from rest_framework.reverse import reverse_lazy
 
 logger = logging.getLogger('ansible_base.models.common')
@@ -85,12 +86,12 @@ class CommonModel(models.Model):
                     continue
                 pk = getattr(self, field.name).pk
                 if pk:
-                    reverse_view = f"{field.related_model.__name__.lower()}-detail"
+                    reverse_view = f"{underscore(field.related_model.__name__)}-detail"
                     response[field.name] = reverse_lazy(reverse_view, kwargs={'pk': pk}, request=request)
 
         # Add any reverse relations required
         for field in getattr(self, 'reverse_foreign_key_fields', []):
-            reverse_view = f"{self.__class__.__name__.lower()}-{field}"
+            reverse_view = f"{underscore(self.__class__.__name__)}-{field}"
             response[field] = reverse_lazy(reverse_view, kwargs={'pk': self.pk}, request=request)
 
         return response
