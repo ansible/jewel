@@ -14,6 +14,9 @@ if [ -z $GW_IGNORE_SYNTAX ] ; then
         done
         # We can't run isort on just a file name because it works differently
         make check_isort
+        if [ $? != 0 ] ; then
+            FAILED=1
+        fi
         if [ $FAILED == 1 ] ; then
             exit 1
         fi
