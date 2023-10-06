@@ -46,6 +46,8 @@ grpcio-tools==1.57.0
     # via -r requirements/requirements.in
 idna==3.4
     # via requests
+inflection==0.5.1
+    # via -r requirements/requirements.in
 oauthlib==3.2.2
     # via
     #   requests-oauthlib

@@ -9,6 +9,7 @@ django-grpc
 django-split-settings
 grpcio
 grpcio-tools
+inflection
 python-ldap
 protobuf>=4.21
 pyjwt
