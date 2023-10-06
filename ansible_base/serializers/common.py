@@ -17,7 +17,7 @@ class CommonModelSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         if self.reverse_url_name:
-            return reverse_lazy(self.reverse_url_name, kwargs={'pk': obj.pk}, request=self.context.get('request'))
+            return reverse_lazy(self.reverse_url_name, kwargs={'pk': obj.pk})
         return ''
 
     def _get_related(self, obj):
