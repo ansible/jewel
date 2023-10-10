@@ -1,3 +1,7 @@
+[project]
+name = "aap-gateway"
+dynamic = ["version"]
+
 [tool.black]
 line-length = 160
 fast = true
@@ -63,3 +67,6 @@ legacy_tox_ini = """
 [tool.coverage.run]
 omit = ["aap_gateway_api/tests/*"]
 relative_files = true
+
+[tool.setuptools]
+py-modules = ['ansible_base', 'aap_gateway_api']
