@@ -49,7 +49,7 @@ urlpatterns = [
     path('api/gateway/v1/teams/', views.TeamViewSet.as_view(list_actions), name='team-list'),
     re_path(r'api/gateway/v1/teams/(?P<pk>[0-9]+)/$', views.TeamViewSet.as_view(detail_actions), name='team-detail'),
     # users
-    path('api/gateway/v1/user/', views.UserViewSet.as_view(list_actions), name='user-list'),
+    path('api/gateway/v1/users/', views.UserViewSet.as_view(list_actions), name='user-list'),
     re_path(r'api/gateway/v1/users/(?P<pk>[0-9]+)/$', views.UserViewSet.as_view(detail_actions), name='user-detail'),
     # service nodes
     path('api/gateway/v1/service_nodes/', views.ServiceNodeViewSet.as_view(list_actions), name='service_node-list'),
