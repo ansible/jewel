@@ -34,8 +34,9 @@ class V1RootView(APIView):
 
         endpoints.sort()
         for endpoint in endpoints:
-            if endpoint != 'status':
-                singular_endpoint = endpoint.rstrip('s')
+            singular_endpoint = endpoint.rstrip('s')
+            if endpoint == 'status':
+                singular_endpoint = endpoint
             try:
                 data[endpoint] = reverse(f'{singular_endpoint}-list')
             except NoReverseMatch:
