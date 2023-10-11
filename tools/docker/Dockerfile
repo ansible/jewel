@@ -56,8 +56,6 @@ COPY aap_gateway_api /opt/aap_gateway/aap_gateway
 COPY manage.py /opt/aap_gateway/aap_gateway
 COPY tools/configs/nginx.conf /etc/gateway/nginx.conf
 COPY tools/configs/nginx-gateway.conf /etc/gateway/nginx-gateway.conf
-COPY tools/generated/gateway.crt /etc/gateway/gateway.crt
-COPY tools/generated/gateway.key /etc/gateway/gateway.key
 COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
 COPY tools/configs/supervisord.conf /etc/supervisord.conf
 
