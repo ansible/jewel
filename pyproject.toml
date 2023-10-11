@@ -69,4 +69,4 @@ omit = ["aap_gateway_api/tests/*"]
 relative_files = true
 
 [tool.setuptools]
-py-modules = ['ansible_base', 'aap_gateway_api']
+packages = ['ansible_base', 'aap_gateway_api']
