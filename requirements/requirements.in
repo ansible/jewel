@@ -12,6 +12,7 @@ grpcio-tools
 inflection
 python-ldap
 protobuf>=4.21
+psycopg
 pyjwt
 requests
 social-auth-app-django
