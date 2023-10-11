@@ -9,7 +9,7 @@ env:
   REGISTRY: quay.io
   IMAGE_NAME: ansible/aap-gateway
   QUAY_USER: ansible+aap_gateway
-  DOCKERFILE_PATH: tools/docker/Dockerfile.gateway
+  DOCKERFILE_PATH: tools/docker/Dockerfile
 
 jobs:
   build-and-push-image:
