@@ -45,49 +45,24 @@ services:
 1. Create a python virtual envenvironment: `python3 -m venv <location>`
 2. Activate the virtual environment: `source <location>/bin/activate`
 3. Install the tools for development: `pip install -r requirements/requirements_dev.txt`
-4. Start up your environmnet: `make docker-compose`
+4. Optionally generate and edit the proxy config file to point it to services you have running:
+    `make tools/generated/proxy.yml`
+    ```yml
+    [...]
+      hub:
+        use_tls: true
+        service_root: /api/galaxy/
+        api_port: 5043
+        type: hub
+    
+        nodes:
+          - address: "localhost"
+    [...]
+    ```
+5. Log into quay.io: `docker login quay.io`
+6. Start up your environment: `make docker-compose`
 
-
-## Run the Gateway with Automation Hub Example Container
-
-1. Build the dev env: `make docker-compose-build`
-2. Configure the proxy to talk to the Hub example container:
-
-```yml
-tools/configs/proxy.yml
-[...]
-  hub:
-    use_tls: true
-    proxy_root: /api/hub/
-    service_root: /api/galaxy/
-
-    load_balance:
-      - address: "localhost"
-        port: 5043
-```
-
-3. Run the dev environment: `make docker-compose`
-4. Once the stack has initialized, create a new super user:
-
-```
-$ docker exec -it aap_gw_1 gateway-manage createsuperuser
-Failed to load file /etc/gateway/SECRET_KEY, will use default
-Username: foo
-Email address: foo@bar.com
-Password:
-Password (again):
-The password is too similar to the username.
-This password is too short. It must contain at least 8 characters.
-Bypass password validation and create user anyway? [y/N]: y
-Superuser created successfully.
-```
-
-5. In a new terminal start the hub example container: `make example/hub`
-6. Navigate to https://localhost:9080/api/gateway/v1/login/ and sign in with your new user
-7. Once the Hub container has finished initializing navigate to https://localhost:9080/api/hub/_ui/v1/me/
-
-Congrats! You've just logged into Hub with your AAP Gateway Credentials
-
+This will build an `admin` user with the password `admin` and create any services you have defined in your proxy.yml file.
 
 ## Side cars
 
