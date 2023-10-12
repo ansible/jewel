@@ -40,10 +40,14 @@ def check_user_attribute_map(user_attr_map: dict, name: str = 'USER_ATTR_MAP') -
 
 
 def create_claims(authenticator: Authenticator, username: str, attrs: dict, groups: list) -> (bool, bool, dict, list):
-    is_superuser = False
-    is_system_auditor = False
+    # Assume we are not going to change our flags
+    is_superuser = None
+    is_system_auditor = None
+    # Assume we start with no mappings
     org_team_mapping = {}
+    # Start with an empty rule responses
     rule_responses = []
+    # Assume we will have access
     access_allowed = True
     logger.info(f"Creating mapping for user {username} through authenticator {authenticator.name}")
     logger.debug(f"{username}'s groups: {groups}")

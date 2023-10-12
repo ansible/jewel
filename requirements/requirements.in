@@ -16,6 +16,7 @@ psycopg
 pyjwt
 requests
 social-auth-app-django
+tabulate
 uwsgi
 xds-protos>=1.58
 PyYAML>=5.3.1, <5.5

@@ -9,7 +9,7 @@ from aap_gateway_api.authentication.session import SessionAuthentication
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.backends.BaseLDAPBackend.authenticate")
+@mock.patch("ansible_base.authenticators.ldap.AuthenticatorPlugin.authenticate")
 def test_ldap_auth_successful(authenticate, unauthenticated_api_client, ldap_authenticator, user):
     """
     Test that a successful LDAP authentication returns a 200 on the /me endpoint.
@@ -17,7 +17,7 @@ def test_ldap_auth_successful(authenticate, unauthenticated_api_client, ldap_aut
     Here we mock the LDAP authentication backend to return a user.
     """
     client = unauthenticated_api_client
-    authenticate.return_value = (user, {}, [])
+    authenticate.return_value = user
     client.login()
 
     url = reverse("me-list")
@@ -26,7 +26,7 @@ def test_ldap_auth_successful(authenticate, unauthenticated_api_client, ldap_aut
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.backends.BaseLDAPBackend.authenticate", return_value=(None, {}, []))
+@mock.patch("ansible_base.authenticators.ldap.AuthenticatorPlugin.authenticate", return_value=None)
 def test_ldap_auth_failed(authenticate, unauthenticated_api_client, ldap_authenticator):
     """
     Test that a failed LDAP authentication returns a 401 on the /me endpoint.
@@ -40,8 +40,8 @@ def test_ldap_auth_failed(authenticate, unauthenticated_api_client, ldap_authent
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.backends.BaseLDAPBackend.authenticate", return_value=None)
-@mock.patch("ansible_base.authentication.ldap.backends.config.LDAPSearch", side_effect=Exception("Something went wrong"))
+@mock.patch("ansible_base.authenticators.ldap.AuthenticatorPlugin.authenticate", return_value=None)
+@mock.patch("ansible_base.authenticators.ldap.config.LDAPSearch", side_effect=Exception("Something went wrong"))
 def test_ldap_search_exception(
     LDAPSearch,
     authenticate,
@@ -60,7 +60,7 @@ def test_ldap_search_exception(
         "users_unique": False,
         "remove_users": True,
         "configuration": ldap_configuration,
-        "type": "l",
+        "type": "ldap",
     }
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 400
@@ -69,7 +69,7 @@ def test_ldap_search_exception(
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.backends.BaseLDAPBackend.authenticate")
+@mock.patch("ansible_base.authenticators.ldap.AuthenticatorPlugin.authenticate")
 @pytest.mark.parametrize(
     "setting_override, expected_errors",
     [
@@ -154,7 +154,7 @@ def test_ldap_create_authenticator_error_handling(
         "users_unique": False,
         "remove_users": True,
         "configuration": ldap_configuration,
-        "type": "l",
+        "type": "ldap",
     }
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 400 if expected_errors else 201
@@ -166,7 +166,7 @@ def test_ldap_create_authenticator_error_handling(
 
 @pytest.mark.django_db
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authenticators.ldap.logger")
 def test_ldap_backend_authenticate_configuration_invalid(
     logger,
     unauthenticated_api_client,
@@ -188,8 +188,8 @@ def test_ldap_backend_authenticate_configuration_invalid(
 
 @pytest.mark.django_db
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.ldap.backends.LDAPBackend.authenticate", return_value=None)
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authenticators.ldap.LDAPBackend.authenticate", return_value=None)
+@mock.patch("ansible_base.authenticators.ldap.logger")
 @pytest.mark.parametrize(
     "extra_settings,expected_message",
     [
@@ -229,8 +229,8 @@ def test_ldap_backend_authenticate_invalid_user(
 
 @pytest.mark.django_db
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.ldap.backends.LDAPBackend.authenticate")
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authenticators.ldap.LDAPBackend.authenticate")
+@mock.patch("ansible_base.authenticators.ldap.logger")
 def test_ldap_backend_authenticate_valid_user(
     logger,
     authenticate,
@@ -258,8 +258,8 @@ def test_ldap_backend_authenticate_valid_user(
 
 @pytest.mark.django_db
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.ldap.backends.LDAPBackend.authenticate")
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authenticators.ldap.LDAPBackend.authenticate")
+@mock.patch("ansible_base.authenticators.ldap.logger")
 def test_ldap_backend_authenticate_unbind_exception(
     logger,
     authenticate,
@@ -286,8 +286,8 @@ def test_ldap_backend_authenticate_unbind_exception(
 
 @pytest.mark.django_db
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
-@mock.patch("ansible_base.authentication.ldap.backends.LDAPBackend.authenticate")
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
+@mock.patch("ansible_base.authenticators.ldap.LDAPBackend.authenticate")
+@mock.patch("ansible_base.authenticators.ldap.logger")
 def test_ldap_backend_authenticate_exception(
     logger,
     authenticate,

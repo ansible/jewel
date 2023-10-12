@@ -66,4 +66,6 @@ urlpatterns = [
     # xDS
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
+    # Social auth
+    path('api/gateway/social/', include('social_django.urls', namespace='social')),
 ]

@@ -1,5 +1,7 @@
 from django.db.models import JSONField, fields
 
+from ansible_base.authentication.authenticators import get_authenticator_plugin
+
 from .common import NamedCommonModel
 
 
@@ -13,11 +15,11 @@ class Authenticator(NamedCommonModel):
     )
     configuration = JSONField(default=dict, help_text="The required configuration for this source")
     type = fields.CharField(
-        max_length=1,
-        choices=[
-            ('l', 'ldap'),
-        ],
+        max_length=256,
         help_text="The type of authentication service this is",
+    )
+    order = fields.IntegerField(
+        default=1, help_text="The order in which an authenticator will be tried. This only pertains to username/password authenticators"
     )
 
     reverse_foreign_key_fields = ['authenticator-map']
@@ -25,25 +27,26 @@ class Authenticator(NamedCommonModel):
     def save(self, *args, **kwargs):
         from ansible_base.utils.encryption import ansible_encryption
 
-        if self.type == 'ldap':
-            from ansible_base.authentication.ldap import configuration_encrypted_fields
+        authenticator = get_authenticator_plugin(self.type)
 
-            for field in configuration_encrypted_fields:
-                if field in self.configuration:
-                    self.configuration[field] = ansible_encryption.encrypt_string(self.configuration[field])
+        for field in getattr(authenticator, 'configuration_encrypted_fields', []):
+            if field in self.configuration:
+                self.configuration[field] = ansible_encryption.encrypt_string(self.configuration[field])
 
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
 
     @classmethod
     def from_db(cls, db, field_names, values):
         from ansible_base.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 
         instance = super().from_db(db, field_names, values)
-        if instance.type == 'ldap':
-            from ansible_base.authentication.ldap import configuration_encrypted_fields
 
-            for field in configuration_encrypted_fields:
-                if field in instance.configuration and instance.configuration[field].startswith(ENCRYPTED_STRING):
-                    instance.configuration[field] = ansible_encryption.decrypt_string(instance.configuration[field])
+        authenticator = get_authenticator_plugin(instance.type)
+        for field in getattr(authenticator, 'configuration_encrypted_fields', []):
+            if field in instance.configuration and instance.configuration[field].startswith(ENCRYPTED_STRING):
+                instance.configuration[field] = ansible_encryption.decrypt_string(instance.configuration[field])
 
         return instance
