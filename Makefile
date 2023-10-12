@@ -110,12 +110,19 @@ tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/so
 	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the docker containers
-docker-compose-build: tools/generated/docker-compose.yml tools/generated/.has_built_api
+docker-compose-build: tools/generated/docker-compose.yml tools/generated/.has_built_api tools/generated/.has_built_ui
 
 ## Build the API container
-tools/generated/.has_built_api: tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+tools/generated/.has_built_api: tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 	docker-compose -f tools/generated/docker-compose.yml build gateway
 	touch $@
+
+tools/generated/.has_built_ui:
+	docker pull quay.io/ansible/platform-ui:latest > tools/generated/last_ui_pull
+	if [ ! -f $@ ] || [ `cat tools/generated/last_ui_pull | grep "Image is up to date" | wc -l` == "0" ] ; then \
+	    echo "Updating UI"; \
+	    touch $@ ; \
+	fi
 
 ## Build the cert file
 tools/generated/gateway.crt:
