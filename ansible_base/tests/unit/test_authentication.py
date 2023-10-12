@@ -6,7 +6,7 @@ import ldap
 import pytest
 
 from ansible_base.authentication.common import check_user_attribute_map
-from ansible_base.authentication.ldap.backends import BaseLDAPBackend, LDAPSettings
+from ansible_base.authenticators.ldap import AuthenticatorPlugin, LDAPSettings
 
 
 @pytest.fixture
@@ -50,10 +50,10 @@ def test_ldap_validate_ldap_filter(ldap_configuration, ldap_settings):
 
 
 @pytest.mark.django_db
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
-def test_BaseLDAPBackend_authenticate_authenticator_disabled(logger, ldap_authenticator, ldap_settings):
+@mock.patch("ansible_base.authenticators.ldap.logger")
+def test_AuthenticatorPlugin_authenticate_authenticator_disabled(logger, ldap_authenticator, ldap_settings):
     """
-    Ensure we handle disabled authenticators correctly in BaseLDAPBackend.authenticate.
+    Ensure we handle disabled authenticators correctly in AuthenticatorPlugin.authenticate.
 
     Normally we cannot hit this case (thus we cannot write a functional test for it), because
     GatewayAuth filters for enabled authenticators only. But perhaps in the future we will
@@ -63,26 +63,26 @@ def test_BaseLDAPBackend_authenticate_authenticator_disabled(logger, ldap_authen
     """
     ldap_authenticator.enabled = False
     ldap_authenticator.save()
-    backend = BaseLDAPBackend(authenticator=ldap_authenticator, settings=ldap_settings)
+    backend = AuthenticatorPlugin(database_instance=ldap_authenticator)
     request = MagicMock()
-    assert backend.authenticate(request, username="foo", password="bar") == (None, {}, [])
+    assert backend.authenticate(request, username="foo", password="bar") is None
     logger.info.assert_called_with(f"LDAP authenticator {ldap_authenticator.name} is disabled, skipping")
 
 
 @pytest.mark.django_db
-@mock.patch("ansible_base.authentication.ldap.backends.logger")
-def test_BaseLDAPBackend_authenticate_no_authenticator(logger):
+@mock.patch("ansible_base.authenticators.ldap.logger")
+def test_AuthenticatorPlugin_authenticate_no_authenticator(logger):
     """
-    Test how BaseLDAPBackend.authenticate handles no authenticator.
+    Test how AuthenticatorPlugin.authenticate handles no authenticator.
     """
-    backend = BaseLDAPBackend(authenticator=None, settings=None)
+    backend = AuthenticatorPlugin(database_instance=None)
     request = MagicMock()
-    assert backend.authenticate(request, username="foo", password="bar") == (None, {}, [])
-    logger.error.assert_called_with("BaseLDAPBackend was missing an authenticator")
+    assert backend.authenticate(request, username="foo", password="bar") is None
+    logger.error.assert_called_with("AuthenticatorPlugin was missing an authenticator")
 
 
 @pytest.mark.django_db
-@mock.patch("ansible_base.authentication.ldap.backends.LDAPBackend.authenticate", return_value=None)
+@mock.patch("ansible_base.authenticators.ldap.LDAPBackend.authenticate", return_value=None)
 @pytest.mark.parametrize(
     "extra_settings, newctx_value",
     [
@@ -108,7 +108,7 @@ def test_BaseLDAPBackend_authenticate_no_authenticator(logger):
         "Existing OPT_X_TLS_NEWCTX gets preserved (START_TLS disabled)",
     ],
 )
-def test_BaseLDAPBackend_authenticate_start_tls(authenticate, ldap_authenticator, extra_settings, newctx_value):
+def test_AuthenticatorPlugin_authenticate_start_tls(authenticate, ldap_authenticator, extra_settings, newctx_value):
     """
     Ensure we force OPT_X_TLS_NEWCTX to 0 (only) when START_TLS is enabled.
 
@@ -118,10 +118,10 @@ def test_BaseLDAPBackend_authenticate_start_tls(authenticate, ldap_authenticator
     """
     ldap_authenticator.configuration.update(extra_settings)
     ldap_authenticator.save()
-    settings = LDAPSettings(defaults=ldap_authenticator.configuration)
-    backend = BaseLDAPBackend(authenticator=ldap_authenticator, settings=settings)
+    # settings = LDAPSettings(defaults=ldap_authenticator.configuration)
+    backend = AuthenticatorPlugin(database_instance=ldap_authenticator)
     request = MagicMock()
-    assert backend.authenticate(request, username="foo", password="bar") == (None, {}, [])
+    assert backend.authenticate(request, username="foo", password="bar") is None
     if newctx_value is not None:
         assert backend.settings.CONNECTION_OPTIONS[ldap.OPT_X_TLS_NEWCTX] == newctx_value
     else:

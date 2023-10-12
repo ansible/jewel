@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 from rest_framework.serializers import ValidationError
 
-from ansible_base.authentication.ldap.backends import LDAPSettings
+from ansible_base.authentication.authenticators import get_authenticator_plugin
 from ansible_base.models import Authenticator
 from ansible_base.utils.encryption import ENCRYPTED_STRING
 
@@ -23,8 +23,9 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         masked_configuration = OrderedDict()
         keys = list(configuration.keys())
         encrypted_keys = []
-        if authenticator.type == 'ldap':
-            from ansible_base.authentication.ldap import configuration_encrypted_fields as encrypted_keys
+
+        authenticator = get_authenticator_plugin(authenticator.type)
+        encrypted_keys = authenticator.configuration_encrypted_fields
 
         keys.sort()
         # Mask any keys in the encryption that should be masked
@@ -43,28 +44,9 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         if not validator_type and self.instance:
             validator_type = self.instance.type
 
-        if validator_type == 'l':
-            self.validate_ldap_configuration(data['configuration'])
-        else:
-            # If its an invalid type it will already be caught but we could have a valid value that is not yet validated
-            raise ValidationError(f"The specified type {type} has no validation yet")
+        try:
+            authenticator = get_authenticator_plugin(validator_type)
+            authenticator.validate_configuration(data['configuration'], self.instance)
+        except ImportError as e:
+            raise ValidationError({'type': e})
         return data
-
-    def validate_ldap_configuration(self, data: dict) -> None:
-        from ansible_base.authentication.ldap import configuration_encrypted_fields
-
-        # If there are any encrypted keys we don't want to use ENCRYPTED_STRING if they were not updated
-        for key in configuration_encrypted_fields:
-            if key in data and data[key] == ENCRYPTED_STRING:
-                data[key] = self.instance.configuration.get(key, None)
-
-        settings = LDAPSettings(defaults=data)
-
-        if settings.errors:
-            raise ValidationError({"configuration": settings.errors})
-
-        # Raise some warnings if specific fields were used
-        # TODO: Figure out how to display these warnings on a successful save
-        for field in ['USER_FLAGS_BY_GROUP', 'DENY_GROUP', 'REQUIRE_GROUP']:
-            if field in data:
-                self.warnings[field] = "It would be better to use the authenticator field instead of setting this field in the LDAP adapter"

@@ -144,7 +144,11 @@ plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Remove all generated files when starting up docker
-docker-reset:
+docker-reset: tools/generated/docker-compose.yml
 	if [ -f tools/generated/docker-compose.yml ] ; then docker-compose -f tools/generated/docker-compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
+
+## Remove the container volumes
+docker-reset-volumes: tools/generated/docker-compose.yml
+	if [ -f tools/generated/docker-compose.yml ] ; then docker-compose -f tools/generated/docker-compose.yml down -v ; fi

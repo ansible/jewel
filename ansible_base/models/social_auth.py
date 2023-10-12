@@ -1,0 +1,30 @@
+from django.contrib.auth import get_user_model
+from django.db import models
+from social_django.models import AbstractUserSocialAuth
+
+from ansible_base.models import Authenticator
+
+USER_MODEL = get_user_model()
+
+
+class AuthenticatorUser(AbstractUserSocialAuth):
+    """
+    This appends extra information on the the local user model that includes extra data returned by
+    the authenticators and links the user to the authenticator that they used to login.
+    """
+
+    provider = models.ForeignKey(Authenticator, on_delete=models.PROTECT, related_name="authenticator_user")
+    user = models.ForeignKey(USER_MODEL, related_name="authenticator_user", on_delete=models.CASCADE)
+    # TODO: set self.authenticated based on the provider that is passed to this method.
+    # the provider should be the name of the Authenticator model instance
+
+    @classmethod
+    def create_social_auth(cls, user, uid, provider):
+        provider = Authenticator.objects.get(pk=provider)
+        return super().create_social_auth(user, uid, provider)
+
+    class Meta:
+        """Meta data"""
+
+        app_label = "ansible_base"
+        unique_together = ("provider", "uid")

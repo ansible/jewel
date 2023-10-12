@@ -1,0 +1,84 @@
+try:
+    from tabulate import tabulate
+
+    HAS_TABULATE = True
+except ImportError:
+    HAS_TABULATE = False
+
+from django.core.management.base import BaseCommand, CommandError
+from django.utils.timezone import now
+
+from aap_gateway_api.models import User
+from ansible_base.models import Authenticator
+
+
+class Command(BaseCommand):
+    help = "Initialize Gateway service configuration with an admin user and a local authenticator"
+
+    def add_arguments(self, parser):
+        parser.add_argument("--list", action="store_true", help="list the authenticators", required=False)
+        parser.add_argument("--initialize", action="store_true", help="Initialize an admin user and local db authenticator", required=False)
+        parser.add_argument("--enable", type=int, help="Initialize an admin user and local db authenticator", required=False)
+        parser.add_argument("--disable", type=int, help="Initialize an admin user and local db authenticator", required=False)
+
+    def handle(self, *args, **options):
+        took_action = False
+        if options["initialize"]:
+            self.initialize_authenticators()
+            took_action = True
+        if options["enable"] or options['disable']:
+            for id, state in [(options['enable'], True), (options['disable'], False)]:
+                if not id:
+                    continue
+                authenticator = Authenticator.objects.get(id=id)
+                if not authenticator:
+                    raise CommandError(f"Authenticator {id} does not exist")
+                if authenticator.enabled is not state:
+                    authenticator.enabled = state
+                    authenticator.save()
+            took_action = True
+        if options["list"] or not took_action:
+            self.list_authenticators()
+
+    def list_authenticators(self):
+        authenticators = []
+        headers = ["ID", "Enabled", "Name", "Order"]
+
+        for authenticator in Authenticator.objects.all().order_by('id'):
+            authenticators.append([f'{authenticator.id}', f'{authenticator.enabled}', authenticator.name, f'{authenticator.order}'])
+
+        print('')
+        if HAS_TABULATE:
+            print(tabulate(authenticators, headers, tablefmt="github"))
+        else:
+            print("\t".join(headers))
+            for authenticator_data in authenticators:
+                print("\t".join(authenticator_data))
+        print('')
+
+    def initialize_authenticators(self):
+        admin_user = User.objects.filter(username="admin").first()
+        if not admin_user:
+            User.objects.update_or_create(
+                username="admin",
+                is_superuser=True,
+                first_name='Gateway',
+                last_name='Admin',
+                password='admin',
+            )
+            print("Created admin user with password 'admin'")
+        existing_authenticator = Authenticator.objects.filter(type="local").first()
+        if not existing_authenticator:
+            Authenticator.objects.create(
+                name='Local Database Authenticator',
+                enabled=True,
+                create_objects=True,
+                configuration={},
+                created_by=admin_user,
+                created_on=now(),
+                modified_by=admin_user,
+                modified_on=now(),
+                remove_users=False,
+                type='local',
+            )
+            print("Created default local authenticator")

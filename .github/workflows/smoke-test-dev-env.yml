@@ -49,9 +49,6 @@ jobs:
             sleep 5
           done
 
-          docker exec -ie DJANGO_SUPERUSER_PASSWORD=admin aap_gw_1 \
-            gateway-manage createsuperuser --username admin --email=none@example.com --noinput
-
           curl -k https://localhost:8000/api/gateway/v1/me | grep -q 'credentials were not provided'
 
           curl -k https://admin:admin@localhost:8000/api/gateway/v1/me | grep -q '"username":"admin"'

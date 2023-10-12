@@ -11,10 +11,12 @@ from django_auth_ldap.backend import LDAPBackend
 from django_auth_ldap.backend import LDAPSettings as BaseLDAPSettings
 from rest_framework.serializers import ValidationError
 
+from ansible_base.authentication.authenticator_lib import AbstractAuthenticatorPlugin, Authenticator, get_or_create_authenticator_user, update_user_claims
 from ansible_base.authentication.common import check_user_attribute_map
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 from ansible_base.utils.validation import VALID_STRING, validate_url_list
 
-logger = logging.getLogger('ansible_base.authentication.ldap')
+logger = logging.getLogger('ansible_base.authentication.authenticators.ldap')
 
 
 user_search_string = '%(user)s'
@@ -254,30 +256,34 @@ class LDAPSettings(BaseLDAPSettings):
             return False
 
 
-class BaseLDAPBackend(LDAPBackend):
-    def __init__(self, authenticator=None, settings=None, *args, **kwargs):
+class AuthenticatorPlugin(LDAPBackend, AbstractAuthenticatorPlugin):
+    def __init__(self, database_instance=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.authenticator = authenticator
-        if settings:
-            self.settings = settings
+        self.database_instance = database_instance
+        if database_instance:
+            self.settings = LDAPSettings(defaults=database_instance.configuration)
+        self.configuration_encrypted_fields = ['BIND_PASSWORD']
+        self.type = 'LDAP'
+        self.set_logger(logger)
 
-    def authenticate(self, request, username, password) -> (object, dict, list):
-        users_attrs = {}
+    def authenticate(self, request, username=None, password=None) -> (object, dict, list):
+        if not username or not password:
+            return
         users_groups = []
 
-        if not self.authenticator:
-            logger.error("BaseLDAPBackend was missing an authenticator")
-            return None, users_attrs, users_groups
+        if not self.database_instance:
+            logger.error("AuthenticatorPlugin was missing an authenticator")
+            return None
 
-        if not self.authenticator.enabled:
-            logger.info(f"LDAP authenticator {self.authenticator.name} is disabled, skipping")
-            return None, users_attrs, users_groups
+        if not self.database_instance.enabled:
+            logger.info(f"LDAP authenticator {self.database_instance.name} is disabled, skipping")
+            return None
 
         # We don't have to check if settings is None because it can never happen, the parent object will always return something
 
         if not self.settings.configuration_valid:
-            logger.error(f"LDAP authenticator {self.authenticator.name} can not be used due to configuration errors.")
-            return None, users_attrs, users_groups
+            logger.error(f"LDAP authenticator {self.database_instance.name} can not be used due to configuration errors.")
+            return None
 
         if self.settings.START_TLS and ldap.OPT_X_TLS_REQUIRE_CERT in self.settings.CONNECTION_OPTIONS:
             # with python-ldap, if you want to set connection-specific TLS
@@ -289,14 +295,13 @@ class BaseLDAPBackend(LDAPBackend):
         try:
             user_from_ldap = super().authenticate(request, username, password)
 
-            if user_from_ldap and user_from_ldap.ldap_user:
-                users_attrs = user_from_ldap.ldap_user.attrs.data
+            if user_from_ldap is not None and user_from_ldap.ldap_user:
                 users_groups = list(user_from_ldap.ldap_user._get_groups().get_group_dns())
 
                 # If we have an LDAP user and that user we found has an user_from_ldap internal object and that object has a bound connection
                 # Then we can try and force an unbind to close the sticky connection
                 if user_from_ldap.ldap_user._connection_bound:
-                    logger.debug(f"Forcing LDAP connection to close for {self.authenticator.name}")
+                    logger.debug(f"Forcing LDAP connection to close for {self.database_instance.name}")
                     try:
                         user_from_ldap.ldap_user._connection.unbind_s()
                         user_from_ldap.ldap_user._connection_bound = False
@@ -307,14 +312,14 @@ class BaseLDAPBackend(LDAPBackend):
 
             self.process_login_messages(user_from_ldap, username)
 
-            return user_from_ldap, users_attrs, users_groups
+            return update_user_claims(user_from_ldap, self.database_instance, users_groups)
         except Exception:
-            logger.exception(f"Encountered an error authenticating to LDAP {self.authenticator.name}")
-            return None, users_attrs, users_groups
+            logger.exception(f"Encountered an error authenticating to LDAP {self.database_instance.name}")
+            return None
 
     def process_login_messages(self, ldap_user, username: str) -> None:
         if ldap_user is None:
-            logger.info(f"User {username} could not be authenticated by LDAP {self.authenticator.name}")
+            logger.info(f"User {username} could not be authenticated by LDAP {self.database_instance.name}")
 
             # If our login failed and we have REQUIRE or DENY group we can't tell that the user is in that but we want inform the admin via a log as a hint
             if self.settings.REQUIRE_GROUP and self.settings.DENY_GROUP:
@@ -324,4 +329,39 @@ class BaseLDAPBackend(LDAPBackend):
             elif self.settings.DENY_GROUP:
                 logger.info("Hint: is user in deny group?")
         else:
-            logger.info(f"User {username} authenticated by LDAP {self.authenticator.name}")
+            logger.info(f"User {username} authenticated by LDAP {self.database_instance.name}")
+
+    def validate_configuration(self, data: dict, instance: object) -> None:
+        # If there are any encrypted keys we don't want to use ENCRYPTED_STRING if they were not updated
+        for key in self.configuration_encrypted_fields:
+            if key in data and data[key] == ENCRYPTED_STRING:
+                data[key] = instance.configuration.get(key, None)
+
+        settings = LDAPSettings(defaults=data)
+
+        if settings.errors:
+            raise ValidationError({"configuration": settings.errors})
+
+        # Raise some warnings if specific fields were used
+        # TODO: Figure out how to display these warnings on a successful save
+        for field in ['USER_FLAGS_BY_GROUP', 'DENY_GROUP', 'REQUIRE_GROUP']:
+            if field in data:
+                self.warnings[field] = "It would be better to use the authenticator field instead of setting this field in the LDAP adapter"
+
+    def update_settings(self, database_authenticator: Authenticator) -> None:
+        self.settings = LDAPSettings(defaults=database_authenticator.configuration)
+
+    def get_or_build_user(self, username, ldap_user):
+        """
+        This gets called by _LDAPUser to create the user in the database.
+        """
+        authenticator_user, created = get_or_create_authenticator_user(
+            user_id=username,
+            user_details={
+                "username": username,
+            },
+            authenticator=self.database_instance,
+            extra_data=ldap_user.attrs.data,
+        )
+
+        return authenticator_user.user, created

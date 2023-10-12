@@ -1,4 +1,5 @@
 import logging
+import traceback
 from http.cookies import SimpleCookie
 
 from django.conf import settings
@@ -62,10 +63,14 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             except Session.DoesNotExist:
                 logger.info("Session is invalid.")
                 return self._return_not_authenticated()
+            except KeyError:
+                logger.info("Session is not associated with a user.")
+                return self._return_not_authenticated()
 
         # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
         except Exception as e:
             logger.error(e)
+            traceback.print_exc()
             raise
 
 

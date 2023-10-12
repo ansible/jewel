@@ -61,7 +61,7 @@ def ldap_authenticator(ldap_configuration):
     from ansible_base.models import Authenticator
 
     authenticator = Authenticator.objects.create(
-        name="Test LDAP Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="l", configuration=ldap_configuration
+        name="Test LDAP Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="ldap", configuration=ldap_configuration
     )
     yield authenticator
     authenticator.delete()
