@@ -2,6 +2,8 @@
 name: Smoke-test dev env
 on:
   push:
+    branches:
+      - devel  # This prevents annoying failure emails from pushing to feature branches on forks
   pull_request_target:
 env:
   REGISTRY: quay.io
