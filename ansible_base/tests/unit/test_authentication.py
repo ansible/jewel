@@ -108,7 +108,7 @@ def test_AuthenticatorPlugin_authenticate_no_authenticator(logger):
         "Existing OPT_X_TLS_NEWCTX gets preserved (START_TLS disabled)",
     ],
 )
-def test_AuthenticatorPlugin_authenticate_start_tls(authenticate, ldap_authenticator, extra_settings, newctx_value):
+def test_AuthenticatorPlugin_authenticate_start_tls(authenticate, ldap_authenticator, extra_settings, newctx_value, shut_up_logging):
     """
     Ensure we force OPT_X_TLS_NEWCTX to 0 (only) when START_TLS is enabled.
 

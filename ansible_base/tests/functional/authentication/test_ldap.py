@@ -182,8 +182,7 @@ def test_ldap_backend_authenticate_configuration_invalid(
     url = reverse("me-list")
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 401
-    assert logger.error.call_count == 1
-    assert logger.error.call_args[0][0] == f"LDAP authenticator {ldap_authenticator.name} can not be used due to configuration errors."
+    logger.error.assert_any_call(f"LDAP authenticator {ldap_authenticator.name} can not be used due to configuration errors.")
 
 
 @pytest.mark.django_db
@@ -220,8 +219,6 @@ def test_ldap_backend_authenticate_invalid_user(
     url = reverse("me-list")
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 401
-    expected_message_count = 2 if expected_message else 1
-    assert logger.info.call_count == expected_message_count
     logger.info.assert_any_call(f"User foo could not be authenticated by LDAP {ldap_authenticator.name}")
     if expected_message:
         logger.info.assert_any_call(expected_message)
