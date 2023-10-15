@@ -42,6 +42,12 @@ services:
 ```
 
 ## Starting Gateway
+
+Please have the following prerequisites already installed on your development machine:
+  * docker
+  * make
+  * openssl
+
 1. Create a python virtual envenvironment: `python3 -m venv <location>`
 2. Activate the virtual environment: `source <location>/bin/activate`
 3. Install the tools for development: `pip install -r requirements/requirements_dev.txt`
