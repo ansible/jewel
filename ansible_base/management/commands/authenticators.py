@@ -47,14 +47,14 @@ class Command(BaseCommand):
         for authenticator in Authenticator.objects.all().order_by('id'):
             authenticators.append([f'{authenticator.id}', f'{authenticator.enabled}', authenticator.name, f'{authenticator.order}'])
 
-        print('')
+        self.stdout.write('')
         if HAS_TABULATE:
-            print(tabulate(authenticators, headers, tablefmt="github"))
+            self.stdout.write(tabulate(authenticators, headers, tablefmt="github"))
         else:
-            print("\t".join(headers))
+            self.stdout.write("\t".join(headers))
             for authenticator_data in authenticators:
-                print("\t".join(authenticator_data))
-        print('')
+                self.stdout.write("\t".join(authenticator_data))
+        self.stdout.write('')
 
     def initialize_authenticators(self):
         admin_user = User.objects.filter(username="admin").first()
@@ -66,7 +66,7 @@ class Command(BaseCommand):
                 last_name='Admin',
                 password='admin',
             )
-            print("Created admin user with password 'admin'")
+            self.stdout.write("Created admin user with password 'admin'")
         existing_authenticator = Authenticator.objects.filter(type="local").first()
         if not existing_authenticator:
             Authenticator.objects.create(
@@ -81,4 +81,4 @@ class Command(BaseCommand):
                 remove_users=False,
                 type='local',
             )
-            print("Created default local authenticator")
+            self.stdout.write("Created default local authenticator")
