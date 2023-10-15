@@ -99,7 +99,7 @@
       }
     ],
     "client": {
-      "{{ container_reference }}:8043": [],
+      "{{ container_reference }}:{{ gateway_port }}": [],
       "gateway_oidc_client": []
     }
   },
@@ -152,9 +152,9 @@
   "clients": [
     {
       "id": "0cb841a2-0a31-4976-86fa-a765f09426da",
-      "clientId": "{{ container_reference }}:8043",
-      "name": "Ansible Tower Instance",
-      "rootUrl": "https://{{ container_reference }}:8043",
+      "clientId": "{{ container_reference }}:{{ gateway_port }}",
+      "name": "Ansible Gateway Instance",
+      "rootUrl": "https://{{ container_reference }}:{{ gateway_port }}",
       "baseUrl": "/",
       "surrogateAuthRequired": false,
       "enabled": true,
@@ -162,10 +162,10 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "**********",
       "redirectUris": [
-        "https://{{ container_reference }}:8043/sso/complete/saml/"
+        "https://{{ container_reference }}:{{ gateway_port }}/api/gateway/social/complete/saml/"
       ],
       "webOrigins": [
-        "https://192.168.0.56:8043"
+        "https://192.168.0.56:{{ gateway_port }}"
       ],
       "notBefore": 0,
       "bearerOnly": false,
@@ -194,7 +194,7 @@
         "id.token.as.detached.signature": "false",
         "saml.assertion.signature": "true",
         "saml.encrypt": "false",
-        "saml_assertion_consumer_url_post": "https://{{ container_reference }}:8043/sso/complete/saml/",
+        "saml_assertion_consumer_url_post": "https://{{ container_reference }}:{{ gateway_port }}/api/gateway/social/complete/saml/",
         "saml.server.signature": "true",
         "saml_idp_initiated_sso_url_name": "{{ container_reference }}",
         "exclude.session.state.from.auth.response": "false",
@@ -321,10 +321,10 @@
       "clientAuthenticatorType": "client-secret",
       "secret": "7b1c3527-8702-4742-af69-2b74ee5742e8",
       "redirectUris": [
-        {% if oidc_reference is defined %}
-        "https://{{ oidc_reference }}:8043/sso/complete/oidc/",
+        {% if oidc_reference is defined and oidc_reference %}
+        "https://{{ oidc_reference }}:{{ gateway_port }}/api/gateway/social/complete/oidc/",
         {% endif %}
-        "https://{{ container_reference }}:8043/sso/complete/oidc/"
+        "https://{{ container_reference }}:{{ gateway_port }}/api/gateway/social/complete/oidc/"
       ],
       "webOrigins": [],
       "notBefore": 0,
@@ -340,6 +340,7 @@
       "attributes": {
         "id.token.as.detached.signature": "false",
         "saml.assertion.signature": "false",
+        "user.info.response.signature.alg": "RS256",
         "saml.force.post.binding": "false",
         "saml.multivalued.roles": "false",
         "saml.encrypt": "false",
@@ -365,6 +366,18 @@
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
       "protocolMappers": [
+        {
+          "id": "46e27633-c399-44da-b873-ddeb8adc8da2",
+          "name": "Audience Mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "gateway_oidc_client",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
         {
           "id": "a8f4a0a8-ece4-4a9d-9e7b-830f23ba0067",
           "name": "Gateway OIDC Group Membership",

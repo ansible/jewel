@@ -90,12 +90,14 @@ services:
       KEYCLOAK_USER: "{{ keycloak_username }}"
       KEYCLOAK_PASSWORD: "{{ keycloak_password }}"
       DB_VENDOR: postgres
-      DB_ADDR: postgres
+      DB_ADDR: db
       DB_DATABASE: keycloak
       DB_USER: {{ db_username }}
       DB_PASSWORD: {{ db_password }}
     depends_on:
       - db
+    networks:
+      - dbnet
 {% endif %}
 
 {% if enabled_containers['ldap'] | bool %}

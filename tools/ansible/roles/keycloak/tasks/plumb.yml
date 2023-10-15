@@ -1,50 +1,33 @@
 ---
-#- name: Load certs, existing and new SAML settings
-#  set_fact:
-#    private_key: "{{ private_key_content }}"
-#    public_key: "{{ public_key_content }}"
-#    existing_saml: "{{ lookup('gateway.gateway.controller_api', 'settings/saml', host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=false) }}"
-#    new_saml: "{{ lookup('template', 'saml_settings.json.j2') }}"
-#    existing_oidc: "{{ lookup('gateway.gateway.controller_api', 'settings/oidc', host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=false) }}"
-#    new_oidc: "{{ lookup('template', 'oidc_settings.json.j2') }}"
-#  vars:
-#    # We add the extra \\ in here so that when jinja is templating out the files we end up with \n in the strings.
-#    public_key_content: "{{ lookup('file', public_key_file) | regex_replace('\n', '\\\\n') }}"
-#    private_key_content: "{{ lookup('file', private_key_file) | regex_replace('\n', '\\\\n') }}"
-#
-#- name: Display existing SAML configuration
-#  debug:
-#    msg:
-#      - "Here is your existing SAML configuration for reference:"
-#      - "{{ existing_saml }}"
-#      - "Here is your existing OIDC configuration for reference:"
-#      - "{{ existing_oidc }}"
-#
-#- name: Write out the existing content
-# copy:
-#   dest: "../_sources/{{ item.filename }}"
-#   content: "{{ item.content }}"
-# loop:
-#   - filename: "existing_saml_adapter_settings.json"
-#     content: "{{ existing_saml }}"
-#   - filename: "existing_oidc_adapter_settings.json"
-#     content: "{{ existing_oidc }}"
-# loop_control:
-#   label: "{{ item.filename }}"
-#
-#- name: Configure Gateway SAML adapter
-# gateway.gateway.settings:
-#   settings: "{{ new_saml }}"
-#   controller_host: "{{ gateway_host }}"
-#   controller_username: "{{ gateway_admin_username }}"
-#   controller_password: "{{ gateway_admin_password }}"
-#   validate_certs: False
-#
-#- name: Configure Gateway OIDC adapter
-#  gateway.gateway.settings:
-#   settings: "{{ new_oidc }}"
-#   controller_host: "{{ gateway_host }}"
-#   controller_username: "{{ gateway_admin_username }}"
-#   controller_password: "{{ gateway_admin_password }}"
-#    validate_certs: False
-#
+- name: Load certs, existing and new SAML settings
+  set_fact:
+    oidc_public_key: "{{ lookup('file', public_key_cert) | regex_replace('\n', '') | regex_replace('-----[^-]*-----', '') }}"
+
+- name: Configure Gateway OIDC adapter
+  uri:
+    url: "{{ gateway_host }}/api/gateway/v1/authenticators/"
+    method: POST
+    body:
+      name: "{{ oidc_adapter_name }}"
+      enabled: True
+      create_objects: True
+      users_unique: False
+      remove_users: True
+      configuration:
+        ACCESS_TOKEN_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token"
+        AUTHORIZATION_URL: "{{ url_base }}/auth/realms/gateway/protocol/openid-connect/auth"
+        KEY: "gateway_oidc_client"
+        PUBLIC_KEY: "{{ oidc_public_key }}"
+        SECRET: "7b1c3527-8702-4742-af69-2b74ee5742e8"
+        VERIFY_SSL: False
+      type: "keycloak"
+    body_format: json
+    validate_certs: False
+    url_username: "{{ gateway_admin_username }}"
+    url_password: "{{ gateway_admin_password }}"
+    force_basic_auth: True
+    status_code:
+      - 201
+      - 400
+  register: oidc_adapter
+  changed_when: oidc_adapter.status == 201

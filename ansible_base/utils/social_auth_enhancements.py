@@ -40,7 +40,7 @@ class AuthenticatorStrategy(DjangoStrategy):
         value = backend.database_instance.configuration.get(name)
 
         # fall  back to settings module
-        if not value:
+        if value is None:
             return super().get_setting(name)
         return value
 
