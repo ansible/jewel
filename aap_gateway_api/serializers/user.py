@@ -23,6 +23,7 @@ class UserSerializer(CommonModelSerializer):
             'email',
             'first_name',
             'last_name',
+            'last_login',
             'password',
             'is_superuser',
             'is_system_auditor',
