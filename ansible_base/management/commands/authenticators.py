@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import now
 
 from aap_gateway_api.models import User
-from ansible_base.models import Authenticator
+from ansible_base.models import Authenticator, AuthenticatorUser
 
 
 class Command(BaseCommand):
@@ -57,9 +57,10 @@ class Command(BaseCommand):
         self.stdout.write('')
 
     def initialize_authenticators(self):
+        admin_created = None
         admin_user = User.objects.filter(username="admin").first()
         if not admin_user:
-            User.objects.update_or_create(
+            user, admin_created = User.objects.update_or_create(
                 username="admin",
                 is_superuser=True,
                 first_name='Gateway',
@@ -67,9 +68,10 @@ class Command(BaseCommand):
                 password='admin',
             )
             self.stdout.write("Created admin user with password 'admin'")
+
         existing_authenticator = Authenticator.objects.filter(type="local").first()
         if not existing_authenticator:
-            Authenticator.objects.create(
+            existing_authenticator = Authenticator.objects.create(
                 name='Local Database Authenticator',
                 enabled=True,
                 create_objects=True,
@@ -82,3 +84,10 @@ class Command(BaseCommand):
                 type='local',
             )
             self.stdout.write("Created default local authenticator")
+
+        if admin_created:
+            AuthenticatorUser.objects.get_or_create(
+                uid='admin',
+                user=user,
+                provider=existing_authenticator,
+            )

@@ -73,7 +73,6 @@ def update_user_claims(user, database_authenticator, groups):
             needs_save = True
 
     if needs_save:
-        logger.info(f"Saving user {user.username}")
         user.save()
 
     if results['access_allowed'] is not True:
