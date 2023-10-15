@@ -1,5 +1,6 @@
 ---
 gateway_host: https://localhost:8000
+gateway_port: 8000
 db_username: gateway
 db_password: gateway
 container_reference: localhost
