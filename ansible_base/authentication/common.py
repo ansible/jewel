@@ -13,8 +13,11 @@ logger = logging.getLogger('ansible_base.authentication.common')
 
 
 def check_user_attribute_map(user_attr_map: dict, name: str = 'USER_ATTR_MAP') -> dict:
-    # Validates an attribute map to user map.
-    # i.e. does the authenticator know how to extract email, username, first_name, last_name, etc
+    '''
+    Validates an attribute map to user map.
+    i.e. does the authenticator know how to extract email, username, first_name, last_name, etc
+    '''
+
     errors = {}
     if type(user_attr_map) is not dict:
         errors[name] = "Must be dict"
@@ -40,6 +43,10 @@ def check_user_attribute_map(user_attr_map: dict, name: str = 'USER_ATTR_MAP') -
 
 
 def create_claims(authenticator: Authenticator, username: str, attrs: dict, groups: list) -> (bool, bool, dict, list):
+    '''
+    Given an authenticator and a username, attrs and groups determine what the user has access to
+    '''
+
     # Assume we are not going to change our flags
     is_superuser = None
     is_system_auditor = None
@@ -108,7 +115,9 @@ def create_claims(authenticator: Authenticator, username: str, attrs: dict, grou
 
 
 def process_groups(trigger_condition: dict, groups: list, authenticator_id: int) -> bool:
-    # Looks at a maps trigger for a group and users groups and determines if the trigger True or False
+    '''
+    Looks at a maps trigger for a group and users groups and determines if the trigger True or False
+    '''
 
     invalid_conditions = set(trigger_condition.keys()) - set(TRIGGER_DEFINITION['groups']['keys'].keys())
     if invalid_conditions:
@@ -139,6 +148,9 @@ def process_groups(trigger_condition: dict, groups: list, authenticator_id: int)
 
 
 def has_access_with_join(current_access: bool, new_access: bool, condition: str = 'or') -> bool:
+    '''
+    Handle join of authenticator_maps
+    '''
     if current_access is None:
         return new_access
 
@@ -150,7 +162,9 @@ def has_access_with_join(current_access: bool, new_access: bool, condition: str 
 
 
 def process_user_attributes(trigger_condition: dict, attributes: dict, authenticator_id: int) -> bool:
-    # Looks at a maps trigger for an attribute and the users attributes and determines if the trigger is True, False or None
+    '''
+    Looks at a maps trigger for an attribute and the users attributes and determines if the trigger is True, False or None
+    '''
 
     has_access = None
     join_condition = trigger_condition.get('join_condition', 'or')
