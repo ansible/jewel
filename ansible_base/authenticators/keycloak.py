@@ -25,6 +25,7 @@ class KeycloakConfiguration(BaseAuthenticatorConfiguration):
     KEY = serializers.CharField(help_text=_("Keycloak Client ID."), allow_null=False)
     PUBLIC_KEY = serializers.CharField(help_text=_("RS256 public key provided by your Keycloak ream."), allow_null=False)
     SECRET = serializers.CharField(help_text=_("Keycloak Client secret."), allow_null=True)
+    VERIFY_SSL = serializers.BooleanField(help_text=_("Validate the Keycloak certificate"), allow_null=False, default=True)
 
 
 class AuthenticatorPlugin(SocialAuthMixin, KeycloakOAuth2, AbstractAuthenticatorPlugin):
