@@ -24,10 +24,6 @@ class User(AbstractUser):
     )
     modified_by = AbstractUser.username
     is_system_auditor = models.BooleanField(default=False, null=False)
-    claims = models.JSONField(default=dict, null=False)
-    last_login_map_results = models.JSONField(default=list, null=False)
-    # This field tracks if a user passed or failed an allow map
-    access_allowed = models.BooleanField(default=None, null=True)
 
     reverse_foreign_key_fields = ['teams']
 

@@ -63,16 +63,26 @@ def update_user_claims(user, database_authenticator, groups):
     results = create_claims(database_authenticator, user.username, user.authenticator_user.extra, groups)
 
     needs_save = False
+    authenticator_user = AuthenticatorUser.objects.filter(provider=database_authenticator.id, user=user.id)
     for attribute, attr_value in results.items():
         if attr_value is None:
             continue
         logger.debug(f"{attribute}: {attr_value}")
-        if getattr(user, attribute) != attr_value:
+        if hasattr(user, attribute):
+            object = user
+        elif hasattr(authenticator_user, attribute):
+            object = authenticator_user
+        else:
+            logger.error(f"Neither user not authentcator user has attribute {attribute}")
+            continue
+
+        if getattr(object, attribute, None) != attr_value:
             logger.debug(f"Setting new attribute {attribute} for {user.username}")
-            setattr(user, attribute, attr_value)
+            setattr(object, attribute, attr_value)
             needs_save = True
 
     if needs_save:
+        authenticator_user.save()
         user.save()
 
     if results['access_allowed'] is not True:
