@@ -125,7 +125,7 @@ class SocialAuthMixin:
 
     @property
     def name(self):
-        return str(self.database_instance.pk)
+        return str(self.database_instance.slug)
 
     def get_user_groups(self):
         """

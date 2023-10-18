@@ -1,4 +1,5 @@
 from django.db.models import JSONField, fields
+from django.utils.text import slugify
 
 from ansible_base.authentication.authenticators import get_authenticator_plugin
 
@@ -21,6 +22,8 @@ class Authenticator(NamedCommonModel):
     order = fields.IntegerField(
         default=1, help_text="The order in which an authenticator will be tried. This only pertains to username/password authenticators"
     )
+    slug = fields.SlugField(max_length=1024, default=None, editable=False, unique=True, help_text="An immutable identifier for the authenticator")
+    category = fields.CharField(max_length=30, default=None, help_text="The base type of this authenticator")
 
     reverse_foreign_key_fields = ['authenticator-map']
 
@@ -29,10 +32,17 @@ class Authenticator(NamedCommonModel):
 
         authenticator = get_authenticator_plugin(self.type)
 
+        if not self.category:
+            self.category = authenticator.category
+
         for field in getattr(authenticator, 'configuration_encrypted_fields', []):
             if field in self.configuration:
                 self.configuration[field] = ansible_encryption.encrypt_string(self.configuration[field])
 
+        if not self.slug:
+            self.slug = slugify(f"{self.type}-{self.name}")
+            # TODO: What happens if computed slug is not unique?
+            # You would have to create an adapter with a name, rename it and then create a new one with the same name
         super().save(*args, **kwargs)
 
     def __str__(self):

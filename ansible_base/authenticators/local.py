@@ -18,6 +18,7 @@ class AuthenticatorPlugin(ModelBackend, AbstractAuthenticatorPlugin):
         self.configuration_encrypted_fields = []
         self.type = "local"
         self.set_logger(logger)
+        self.category = "password"
 
     def authenticate(self, request, username=None, password=None, **kwargs):
         if not username or not password:

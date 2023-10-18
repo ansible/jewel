@@ -32,3 +32,4 @@ class AuthenticatorPlugin(SocialAuthMixin, KeycloakOAuth2, AbstractAuthenticator
     configuration_class = KeycloakConfiguration
     type = "keycloak"
     logger = logger
+    category = "sso"

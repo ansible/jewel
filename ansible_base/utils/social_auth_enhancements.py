@@ -52,10 +52,10 @@ class AuthenticatorStrategy(DjangoStrategy):
         """Return a configured backend class"""
         return get_authenticator_class(name)
 
-    def get_backend(self, name, redirect_uri=None, *args, **kwargs):
+    def get_backend(self, slug, redirect_uri=None, *args, **kwargs):
         """Add the database instance arg into the social auth backend."""
 
-        db_instance = Authenticator.objects.get(pk=name)
+        db_instance = Authenticator.objects.get(slug=slug)
         Backend = self.get_backend_class(db_instance.type)
 
         kwargs["database_instance"] = db_instance

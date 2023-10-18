@@ -265,6 +265,7 @@ class AuthenticatorPlugin(LDAPBackend, AbstractAuthenticatorPlugin):
         self.configuration_encrypted_fields = ['BIND_PASSWORD']
         self.type = 'LDAP'
         self.set_logger(logger)
+        self.category = "password"
 
     def authenticate(self, request, username=None, password=None) -> (object, dict, list):
         if not username or not password:
