@@ -22,4 +22,5 @@ urls = [
     path('authenticator_plugins/', views.AuthenticatorPluginView.as_view(), name='authenticator_plugin-view'),
     # Trigger definition
     path('trigger_definition/', views.TriggerDefinitionView.as_view(), name='trigger_definition-view'),
+    path('ui_auth/', views.UIAuth.as_view(), name='ui_auth-view'),
 ]
