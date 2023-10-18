@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+from rest_framework.reverse import reverse
 from rest_framework.serializers import ValidationError
 
 from ansible_base.authentication.authenticators import get_authenticator_plugin
@@ -24,8 +25,8 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
         keys = list(configuration.keys())
         encrypted_keys = []
 
-        authenticator = get_authenticator_plugin(authenticator.type)
-        encrypted_keys = authenticator.configuration_encrypted_fields
+        authenticator_plugin = get_authenticator_plugin(authenticator.type)
+        encrypted_keys = authenticator_plugin.configuration_encrypted_fields
 
         keys.sort()
         # Mask any keys in the encryption that should be masked
@@ -35,6 +36,10 @@ class AuthenticatorSerializer(NamedCommonModelSerializer):
             else:
                 masked_configuration[key] = configuration[key]
         ret['configuration'] = masked_configuration
+
+        # Generate a sso login URL if this is an sso category
+        if authenticator.category == 'sso':
+            ret['sso_login_url'] = reverse('social:begin', kwargs={'backend': authenticator.slug})
 
         return ret
 

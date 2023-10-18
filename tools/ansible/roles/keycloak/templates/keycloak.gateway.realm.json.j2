@@ -322,9 +322,9 @@
       "secret": "7b1c3527-8702-4742-af69-2b74ee5742e8",
       "redirectUris": [
         {% if oidc_reference is defined and oidc_reference %}
-        "https://{{ oidc_reference }}:{{ gateway_port }}/api/gateway/social/complete/oidc/",
+        "https://{{ oidc_reference }}:{{ gateway_port }}/api/gateway/social/complete/keycloak-{{ oidc_adapter_name | lower | regex_replace(' ', '-') }}/",
         {% endif %}
-        "https://{{ container_reference }}:{{ gateway_port }}/api/gateway/social/complete/oidc/"
+        "https://{{ container_reference }}:{{ gateway_port }}/api/gateway/social/complete/keycloak-{{ oidc_adapter_name | lower | regex_replace(' ', '-') }}/"
       ],
       "webOrigins": [],
       "notBefore": 0,
