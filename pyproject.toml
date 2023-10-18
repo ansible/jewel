@@ -31,11 +31,12 @@ legacy_tox_ini = """
     min_version = 4.0
     no_package = true
     env_list =
+        check
         py311
         py310
         py39
     labels =
-        test = py39, py310, py311
+        test = py39, py310, py311, check
         lint = flake8, black, isort
 
     [testenv]
@@ -46,6 +47,12 @@ legacy_tox_ini = """
         pytest-cov
         pytest-django
     commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch aap_gateway_api/tests ansible_base/tests {posargs}
+
+    [testenv:check]
+    deps =
+         -r{toxinidir}/requirements/requirements.txt
+         psycopg[binary]
+    commands = python3 manage.py check
 
     [testenv:flake8]
     deps =
