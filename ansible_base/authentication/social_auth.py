@@ -5,7 +5,7 @@ from social_django.models import Association, Code, Nonce, Partial
 from social_django.storage import BaseDjangoStorage
 from social_django.strategy import DjangoStrategy
 
-from ansible_base.authentication.authenticators import get_authenticator_class, get_authenticator_plugins
+from ansible_base.authenticator_plugins.utils import get_authenticator_class, get_authenticator_plugins
 from ansible_base.models import Authenticator, AuthenticatorUser
 
 
@@ -50,6 +50,7 @@ class AuthenticatorStrategy(DjangoStrategy):
 
     def get_backend_class(self, name):
         """Return a configured backend class"""
+        # TODO: This can raise an exception if the back end is fubar
         return get_authenticator_class(name)
 
     def get_backend(self, slug, redirect_uri=None, *args, **kwargs):
@@ -77,7 +78,37 @@ class AuthenticatorStrategy(DjangoStrategy):
         return super().session_set(name, value)
 
 
+class SocialAuthMixin:
+    configuration_encrypted_fields = []
+    logger = None
+
+    def __init__(self, *args, **kwargs):
+        # social auth expects the first arg to be a strategy instance. Since this has
+        # to be instantiated outside of social auth, make sure that the strategy arg
+        # is present.
+        args = self.ensure_strategy_in_args(args)
+        self.database_instance = kwargs.pop("database_instance", None)
+        super().__init__(*args, **kwargs)
+        self.set_logger(self.logger)
+
+    @property
+    def name(self):
+        return str(self.database_instance.slug)
+
+    def get_user_groups(self):
+        """
+        Receives the user object that .authenticate returns.
+        """
+        return []
+
+    def ensure_strategy_in_args(self, args):
+        if len(args) == 0:
+            args = (AuthenticatorStrategy(storage=AuthenticatorStorage()),)
+
+        return args
+
+
 def create_user_claims_pipeline(*args, backend, **kwargs):
-    from ansible_base.authentication.authenticator_lib import update_user_claims
+    from ansible_base.authentication.common import update_user_claims
 
     update_user_claims(kwargs["user"], backend.database_instance, backend.get_user_groups())

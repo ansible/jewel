@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
-from ansible_base.tests.conftest import admin_api_client, shut_up_logging, unauthenticated_api_client, user  # noqa: F401
+from ansible_base.tests.conftest import admin_api_client, local_authenticator, shut_up_logging, unauthenticated_api_client, user  # noqa: F401
 
 
 def copy_fixture(copies=1):

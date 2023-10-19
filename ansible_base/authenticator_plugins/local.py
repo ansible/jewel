@@ -3,7 +3,7 @@ import logging
 from django.contrib.auth.backends import ModelBackend
 from django.core.exceptions import ValidationError
 
-from ansible_base.authentication.authenticator_lib import AbstractAuthenticatorPlugin
+from ansible_base.authenticator_plugins.base import AbstractAuthenticatorPlugin
 from ansible_base.models import AuthenticatorUser
 
 logger = logging.getLogger('aap.gateway.authentication.local')

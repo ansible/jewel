@@ -3,7 +3,7 @@ from collections import OrderedDict
 from rest_framework.reverse import reverse
 from rest_framework.serializers import ValidationError
 
-from ansible_base.authentication.authenticators import get_authenticator_plugin
+from ansible_base.authenticator_plugins.utils import get_authenticator_plugin
 from ansible_base.models import Authenticator
 from ansible_base.utils.encryption import ENCRYPTED_STRING
 

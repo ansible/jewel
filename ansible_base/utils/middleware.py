@@ -3,8 +3,8 @@ from django.contrib.auth import BACKEND_SESSION_KEY
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.deprecation import MiddlewareMixin
 
-from ansible_base.authentication.authenticators import get_authenticator_plugins
-from ansible_base.authentication.authenticators import setting as authenticator_prefix
+from ansible_base.authenticator_plugins.utils import get_authenticator_plugins
+from ansible_base.authenticator_plugins.utils import setting as authenticator_prefix
 
 
 def get_authenticator_module_paths() -> list:
@@ -34,8 +34,8 @@ class AuthenticatorBackendMiddleware(MiddlewareMixin):
             )
 
         # If the session backend is one from one of the Authenticator plugins, change it to
-        # ansible_base.authentication.backends.AnsibleBaseAuth so that the user can be logged
+        # ansible_base.authentication.backend.AnsibleBaseAuth so that the user can be logged
         # in since the Authenticator backends aren't in AUTHENTICATION_BACKENDS
         if backend := request.session.get(BACKEND_SESSION_KEY, None):
             if backend in self.plugins:
-                request.session[BACKEND_SESSION_KEY] = "ansible_base.authentication.backends.AnsibleBaseAuth"
+                request.session[BACKEND_SESSION_KEY] = "ansible_base.authentication.backend.AnsibleBaseAuth"

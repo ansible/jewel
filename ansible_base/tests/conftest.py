@@ -9,7 +9,7 @@ def unauthenticated_api_client(db):
 
 
 @pytest.fixture
-def admin_api_client(db, admin_user, unauthenticated_api_client):
+def admin_api_client(db, admin_user, unauthenticated_api_client, local_authenticator):
     client = unauthenticated_api_client
     client.login(username="admin", password="password")
     yield client
@@ -21,7 +21,19 @@ def admin_api_client(db, admin_user, unauthenticated_api_client):
 
 
 @pytest.fixture
-def user(db, django_user_model):
+def local_authenticator(db):
+    from ansible_base.models import Authenticator
+
+    authenticator = Authenticator.objects.create(
+        name="Test Local Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="local", configuration={}
+    )
+    yield authenticator
+    authenticator.authenticator_user.all().delete()
+    authenticator.delete()
+
+
+@pytest.fixture
+def user(db, django_user_model, local_authenticator):
     user = django_user_model.objects.create_user(username="user", password="password")
     yield user
     user.delete()

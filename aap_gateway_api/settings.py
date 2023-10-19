@@ -98,11 +98,10 @@ INSTALLED_APPS = [
 # User our own user model
 AUTH_USER_MODEL = 'aap_gateway_api.User'
 
-ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIX = "ansible_base.authenticators"
+ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIX = "ansible_base.authenticator_plugins"
 
 AUTHENTICATION_BACKENDS = [
-    "ansible_base.authentication.backends.AnsibleBaseAuth",
-    "django.contrib.auth.backends.ModelBackend",
+    "ansible_base.authentication.backend.AnsibleBaseAuth",
 ]
 
 MIDDLEWARE = [
@@ -281,8 +280,8 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.associate_user',
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
-    'ansible_base.utils.social_auth_enhancements.create_user_claims_pipeline',
+    'ansible_base.authentication.social_auth.create_user_claims_pipeline',
 )
-SOCIAL_AUTH_STORAGE = "ansible_base.utils.social_auth_enhancements.AuthenticatorStorage"
-SOCIAL_AUTH_STRATEGY = "ansible_base.utils.social_auth_enhancements.AuthenticatorStrategy"
+SOCIAL_AUTH_STORAGE = "ansible_base.authentication.social_auth.AuthenticatorStorage"
+SOCIAL_AUTH_STRATEGY = "ansible_base.authentication.social_auth.AuthenticatorStrategy"
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/api/gateway/v1/me"
