@@ -19,4 +19,6 @@ oidc_configuration:
     KEY: "gateway_oidc_client"
     PUBLIC_KEY: "{{ oidc_public_key }}"
     SECRET: "7b1c3527-8702-4742-af69-2b74ee5742e8"
+    ADDITIONAL_UNVERIFIED_ARGS:
+      VERIFY_SSL: False
   type: "keycloak"

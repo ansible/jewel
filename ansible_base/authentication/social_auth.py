@@ -1,3 +1,5 @@
+import logging
+
 from django.db import models
 from django.db.utils import IntegrityError
 from social_core.utils import setting_name
@@ -7,6 +9,8 @@ from social_django.strategy import DjangoStrategy
 
 from ansible_base.authenticator_plugins.utils import get_authenticator_class, get_authenticator_plugins
 from ansible_base.models import Authenticator, AuthenticatorUser
+
+logger = logging.getLogger('ansible_base.authentication.social_auth')
 
 
 class AuthenticatorStorage(BaseDjangoStorage):
@@ -37,12 +41,18 @@ class AuthenticatorStrategy(DjangoStrategy):
     # load the authenticator setting from the database object.
     def get_setting(self, name, backend):
         # try to load the value from the db.
-        value = backend.database_instance.configuration.get(name)
+        value = backend.database_instance.configuration.get(name, None)
+        if value is not None:
+            return value
 
-        # fall  back to settings module
-        if value is None:
-            return super().get_setting(name)
-        return value
+        # next check the ADDITIONAL_UNVERIFIED_ARGS
+        additional_args = backend.database_instance.configuration.get('ADDITIONAL_UNVERIFIED_ARGS', {})
+        value = additional_args.get(name, None)
+        if value is not None:
+            return value
+
+        # fall back to settings module
+        return super().get_setting(name)
 
     def get_backends(self):
         """Return configured backends"""
