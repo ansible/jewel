@@ -2,8 +2,11 @@ import logging
 import re
 
 from django.contrib.auth import get_user_model
+from django.utils.timezone import now
+from social_core.pipeline.user import get_username
 
-from ansible_base.models import Authenticator, AuthenticatorMap
+from ansible_base.authentication.social_auth import AuthenticatorStorage, AuthenticatorStrategy
+from ansible_base.models import Authenticator, AuthenticatorMap, AuthenticatorUser
 
 from .trigger_definition import TRIGGER_DEFINITION
 
@@ -228,3 +231,77 @@ def process_user_attributes(trigger_condition: dict, attributes: dict, authentic
                 has_access = has_access_with_join(has_access, a_user_value in trigger_condition[attribute]['in'], join_condition)
 
     return has_access
+
+
+def get_local_username(user_details, authenticator):
+    """
+    Converts the username provided by the backend to one that doesn't conflict with users
+    from other auth backends.
+    """
+
+    class FakeBackend:
+        def setting(self, *args, **kwargs):
+            return ["username", "email"]
+
+    username = get_username(strategy=AuthenticatorStrategy(AuthenticatorStorage()), details=user_details, backend=FakeBackend())
+
+    if username:
+        return username["username"]
+    else:
+        return user_details["username"]
+
+
+def get_or_create_authenticator_user(user_id, user_details, authenticator, extra_data):
+    """
+    Create the user object in the database along with it's associated AuthenticatorUser class.
+    """
+
+    extra = {**extra_data, "auth_time": now().isoformat()}
+
+    try:
+        auth_user = AuthenticatorUser.objects.get(uid=user_id, provider=authenticator)
+        auth_user.extra_data = extra
+        auth_user.save()
+        return (auth_user, False)
+    except AuthenticatorUser.DoesNotExist:
+        username = get_local_username(user_details, authenticator)
+
+        # ensure the authenticator isn't trying to pass along a cheeky is_superuser in user_details
+        allowed_keys = ["first_name", "last_name", "email"]
+        details = {k: user_details.get(k, "") for k in allowed_keys if k}
+
+        local_user, created = get_user_model().objects.get_or_create(username=username, defaults=details)
+
+        return (AuthenticatorUser.objects.create(user=local_user, uid=user_id, extra_data=extra, provider=authenticator), True)
+
+
+def update_user_claims(user, database_authenticator, groups):
+    results = create_claims(database_authenticator, user.username, user.authenticator_user.extra, groups)
+
+    needs_save = False
+    authenticator_user = AuthenticatorUser.objects.filter(provider=database_authenticator.id, user=user.id)
+    for attribute, attr_value in results.items():
+        if attr_value is None:
+            continue
+        logger.debug(f"{attribute}: {attr_value}")
+        if hasattr(user, attribute):
+            object = user
+        elif hasattr(authenticator_user, attribute):
+            object = authenticator_user
+        else:
+            logger.error(f"Neither user not authentcator user has attribute {attribute}")
+            continue
+
+        if getattr(object, attribute, None) != attr_value:
+            logger.debug(f"Setting new attribute {attribute} for {user.username}")
+            setattr(object, attribute, attr_value)
+            needs_save = True
+
+    if needs_save:
+        authenticator_user.save()
+        user.save()
+
+    if results['access_allowed'] is not True:
+        logger.warning(f"User {user.username} failed an allow map and was denied access")
+        return None
+    return user

@@ -4,7 +4,7 @@ from django.urls import reverse
 
 
 @mock.patch("aap_gateway_api.views.api.v1.local_login.logger")
-def test_login_post_successful_login(logger, unauthenticated_api_client, admin_user):
+def test_login_post_successful_login(logger, unauthenticated_api_client, admin_user, local_authenticator):
     """
     Test POSTing to the login view (successful login).
     """
@@ -70,7 +70,7 @@ def test_login_get_accept_unknown(unauthenticated_api_client):
 
 
 @mock.patch("aap_gateway_api.views.api.v1.local_login.logger")
-def test_logout_view(logger, unauthenticated_api_client, admin_user):
+def test_logout_view(logger, unauthenticated_api_client, admin_user, local_authenticator):
     """
     Test GETing the logout view.
     """

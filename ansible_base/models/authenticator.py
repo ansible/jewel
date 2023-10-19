@@ -1,7 +1,7 @@
 from django.db.models import JSONField, fields
 from django.utils.text import slugify
 
-from ansible_base.authentication.authenticators import get_authenticator_plugin
+from ansible_base.authenticator_plugins.utils import get_authenticator_plugin
 
 from .common import NamedCommonModel
 

@@ -8,7 +8,7 @@ from aap_gateway_api.authentication.basic_auth import LoggedBasicAuthentication
 
 # Patch the logger to ensure we log the correct message
 @mock.patch("aap_gateway_api.authentication.basic_auth.logged_basic_auth.logger")
-def test_logged_basic_auth(logger, unauthenticated_api_client, organization, admin_user):
+def test_logged_basic_auth(logger, unauthenticated_api_client, organization, admin_user, local_authenticator):
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:password".encode("utf-8")).decode("utf-8"))
     url = reverse("organization-list")

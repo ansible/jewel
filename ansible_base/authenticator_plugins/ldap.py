@@ -11,12 +11,12 @@ from django_auth_ldap.backend import LDAPBackend
 from django_auth_ldap.backend import LDAPSettings as BaseLDAPSettings
 from rest_framework.serializers import ValidationError
 
-from ansible_base.authentication.authenticator_lib import AbstractAuthenticatorPlugin, Authenticator, get_or_create_authenticator_user, update_user_claims
-from ansible_base.authentication.common import check_user_attribute_map
+from ansible_base.authentication.common import check_user_attribute_map, get_or_create_authenticator_user, update_user_claims
+from ansible_base.authenticator_plugins.base import AbstractAuthenticatorPlugin, Authenticator
 from ansible_base.utils.encryption import ENCRYPTED_STRING
 from ansible_base.utils.validation import VALID_STRING, validate_url_list
 
-logger = logging.getLogger('ansible_base.authentication.authenticators.ldap')
+logger = logging.getLogger('ansible_base.authenticator_plugins.ldap')
 
 
 user_search_string = '%(user)s'
