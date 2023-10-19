@@ -3,31 +3,48 @@
   set_fact:
     oidc_public_key: "{{ lookup('file', public_key_cert) | regex_replace('\n', '') | regex_replace('-----[^-]*-----', '') }}"
 
-- name: Configure Gateway OIDC adapter
+- name: Load the existing authenticators
   uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/"
+    url: "{{ gateway_host }}/api/gateway/v1/authenticators/?name={{ oidc_adapter_name | urlencode }}"
+    validate_certs: False
+    url_username: "{{ gateway_admin_username }}"
+    url_password: "{{ gateway_admin_password }}"
+    force_basic_auth: True
+  register: existing_authenticators
+
+- name: See if our authenticator exists
+  set_fact:
+    authenticator_number: "{{ item.id }}/"
+    title: "Updating existing authenticator"
+    method: PUT
+    statuses:
+     - 200
+  loop: "{{ existing_authenticators.json.results | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name == oidc_configuration.name
+
+- name: Set default variables
+  set_fact:
+    authenticator_number: ''
+    title: "Configure a new authenticator"
     method: POST
-    body:
-      name: "{{ oidc_adapter_name }}"
-      enabled: True
-      create_objects: True
-      users_unique: False
-      remove_users: True
-      configuration:
-        ACCESS_TOKEN_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token"
-        AUTHORIZATION_URL: "{{ url_base }}/auth/realms/gateway/protocol/openid-connect/auth"
-        KEY: "gateway_oidc_client"
-        PUBLIC_KEY: "{{ oidc_public_key }}"
-        SECRET: "7b1c3527-8702-4742-af69-2b74ee5742e8"
-        VERIFY_SSL: False
-      type: "keycloak"
+    statuses:
+     - 201
+  when: authenticator_number is not defined
+
+- debug:
+    msg: "{{ oidc_configuration }}"
+
+- name: "{{ title }}"
+  uri:
+    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ authenticator_number }}"
+    method: "{{ method }}"
+    body: "{{ oidc_configuration }}"
     body_format: json
     validate_certs: False
     url_username: "{{ gateway_admin_username }}"
     url_password: "{{ gateway_admin_password }}"
     force_basic_auth: True
-    status_code:
-      - 201
-      - 400
-  register: oidc_adapter
-  changed_when: oidc_adapter.status == 201
+    status_code: "{{ statuses }}"
+  changed_when: True

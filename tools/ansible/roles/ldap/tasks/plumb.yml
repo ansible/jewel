@@ -1,5 +1,5 @@
 ---
-- name: Load the existing LDAP authenticators
+- name: Load the existing authenticators
   uri:
     url: "{{ gateway_host }}/api/gateway/v1/authenticators/?name={{ ldap_container_name | urlencode }}"
     validate_certs: False
@@ -8,43 +8,36 @@
     force_basic_auth: True
   register: existing_authenticators
 
-- block:
-    - name: Display existing LDAP authenticators
-      debug:
-        msg:
-          - "Existing authenticator"
-          - "{{ existing_authenticators.json.results[0] }}"
+- name: See if our authenticator exists
+  set_fact:
+    authenticator_number: "{{ item.id }}/"
+    title: "Updating existing authenticator"
+    method: PUT
+    statuses:
+     - 200
+  loop: "{{ existing_authenticators.json.results | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name == ldap_configuration.name
 
-    - name: Write out the existing content
-      copy:
-        dest: "../generated/existing_ldap_adapter_settings.json"
-        content: "{{ existing_authenticators.json.results[0] }}"
-
-    - name: Updating existing authenticator
-      uri:
-        url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ existing_authenticators.json.results[0].id }}/"
-        method: PUT
-        body: "{{ ldap_configuration }}"
-        body_format: json
-        validate_certs: False
-        url_username: "{{ gateway_admin_username }}"
-        url_password: "{{ gateway_admin_password }}"
-        force_basic_auth: True
-      changed_when: True
-
-  when: existing_authenticators.json.count != 0
-
-- name: Configure a new authenticator
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/"
+- name: Set default variables
+  set_fact:
+    authenticator_number: ''
+    title: "Configure a new authenticator"
     method: POST
+    statuses:
+     - 201
+  when: authenticator_number is not defined
+
+- name: "{{ title }}"
+  uri:
+    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ authenticator_number }}"
+    method: "{{ method }}"
     body: "{{ ldap_configuration }}"
     body_format: json
     validate_certs: False
     url_username: "{{ gateway_admin_username }}"
     url_password: "{{ gateway_admin_password }}"
     force_basic_auth: True
-    status_code:
-      - 201
+    status_code: "{{ statuses }}"
   changed_when: True
-  when: existing_authenticators.json.count == 0
