@@ -267,7 +267,7 @@ class AuthenticatorPlugin(LDAPBackend, AbstractAuthenticatorPlugin):
         self.set_logger(logger)
         self.category = "password"
 
-    def authenticate(self, request, username=None, password=None) -> (object, dict, list):
+    def authenticate(self, request, username=None, password=None, **kwargs) -> (object, dict, list):
         if not username or not password:
             return
         users_groups = []

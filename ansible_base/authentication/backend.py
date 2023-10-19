@@ -24,7 +24,7 @@ class AnsibleBaseAuth(ModelBackend):
                     authentication_backends[database_authenticator.id] = get_authenticator_plugin(database_authenticator.type)
             authenticator_object = authentication_backends[database_authenticator.id]
             authenticator_object.update_if_needed(database_authenticator)
-            user = authentication_backends[database_authenticator.id].authenticate(request, *args, **kwargs)
+            user = authenticator_object.authenticate(request, *args, **kwargs)
             if user:
                 logger.info(f'User {user.username} logged in from {database_authenticator.name}')
                 return user
