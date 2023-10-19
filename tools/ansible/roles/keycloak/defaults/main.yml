@@ -6,3 +6,17 @@ keycloak_realm_template: ../generated/keycloak.gateway.realm.json
 oidc_adapter_name: "Dev Keycloak Container"
 url_base: "https://{{ (oidc_reference == '') | ternary(oidc_reference, container_reference) }}:{{ keycloak_exposed_port }}"
 init_file: "{{ sources_dest }}/keycloak_initialized"
+
+oidc_configuration:
+  name: "{{ oidc_adapter_name }}"
+  enabled: True
+  create_objects: True
+  users_unique: False
+  remove_users: True
+  configuration:
+    ACCESS_TOKEN_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token"
+    AUTHORIZATION_URL: "{{ url_base }}/auth/realms/gateway/protocol/openid-connect/auth"
+    KEY: "gateway_oidc_client"
+    PUBLIC_KEY: "{{ oidc_public_key }}"
+    SECRET: "7b1c3527-8702-4742-af69-2b74ee5742e8"
+  type: "keycloak"
