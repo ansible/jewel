@@ -79,6 +79,8 @@ RUN for dir in \
 # once a new version of xds-protos is available
 ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
+# Pull in the platform-ui, this can change frequently so it should be one of the last things we try and do
+COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
 
 USER 1000
 EXPOSE 8000
