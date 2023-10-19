@@ -15,10 +15,16 @@ class UIAuth(APIView):
 
     def get(self, request, format=None):
         authenticators = Authenticator.objects.filter(enabled=True)
-        response = {'show_login_form': False, 'ssos': []}
+        response = {'show_login_form': False, 'passwords': [], 'ssos': []}
         for authenticator in authenticators:
             if authenticator.category == 'password':
                 response['show_login_form'] = True
+                response['passwords'].append(
+                    {
+                        'name': authenticator.name,
+                        'type': authenticator.type,
+                    }
+                )
             elif authenticator.category == 'sso':
                 response['ssos'].append(
                     {
