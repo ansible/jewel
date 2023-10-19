@@ -3,7 +3,7 @@ import logging
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.fields import empty
-from rest_framework.serializers import ValidationError
+from rest_framework.serializers import JSONField, ValidationError
 
 from ansible_base.models import Authenticator
 
@@ -12,6 +12,11 @@ logger = logging.getLogger('ansible_base.authentication.authenticator_lib')
 
 class BaseAuthenticatorConfiguration(serializers.Serializer):
     documentation_url = None
+    ADDITIONAL_UNVERIFIED_ARGS = JSONField(
+        help_text="Any additional fields that this authenticator can take, they are not validated and passed directly back to the authenticator",
+        required=False,
+        allow_null=True,
+    )
 
     def get_configuration_schema(self):
         fields = self.get_fields()
