@@ -35,7 +35,7 @@ urlpatterns = [
         views.EnvironmentOrganizationViewSet.as_view(view_only_list),
         name='environment-organizations',
     ),
-    path('api/gateway/v1/me', views.MeViewSet.as_view(view_only_list), name='me-list'),
+    path('api/gateway/v1/me/', views.MeViewSet.as_view(view_only_list), name='me-list'),
     path('api/gateway/v1/organizations/', views.OrganizationViewSet.as_view(list_actions), name='organization-list'),
     re_path(r'api/gateway/v1/organizations/(?P<pk>[0-9]+)/$', views.OrganizationViewSet.as_view(detail_actions), name='organization-detail'),
     re_path(r'api/gateway/v1/organizations/(?P<pk>[0-9]+)/teams/$', views.OrganizationTeamViewSet.as_view(view_only_list), name='organization-teams'),
