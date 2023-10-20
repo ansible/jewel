@@ -34,7 +34,7 @@ register(
 register(
     section="proxy",
     preference_name="gateway_proxy_url",
-    default='https://localhost:8090',
+    default='https://localhost:9080',
     required=True,
     preference_type="url",
     help_text="URL to the Gateway proxy layer",
