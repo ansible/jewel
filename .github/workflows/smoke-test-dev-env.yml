@@ -51,8 +51,8 @@ jobs:
             sleep 5
           done
 
-          curl -k https://localhost:8000/api/gateway/v1/me | grep -q 'credentials were not provided'
+          curl -k https://localhost:8000/api/gateway/v1/me/ | grep -q 'credentials were not provided'
 
-          curl -k https://admin:admin@localhost:8000/api/gateway/v1/me | grep -q '"username":"admin"'
+          curl -k https://admin:admin@localhost:8000/api/gateway/v1/me/ | grep -q '"username":"admin"'
 
           make docker-reset
