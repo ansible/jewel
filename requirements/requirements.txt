@@ -21,6 +21,7 @@ django==4.2.5
     #   django-crum
     #   django-dynamic-preferences
     #   django-extensions
+    #   django-filter
     #   djangorestframework
     #   social-auth-app-django
 django-auth-ldap==4.5.0
@@ -30,6 +31,8 @@ django-crum==0.7.9
 django-dynamic-preferences==1.15.0
     # via -r requirements/requirements.in
 django-extensions==3.2.3
+    # via -r requirements/requirements.in
+django-filter==23.3
     # via -r requirements/requirements.in
 django-grpc==1.0.21
     # via -r requirements/requirements.in

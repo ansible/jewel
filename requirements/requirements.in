@@ -20,3 +20,4 @@ tabulate
 uwsgi
 xds-protos>=1.58
 PyYAML
+django-filter

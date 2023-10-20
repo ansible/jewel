@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'django_grpc',
     'social_django',
     'ansible_base',
+    'django_filters',
 ]
 
 # User our own user model
