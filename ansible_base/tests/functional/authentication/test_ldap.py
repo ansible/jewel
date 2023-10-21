@@ -6,6 +6,8 @@ from django.urls import reverse
 
 # TODO: Figure out how to deal with this because SessionAuthentication remains in aap_gateway_api
 from aap_gateway_api.authentication.session import SessionAuthentication
+from ansible_base.models import Authenticator
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
@@ -164,10 +166,41 @@ def test_ldap_create_authenticator_error_handling(
             assert value in response.data["configuration"][key]
 
 
-def test_omg(
+@mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
+def test_ldap_backend_authenticate_encrypted_fields_update(admin_api_client, ldap_authenticator):
+    url = reverse("authenticator-detail", kwargs={"pk": ldap_authenticator.pk})
+    # BIND_PASSWORD is encrypted
+    config = ldap_authenticator.configuration
+    config["BIND_PASSWORD"] = 'foo'
+    response = admin_api_client.patch(url, data={"configuration": config}, format="json")
+    assert response.status_code == 200
+    assert response.data["configuration"]["BIND_PASSWORD"] == ENCRYPTED_STRING
+    authenticator = Authenticator.objects.get(pk=ldap_authenticator.pk)
+    # We automatically decrypt the encrypted fields in Authenticator#from_db
+    assert authenticator.configuration["BIND_PASSWORD"] == "foo"
+
+    # And updating it to ENCRYPTED_STRING should not change the value
+    config["BIND_PASSWORD"] = ENCRYPTED_STRING
+    response = admin_api_client.patch(url, data={"configuration": config}, format="json")
+    assert response.status_code == 200
+    assert response.data["configuration"]["BIND_PASSWORD"] == ENCRYPTED_STRING
+    authenticator = Authenticator.objects.get(pk=ldap_authenticator.pk)
+    assert authenticator.configuration["BIND_PASSWORD"] == "foo"
+
+
+@pytest.mark.xfail(reason="https://issues.redhat.com/browse/AAP-17453")
+@mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
+def test_ldap_backend_validate_configuration_warn_specific_fields(
     admin_api_client,
+    ldap_authenticator,
 ):
-    assert True
+    config = ldap_authenticator.configuration
+    config["DENY_GROUP"] = "cn=deniedgroup,ou=groups,dc=example,dc=org"
+
+    url = reverse("authenticator-detail", kwargs={"pk": ldap_authenticator.pk})
+    response = admin_api_client.patch(url, data={"configuration": config}, format="json")
+    assert response.status_code == 200
+    assert "better to use the authenticator field" in response.data["warnings"]["DENY_GROUP"]
 
 
 @pytest.mark.django_db
@@ -228,6 +261,38 @@ def test_ldap_backend_authenticate_invalid_user(
     logger.info.assert_any_call(f"User foo could not be authenticated by LDAP {ldap_authenticator.name}")
     if expected_message:
         logger.info.assert_any_call(expected_message)
+
+
+@pytest.mark.django_db
+@mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
+@mock.patch("ansible_base.authenticator_plugins.ldap.LDAPBackend.authenticate", return_value=None)
+@mock.patch("ansible_base.authenticator_plugins.ldap.logger")
+@pytest.mark.parametrize(
+    "username,password",
+    [
+        ("user", "invalidpassword"),
+        ("invaliduser", "password"),
+        ("", "invalidpassword"),
+        ("invaliduser", ""),
+        ("", ""),
+    ],
+)
+def test_ldap_backend_authenticate_empty_username_password(
+    logger,
+    authenticate,
+    unauthenticated_api_client,
+    ldap_authenticator,
+    shut_up_logging,
+    username,
+    password,
+):
+    """
+    Test login flow when authenticate() gets a blank username/password.
+    """
+    unauthenticated_api_client.login(username=username, password=password)
+    url = reverse("me-list")
+    response = unauthenticated_api_client.get(url)
+    assert response.status_code == 401
 
 
 @pytest.mark.django_db

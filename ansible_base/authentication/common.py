@@ -74,9 +74,7 @@ def create_claims(authenticator: Authenticator, username: str, attrs: dict, grou
             rule_responses.append({auth_map.id: 'invalid'})
             continue
 
-        for trigger_type in auth_map.triggers.keys():
-            trigger = auth_map.triggers[trigger_type]
-
+        for trigger_type, trigger in auth_map.triggers.items():
             if trigger_type == 'groups':
                 has_permission = process_groups(trigger, groups, authenticator.name)
             if trigger_type == 'attributes':
@@ -172,7 +170,7 @@ def process_user_attributes(trigger_condition: dict, attributes: dict, authentic
     has_access = None
     join_condition = trigger_condition.get('join_condition', 'or')
     if join_condition not in TRIGGER_DEFINITION['attributes']['keys']['join_condition']['choices']:
-        logger.warning("Trigger join_condition {join_condition} on authenticator map {authenticator_id} is invalid and will assumed to be 'or'")
+        logger.warning("Trigger join_condition {join_condition} on authenticator map {authenticator_id} is invalid and will be set to 'or'")
         join_condition = 'or'
 
     for attribute in trigger_condition.keys():
@@ -219,13 +217,15 @@ def process_user_attributes(trigger_condition: dict, attributes: dict, authentic
                 has_access = has_access_with_join(has_access, a_user_value == trigger_condition[attribute]["equals"], join_condition)
 
             elif "matches" in trigger_condition[attribute]:
-                has_access = has_access_with_join(has_access, re.match(trigger_condition[attribute]["matches"], a_user_value, re.IGNORECASE), trigger_condition)
+                has_access = has_access_with_join(
+                    has_access, re.match(trigger_condition[attribute]["matches"], a_user_value, re.IGNORECASE) is not None, join_condition
+                )
 
             elif "contains" in trigger_condition[attribute]:
-                has_access = has_access_with_join(has_access, {trigger_condition[attribute]['contains']} in a_user_value, join_condition)
+                has_access = has_access_with_join(has_access, trigger_condition[attribute]['contains'] in a_user_value, join_condition)
 
             elif "ends_with" in trigger_condition[attribute]:
-                has_access = has_access_with_join(has_access, a_user_value.ends_with(trigger_condition[attribute]['ends_with']), join_condition)
+                has_access = has_access_with_join(has_access, a_user_value.endswith(trigger_condition[attribute]['ends_with']), join_condition)
 
             elif "in" in trigger_condition[attribute]:
                 has_access = has_access_with_join(has_access, a_user_value in trigger_condition[attribute]['in'], join_condition)
