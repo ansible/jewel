@@ -201,75 +201,298 @@ def test_has_access_with_join(current_access, new_access, condition, expected):
 @pytest.mark.parametrize(
     "trigger_condition, attributes, expected",
     [
-        (
+        pytest.param(
             {"email": {"equals": "foo@example.com"}},
             {"email": "foo@example.com"},
             True,
+            id="equals, positive",
         ),
-        (
+        pytest.param(
             {"email": {"equals": "foo@example.com"}},
             {"email": "foo@example.org"},
             False,
+            id="equals, negative",
         ),
-        (
+        pytest.param(
             {"email": {"matches": ".*@ex.*"}},
             {"email": "foo@example.com"},
             True,
+            id="matches, positive",
         ),
-        (
+        pytest.param(
             {"email": {"matches": "^foo@.*"}},
             {"email": "foo@example.com"},
             True,
+            id="matches, start of line, positive",
         ),
-        (
-            {"email": {"matches": "foo@.*"}},
-            {"email": "foo@example.com"},
-            True,
-        ),
-        (
+        pytest.param(
             {"email": {"matches": "foo@.*"}},
             {"email": "bar@example.com"},
             False,
+            id="matches, negative",
         ),
-        (
+        pytest.param(
             {"email": {"matches": "^foo@.*"}},
             {"email": "bar@example.com"},
             False,
+            id="matches, start of line, negative",
         ),
-        (
+        pytest.param(
             {"email": {"contains": "@example.com"}},
             {"email": "foo@example.com"},
             True,
+            id="contains, positive",
         ),
-        (
+        pytest.param(
             {"email": {"contains": "@example.com"}},
             {"email": "foo@example.org"},
             False,
+            id="contains, negative",
         ),
-        (
+        pytest.param(
             {"email": {"ends_with": "@example.com"}},
             {"email": "foo@example.com"},
             True,
+            id="ends_with, positive",
         ),
-        (
+        pytest.param(
             {"email": {"ends_with": "@example.com"}},
             {"email": "foo@example.org"},
             False,
+            id="ends_with, negative",
         ),
-        (
+        pytest.param(
             {"email": {"in": "omg hey foo@example.com bye"}},
             {"email": "foo@example.com"},
             True,
+            id="in, positive",
         ),
-        (
+        pytest.param(
             {"email": {"in": "omg hey foo@example.com bye"}},
             {"email": "foo@example.org"},
             False,
+            id="in, negative",
         ),
-        (
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "and",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.org"},
+            False,
+            id="'and' join_condition, missing one attribute, negative",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "and",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.org", "favorite_color": "red"},
+            False,
+            id="'and' join_condition, two false conditions, negative",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "and",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.org", "favorite_color": "teal"},
+            False,
+            id="'and' join_condition, one false condition, negative",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "and",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.com", "favorite_color": "teal"},
+            True,
+            id="'and' join_condition, positive",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "or",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.com", "favorite_color": "teal"},
+            True,
+            id="'or' join_condition, both conditions true, positive",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "or",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.com", "favorite_color": "red"},
+            True,
+            id="'or' join_condition, one condition true, positive",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.com", "favorite_color": "red"},
+            True,
+            id="implicit 'or' join_condition, one condition true, positive",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.org", "favorite_color": "red"},
+            False,
+            id="implicit 'or' join_condition, both conditions false, negative",
+        ),
+        pytest.param(
+            {
+                "email": {"in": "omg hey foo@example.com bye"},
+                "join_condition": "or",
+                "favorite_color": {
+                    "equals": "teal",
+                },
+            },
+            {"email": "foo@example.org", "favorite_color": "red"},
+            False,
+            id="'or' join_condition, both conditions false, negative",
+        ),
+        pytest.param(
             {"email": {"invalid": "omg hey foo@example.com bye"}},
             {"email": "foo@example.org"},
             None,
+            id="invalid predicate in trigger conditions returns None",
+        ),
+        pytest.param(
+            {"email": {}},
+            {"email": "foo@example.org"},
+            True,
+            id="trigger dict attribute has empty dict, becomes 'exists', positive",
+        ),
+        pytest.param(
+            {"email": {}},
+            {"favorite_color": "teal"},
+            False,
+            id="trigger dict attribute has empty dict, becomes 'exists', negative",
+        ),
+        pytest.param(
+            {"email": {}},
+            {},
+            False,
+            id="trigger dict attribute has empty dict, becomes 'exists', empty attributes, negative",
+        ),
+        pytest.param(
+            {"email": {}, "favorite_color": {}},
+            {"favorite_color": "teal"},
+            True,
+            id="trigger dict attributes have empty dicts, becomes 'exists', implicit 'or', positive",
+        ),
+        pytest.param(
+            {"email": {}, "favorite_color": {}, "join_condition": "or"},
+            {"favorite_color": "teal"},
+            True,
+            id="trigger dict attributes have empty dicts, becomes 'exists', explicit 'or', positive",
+        ),
+        pytest.param(
+            {"email": {}, "favorite_color": {}, "join_condition": "and"},
+            {"favorite_color": "teal"},
+            False,
+            id="trigger dict attributes have empty dicts, becomes 'exists', explicit 'and', negative",
+        ),
+        pytest.param(
+            {"email": {}, "favorite_color": {}, "join_condition": "and"},
+            {"favorite_color": "teal", "email": "foo@example.com"},
+            True,
+            id="trigger dict attributes have empty dicts, becomes 'exists', explicit 'and', positive",
+        ),
+        pytest.param(
+            {"email": {"contains": "example"}},
+            {"email": None},
+            None,
+            id="user attribute is None, no predicate checks, returns None",
+        ),
+        pytest.param(
+            {"email": {}},
+            {"email": None},
+            True,
+            id="user attribute is None, exists check still works, negative",
+        ),
+        # It can take a list, and in that case the same join_condition works internally too
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}},
+            {"email": ["bar@example.com", "baz@example.com"]},
+            False,
+            id="user attribute is list, no matches, negative",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}},
+            {"email": ["bar@example.com", "foo@example.com"]},
+            True,
+            id="user attribute is list, one match, implicit 'or', positive",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "and"},
+            {"email": ["bar@example.com", "foo@example.com"]},
+            False,
+            id="user attribute is list, one match, explicit 'and', negative",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "and"},
+            {"email": ["foo@example.com", "foo@example.com"]},
+            True,
+            id="user attribute is list, all matches, explicit 'and', positive",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "or"},
+            {"email": ["foo@example.com", "foo@example.com"]},
+            True,
+            id="user attribute is list, all matches, explicit 'or', positive",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "and"},
+            {"email": []},
+            None,
+            id="user attribute is empty list, explicit 'and', returns None",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "or"},
+            {"email": []},
+            None,
+            id="user attribute is empty list, explicit 'or', returns None",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "or"},
+            {"email": ["foo@example.com", "bar@example.com"]},
+            True,
+            id="user attribute is list, explicit 'or', second match is false, positive",
+        ),
+        pytest.param(
+            {"email": {"equals": "foo@example.com"}, "join_condition": "invalid"},
+            {"email": ["foo@example.com", "bar@example.com"]},
+            True,
+            id="join condition is invalid, defaults to or",
         ),
     ],
 )
