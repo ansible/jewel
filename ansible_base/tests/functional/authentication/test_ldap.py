@@ -191,6 +191,7 @@ def test_ldap_backend_authenticate_encrypted_fields_update(admin_api_client, lda
 @pytest.mark.xfail(reason="AAP-17453")
 @mock.patch("rest_framework.views.APIView.authentication_classes", [SessionAuthentication])
 def test_ldap_backend_validate_configuration_warn_specific_fields(
+    shut_up_logging,  # TODO: Remove with xfail
     admin_api_client,
     ldap_authenticator,
 ):
