@@ -199,12 +199,12 @@ def process_user_attributes(trigger_condition: dict, attributes: dict, authentic
             continue
 
         user_value = attributes.get(attribute, None)
-        # If the user does not contain the attribute than we can't check any further, don't set has_access and just continue
+        # If the user does not contain the attribute then we can't check any further, don't set has_access and just continue
         if user_value is None:
             continue
 
         if type(user_value) is not list:
-            # If the value is a string than convert it to a list
+            # If the value is a string then convert it to a list
             user_value = [user_value]
 
         for a_user_value in user_value:
