@@ -7,7 +7,7 @@ from .common import CommonModel
 class AuthenticatorMap(CommonModel):
     class Meta:
         app_label = 'ansible_base'
-        # If he map type is a team than we must have an org/team
+        # If the map type is a team then we must have an org/team
         constraints = [
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_require_org_team_if_team_map",

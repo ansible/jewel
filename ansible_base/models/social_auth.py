@@ -9,7 +9,7 @@ USER_MODEL = get_user_model()
 
 class AuthenticatorUser(AbstractUserSocialAuth):
     """
-    This appends extra information on the the local user model that includes extra data returned by
+    This appends extra information on the local user model that includes extra data returned by
     the authenticators and links the user to the authenticator that they used to login.
     """
 
