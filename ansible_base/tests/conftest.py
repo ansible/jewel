@@ -21,18 +21,6 @@ def admin_api_client(db, admin_user, unauthenticated_api_client, local_authentic
 
 
 @pytest.fixture
-def local_authenticator(db):
-    from ansible_base.models import Authenticator
-
-    authenticator = Authenticator.objects.create(
-        name="Test Local Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="local", configuration={}
-    )
-    yield authenticator
-    authenticator.authenticator_user.all().delete()
-    authenticator.delete()
-
-
-@pytest.fixture
 def user(db, django_user_model, local_authenticator):
     user = django_user_model.objects.create_user(username="user", password="password")
     yield user
@@ -77,3 +65,41 @@ def ldap_authenticator(ldap_configuration):
     )
     yield authenticator
     authenticator.delete()
+
+
+@pytest.fixture
+def local_authenticator(db):
+    from ansible_base.models import Authenticator
+
+    authenticator = Authenticator.objects.create(
+        name="Test Local Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="local", configuration={}
+    )
+    yield authenticator
+    authenticator.authenticator_user.all().delete()
+    authenticator.delete()
+
+
+@pytest.fixture
+def keycloak_authenticator(db):
+    from ansible_base.models import Authenticator
+
+    authenticator = Authenticator.objects.create(
+        name="Test Keycloak Authenticator", enabled=True, create_objects=True, users_unique=False, remove_users=True, type="keycloak", configuration={}
+    )
+    yield authenticator
+    authenticator.delete()
+
+
+@pytest.fixture
+def local_authenticator_map(db, local_authenticator, user):
+    from ansible_base.models import AuthenticatorMap
+
+    authenticator_map = AuthenticatorMap.objects.create(
+        authenticator=local_authenticator,
+        map_type="is_superuser",
+        triggers={"always": {}},
+        organization="testorg",
+        team="testteam",
+    )
+    yield authenticator_map
+    authenticator_map.delete()
