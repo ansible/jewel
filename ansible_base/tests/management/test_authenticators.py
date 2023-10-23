@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest import mock
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -41,7 +42,39 @@ def test_authenticators_cli_list_with_tabulate(command_args, local_authenticator
         assert order.strip() == str(authenticator.order)
 
 
-# TODO: Figure out how to mock-force HAS_TABULATE False.
+@pytest.mark.parametrize(
+    "command_args",
+    [None, "--list"],
+)
+@mock.patch("ansible_base.management.commands.authenticators.HAS_TABULATE", False)
+def test_authenticators_cli_list_without_tabulate(command_args, local_authenticator, ldap_authenticator):
+    """
+    When we don't have tabulate, we have to parse a simple table.
+
+    Ensure that table contains the authenticators we expect.
+    """
+    out = StringIO()
+    err = StringIO()
+
+    if command_args is None:
+        call_command('authenticators', stdout=out, stderr=err)
+    else:
+        call_command('authenticators', command_args, stdout=out, stderr=err)
+
+    lines = out.getvalue().strip().splitlines()
+    headers = ("ID", "Enabled", "Name", "Order")
+
+    for header in headers:
+        assert header in lines[0]
+
+    for line, authenticator in ((1, local_authenticator), (2, ldap_authenticator)):
+        auth_line = lines[line]
+        (auth_id, enabled, name, order) = auth_line.split('\t')
+
+        assert auth_id.strip() == str(authenticator.id)
+        assert enabled.strip() == str(authenticator.enabled)
+        assert name.strip() == str(authenticator.name)
+        assert order.strip() == str(authenticator.order)
 
 
 def test_authenticators_cli_initialize(django_user_model):
