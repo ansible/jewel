@@ -1,5 +1,7 @@
 import logging
+import typing
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.reverse import reverse_lazy
 
@@ -20,6 +22,7 @@ class CommonModelSerializer(serializers.ModelSerializer):
             return reverse_lazy(self.reverse_url_name, kwargs={'pk': obj.pk})
         return ''
 
+    @extend_schema_field(typing.Dict[str, typing.Any])
     def _get_related(self, obj):
         if obj is None:
             return {}
@@ -28,6 +31,7 @@ class CommonModelSerializer(serializers.ModelSerializer):
             return {}
         return obj.related_fields(self.context.get('request'))
 
+    @extend_schema_field(typing.Dict[str, typing.Dict[str, typing.Any]])
     def _get_summary_fields(self, obj):
         if obj is None:
             return {}

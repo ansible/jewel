@@ -36,14 +36,18 @@ def get_fields(model, prefix=""):
             fields.update(get_fields(field.remote_field.model, prefix=field.name + "__"))
 
         if try_dbfield(FILTER_FOR_DBFIELD_DEFAULTS.get, field.__class__) and field.name not in IGNORED_FIELDS:
-            lookups = set(field.get_lookups().keys())
+            if not prefix:
+                lookups = set(field.get_lookups().keys())
+            else:
+                lookups = {
+                    'exact',
+                }
 
             # many to many and one to many cause "in" to break
             # see https://github.com/carltongibson/django-filter/issues/1103
             if field.many_to_many or field.one_to_many:
-                print(prefix + field.name)
-                print("removing in")
-                lookups.remove("in")
+                if "in" in lookups:
+                    lookups.remove("in")
 
             fields[prefix + field.name] = list(lookups.intersection(SUPPORTED_LOOKUPS))
 

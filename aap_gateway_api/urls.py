@@ -2,6 +2,7 @@ import logging
 
 from django.contrib import admin
 from django.urls import include, path, re_path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from aap_gateway_api import views
 from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView
@@ -68,4 +69,8 @@ urlpatterns = [
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
     # Social auth
     path('api/gateway/social/', include('social_django.urls', namespace='social')),
+    # drf spectacular (open api)
+    path('api/gateway/v1/docs/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/gateway/v1/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/gateway/v1/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

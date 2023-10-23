@@ -94,6 +94,7 @@ INSTALLED_APPS = [
     'social_django',
     'ansible_base',
     'django_filters',
+    'drf_spectacular',
 ]
 
 # User our own user model
@@ -131,6 +132,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
     'PAGE_SIZE': 50,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
@@ -286,3 +288,11 @@ SOCIAL_AUTH_PIPELINE = (
 SOCIAL_AUTH_STORAGE = "ansible_base.authentication.social_auth.AuthenticatorStorage"
 SOCIAL_AUTH_STRATEGY = "ansible_base.authentication.social_auth.AuthenticatorStrategy"
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/api/gateway/v1/me"
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Gateway API',
+    'DESCRIPTION': 'Gateway API',
+    'VERSION': 'v1',
+    'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
+}
