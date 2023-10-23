@@ -30,8 +30,9 @@ class Command(BaseCommand):
             for id, state in [(options['enable'], True), (options['disable'], False)]:
                 if not id:
                     continue
-                authenticator = Authenticator.objects.get(id=id)
-                if not authenticator:
+                try:
+                    authenticator = Authenticator.objects.get(id=id)
+                except Authenticator.DoesNotExist:
                     raise CommandError(f"Authenticator {id} does not exist")
                 if authenticator.enabled is not state:
                     authenticator.enabled = state
