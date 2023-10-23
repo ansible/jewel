@@ -163,7 +163,6 @@ def test_authenticators_cli_enable_disable(local_authenticator, start_state, fla
     ["--enable", "--disable"],
 )
 @pytest.mark.django_db
-@pytest.mark.xfail(reason="BUG: implementation uses .get() which throws, the CommandError is unreachable")
 def test_authenticators_cli_enable_disable_nonexisting(flag):
     """
     Test enabling/disabling a non-existing authenticator.
