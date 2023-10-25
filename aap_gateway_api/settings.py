@@ -131,6 +131,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
+    'DEFAULT_FILTER_BACKENDS': ['ansible_base.utils.filtering.AutomaticDjangoFilterBackend'],
     'PAGE_SIZE': 50,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
