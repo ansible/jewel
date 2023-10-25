@@ -54,7 +54,7 @@ def get_fields(model, prefix=""):
     return fields
 
 
-class CustomFilterBackend(filters.DjangoFilterBackend):
+class AutomaticDjangoFilterBackend(filters.DjangoFilterBackend):
     generated_classes = {}
 
     def get_filterset_class(self, view, queryset=None):

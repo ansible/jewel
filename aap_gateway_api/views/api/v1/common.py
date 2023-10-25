@@ -1,7 +1,6 @@
 from rest_framework import views, viewsets
 
 from aap_gateway_api.utils import get_api_version
-from ansible_base.utils.filtering import CustomFilterBackend
 
 
 class ViewWithHeaders(views.APIView):
@@ -13,4 +12,4 @@ class ViewWithHeaders(views.APIView):
 
 
 class GatewayModelViewSet(viewsets.ModelViewSet, ViewWithHeaders):
-    filter_backends = (CustomFilterBackend,)
+    pass
