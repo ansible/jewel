@@ -11,6 +11,7 @@ ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
 ENV PYTHONUNBUFFERED=1
 
 RUN dnf install -y \
+    git \
     gcc \
     ${PYTHON}-devel \
     ${PYTHON} \
@@ -53,7 +54,6 @@ COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
 COPY tools/scripts/gateway-manage /usr/bin/gateway-manage
 ADD aap_gateway_api /opt/aap_gateway/aap_gateway/aap_gateway_api/
-ADD ansible_base /opt/aap_gateway/aap_gateway/ansible_base/
 COPY manage.py /opt/aap_gateway/aap_gateway
 COPY tools/configs/nginx.conf /etc/gateway/nginx.conf
 COPY tools/configs/nginx-gateway.conf /etc/gateway/nginx-gateway.conf

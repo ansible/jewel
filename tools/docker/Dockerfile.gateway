@@ -11,6 +11,7 @@ ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
 ENV PYTHONUNBUFFERED=1
 
 RUN dnf install -y \
+    git \
     gcc \
     ${PYTHON}-devel \
     ${PYTHON} \
@@ -33,7 +34,9 @@ RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
 
 COPY requirements/requirements.txt /tmp/requirements.txt
 COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
-RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt -r /tmp/requirements_dev.txt
+COPY requirements/requirements_git.txt /tmp/requirements_git.txt
+ARG DJANGO_ANSIBLE_BASE_DEVEL_SHA  # passed in from docker-compose file
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt -r /tmp/requirements_dev.txt -r /tmp/requirements_git.txt
 
 FROM quay.io/centos/centos:stream9
 ARG PYTHON

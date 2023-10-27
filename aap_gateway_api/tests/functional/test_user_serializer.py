@@ -1,10 +1,10 @@
 from unittest import mock
 
 import pytest
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 from django.urls import reverse
 
 from aap_gateway_api.models import User
-from ansible_base.utils.encryption import ENCRYPTED_STRING
 
 
 @pytest.mark.parametrize(

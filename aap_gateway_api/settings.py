@@ -91,10 +91,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'aap_gateway_api',
     'django_grpc',
-    'social_django',
     'ansible_base',
-    'django_filters',
-    'drf_spectacular',
 ]
 
 # User our own user model
@@ -125,7 +122,7 @@ REST_FRAMEWORK = {
         # or anything that doesn't return a string from its authenticate_header.
         # DRF uses the first thing here to determine if invalid auth should be
         # 401 or 403. The UI expects 401.
-        'aap_gateway_api.authentication.session.SessionAuthentication',
+        'ansible_base.authentication.session.SessionAuthentication',
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],

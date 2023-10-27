@@ -1,12 +1,12 @@
 from unittest.mock import MagicMock
 
 import pytest
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 from django.core.exceptions import ValidationError
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.utils import preferences
-from ansible_base.utils.encryption import ENCRYPTED_STRING
 
 
 def test_register_exceptions():
