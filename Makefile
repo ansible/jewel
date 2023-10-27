@@ -14,7 +14,7 @@ COMPOSE_UP_OPTS ?=
 .PHONY: PYTHON_VERSION clean \
 	check lint check_black check_flake8 check_isort \
 	build_service_lib test_service_lib \
-	docker-compose plumb
+	docker-compose plumb update_django_ansible_base_hash
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
@@ -110,12 +110,25 @@ tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/so
 	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the docker containers
-docker-compose-build: tools/generated/docker-compose.yml tools/generated/.has_built_api tools/generated/.has_built_ui
+docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_base_hash tools/generated/.has_built_api tools/generated/.has_built_ui
 
 ## Build the API container
-tools/generated/.has_built_api: tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
-	docker-compose -f tools/generated/docker-compose.yml build gateway
+tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+	docker-compose -f tools/generated/docker-compose.yml \
+	    build \
+	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
+	    gateway
 	touch $@
+
+update_django_ansible_base_hash:
+	@echo "Checking for updates to django-ansible-base"
+	$(eval DAB_HEAD=$(shell git ls-remote https://github.com/relrod/django-ansible-base | awk '/refs\/heads\/devel/ { print $$1 }'))
+	@if [[ ! -f tools/generated/.django_ansible_base_head ]] || ! grep -q $(DAB_HEAD) tools/generated/.django_ansible_base_head; then \
+	    echo "UPDATE - django-ansible-base is out of date, triggering rebuild"; \
+	    echo $(DAB_HEAD) > tools/generated/.django_ansible_base_head; \
+	else \
+	    echo "NO UPDATE - django-ansible-base is up to date"; \
+	fi
 
 tools/generated/.has_built_ui:
 	docker pull quay.io/ansible/platform-ui:latest > tools/generated/last_ui_pull

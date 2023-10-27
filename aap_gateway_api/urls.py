@@ -1,12 +1,12 @@
 import logging
 
+from ansible_base.urls import urls as base_urls
 from django.contrib import admin
 from django.urls import include, path, re_path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from aap_gateway_api import views
 from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView
-from ansible_base.urls import urls as base_urls
 
 logger = logging.getLogger('aap.gateway.urls')
 

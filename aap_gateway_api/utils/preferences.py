@@ -1,10 +1,10 @@
+from ansible_base.utils.encryption import ENCRYPTED_STRING
 from django.conf import settings
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
 from aap_gateway_api.models import gateway_preference_registry
 from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPreference
-from ansible_base.utils.encryption import ENCRYPTED_STRING
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')

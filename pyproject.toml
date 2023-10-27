@@ -13,13 +13,13 @@ force-exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 160
-extend_skip = [ "aap_gateway_api/migrations", "ansible_base/migrations" ]
+extend_skip = ["aap_gateway_api/migrations"]
 
 
 [tool.flake8]
 max-line-length = 160
 extend-ignore = [ "E203" ]
-exclude = [ 'aap_gateway_api/migrations/*', 'ansible_base/migrations/*', '.tox' ]
+exclude = ['aap_gateway_api/migrations/*', '.tox']
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
@@ -33,25 +33,25 @@ legacy_tox_ini = """
     env_list =
         check
         py311
-        py310
-        py39
     labels =
-        test = py39, py310, py311, check
+        test = py311, check
         lint = flake8, black, isort
 
     [testenv]
     deps =
         -r{toxinidir}/requirements/requirements.txt
+        -r{toxinidir}/requirements/requirements_git.txt
         pytest
         pytest-xdist
         pytest-cov
         pytest-django
-    commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests ansible_base/tests} {posargs}
+    commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
     deps =
-         -r{toxinidir}/requirements/requirements.txt
-         psycopg[binary]
+        -r{toxinidir}/requirements/requirements.txt
+        -r{toxinidir}/requirements/requirements_git.txt
+        psycopg[binary]
     commands = python3 manage.py check
 
     [testenv:flake8]
@@ -76,4 +76,4 @@ omit = ["aap_gateway_api/tests/*"]
 relative_files = true
 
 [tool.setuptools]
-packages = ['ansible_base', 'aap_gateway_api']
+packages = ['aap_gateway_api']

@@ -1,7 +1,6 @@
 cryptography
 Django>=4.2.5,<4.3.0
 djangorestframework
-django-auth-ldap
 django-crum
 django-dynamic-preferences
 django-extensions
@@ -9,16 +8,10 @@ django-grpc
 django-split-settings
 grpcio
 grpcio-tools
-inflection
-python-ldap
 protobuf>=4.21
 psycopg
 pyjwt
 requests
-social-auth-app-django
-tabulate
 uwsgi
 xds-protos>=1.58
 PyYAML
-django-filter
-drf-spectacular
