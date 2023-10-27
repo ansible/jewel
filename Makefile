@@ -122,7 +122,7 @@ tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/
 
 update_django_ansible_base_hash:
 	@echo "Checking for updates to django-ansible-base"
-	$(eval DAB_HEAD=$(shell git ls-remote https://github.com/relrod/django-ansible-base | awk '/refs\/heads\/devel/ { print $$1 }'))
+	$(eval DAB_HEAD=$(shell git ls-remote https://github.com/ansible/django-ansible-base | awk '/refs\/heads\/devel/ { print $$1 }'))
 	@if [[ ! -f tools/generated/.django_ansible_base_head ]] || ! grep -q $(DAB_HEAD) tools/generated/.django_ansible_base_head; then \
 	    echo "UPDATE - django-ansible-base is out of date, triggering rebuild"; \
 	    echo $(DAB_HEAD) > tools/generated/.django_ansible_base_head; \
