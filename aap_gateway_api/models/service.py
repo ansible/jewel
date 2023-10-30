@@ -61,7 +61,7 @@ class HTTPPort(CommonModel):
             "filter_chains": [
                 {
                     "filters": [
-                        network_manager_filter(http_filters=http_filters, routes=[r.get_xds_route_config() for r in self.routes.all()]),
+                        network_manager_filter(http_filters=http_filters, routes=[r.get_xds_route_config() for r in self.routes.all().order_by('order')]),
                     ]
                 }
             ],
@@ -82,15 +82,15 @@ class ServiceCluster(CommonModel):
     """
 
     class ServiceType(models.TextChoices):
-        HUB = "h", "hub"
-        CONTROLLER = "c", "controller"
-        EDA = "e", "eda"
-        GATEWAY = "g", "gateway"
+        HUB = "hub", "hub"
+        CONTROLLER = "controller", "controller"
+        EDA = "eda", "eda"
+        GATEWAY = "gateway", "gateway"
 
     service_type = models.CharField(
         # We can remove this if/when we add support for multiple services of each type.
         unique=True,
-        max_length=1,
+        max_length=11,
         choices=ServiceType.choices,
         help_text="The type of service for this cluster.",
     )
@@ -168,6 +168,13 @@ class Route(NamedCommonModel):
     # cluster in the db to identify the ServiceCluster/port combo.
     envoy_cluster_name = models.CharField(max_length=255, null=False)
 
+    # The order of the routes
+    order = models.IntegerField(
+        default=50,
+        validators=[MaxValueValidator(100), MinValueValidator(0)],
+        help_text="The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order",
+    )
+
     def save(self, *args, **kwargs):
         self.envoy_cluster_name = f"cluster-{self.service_cluster.pk}-{self.service_port}"
 
@@ -238,7 +245,10 @@ class ServiceAPIRoute(Route):
 
     def save(self, *args, **kwargs):
         self.port = HTTPPort.objects.get(is_api_port=True)
-        self.gateway_path = API_PREFIX + self.api_slug + "/"
+        if self.api_slug == 'gateway':
+            self.gateway_path = '/'
+        else:
+            self.gateway_path = API_PREFIX + self.api_slug + "/"
 
         return super().save(*args, **kwargs)
 

@@ -2,6 +2,7 @@ from collections import OrderedDict
 
 from django.core.exceptions import FieldError
 from django.db import IntegrityError
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -11,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.views import APIView, exception_handler
 
+from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
 from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
 from aap_gateway_api.views.api.v1.environment import EnvironmentOrganizationViewSet, EnvironmentViewSet  # noqa: F401
@@ -53,5 +55,10 @@ class ApiRootView(APIView):
         gateway = reverse('api_gateway_root_view')
         data = OrderedDict()
         data['description'] = _('Gateway REST API')
-        data['gateway'] = dict(gateway=gateway)
+        data['apis'] = OrderedDict(
+            gateway=gateway,
+        )
+        routes = ServiceAPIRoute.objects.filter(~Q(api_slug='gateway')).order_by('api_slug')
+        for route in routes:
+            data['apis'][route.api_slug] = route.gateway_path
         return Response(data)

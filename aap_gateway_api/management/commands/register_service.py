@@ -3,12 +3,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from aap_gateway_api.models.service import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 
-SERVICE_MAP = {
-    "gateway": "g",
-    "hub": "h",
-    "controller": "c",
-    "eda": "e",
-}
+SERVICES = ["gateway", "hub", "controller", "eda"]
 
 
 class Command(BaseCommand):
@@ -39,11 +34,11 @@ class Command(BaseCommand):
             cfg = services[name]
             service_type = cfg["type"]
 
-            if service_type not in SERVICE_MAP:
+            if service_type not in SERVICES:
                 raise CommandError(f"{service_type} is not allowed.")
 
             self.stdout.write(f'Creating cluster for {service_type}')
-            service, _ = ServiceCluster.objects.get_or_create(service_type=SERVICE_MAP[service_type])
+            service, _ = ServiceCluster.objects.get_or_create(service_type=service_type)
 
             api_route, _ = ServiceAPIRoute.objects.update_or_create(
                 service_cluster=service,
@@ -53,6 +48,7 @@ class Command(BaseCommand):
                     "service_path": cfg["service_root"],
                     "is_service_https": cfg["use_tls"],
                     "api_slug": name,
+                    "order": cfg.get("order", 50),
                 },
             )
 
@@ -61,23 +57,7 @@ class Command(BaseCommand):
             for instance in cfg["nodes"]:
                 ServiceNode.objects.create(service=service, **instance)
 
-            # create /static/ route
-            if service_type == "gateway":
-                self.stdout.write(f'Creating /static/ route for {service_type}')
-                AdditionalRoute.objects.update_or_create(
-                    port=api_port,
-                    gateway_path="/static/",
-                    name="static",
-                    defaults={
-                        "service_port": cfg["api_port"],
-                        "service_path": "/static/",
-                        "is_service_https": cfg["use_tls"],
-                        "description": "Static files for AAP.",
-                        "service_cluster": service,
-                        "enable_gateway_auth": False,
-                    },
-                )
-            elif service_type == "hub":
+            if service_type == "hub":
                 self.stdout.write(f'Creating /v2/ route for {service_type}')
                 AdditionalRoute.objects.update_or_create(
                     port=api_port,
