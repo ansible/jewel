@@ -33,7 +33,9 @@ RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/${PYTHON}/si
 RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
 
 COPY requirements/requirements.txt /tmp/requirements.txt
+COPY requirements/requirements_git.txt /tmp/requirements_git.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
 
 FROM quay.io/centos/centos:stream9
 ARG PYTHON
