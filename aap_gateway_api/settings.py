@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'dynamic_preferences',
     'django_extensions',
+    'django_filters',
     'rest_framework',
     'aap_gateway_api',
     'django_grpc',
