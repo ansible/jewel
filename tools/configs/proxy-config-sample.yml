@@ -8,9 +8,9 @@ services:
     use_tls: true
     api_port: 8000
     control_plane_port: 50051
-    service_root: /api/gateway/
+    service_root: /
     type: gateway
-
+    order: 100
     nodes:
       - address: "gateway"
 
@@ -19,7 +19,7 @@ services:
     service_root: /api/galaxy/
     api_port: 5043
     type: hub
-
+    order: 1
     nodes:
       - address: "localhost"
 
@@ -28,7 +28,7 @@ services:
     service_root: /api/
     api_port: 8043
     type: controller
-
+    order: 2
     nodes:
       - address: "localhost"
 
@@ -37,6 +37,6 @@ services:
     service_root: /api/
     api_port: 8000
     type: eda
-
+    order: 3
     nodes:
       - address: "localhost"

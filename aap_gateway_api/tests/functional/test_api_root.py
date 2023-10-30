@@ -12,5 +12,5 @@ def test_api_root_view(unauthenticated_api_client):
     assert response.data["description"] == "AAP Gateway REST API"
 
     gateway = reverse("api_gateway_root_view")
-    assert "gateway" in response.data
-    assert response.data["gateway"]["gateway"] == gateway
+    assert "apis" in response.data
+    assert response.data["apis"]["gateway"] == gateway

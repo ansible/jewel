@@ -37,6 +37,7 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
             'gateway_path',
             'description',
             'api_slug',
+            'order',
         ]
 
         read_only_fields = ('gateway_path',)

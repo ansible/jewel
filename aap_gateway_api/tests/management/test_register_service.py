@@ -6,7 +6,6 @@ import pytest
 import yaml
 from django.core.management import CommandError, call_command
 
-from aap_gateway_api.management.commands.register_service import SERVICE_MAP
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
 
 SERVICE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'fixtures', 'service_config.yml')
@@ -50,12 +49,12 @@ def test_register_service_yaml_success(service_config):
 
     for service_type, params in service_config['services'].items():
         assert f"Creating cluster for {service_type}" in out.getvalue()
-        sc = ServiceCluster.objects.get(service_type=SERVICE_MAP[service_type])
+        sc = ServiceCluster.objects.get(service_type=service_type)
         assert ServiceAPIRoute.objects.filter(service_cluster=sc, name=f"{service_type} api").exists()
         for instance in params['nodes']:
             assert ServiceNode.objects.filter(service=sc, **instance).exists()
 
-        if service_type in ("gateway", "hub"):
+        if service_type in ("hub"):
             assert AdditionalRoute.objects.filter(service_port=params['api_port'], service_cluster=sc).exists()
         else:
             assert not AdditionalRoute.objects.filter(service_port=params['api_port'], service_cluster=sc).exists()
