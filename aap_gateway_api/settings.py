@@ -286,7 +286,7 @@ SOCIAL_AUTH_PIPELINE = (
 )
 SOCIAL_AUTH_STORAGE = "ansible_base.authentication.social_auth.AuthenticatorStorage"
 SOCIAL_AUTH_STRATEGY = "ansible_base.authentication.social_auth.AuthenticatorStrategy"
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/api/gateway/v1/me"
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/"
 
 
 SPECTACULAR_SETTINGS = {
