@@ -104,7 +104,7 @@ def import_ldap_adapters():
             "users_unique": False,
             "remove_users": False,
             "configuration": {},
-            "type": "l",
+            "type": "ansible_base.authenticator_plugins.ldap",
         }
         for setting in [
             'BIND_DN',
