@@ -98,7 +98,7 @@ INSTALLED_APPS = [
 # User our own user model
 AUTH_USER_MODEL = 'aap_gateway_api.User'
 
-ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIX = "ansible_base.authenticator_plugins"
+ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = ["ansible_base.authenticator_plugins"]
 
 AUTHENTICATION_BACKENDS = [
     "ansible_base.authentication.backend.AnsibleBaseAuth",
