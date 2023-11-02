@@ -69,8 +69,14 @@ def get_endpoint(session, endpoint):
     return response.json()
 
 
+name_counter = 1
+
+
 def build_attribute_map(session, data):
+    global name_counter
     url = f'{session.base_url}/authenticator_maps/'
+    data["name"] = f"Rule #{name_counter}"
+    name_counter += 1
     response = session.post(url, json=data, verify=session.verify)
     if response.status_code != 201:
         print(f"Failed to add attribute map ({response.status_code}):")
