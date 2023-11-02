@@ -114,6 +114,7 @@ docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_b
 
 ## Build the API container
 tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+	mkdir -p django-ansible-base
 	docker-compose -f tools/generated/docker-compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
@@ -121,13 +122,17 @@ tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/
 	touch $@
 
 update_django_ansible_base_hash:
-	@echo "Checking for updates to django-ansible-base"
-	$(eval DAB_HEAD=$(shell git ls-remote https://github.com/ansible/django-ansible-base | awk '/refs\/heads\/devel/ { print $$1 }'))
-	@if [[ ! -f tools/generated/.django_ansible_base_head ]] || ! grep -q $(DAB_HEAD) tools/generated/.django_ansible_base_head; then \
-	    echo "UPDATE - django-ansible-base is out of date, triggering rebuild"; \
-	    echo $(DAB_HEAD) > tools/generated/.django_ansible_base_head; \
+	@if [ ! -d "django-ansible-base/.git" ]; then \
+		echo "Checking for updates to django-ansible-base"; \
+		$(eval DAB_HEAD=$(shell git ls-remote https://github.com/ansible/django-ansible-base | awk '/refs\/heads\/devel/ { print $$1 }')) \
+		if [[ ! -f tools/generated/.django_ansible_base_head ]] || ! grep -q $(DAB_HEAD) tools/generated/.django_ansible_base_head; then \
+			echo "UPDATE - django-ansible-base is out of date, triggering rebuild"; \
+			echo $(DAB_HEAD) > tools/generated/.django_ansible_base_head; \
+		else \
+			echo "NO UPDATE - django-ansible-base is up to date"; \
+		fi; \
 	else \
-	    echo "NO UPDATE - django-ansible-base is up to date"; \
+		echo "Not checking for django-ansible-base update because a local checkout of it was found."; \
 	fi
 
 tools/generated/.has_built_ui:

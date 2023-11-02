@@ -43,3 +43,6 @@ tools/generated/*
 
 # Gets created when testing sonar-scanner locally
 .scannerwork
+
+# Avoid git-in-git nastiness
+/django-ansible-base
