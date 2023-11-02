@@ -14,6 +14,9 @@ from rest_framework.views import APIView
 logger = logging.getLogger('aap.view')
 
 
+ignore_endpoints = ['docs']
+
+
 class V1RootView(APIView):
     permission_classes = (AllowAny,)
     name = _('v1')
@@ -34,6 +37,9 @@ class V1RootView(APIView):
 
         endpoints.sort()
         for endpoint in endpoints:
+            if endpoint in ignore_endpoints:
+                continue
+
             singular_endpoint = endpoint.rstrip('s')
             if endpoint == 'status':
                 singular_endpoint = endpoint
