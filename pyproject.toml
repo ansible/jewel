@@ -74,6 +74,3 @@ legacy_tox_ini = """
 [tool.coverage.run]
 omit = ["aap_gateway_api/tests/*"]
 relative_files = true
-
-[tool.setuptools]
-packages = ['aap_gateway_api']
