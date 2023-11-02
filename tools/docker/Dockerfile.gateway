@@ -36,8 +36,15 @@ COPY requirements/requirements.txt /tmp/requirements.txt
 COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
 COPY requirements/requirements_git.txt /tmp/requirements_git.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt -r /tmp/requirements_dev.txt
-ARG DJANGO_ANSIBLE_BASE_DEVEL_SHA  # passed in from docker-compose file
+ARG DJANGO_ANSIBLE_BASE_DEVEL_SHA
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
+
+# Set up django-ansible-base to be mounted in the container and used as an editable dependency if we have a clone.
+COPY django-ansible-base /opt/aap_gateway/ansible_base
+RUN if [[ -d /opt/aap_gateway/ansible_base/.git ]]; then \
+      /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/ansible_base && \
+      rm -rf /opt/aap_gateway/ansible_base/ ; \
+    fi
 
 FROM quay.io/centos/centos:stream9
 ARG PYTHON

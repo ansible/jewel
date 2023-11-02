@@ -20,7 +20,7 @@ The goal for a platform wide gateway is to provide a single entry point that sit
 
 Gateway is currently in design phase, more information will be available later.
 
-This repo is internal only at this time. 
+This repo is internal only at this time.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -60,19 +60,20 @@ Please have the following prerequisites already installed on your development ma
         service_root: /api/galaxy/
         api_port: 5043
         type: hub
-    
+
         nodes:
           - address: "localhost"
     [...]
     ```
 5. Log into quay.io: `docker login quay.io`
-6. Start up your environment: `make docker-compose`
+6. Optionally clone `django-ansible-base` if you are going to be making changes to it. If you clone it, it must live directly inside your `aap-gateway` directory, and be called `django-ansible-base`. If you skip this step, the latest git version of `django-ansible-base` will be built into your development image.
+7. Start up your environment: `make docker-compose`
 
 This will build an `admin` user with the password `admin` and create any services you have defined in your proxy.yml file.
 
 ## Side cars
 
-There are additional services available to be started alongside gateway to enable development. We call these side car containers. When you run an initial `make docker-compose` a file called `container-startup.yml` will be created at the root of your project. If you haven't run `make docker-compose` yet and want to generate the file you can run `make container-startup.yml". 
+There are additional services available to be started alongside gateway to enable development. We call these side car containers. When you run an initial `make docker-compose` a file called `container-startup.yml` will be created at the root of your project. If you haven't run `make docker-compose` yet and want to generate the file you can run `make container-startup.yml".
 
 At the beginning of you file you will see the following options:
 ```

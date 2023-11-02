@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Install requirments
+      - name: Install requirements
         run: pip3.11 install -r requirements/requirements_dev.txt
 
       - name: Run check ${{ matrix.tests.name }}
