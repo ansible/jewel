@@ -133,6 +133,7 @@ update_django_ansible_base_hash:
 		fi; \
 	else \
 		echo "Not checking for django-ansible-base update because a local checkout of it was found."; \
+		echo local > tools/generated/.django_ansible_base_head; \
 	fi
 
 tools/generated/.django_ansible_base_head: update_django_ansible_base_hash
