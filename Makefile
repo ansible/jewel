@@ -135,6 +135,8 @@ update_django_ansible_base_hash:
 		echo "Not checking for django-ansible-base update because a local checkout of it was found."; \
 	fi
 
+tools/generated/.django_ansible_base_head: update_django_ansible_base_hash
+
 tools/generated/.has_built_ui:
 	docker pull quay.io/ansible/platform-ui:latest > tools/generated/last_ui_pull
 	if [ ! -f $@ ] || [ `cat tools/generated/last_ui_pull | grep "Image is up to date" | wc -l` == "0" ] ; then \
