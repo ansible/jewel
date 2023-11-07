@@ -114,7 +114,7 @@ docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_b
 
 ## Build the API container
 tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
-	mkdir -p django-ansible-base
+	mkdir -p django-ansible-base/requirements
 	docker-compose -f tools/generated/docker-compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
