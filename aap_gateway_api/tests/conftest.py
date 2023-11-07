@@ -2,36 +2,17 @@ import random
 import uuid
 
 import pytest
-from ansible_base.tests.conftest import admin_api_client, local_authenticator, shut_up_logging, unauthenticated_api_client, user  # noqa: F401
+from ansible_base.tests.conftest import (  # noqa: F401
+    admin_api_client,
+    copy_fixture,
+    local_authenticator,
+    randname,
+    shut_up_logging,
+    unauthenticated_api_client,
+    user,
+)
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
-
-
-def copy_fixture(copies=1):
-    """
-    Decorator to create 'copies' copies of a fixture.
-
-    The copies will be named func_1, func_2, ..., func_n in the same module as
-    the original fixture.
-    """
-
-    def wrapper(func):
-        if '_pytestfixturefunction' not in dir(func):
-            raise TypeError(f"Can't apply copy_fixture to {func.__name__} because it is not a fixture. HINT: @copy_fixture must be *above* @pytest.fixture")
-        for i in range(copies):
-            new_name = f"{func.__name__}_{i + 1}"
-            globals()[new_name] = func
-        return func
-
-    return wrapper
-
-
-@pytest.fixture
-def randname():
-    def _randname(prefix):
-        return f"{prefix} {uuid.uuid4().hex[:6]}"
-
-    return _randname
 
 
 @pytest.fixture
@@ -78,7 +59,7 @@ def register_preference(db):
 
 
 @pytest.fixture
-def environment(randname):
+def environment(randname):  # noqa: F811
     from aap_gateway_api.models import Environment
 
     random_name = randname("Test Environment")
@@ -88,7 +69,7 @@ def environment(randname):
 
 
 @pytest.fixture
-def organization(environment, randname):
+def organization(environment, randname):  # noqa: F811
     from aap_gateway_api.models import Organization
 
     random_name = randname("Test Organization")
@@ -168,7 +149,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         yield node
         node.delete()
 
-    def _route(request, http_port_factory, randname):
+    def _route(request, http_port_factory, randname):  # noqa: F402
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         randstr1 = uuid.uuid4().hex[:6]
         randstr2 = uuid.uuid4().hex[:6]
@@ -186,7 +167,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         yield route
         route.delete()
 
-    def _service_api_route(request, http_api_port_factory, randname):
+    def _service_api_route(request, http_api_port_factory, randname):  # noqa: F402
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         randstr = uuid.uuid4().hex[:6]
         slug = f"my-api-slug-{uuid.uuid4().hex[:6]}"
