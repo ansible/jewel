@@ -67,7 +67,7 @@ services:
       - ENVOY_UID=0
     ports:
       - "443:9080"
-      - "9090:19000"
+      - "19000:19000"
     volumes:
       - $PWD/tools/configs/envoy.yml:/etc/envoy/envoy.yaml:z
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
