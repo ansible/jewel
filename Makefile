@@ -8,6 +8,7 @@ SERVICE_LIB_DIR ?= service_lib
 SERVICE_LIB_DIST ?= $(SERVICE_LIB_DIR)/dist
 UID := $(shell id -u)
 TOX_ARGS ?= ""
+DOCKER_COMPOSE ?= docker compose
 COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
 
@@ -99,7 +100,7 @@ help/generate:
 ## Start the docker container
 docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
 	ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} docker-compose -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Generate the default container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
@@ -115,7 +116,7 @@ docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_b
 ## Build the API container
 tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 	mkdir -p django-ansible-base/requirements
-	docker-compose -f tools/generated/docker-compose.yml \
+	$(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
 	    gateway
@@ -166,10 +167,10 @@ plumb:
 
 ## Remove all generated files when starting up docker
 docker-reset: tools/generated/docker-compose.yml
-	if [ -f tools/generated/docker-compose.yml ] ; then docker-compose -f tools/generated/docker-compose.yml down -v ; fi
+	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
 
 ## Remove the container volumes
 docker-reset-volumes: tools/generated/docker-compose.yml
-	if [ -f tools/generated/docker-compose.yml ] ; then docker-compose -f tools/generated/docker-compose.yml down -v ; fi
+	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
