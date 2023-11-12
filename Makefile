@@ -11,6 +11,7 @@ TOX_ARGS ?= ""
 DOCKER_COMPOSE ?= docker compose
 COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
+ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
 
 .PHONY: PYTHON_VERSION clean \
 	check lint check_black check_flake8 check_isort \
@@ -104,7 +105,12 @@ docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hoo
 
 ## Generate the default container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
-	cp tools/configs/container-startup.yml ./container-startup.yml
+	@if [ -f container-startup.yml ] ; then \
+		cp container-startup.yml container-startup.yml.backup; \
+		echo ">>>>>> WARNING <<<<<<<<" ; \
+		echo "container-startup.yml has been overwritten but a backup was taken (will be overwritten on next change)!"; \
+	fi;
+	@cat tools/configs/container-startup.yml | sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" > ./container-startup.yml
 
 ## Generate the docker-compose.yml file
 tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2

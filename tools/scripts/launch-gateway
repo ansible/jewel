@@ -18,6 +18,35 @@ except Exception:
 EOF
 }
 
+get_admin_password() {
+${GATEWAY_PYTHON} <<EOF
+import yaml
+import secrets
+
+random_password = secrets.token_urlsafe(20)
+data = {}
+with open("${GATEWAY_APP_DIR}/container-startup.yml", "r") as stream:
+    try:
+        data = yaml.safe_load(stream)
+    except Exception:
+        pass
+print(data.get('gateway_admin_password', random_password))
+EOF
+}
+
+update_user_password() {
+${GATEWAY_PYTHON} << EOF
+import os
+import django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "aap_gateway_api.settings")
+django.setup()
+from aap_gateway_api.models import User
+user = User.objects.filter(username='admin').first()
+user.password='$DJANGO_SUPERUSER_PASSWORD'
+user.save()
+EOF
+}
+
 until database_ready
 do
     echo "Waiting until the database is ready..."
@@ -28,6 +57,20 @@ ${GATEWAY_MANAGE} migrate --noinput
 ${GATEWAY_MANAGE} collectstatic --noinput
 ${GATEWAY_MANAGE} register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
 ${GATEWAY_MANAGE} authenticators --initialize
+
+export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
+if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
+    echo $output
+else
+    # Make sure the password is set as required
+    update_user_password
+fi
+echo ">>>>>>>> Admin password: ${DJANGO_SUPERUSER_PASSWORD}"
+
+${GATEWAY_MANAGE} authenticators --initialize
+if [ $? != 0 ] ; then
+    exit 255
+fi
 
 cd ${GATEWAY_APP_DIR}
 exec supervisord -n

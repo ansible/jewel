@@ -39,6 +39,7 @@ htmlcov
 
 # Container customizations
 container-startup.yml
+container-startup.yml.backup
 tools/generated/*
 
 # Gets created when testing sonar-scanner locally
