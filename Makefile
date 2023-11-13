@@ -110,7 +110,7 @@ container-startup.yml: tools/configs/container-startup.yml
 		echo ">>>>>> WARNING <<<<<<<<" ; \
 		echo "container-startup.yml has been overwritten but a backup was taken (will be overwritten on next change)!"; \
 	fi;
-	@cat tools/configs/container-startup.yml | sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" > ./container-startup.yml
+	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
 ## Generate the docker-compose.yml file
 tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
