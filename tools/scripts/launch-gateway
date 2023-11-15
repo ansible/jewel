@@ -23,10 +23,10 @@ do
     sleep 5
 done
 
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py migrate --noinput
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py collectstatic --noinput
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/manage.py authenticators --initialize
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py migrate --noinput
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py collectstatic --noinput
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
+${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py authenticators --initialize
 
 cd ${GATEWAY_APP_DIR}
 exec supervisord -n

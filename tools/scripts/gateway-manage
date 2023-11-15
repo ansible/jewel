@@ -1,3 +1,3 @@
 #!/bin/bash
 
-/opt/aap_gateway/venv/bin/python /opt/aap_gateway/aap_gateway/manage.py "$@"
+/opt/aap_gateway/venv/bin/python /opt/aap_gateway/aap_gateway/aap_gateway_api/manage.py "$@"
