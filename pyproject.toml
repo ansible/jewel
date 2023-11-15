@@ -1,6 +1,39 @@
 [project]
 name = "aap-gateway"
-dynamic = ["version"]
+authors = [
+    {name = "Red Hat, Inc.", email = "info@ansible.com"},
+]
+description = "Ansible Automation Platform gateway"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["ansible", "django", "gateway"]
+license = {file = "LICENSE.md"}
+classifiers = [
+    "Framework :: Django",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements/requirements.txt", "requirements/requirements_git.txt"]}
+
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = 'setuptools.build_meta'
+
+[project.scripts]
+aap-gateway-manage = "aap_gateway_api.manage:main"
 
 [tool.black]
 line-length = 160
@@ -57,7 +90,7 @@ legacy_tox_ini = """
         psycopg[binary]
     commands =
         sh -c "[ -d django-ansible-base/.git ] && pip install ./django-ansible-base/ || true"
-        python3 manage.py check
+        python3 aap_gateway_api/manage.py check
 
     [testenv:flake8]
     deps =
