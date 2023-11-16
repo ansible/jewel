@@ -4,6 +4,7 @@ set -o errexit
 GATEWAY_BASE_DIR=/opt/aap_gateway
 GATEWAY_APP_DIR="${GATEWAY_BASE_DIR}/aap_gateway"
 GATEWAY_PYTHON="${GATEWAY_BASE_DIR}/venv/bin/python"
+GATEWAY_MANAGE="/usr/bin/gateway-manage"
 
 database_ready() {
 ${GATEWAY_PYTHON} <<EOF
@@ -23,10 +24,10 @@ do
     sleep 5
 done
 
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py migrate --noinput
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py collectstatic --noinput
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
-${GATEWAY_PYTHON} ${GATEWAY_APP_DIR}/aap_gateway_api/manage.py authenticators --initialize
+${GATEWAY_MANAGE} migrate --noinput
+${GATEWAY_MANAGE} collectstatic --noinput
+${GATEWAY_MANAGE} register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
+${GATEWAY_MANAGE} authenticators --initialize
 
 cd ${GATEWAY_APP_DIR}
 exec supervisord -n

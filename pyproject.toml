@@ -33,7 +33,7 @@ requires = ["setuptools>=64", "setuptools_scm>=8"]
 build-backend = 'setuptools.build_meta'
 
 [project.scripts]
-aap-gateway-manage = "aap_gateway_api.manage:main"
+aap-gateway-manage = "aap_gateway_api:manage"
 
 [tool.black]
 line-length = 160
@@ -56,6 +56,7 @@ exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base']
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
 addopts = "--strict-markers --reuse-db --create-db --migrations -s -vvv"
+pythonpath = ". aap_gateway_api"
 
 [tool.tox]
 legacy_tox_ini = """
