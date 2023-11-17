@@ -26,7 +26,7 @@ classifiers = [
 dynamic = ["version", "dependencies"]
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements/requirements.txt", "requirements/requirements_git.txt"]}
+dependencies = {file = ["requirements/requirements.in", "requirements/requirements_git.txt"]}
 
 [build-system]
 requires = ["setuptools>=64", "setuptools_scm>=8"]
