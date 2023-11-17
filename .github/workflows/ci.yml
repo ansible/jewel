@@ -14,6 +14,9 @@ jobs:
       fail-fast: false
       matrix:
         tests:
+          - env: check
+            python-version: "3.11"
+            sonar: false
           - env: py311
             python-version: "3.11"
             sonar: true

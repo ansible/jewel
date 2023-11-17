@@ -85,13 +85,15 @@ legacy_tox_ini = """
 
     [testenv:check]
     allowlist_externals = sh
+    setenv =
+        PYTHONPATH = {toxinidir}
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
         psycopg[binary]
     commands =
         sh -c "[ -d django-ansible-base/.git ] && pip install ./django-ansible-base/ || true"
-        python3 aap_gateway_api/manage.py check
+        python3 aap_gateway_api/__init__.py check
 
     [testenv:flake8]
     deps =
