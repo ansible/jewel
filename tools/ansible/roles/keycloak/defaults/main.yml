@@ -3,7 +3,7 @@ private_key_file: ../generated/keycloak.key
 public_key_file: ../generated/keycloak.cert
 public_key_cert: ../generated/keycloak.pub
 keycloak_realm_template: ../generated/keycloak.gateway.realm.json
-oidc_adapter_name: "Dev Keycloak Container"
+oidc_adapter_name: "Dev Keycloak OIDC"
 url_base: "https://{{ (oidc_reference == '') | ternary(oidc_reference, container_reference) }}:{{ keycloak_exposed_port }}"
 init_file: "{{ sources_dest }}/keycloak_initialized"
 
@@ -22,3 +22,42 @@ oidc_configuration:
     ADDITIONAL_UNVERIFIED_ARGS:
       VERIFY_SSL: False
   type: "ansible_base.authenticator_plugins.keycloak"
+
+saml_adapter_name: "Dev Keycloak SAML"
+saml_configuration:
+  name: "{{ saml_adapter_name }}"
+  enabled: True
+  create_objects: True
+  users_unique: False
+  remove_users: True
+  configuration:
+    EXTRA_DATA: []
+    IDP_ATTR_EMAIL: email
+    IDP_ATTR_FIRST_NAME: first_name
+    IDP_ATTR_LAST_NAME: last_name
+    IDP_ATTR_USERNAME: username
+    IDP_ATTR_USER_PERMANENT_ID: name_id
+    IDP_ENTITY_ID: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/realms/gateway"
+    IDP_GROUPS: groups
+    IDP_URL: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/saml"
+    IDP_X509_CERT: "{{ public_key | regex_replace('\\n', '') }}"
+    ORG_INFO:
+      en-US:
+        url: "https://{{ container_reference }}"
+        name: Gateway Developers
+        displayname: Gateway Developer Engineering
+    SECURITY_CONFIG:
+      requestedAuthnContext: false
+    SP_ENTITY_ID: gateway
+    SP_EXTRA: {}
+    SP_PRIVATE_KEY: "{{ private_key }}"
+    SP_PUBLIC_CERT: "{{ public_key }}"
+    SUPPORT_CONTACT:
+      givenName: Me Myself
+      emailAddress: noone@nowhere.com
+    TECHNICAL_CONTACT:
+      givenName: Me Myself
+      emailAddress: noone@nowhere.com
+    ADDITIONAL_UNVERIFIED_ARGS:
+      VERIFY_SSL: False
+  type: ansible_base.authenticator_plugins.saml

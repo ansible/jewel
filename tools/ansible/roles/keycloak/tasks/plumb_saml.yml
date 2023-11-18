@@ -1,0 +1,49 @@
+---
+- name: Load certs, existing and new SAML settings
+  set_fact:
+    private_key: "{{ private_key_content }}"
+    public_key: "{{ public_key_content }}"
+  vars:
+    # We add the extra \\ in here so that when jinja is templating out the files we end up with \n in the strings.
+    public_key_content: "{{ lookup('file', public_key_file) | regex_replace('\n', '\\n') }}"
+    private_key_content: "{{ lookup('file', private_key_file) | regex_replace('\n', '\\n') }}"
+
+- debug:
+    msg: "{{ saml_configuration }}"
+
+- name: See if our authenticator exists
+  set_fact:
+    keycloak_saml_authenticator_number: "{{ item.id }}/"
+    title: "Updating existing authenticator"
+    method: PUT
+    statuses:
+     - 200
+  loop: "{{ existing_authenticators.json.results | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name == saml_configuration.name
+
+- name: Set default variables
+  set_fact:
+    keycloak_saml_authenticator_number: ''
+    title: "Configure a new authenticator"
+    method: POST
+    statuses:
+     - 201
+  when: keycloak_saml_authenticator_number is not defined
+
+- debug:
+    msg: "{{ saml_configuration }}"
+
+- name: "{{ title }}"
+  uri:
+    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ keycloak_saml_authenticator_number }}"
+    method: "{{ method }}"
+    body: "{{ saml_configuration }}"
+    body_format: json
+    validate_certs: False
+    url_username: "{{ gateway_admin_username }}"
+    url_password: "{{ gateway_admin_password }}"
+    force_basic_auth: True
+    status_code: "{{ statuses }}"
+  changed_when: True

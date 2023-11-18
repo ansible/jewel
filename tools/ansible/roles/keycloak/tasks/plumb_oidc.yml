@@ -1,0 +1,37 @@
+---
+- name: See if our authenticator exists
+  set_fact:
+    keycloak_oidc_authenticator_number: "{{ item.id }}/"
+    title: "Updating existing authenticator"
+    method: PUT
+    statuses:
+     - 200
+  loop: "{{ existing_authenticators.json.results | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name == oidc_configuration.name
+
+- name: Set default variables
+  set_fact:
+    keycloak_oidc_authenticator_number: ''
+    title: "Configure a new authenticator"
+    method: POST
+    statuses:
+     - 201
+  when: keycloak_oidc_authenticator_number is not defined
+
+- debug:
+    msg: "{{ oidc_configuration }}"
+
+- name: "{{ title }}"
+  uri:
+    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ keycloak_oidc_authenticator_number }}"
+    method: "{{ method }}"
+    body: "{{ oidc_configuration }}"
+    body_format: json
+    validate_certs: False
+    url_username: "{{ gateway_admin_username }}"
+    url_password: "{{ gateway_admin_password }}"
+    force_basic_auth: True
+    status_code: "{{ statuses }}"
+  changed_when: True
