@@ -4,6 +4,9 @@
     path: "{{ init_file }}"
   register: initialize_file_results
 
+- debug:
+    var: init_file
+
 - name: Skip task if initialization file is present
   include_tasks: run_initialize.yml
   when: not initialize_file_results.stat.exists
