@@ -7,7 +7,7 @@ register(
     default='X-AAP-GW-TOKEN',
     required=True,
     preference_type="string",
-    help_text="The header name to push from the proxy to the backend service. WARNING: if this is changed backends must be updated to compensate!",
+    help_text="The header name to push from the proxy to the backend service. WARNING: if this is changed, backends must be updated to compensate!",
     encrypted=False,
 )
 
@@ -27,7 +27,7 @@ register(
     default=True,
     required=True,
     preference_type="bool",
-    help_text="Enable basic auth to the gateways API",
+    help_text="Enable basic auth to the gateway API",
     encrypted=False,
 )
 
@@ -73,6 +73,16 @@ register(
     help_text="JWT public key (read-only)",
     encrypted=False,
     read_only=True,
+)
+
+register(
+    section="proxy",
+    preference_name="status_endpoint_backend_timeout_seconds",
+    default=5,
+    required=True,
+    preference_type="int",
+    help_text="Timeout (in seconds) for the status endpoint to wait when trying to connect to a backend.",
+    encrypted=False,
 )
 
 register(

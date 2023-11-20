@@ -1,5 +1,6 @@
 import random
 import uuid
+from collections import namedtuple
 
 import pytest
 from ansible_base.tests.conftest import (  # noqa: F401
@@ -10,6 +11,7 @@ from ansible_base.tests.conftest import (  # noqa: F401
     shut_up_logging,
     unauthenticated_api_client,
     user,
+    user_api_client,
 )
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
@@ -127,6 +129,8 @@ def http_api_port_factory():
     api_port.delete()
 
 
+ServiceHierarchy = namedtuple("ServiceHierarchy", ["service_cluster", "service_node", "route"])
+
 # Hack to generate service cluster fixtures for each service type
 # This will generate:
 #   - service_cluster_<service_type>
@@ -140,7 +144,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         yield cluster
         cluster.delete()
 
-    def _service_node(request):
+    def _service_node(request, name=name):
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         node = ServiceNode.objects.create(
             service=service_cluster,
@@ -149,7 +153,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         yield node
         node.delete()
 
-    def _route(request, http_port_factory, randname):  # noqa: F402
+    def _route(request, http_port_factory, randname, name=name):  # noqa: F402
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         randstr1 = uuid.uuid4().hex[:6]
         randstr2 = uuid.uuid4().hex[:6]
@@ -167,7 +171,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         yield route
         route.delete()
 
-    def _service_api_route(request, http_api_port_factory, randname):  # noqa: F402
+    def _service_api_route(request, http_api_port_factory, randname, name=name):  # noqa: F402
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         randstr = uuid.uuid4().hex[:6]
         slug = f"my-api-slug-{uuid.uuid4().hex[:6]}"
@@ -186,7 +190,16 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         yield route
         route.delete()
 
+    def _full_service_hierarchy(request, name=name):
+        service_node = request.getfixturevalue(f"service_node_{name}")
+        service_cluster = service_node.service
+        route = request.getfixturevalue(f"additional_route_{name}")
+        route.service_cluster = service_cluster
+        route.save()
+        yield ServiceHierarchy(service_cluster, service_node, route)
+
     globals()[f"service_cluster_{name}"] = pytest.fixture(_service_cluster)
     globals()[f"service_node_{name}"] = pytest.fixture(_service_node)
     globals()[f"additional_route_{name}"] = pytest.fixture(_route)
     globals()[f"service_api_route_{name}"] = pytest.fixture(_service_api_route)
+    globals()[f"full_service_hierarchy_{name}"] = pytest.fixture(_full_service_hierarchy)

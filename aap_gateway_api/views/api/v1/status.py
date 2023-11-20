@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
+from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import ViewWithHeaders
 
 ping_pages = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/_healthz"}
@@ -38,7 +39,8 @@ class StatusView(ViewWithHeaders):
                     'status': 'Fine',
                 }
                 try:
-                    node_response = requests.get(url)
+                    timeout = get_preference_value('proxy', 'status_endpoint_backend_timeout_seconds')
+                    node_response = requests.get(url, timeout=timeout)
                     if node_response.status_code != 200:
                         node_data['status'] = 'Failed'
                         node_data['response_code'] = node_response.status_code
