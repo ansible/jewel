@@ -71,7 +71,9 @@ legacy_tox_ini = """
         lint = flake8, black, isort
 
     [testenv]
-    allowlist_externals = sh
+    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    setenv =
+        PYTHONPATH = {toxinidir}/django-ansible-base/
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
@@ -80,19 +82,19 @@ legacy_tox_ini = """
         pytest-cov
         pytest-django
     commands =
-        sh -c "[ -d django-ansible-base/.git ] && pip install ./django-ansible-base/ || true"
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
-    allowlist_externals = sh
+    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
     setenv =
-        PYTHONPATH = {toxinidir}
+        PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
         psycopg[binary]
     commands =
-        sh -c "[ -d django-ansible-base/.git ] && pip install ./django-ansible-base/ || true"
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 aap_gateway_api/__init__.py check
 
     [testenv:flake8]
