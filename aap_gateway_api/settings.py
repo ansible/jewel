@@ -206,7 +206,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 STATIC_URL = 'static/'
-STATIC_ROOT = '/opt/aap_gateway/static/'
+STATIC_ROOT = os.environ.get('GATEWAY_STATIC_ROOT', '/opt/aap_gateway/static/')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -233,7 +233,7 @@ GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
 CSRF_COOKIE_SECURE = True
 
 # Make this unique, and don't share it with anybody.
-secret_key_file = '/etc/gateway/SECRET_KEY'
+secret_key_file = os.environ.get('GATEWAY_SECRET_KEY_FILE', '/etc/gateway/SECRET_KEY')
 read_key = False
 try:
     with open(secret_key_file, 'rb') as f:
