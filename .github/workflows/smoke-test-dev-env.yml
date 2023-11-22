@@ -55,7 +55,7 @@ jobs:
 
           curl -k https://localhost:8000/api/gateway/v1/me/ | grep -q 'credentials were not provided'
 
-          ADMIN_PASS="$(awk '/^gateway_admin_password:/{ print $2 }' container-startup.yml)"
+          ADMIN_PASS="$(awk '/^gateway_admin_password:/{ print $2 }' container-startup.yml | sed "s/'//g" )"
           curl -k "https://admin:$ADMIN_PASS@localhost:8000/api/gateway/v1/me/" | grep -q '"username":"admin"'
 
           make docker-reset
