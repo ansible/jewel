@@ -46,8 +46,9 @@ RUN mkdir -p /opt/aap_gateway/ansible_base/ansible_base && touch /opt/aap_gatewa
 COPY LICENSE.md django-ansible-base/pyproject.toml* /opt/aap_gateway/ansible_base/
 COPY django-ansible-base/requirements /opt/aap_gateway/ansible_base/requirements
 RUN if [[ -f /opt/aap_gateway/ansible_base/pyproject.toml ]]; then \
+      /opt/aap_gateway/venv/bin/pip uninstall -y django-ansible-base && \
       /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/ansible_base ; \
-    fi; \
+    fi && \
     rm -rf /opt/aap_gateway/ansible_base
 
 FROM quay.io/centos/centos:stream9
