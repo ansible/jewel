@@ -32,6 +32,8 @@ jobs:
 
       - name: Try out the dev env
         run: |
+          set -x
+
           COMPOSE_UP_OPTS=--abort-on-container-exit make docker-compose & GATEWAY_PID=$!
 
           SECONDS=0
@@ -53,7 +55,7 @@ jobs:
 
           curl -k https://localhost:8000/api/gateway/v1/me/ | grep -q 'credentials were not provided'
 
-          ADMIN_PASS="$(awk '/^gateway_admin_password:/{ print $2 }' tools/configs/container-startup.yml)"
+          ADMIN_PASS="$(awk '/^gateway_admin_password:/{ print $2 }' container-startup.yml)"
           curl -k "https://admin:$ADMIN_PASS@localhost:8000/api/gateway/v1/me/" | grep -q '"username":"admin"'
 
           make docker-reset
