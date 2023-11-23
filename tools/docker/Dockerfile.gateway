@@ -10,7 +10,8 @@ ARG DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
 ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
 ENV PYTHONUNBUFFERED=1
 
-RUN dnf install -y \
+RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/centos.repo && \
+    dnf install -y \
     git \
     gcc \
     ${PYTHON}-devel \
@@ -18,9 +19,11 @@ RUN dnf install -y \
     ${PYTHON}-pip \
     libpq \
     libpq-devel \
+    libtool-ltdl-devel \
     openldap-devel \
     postgresql \
-    less
+    less \
+    xmlsec1-devel
 
 RUN for dir in \
       /opt/aap_gateway; \
@@ -64,7 +67,8 @@ RUN dnf module install -y nginx/common && \
     ${PYTHON} \
     ${PYTHON}-pip \
     socat \
-    supervisor
+    supervisor \
+    xmlsec1-openssl
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
