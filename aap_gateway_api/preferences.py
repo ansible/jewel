@@ -134,3 +134,13 @@ register(
     help_text="Can a superuser account save an insecure password",
     encrypted=False,
 )
+
+register(
+    section="social_auth",
+    preference_name="SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL",
+    default=False,
+    required=False,
+    preference_type="bool",
+    help_text="Enabling this setting will tell social auth to use the full email as username instead of the full name",
+    encrypted=False,
+)
