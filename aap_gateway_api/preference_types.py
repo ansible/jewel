@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from dynamic_preferences import types
 
-logger = logging.getLogger("aap_gateway_api.preference_types")
+logger = logging.getLogger("aap.gateway.preference_types")
 
 
 class URLPreference(types.StringPreference):
