@@ -60,6 +60,17 @@ def register_preference(db):
     Preference.objects.filter(section=kwargs_cache["section"], name=kwargs_cache["preference_name"]).delete()
 
 
+@copy_fixture(copies=3)
+@pytest.fixture
+def team(randname, organization):  # noqa: F811
+    from aap_gateway_api.models import Team
+
+    random_name = randname("Test Team")
+    team = Team.objects.create(name=random_name, organization=organization)
+    yield team
+    team.delete()
+
+
 @pytest.fixture
 def environment(randname):  # noqa: F811
     from aap_gateway_api.models import Environment
@@ -70,12 +81,13 @@ def environment(randname):  # noqa: F811
     environment.delete()
 
 
+@copy_fixture(copies=3)
 @pytest.fixture
-def organization(environment, randname):  # noqa: F811
+def organization(randname):  # noqa: F811
     from aap_gateway_api.models import Organization
 
     random_name = randname("Test Organization")
-    organization = Organization.objects.create(name=random_name, environment=environment)
+    organization = Organization.objects.create(name=random_name)
     yield organization
     organization.delete()
 

@@ -37,7 +37,7 @@ class PreferenceSingletonView(ViewWithHeaders):
 PreferenceSection = collections.namedtuple('PreferenceSection', ('url', 'name'))
 
 
-class PreferenceListView(GatewayModelViewSet):
+class PreferenceListViewSet(GatewayModelViewSet):
     model = Preference  # Not exactly, but needed for the view.
     serializer_class = SettingSectionSerializer
     filter_backends = []

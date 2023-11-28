@@ -18,6 +18,7 @@ class Organization(NamedCommonModel):
         on_delete=models.SET_NULL,
         null=True,
         help_text="The environment this organization belongs to",
+        related_name='organizations',
     )
 
     reverse_foreign_key_fields = ['teams']
