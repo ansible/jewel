@@ -1,3 +1,6 @@
+from django.conf import settings
+
+
 def path_rewrite_filter():
     return {
         "name": "lua_path_rewrite",
@@ -58,7 +61,7 @@ def transport_socket():
         "typed_config": {
             "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext",
             "common_tls_context": {
-                "tls_certificates": [{"certificate_chain": {"filename": "/etc/gateway/gateway.crt"}, "private_key": {"filename": "/etc/gateway/gateway.key"}}]
+                "tls_certificates": [{"certificate_chain": {"filename": settings.GATEWAY_CERT_FILE}, "private_key": {"filename": settings.GATEWAY_KEY_FILE}}]
             },
         },
     }
