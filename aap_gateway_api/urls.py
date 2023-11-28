@@ -15,11 +15,12 @@ detail_actions = {'get': 'retrieve', 'put': 'update', 'patch': 'partial_update',
 view_only_list = {'get': 'list'}
 
 urlpatterns = [
+    # Load base URLs first
+    path(r'api/gateway/v1/', include(base_urls)),
     path('admin/', admin.site.urls),
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
     path('api/gateway/v1/', views.V1RootView.as_view(), name='api_gateway_v1_root_view'),
-    path(r'api/gateway/v1/', include(base_urls)),
     path('api/gateway/v1/jwt_key/', views.JWTKeyView.as_view(), name='jwt-key-view'),
     path('api/gateway/v1/ping/', views.PingView.as_view(), name='ping-view'),
     path('api/gateway/v1/status/', views.StatusView.as_view(), name='status-view'),
