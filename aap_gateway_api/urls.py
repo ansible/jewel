@@ -6,6 +6,7 @@ from django.urls import include, path, re_path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from aap_gateway_api import views
+from aap_gateway_api.router import router
 from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView
 
 logger = logging.getLogger('aap.gateway.urls')
@@ -30,41 +31,9 @@ urlpatterns = [
         name='login',
     ),
     path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
-    path('api/gateway/v1/environments/', views.EnvironmentViewSet.as_view(list_actions), name='environment-list'),
-    re_path(r'api/gateway/v1/environments/(?P<pk>[0-9]+)/$', views.EnvironmentViewSet.as_view(detail_actions), name='environment-detail'),
-    re_path(
-        r'api/gateway/v1/environments/(?P<pk>[0-9]+)/organizations/$',
-        views.EnvironmentOrganizationViewSet.as_view(view_only_list),
-        name='environment-organizations',
-    ),
     path('api/gateway/v1/me/', views.MeViewSet.as_view(view_only_list), name='me-list'),
-    path('api/gateway/v1/organizations/', views.OrganizationViewSet.as_view(list_actions), name='organization-list'),
-    re_path(r'api/gateway/v1/organizations/(?P<pk>[0-9]+)/$', views.OrganizationViewSet.as_view(detail_actions), name='organization-detail'),
-    re_path(r'api/gateway/v1/organizations/(?P<pk>[0-9]+)/teams/$', views.OrganizationTeamViewSet.as_view(view_only_list), name='organization-teams'),
-    # services
-    path('api/gateway/v1/services/', views.ServiceAPIRouteViewSet.as_view(list_actions), name='service-list'),
-    re_path(r'api/gateway/v1/services/(?P<pk>[0-9]+)/$', views.ServiceAPIRouteViewSet.as_view(detail_actions), name='service-detail'),
     # settings
-    path('api/gateway/v1/settings/', views.PreferenceListView.as_view(view_only_list), name='setting-list'),
     re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
-    # teams
-    path('api/gateway/v1/teams/', views.TeamViewSet.as_view(list_actions), name='team-list'),
-    re_path(r'api/gateway/v1/teams/(?P<pk>[0-9]+)/$', views.TeamViewSet.as_view(detail_actions), name='team-detail'),
-    # users
-    path('api/gateway/v1/users/', views.UserViewSet.as_view(list_actions), name='user-list'),
-    re_path(r'api/gateway/v1/users/(?P<pk>[0-9]+)/$', views.UserViewSet.as_view(detail_actions), name='user-detail'),
-    # service nodes
-    path('api/gateway/v1/service_nodes/', views.ServiceNodeViewSet.as_view(list_actions), name='service_node-list'),
-    re_path(r'api/gateway/v1/service_nodes/(?P<pk>[0-9]+)/$', views.ServiceNodeViewSet.as_view(detail_actions), name='service_node-detail'),
-    # http ports
-    path('api/gateway/v1/http_ports/', views.HTTPPortViewSet.as_view(list_actions), name='http_port-list'),
-    re_path(r'api/gateway/v1/http_ports/(?P<pk>[0-9]+)/$', views.HTTPPortViewSet.as_view(detail_actions), name='http_port-detail'),
-    # service clusters
-    path('api/gateway/v1/service_clusters/', views.ServiceClusterViewSet.as_view(list_actions), name='service_cluster-list'),
-    re_path(r'api/gateway/v1/service_clusters/(?P<pk>[0-9]+)/$', views.ServiceClusterViewSet.as_view(detail_actions), name='service_cluster-detail'),
-    # routes
-    path('api/gateway/v1/routes/', views.AdditionalRouteViewSet.as_view(list_actions), name='route-list'),
-    re_path(r'api/gateway/v1/routes/(?P<pk>[0-9]+)/$', views.AdditionalRouteViewSet.as_view(detail_actions), name='route-detail'),
     # xDS
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
@@ -74,4 +43,5 @@ urlpatterns = [
     path('api/gateway/v1/docs/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/gateway/v1/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/gateway/v1/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path('api/gateway/v1/', include(router.urls)),
 ]

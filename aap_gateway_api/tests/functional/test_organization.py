@@ -78,3 +78,89 @@ def test_organizations_delete_nonexistent(admin_api_client):
     url = reverse("organization-detail", kwargs={"pk": 999})
     response = admin_api_client.delete(url)
     assert response.status_code == 404
+
+
+def test_organizations_teams_associate(admin_api_client, organization, team_1, team_2):
+    """
+    Test that we can associate teams with an organization.
+    """
+    team_1.organization = organization
+    team_2.organization = organization
+    team_1.save()
+    team_2.save()
+
+    url = reverse("organization-teams-associate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [team_1.pk, team_2.pk]})
+    assert response.status_code == 204
+    assert organization.team_set.count() == 2
+    assert team_1 in organization.team_set.all()
+    assert team_2 in organization.team_set.all()
+
+
+def test_organizations_teams_associate_twice_noop(admin_api_client, organization, team_1, team_2):
+    """
+    Test that associating the same teams twice is a no-op.
+    """
+    team_1.organization = organization
+    team_2.organization = organization
+    team_1.save()
+    team_2.save()
+
+    url = reverse("organization-teams-associate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [team_1.pk, team_2.pk]})
+    assert response.status_code == 204
+    assert organization.team_set.count() == 2
+    assert team_1 in organization.team_set.all()
+    assert team_2 in organization.team_set.all()
+
+    # Associate the same teams again - should be a no-op
+    response = admin_api_client.post(url, data={"instances": [team_1.pk, team_2.pk]})
+    assert response.status_code == 204
+    assert organization.team_set.count() == 2
+    assert team_1 in organization.team_set.all()
+    assert team_2 in organization.team_set.all()
+
+
+def test_organizations_teams_associate_nonexistent(admin_api_client, organization, team):
+    """
+    Test that we can't associate a nonexistent team with an organization.
+    """
+    url = reverse("organization-teams-associate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [team.pk, 999]})
+    assert response.status_code == 400
+    assert organization.team_set.count() == 1
+
+
+def test_organizations_teams_associate_unauthenticated(unauthenticated_api_client, organization, team):
+    """
+    Test that we can't associate an team with an organization if we're not authenticated.
+    """
+    t_org = team.organization
+    url = reverse("organization-teams-associate", kwargs={"pk": t_org.pk})
+    response = unauthenticated_api_client.post(url, data={"instances": [team.pk]})
+    assert response.status_code == 401
+    assert t_org.team_set.count() == 1
+
+
+def test_organizations_teams_disassociate(admin_api_client, organization, team_1, team_2):
+    """
+    Test that we can disassociate teams from an organization.
+    """
+    team_1.organization = organization
+    team_2.organization = organization
+    team_1.save()
+    team_2.save()
+
+    url = reverse("organization-teams-associate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [team_1.pk, team_2.pk]})
+    assert response.status_code == 204
+    assert organization.team_set.count() == 2
+    assert team_1 in organization.team_set.all()
+    assert team_2 in organization.team_set.all()
+
+    # Disassociate the teams
+    url = reverse("organization-teams-disassociate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [team_1.pk]})
+    assert response.status_code == 405
+    assert "a relationship must exist" in response.data["detail"]
+    assert organization.team_set.count() == 2
