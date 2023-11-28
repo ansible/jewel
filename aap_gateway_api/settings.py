@@ -248,6 +248,9 @@ except Exception as e:
 if not read_key:
     SECRET_KEY = 'django-insecure-aa$p$j(w3+l)77o3d4hb^_qoed!#!$d0g*t1%4a$x7gtrezoio'
 
+GATEWAY_CERT_FILE = os.environ.get('GATEWAY_CERT_FILE', '/etc/gateway/gateway.crt')
+GATEWAY_KEY_FILE = os.environ.get('GATEWAY_KEY_FILE', '/etc/gateway/gateway.key')
+
 DYNAMIC_PREFERENCES = {
     'REGISTRY_MODULE': 'preferences',
     'ENABLE_CACHE': False,
