@@ -1,5 +1,4 @@
 import logging
-import traceback
 from http.cookies import SimpleCookie
 
 from django.conf import settings
@@ -10,6 +9,7 @@ from envoy.service.auth.v3 import external_auth_pb2, external_auth_pb2_grpc
 
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_preference_value
 
+User = get_user_model()
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 
@@ -54,7 +54,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
                 return self._return_authenticated(jwt)
             try:
                 session = Session.objects.get(session_key=session_id)
-                user = get_user_model().objects.get(pk=session.get_decoded()["_auth_user_id"])
+                user = User.objects.get(pk=session.get_decoded()["_auth_user_id"])
                 logger.info("Creating new JWT token.")
                 jwt = create_signed_jwt(user)
                 JWTSessionCache.set(session_id, jwt)
@@ -66,11 +66,13 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             except KeyError:
                 logger.info("Session is not associated with a user.")
                 return self._return_not_authenticated()
+            except User.DoesNotExist:
+                logger.info(f"User pk={session.get_decoded()['_auth_user_id']} was deleted, returning no session")
+                return self._return_not_authenticated()
 
         # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
         except Exception as e:
-            logger.error(e)
-            traceback.print_exc()
+            logger.exception(e)
             raise
 
 
