@@ -11,7 +11,7 @@ from rest_framework.reverse import reverse
 from rest_framework.schemas.generators import EndpointEnumerator
 from rest_framework.views import APIView
 
-logger = logging.getLogger('aap.view')
+logger = logging.getLogger('aap.gateway.views')
 
 
 ignore_endpoints = ['docs']

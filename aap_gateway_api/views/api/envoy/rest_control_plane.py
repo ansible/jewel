@@ -23,7 +23,7 @@ from envoy.extensions.filters.network.http_connection_manager.v3 import http_con
 
 # isort: on
 
-logger = logging.getLogger('aap.gateway.proxy')
+logger = logging.getLogger('aap.gateway.views.proxy.rest_control_plane')
 
 
 class XDSView(APIView):

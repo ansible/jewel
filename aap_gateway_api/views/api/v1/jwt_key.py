@@ -5,7 +5,7 @@ from django.views import View
 
 from aap_gateway_api.utils import get_jwt_rsa_key
 
-logger = logging.getLogger('jwt_key')
+logger = logging.getLogger('aap.gateway.views.jwt_key')
 
 
 class JWTKeyView(View):

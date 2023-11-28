@@ -10,7 +10,7 @@ from aap_gateway_api.models import gateway_preference_registry
 from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
 
-logger = logging.getLogger('aap.gateway.serializers')
+logger = logging.getLogger('aap.gateway.serializers.preferences')
 
 
 class SettingSectionSerializer(serializers.Serializer):

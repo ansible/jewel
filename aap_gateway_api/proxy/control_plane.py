@@ -10,7 +10,7 @@ from envoy.service.auth.v3 import external_auth_pb2, external_auth_pb2_grpc
 
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_preference_value
 
-logger = logging.getLogger('aap.gateway.proxy')
+logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 
 class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
