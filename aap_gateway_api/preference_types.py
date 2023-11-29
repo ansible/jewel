@@ -10,6 +10,11 @@ logger = logging.getLogger("aap.gateway.preference_types")
 
 class URLPreference(types.StringPreference):
     def validate(self, value):
+        if not self.required and not value:
+            # If this preference is not required and we didn't get a value we can just return
+            #  because '' or None is not a valid URL and will trip up the URLValidator
+            return value
+
         try:
             validator = URLValidator(schemes=["https"])
             validator(value)
