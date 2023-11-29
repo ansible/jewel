@@ -144,3 +144,13 @@ register(
     help_text="Enabling this setting will tell social auth to use the full email as username instead of the full name",
     encrypted=False,
 )
+
+register(
+    section="local_login",
+    preference_name="LOGIN_REDIRECT_OVERRIDE",
+    default='',
+    required=False,
+    preference_type="url",
+    help_text="URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page.",
+    encrypted=False,
+)
