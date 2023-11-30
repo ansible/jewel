@@ -219,3 +219,25 @@ def test_environments_disassociate(admin_api_client, environment, organization, 
     assert environment.organizations.count() == 1
     assert organization_1 not in environment.organizations.all()
     assert organization_2 in environment.organizations.all()
+
+
+def test_environments_disassociate_unassociated(admin_api_client, environment, organization_1, organization_2):
+    """
+    Test what happens if we try to disassociate something that isn't associated.
+    """
+    url = reverse("environment-organizations-disassociate", kwargs={"pk": environment.pk})
+    response = admin_api_client.post(url, data={"instances": [1, 2]})
+    assert response.status_code == 400
+    assert 'Cannot disassociate these objects' in response.data["instances"]
+    assert "1, 2" in response.data["instances"]
+
+
+def test_environments_disassociate_nonexistent(admin_api_client, environment, organization):
+    """
+    Test that we can't disassociate a nonexistent organization from an environment.
+    """
+    url = reverse("environment-organizations-disassociate", kwargs={"pk": environment.pk})
+    response = admin_api_client.post(url, data={"instances": [organization.pk, 999]})
+    assert response.status_code == 400
+    assert environment.organizations.count() == 0
+    assert response.data["instances"][0] == 'Invalid pk "999" - object does not exist.'
