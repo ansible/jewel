@@ -161,6 +161,6 @@ def test_organizations_teams_disassociate(admin_api_client, organization, team_1
     # Disassociate the teams
     url = reverse("organization-teams-disassociate", kwargs={"pk": organization.pk})
     response = admin_api_client.post(url, data={"instances": [team_1.pk]})
-    assert response.status_code == 405
-    assert "a relationship must exist" in response.data["detail"]
+    assert response.status_code == 400
+    assert "there must be a related object" in response.data["instances"]
     assert organization.team_set.count() == 2

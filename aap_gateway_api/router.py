@@ -36,6 +36,20 @@ class AssociateMixin:
         serializer.is_valid(raise_exception=True)
         related_instances = serializer.validated_data['instances']
         manager = getattr(instance, self.association_fk)
+
+        # Ensure each of the given related_instances is actually related to the instance.
+        # If any isn't, then bomb out and tell the user which ones aren't related.
+        given_related_instance_set = set(related_instances)
+        related_instance_set = set(manager.all())
+        non_related_instances = given_related_instance_set - related_instance_set
+        if non_related_instances:
+            raise serializers.ValidationError(
+                {
+                    'instances': _('Cannot disassociate these objects because they are not all related to this object: %(non_related_instances)s')
+                    % {'non_related_instances': ', '.join(str(i.pk) for i in non_related_instances)},
+                }
+            )
+
         try:
             manager.remove(*related_instances)
         except AttributeError:
@@ -43,10 +57,12 @@ class AssociateMixin:
             # https://docs.djangoproject.com/en/dev/ref/models/relations/#django.db.models.fields.related.RelatedManager.remove
             # "For ForeignKey objects, this method only exists if null=True."
             # Return something stating that the operation is not supported.
-            return Response(
-                {'detail': _('Cannot disassociate these objects because a relationship must exist.')},
-                status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            raise serializers.ValidationError(
+                {
+                    'instances': _('Cannot disassociate these objects because there must be a related object'),
+                }
             )
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_serializer_class(self):
