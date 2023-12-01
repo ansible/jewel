@@ -1,0 +1,11 @@
+---
+exclude_paths:
+  - 'changelogs/'
+parseable: true
+use_default_rules: true
+skip_list:
+  - fqcn[keyword]
+  - role-name[path]
+  - sanity[cannot-ignore]  # We're only ignoring sanity rules when we have to
+  - var-naming[no-role-prefix]
+...

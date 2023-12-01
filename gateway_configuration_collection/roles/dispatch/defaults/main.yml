@@ -1,0 +1,9 @@
+---
+gateway_configuration_dispatcher_roles:
+  - role: infra.gateway_configuration.settings
+    var: gateway_settings
+    tags: settings
+  - role: users
+    var: infra.gateway_configuration.gateway_user_accounts
+    tags: users
+...
