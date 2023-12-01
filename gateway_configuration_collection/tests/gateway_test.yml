@@ -1,0 +1,36 @@
+---
+- name: Playbook to do development tests for automation platform gateway
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    gateway_hostname: https://gateway.nas:9080/
+    gateway_username: admin
+    gateway_password: admin
+    gateway_validate_certs: false
+    gateway_configuration_users_secure_logging: false
+
+  tasks:
+    # Disabled until we get tokens working
+    # - name: Create a new token using username/password
+    #   infra.gateway_configuration.token:
+    #     state: present
+    #     gateway_hostname: "{{ gateway_hostname }}"
+    #     gateway_username: "{{ gateway_username }}"
+    #     gateway_password: "{{ gateway_username }}"
+    #     gateway_validate_certs: false
+
+    - name: Add settings
+      infra.gateway_configuration.settings:
+        settings:
+          gateway_access_token_expiration: 700
+          password_min_length: 20
+          password_min_digits: 2
+          password_min_upper: 6
+          password_min_special: 2
+        gateway_hostname: "{{ gateway_hostname }}"
+        gateway_username: "{{ gateway_username }}"
+        gateway_password: "{{ gateway_username }}"
+        gateway_validate_certs: false
+
+...

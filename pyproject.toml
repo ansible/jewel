@@ -52,6 +52,12 @@ extend_skip = ["aap_gateway_api/migrations", "django-ansible-base"]
 max-line-length = 160
 extend-ignore = [ "E203" ]
 exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base']
+# E402: module level import not at top of file. Ansible modules follow a
+# somewhat different convention here because DOCUMENTATION, EXAMPLES, and
+# RETRUN module variables contain documentation.
+per-file-ignores = """
+    gateway_configuration_collection/plugins/modules/*:E402
+"""
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"

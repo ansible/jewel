@@ -1,0 +1,18 @@
+# TODO
+Named urls working
+Type in each record in the API
+in the options a default for each field.
+
+
+gateway_access_token_expiration needs a limit, it will error if you set it to someting stupid
+
+settings
+"c{'allow_admins_to_set_insecure': \"Value False can't be deserialized to a Boolean\"}"
+
+
+Don’t make modules out of the gate for the following endpoints:
+"me": "/api/gateway/v1/me/",
+"ping": "/api/gateway/v1/ping/",
+"status": "/api/gateway/v1/status/",
+"trigger_definition": "/api/gateway/v1/trigger_definition/",
+"ui_auth": "/api/gateway/v1/ui_auth/",

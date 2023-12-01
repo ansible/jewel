@@ -1,0 +1,31 @@
+---
+namespace: infra
+name: gateway_configuration
+description: A collection of roles to manage Ansible automation platform gateway
+version: 1.0.0
+readme: README.md
+authors:
+  - automation platform gateway project contributors <aap-project@googlegroups.com>  # TBD
+  - Sean Sullivan <@sean-m-sullivan>
+license:
+  - Apache-2.0
+tags:
+  - gateway
+  - collection
+  - gateway_configuration
+  - automation_platform
+  - infrastructure
+dependencies: {}
+
+repository: https://github.com/ansible
+homepage: http://ansible.com/
+issues: https://access.redhat.com/support/
+
+build_ignore:
+  - galaxy.yml.j2
+  - release.yml
+  - .github
+  - .ansiblelint.yml
+  - .yamllint.yml
+  - "*.tar.gz"
+...
