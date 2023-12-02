@@ -32,7 +32,7 @@ services:
       - "4444:4444"
     user: "${UID}"
     volumes:
-      - $PWD:/opt/aap_gateway/aap_gateway:z
+      - $PWD:/opt/aap_gateway/src:z
       - $PWD/django-ansible-base:/opt/aap_gateway/ansible_base:z
       - $PWD/tools/configs/nginx.conf:/etc/gateway/nginx.conf:z
       - $PWD/tools/configs/nginx-gateway.conf:/etc/gateway/nginx-gateway.conf:z
