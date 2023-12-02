@@ -1,32 +1,35 @@
 [project]
 name = "jewel"
-authors = [
-    {name = "Ansible community", email = "info@ansible.com"},
-]
+authors = [{ name = "Ansible community", email = "info@ansible.com" }]
 description = "gateway"
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = ["ansible", "django", "gateway"]
-license = {file = "LICENSE.md"}
+license = { file = "LICENSE.md" }
 classifiers = [
-    "Framework :: Django",
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: Web Environment",
-    "Framework :: Django",
-    "Intended Audience :: Developers",
-    "Intended Audience :: System Administrators",
-    "Operating System :: OS Independent",
-    "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
+  "Framework :: Django",
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Web Environment",
+  "Framework :: Django",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
 ]
 dynamic = ["version", "dependencies"]
 
+
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements/requirements.in", "requirements/requirements_git.txt"]}
+dependencies = { file = [
+  "requirements/requirements.in",
+  "requirements/requirements_git.txt",
+] }
+
 
 [tool.setuptools.packages.find]
 include = ["aap_gateway_api.*"]
@@ -58,7 +61,7 @@ extend_skip = ["aap_gateway_api/migrations", "django-ansible-base"]
 
 [tool.flake8]
 max-line-length = 160
-extend-ignore = [ "E203" ]
+extend-ignore = ["E203"]
 exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base']
 # E402: module level import not at top of file. Ansible modules follow a
 # somewhat different convention here because DOCUMENTATION, EXAMPLES, and
