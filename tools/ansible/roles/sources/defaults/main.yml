@@ -1,0 +1,1 @@
+headless: "{{ (lookup('env','HEADLESS') | bool) or false }}"

@@ -5,7 +5,7 @@ services:
   gateway:
     build:
       context: $PWD
-      dockerfile: tools/docker/Dockerfile.gateway
+      dockerfile: tools/generated/Dockerfile
     command:
       - /usr/bin/launch-gateway
     container_name: aap_gw_1
@@ -30,7 +30,7 @@ services:
     ports:
       - "8000:8000"
       - "4444:4444"
-    user: "${UID}"
+    user: "${UID:-1000}"
     volumes:
       - $PWD:/opt/aap_gateway/src:z
       - $PWD/django-ansible-base:/opt/aap_gateway/ansible_base:z

@@ -5,3 +5,4 @@
     mode: '0600'
   loop:
     - docker-compose.yml
+    - Dockerfile

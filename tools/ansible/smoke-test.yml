@@ -1,0 +1,38 @@
+---
+- hosts: localhost
+  tasks:
+    - name: Run dev env smoke test
+      block:
+        - name: Start the development environment
+          command: make docker-compose
+          args:
+            chdir: "{{ repo_root }}"
+          environment:
+            COMPOSE_UP_OPTS: '-d'
+
+        - name: Wait for it
+          uri:
+            url: https://localhost:8000/api/gateway/v1/ping/
+            body_format: json
+            validate_certs: false
+          register: gateway_ping
+          until: "gateway_ping is success and (gateway_ping.json.pong | to_datetime('%Y-%m-%d %H:%M:%S.%f'))"
+          retries: 10
+
+        - include_vars:
+            file: "{{ gateway_vars }}"
+
+        - name: Make request as admin
+          uri:
+            url: https://localhost:8000/api/gateway/v1/me/
+            user: "{{ gateway_admin_username }}"
+            password: "{{ gateway_admin_password }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: "admin_request"
+          until: "admin_request is success and admin_request.json.results[0].username == 'admin'"
+      rescue:
+        - name: Print container logs
+          command: docker compose -f tools/generated/docker-compose.yml logs
+          args:
+            chdir: "{{ repo_root }}"

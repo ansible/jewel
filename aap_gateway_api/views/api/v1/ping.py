@@ -16,7 +16,7 @@ class PingView(ViewWithHeaders):
     def get(self, request):
         current_time = datetime.now()
         response = {
-            "pong": current_time,
+            "pong": str(current_time),
             "status": "good",
         }
 
