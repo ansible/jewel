@@ -114,13 +114,19 @@ container-startup.yml: tools/configs/container-startup.yml
 
 ## Generate the docker-compose.yml file
 tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
-	ansible-playbook tools/ansible/generate-docker-compose.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
+	ansible-playbook tools/ansible/generate-docker-compose.yml \
+	    -e @tools/ansible/vars/container_config.yml \
+	    -e @container-startup.yml
 
 ## Build the docker containers
-docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_base_hash tools/generated/.has_built_api tools/generated/.has_built_ui
+docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_base_hash tools/generated/.has_built_api
 
 ## Build the API container
-tools/generated/.has_built_api: tools/generated/.django_ansible_base_head tools/generated/.has_built_ui tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/docker/Dockerfile.gateway requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+API_TARGETS = tools/generated/.django_ansible_base_head tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/generated/Dockerfile requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+ifndef HEADLESS
+    API_TARGETS += tools/generated/.has_built_ui
+endif
+tools/generated/.has_built_api: $(API_TARGETS)
 	mkdir -p django-ansible-base/requirements
 	$(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml \
 	    build \

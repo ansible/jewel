@@ -99,8 +99,10 @@ ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 ENV PATH=/opt/aap_gateway/venv/bin:$PATH
 ENV PYTHONPATH=/opt/aap_gateway/src
 
+{% if not headless | bool %}
 # Pull in the platform-ui, this can change frequently so it should be one of the last things we try and do
 COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
+{% endif %}
 
 USER 1000
 EXPOSE 8000
