@@ -28,6 +28,14 @@ dynamic = ["version", "dependencies"]
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements/requirements.in", "requirements/requirements_git.txt"]}
 
+[tool.setuptools.packages.find]
+include = ["aap_gateway_api.*"]
+exclude = ["aap_gateway_api.tests*"]
+
+[tool.setuptools.package-data]
+"aap_gateway_api.templates" = ["**"]
+"aap_gateway_api.static" = ["**"]
+
 [build-system]
 requires = ["setuptools>=64", "setuptools_scm>=8"]
 build-backend = 'setuptools.build_meta'
