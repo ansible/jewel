@@ -1,3 +1,0 @@
-#!/bin/bash
-
-/opt/aap_gateway/venv/bin/python /opt/aap_gateway/aap_gateway/aap_gateway_api/__init__.py "$@"

@@ -2,7 +2,7 @@
 set -o errexit
 
 GATEWAY_BASE_DIR=/opt/aap_gateway
-GATEWAY_APP_DIR="${GATEWAY_BASE_DIR}/aap_gateway"
+GATEWAY_APP_DIR="${GATEWAY_BASE_DIR}/src"
 GATEWAY_PYTHON="${GATEWAY_BASE_DIR}/venv/bin/python"
 GATEWAY_MANAGE="/usr/bin/gateway-manage"
 
@@ -55,7 +55,7 @@ done
 
 ${GATEWAY_MANAGE} migrate --noinput
 ${GATEWAY_MANAGE} collectstatic --noinput
-${GATEWAY_MANAGE} register_service --config /opt/aap_gateway/aap_gateway/tools/generated/proxy.yml
+${GATEWAY_MANAGE} register_service --config /opt/aap_gateway/src/tools/generated/proxy.yml
 
 export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
 if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
@@ -70,6 +70,4 @@ ${GATEWAY_MANAGE} authenticators --initialize
 if [ $? != 0 ] ; then
     exit 255
 fi
-
-cd ${GATEWAY_APP_DIR}
 exec supervisord -n
