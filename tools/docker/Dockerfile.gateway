@@ -30,7 +30,6 @@ RUN for dir in \
     do mkdir -p $dir && chgrp -R 0 $dir && chmod -R g=u $dir ; done
 
 RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
-RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/${PYTHON}/site-packages/project.pth
 
 # See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
 RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
@@ -60,10 +59,12 @@ ARG PYTHON
 RUN dnf module install -y nginx/common && \
     dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm  && \
     dnf install -y \
+    git-core \
     inotify-tools \
     less \
     libpq \
     postgresql \
+    procps \
     ${PYTHON} \
     ${PYTHON}-pip \
     socat \
@@ -73,7 +74,7 @@ RUN dnf module install -y nginx/common && \
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
-COPY tools/scripts/gateway-manage /usr/bin/gateway-manage
+COPY tools/scripts/aap-gateway-manage /usr/bin/aap-gateway-manage
 
 RUN for dir in \
       /etc/nginx \
@@ -87,13 +88,15 @@ RUN for dir in \
     for file in \
       /etc/nginx/gateway.crt \
       /etc/nginx/gateway.key ; \
-    do touch $file ; chmod g+rw $file ; chgrp root $file ; done
+    do touch $file ; chmod g+rw $file ; chgrp root $file ; done && \
+    ln -s /usr/bin/aap-gateway-manage /usr/bin/gateway-manage
 
 # This is required for the xds protobuf defintions in order for them
 # to be compatible with protobuf 3.21+. This should be removed
 # once a new version of xds-protos is available
 ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
+ENV PATH=/opt/aap_gateway/venv/bin:$PATH
 
 # Pull in the platform-ui, this can change frequently so it should be one of the last things we try and do
 COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
@@ -101,5 +104,5 @@ COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_ga
 USER 1000
 EXPOSE 8000
 
-WORKDIR /opt
+WORKDIR /opt/aap_gateway/src
 CMD /usr/bin/launch-gateway
