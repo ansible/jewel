@@ -32,7 +32,7 @@ dependencies = { file = [
 
 
 [tool.setuptools.packages.find]
-include = ["aap_gateway_api.*"]
+include = ["aap_gateway_api*"]
 exclude = ["aap_gateway_api.tests*"]
 
 [tool.setuptools.package-data]
