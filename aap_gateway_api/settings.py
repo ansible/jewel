@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'django_filters',
     'rest_framework',
+    'drf_spectacular',
     'aap_gateway_api',
     'django_grpc',
     'ansible_base',
