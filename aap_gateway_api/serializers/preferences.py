@@ -105,7 +105,8 @@ class SettingSingletonSerializer(serializers.Serializer):
                 logger.debug(f"Validating value change from {current_value} to {masked_value} for {registered_preference.name}")
                 try:
                     # Try to let the preference's class serializer convert the value (will raise if not valid)
-                    new_value = registered_preference.serializer.to_python(new_value)
+                    # this method expects a string in case of a boolean value, so we have to convert it to pass validation
+                    new_value = registered_preference.serializer.to_python(str(new_value))
                     registered_preference.validate(new_value)
 
                     # There are a couple scenarios this does not catch
