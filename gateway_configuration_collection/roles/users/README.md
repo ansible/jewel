@@ -25,7 +25,7 @@ If Both variables are not set, enforcing default values is not done.
 Enabling these variables enforce default values on options that are optional in the gateway API.
 This should be enabled to enforce configuration and prevent configuration drift. It is recomended to be enabled, however it is not enforced by default.
 
-Enabling this will enforce configurtion without specifying every option in the configuration files.
+Enabling this will enforce configuration without specifying every option in the configuration files.
 
 'gateway_configuration_users_enforce_defaults' defaults to the value of 'gateway_configuration_enforce_defaults' if it is not explicitly called. This allows for enforced defaults to be toggled for the entire suite of gateway configuration roles with a single variable, or for the user to selectively use it.
 
@@ -39,12 +39,12 @@ Enabling this will enforce configurtion without specifying every option in the c
 The following Variables compliment each other.
 If Both variables are not set, secure logging defaults to false.
 The role defaults to False as normally the add user task does not include sensitive information.
-`gateway_configuration_user_secure_logging` defaults to the value of `gateway_configuration_secure_logging` if it is not explicitly called. This allows for secure logging to be toggled for the entire suite of configuration roles with a single variable, or for the user to selectively use it.
+`gateway_configuration_users_secure_logging` defaults to the value of `gateway_configuration_secure_logging` if it is not explicitly called. This allows for secure logging to be toggled for the entire suite of configuration roles with a single variable, or for the user to selectively use it.
 
-|Variable Name|Default Value|Required|Description|
-|:---:|:---:|:---:|:---:|
-|`gateway_configuration_user_secure_logging`|`False`|no|Whether or not to include the sensitive user role tasks in the log. Set this value to `True` if you will be providing your sensitive values from elsewhere.|
-|`gateway_configuration_secure_logging`|`False`|no|This variable enables secure logging as well, but is shared across multiple roles, see above.|
+|                Variable Name                 |Default Value|Required|Description|
+|:--------------------------------------------:|:---:|:---:|:---:|
+| `gateway_configuration_users_secure_logging` |`False`|no|Whether or not to include the sensitive user role tasks in the log. Set this value to `True` if you will be providing your sensitive values from elsewhere.|
+|    `gateway_configuration_secure_logging`    |`False`|no|This variable enables secure logging as well, but is shared across multiple roles, see above.|
 
 ### Asynchronous Retry Variables
 

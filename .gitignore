@@ -48,3 +48,6 @@ tools/generated/*
 
 # Avoid git-in-git nastiness
 /django-ansible-base
+
+# Dev
+aap_gateway_dev
