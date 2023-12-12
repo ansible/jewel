@@ -8,7 +8,7 @@
         gateway_settings:
           gateway_access_token_expiration: 700
           password_min_length: 20
-          password_min_digits: 2
+          password_min_digits: 3
           password_min_upper: 6
           password_min_special: 2
 
@@ -27,7 +27,7 @@
         gateway_settings:
           gateway_access_token_expiration: 700
           password_min_length: 20
-          password_min_digits: 2
+          password_min_digits: 3
           password_min_upper: 6
           password_min_special: 2
 

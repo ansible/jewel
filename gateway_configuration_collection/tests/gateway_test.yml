@@ -10,6 +10,8 @@
     gateway_validate_certs: false
     gateway_configuration_users_secure_logging: false
 
+  collections:
+  - infra.gateway_configuration
   tasks:
     # Disabled until we get tokens working
     # - name: Create a new token using username/password
@@ -26,11 +28,13 @@
           gateway_access_token_expiration: 700
           password_min_length: 20
           password_min_digits: 2
-          password_min_upper: 6
-          password_min_special: 2
+          password_min_upper: 0
+          password_min_special: 0
         gateway_hostname: "{{ gateway_hostname }}"
         gateway_username: "{{ gateway_username }}"
-        gateway_password: "{{ gateway_username }}"
+        gateway_password: "{{ gateway_password }}"
         gateway_validate_certs: false
+    - include_tasks: integration/targets/users_test/tasks/main.yml
+    - include_tasks: integration/targets/settings_test/tasks/main.yml
 
 ...
