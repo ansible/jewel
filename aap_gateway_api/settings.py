@@ -88,7 +88,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'dynamic_preferences',
     'django_extensions',
-    'django_filters',
     'rest_framework',
     'drf_spectacular',
     'aap_gateway_api',
@@ -99,19 +98,12 @@ INSTALLED_APPS = [
 # User our own user model
 AUTH_USER_MODEL = 'aap_gateway_api.User'
 
-ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = ["ansible_base.authenticator_plugins"]
-
-AUTHENTICATION_BACKENDS = [
-    "ansible_base.authentication.backend.AnsibleBaseAuth",
-]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    # must come before django.contrib.auth.middleware.AuthenticationMiddleware
-    'ansible_base.utils.middleware.AuthenticatorBackendMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -120,17 +112,11 @@ MIDDLEWARE = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # NOTE: Do NOT put the built-in DRF SessionAuthentication here first,
-        # or anything that doesn't return a string from its authenticate_header.
-        # DRF uses the first thing here to determine if invalid auth should be
-        # 401 or 403. The UI expects 401.
-        'ansible_base.authentication.session.SessionAuthentication',
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
-    'DEFAULT_FILTER_BACKENDS': ['ansible_base.utils.filtering.AutomaticDjangoFilterBackend'],
     'PAGE_SIZE': 50,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -275,24 +261,6 @@ GRPCSERVER = {
 include(optional('settings_dev.py'), scope=locals())
 
 
-# TODO: how do we configure these in the ansible_base app?
-SOCIAL_AUTH_PIPELINE = (
-    'social_core.pipeline.social_auth.social_details',
-    'social_core.pipeline.social_auth.social_uid',
-    'social_core.pipeline.social_auth.auth_allowed',
-    'social_core.pipeline.social_auth.social_user',
-    'social_core.pipeline.user.get_username',
-    'social_core.pipeline.user.create_user',
-    'social_core.pipeline.social_auth.associate_user',
-    'social_core.pipeline.social_auth.load_extra_data',
-    'social_core.pipeline.user.user_details',
-    'ansible_base.authentication.social_auth.create_user_claims_pipeline',
-)
-SOCIAL_AUTH_STORAGE = "ansible_base.authentication.social_auth.AuthenticatorStorage"
-SOCIAL_AUTH_STRATEGY = "ansible_base.authentication.social_auth.AuthenticatorStrategy"
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/"
-
-
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Gateway API',
     'DESCRIPTION': 'Gateway API',
@@ -302,3 +270,10 @@ SPECTACULAR_SETTINGS = {
 
 ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
 LOGIN_REDIRECT_OVERRIDE = 'aap_gateway_api.authentication.util.get_login_redirect_override'
+
+ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': True, 'SWAGGER': True}
+
+from ansible_base import settings  # noqa: E402
+
+settings_file = os.path.join(os.path.dirname(settings.__file__), 'dynamic_settings.py')
+include(settings_file)
