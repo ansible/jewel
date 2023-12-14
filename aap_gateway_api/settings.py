@@ -271,7 +271,7 @@ SPECTACULAR_SETTINGS = {
 ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
 LOGIN_REDIRECT_OVERRIDE = 'aap_gateway_api.authentication.util.get_login_redirect_override'
 
-ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': True, 'SWAGGER': True}
+ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': True, 'SWAGGER': True, 'FILTERING': True}
 
 from ansible_base import settings  # noqa: E402
 
