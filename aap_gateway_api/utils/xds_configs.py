@@ -18,6 +18,7 @@ def external_auth_filter():
             "@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz",
             "grpc_service": {"envoy_grpc": {"cluster_name": "gateway_control_plane"}, "timeout": "0.5s"},
             "transport_api_version": "V3",
+            "status_on_error": {"code": "BadGateway"},
         },
     }
 

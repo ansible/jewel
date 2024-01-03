@@ -1,21 +1,52 @@
 import logging
-from http.cookies import SimpleCookie
 
-from django.conf import settings
+from ansible_base.utils.middleware import AuthenticatorBackendMiddleware
 from django.contrib.auth import get_user_model
-from django.contrib.sessions.models import Session
+from django.contrib.auth.middleware import AuthenticationMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.http import HttpRequest, parse_cookie
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
-from envoy.service.auth.v3 import external_auth_pb2, external_auth_pb2_grpc
+from envoy.service.auth.v3 import attribute_context_pb2, external_auth_pb2, external_auth_pb2_grpc
+from rest_framework.request import Request as DRFRequest
+from rest_framework.settings import api_settings
 
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_preference_value
+
+MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware]
 
 User = get_user_model()
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 
+def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest) -> DRFRequest:
+    d_request = HttpRequest()
+    d_request.method = request.method
+    d_request.path = request.path
+    d_request.COOKIES = parse_cookie(request.headers.get("cookie", ""))
+
+    d_request.META = {**{"HTTP_" + k.upper(): v for k, v in request.headers.items()}, "QUERY_STRING": request.query}
+
+    d_request.META["SERVER_NAME"] = request.host
+
+    for middleware in MIDDLEWARE:
+        middleware(lambda x: x).process_request(d_request)
+
+    req = DRFRequest(d_request, authenticators=[x() for x in api_settings.DEFAULT_AUTHENTICATION_CLASSES])
+
+    # Turn off CSRF enforcement
+    req._dont_enforce_csrf_checks = True
+    return req
+
+
 class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
     def _return_authenticated(self, jwt):
         logger.info("User successfully authenticated")
+
+        # TODO: DRF basic auth raises an exception if you pass an invalid username/password
+        # regardless of any other auth classes. We need to remove the authentication headers
+        # from the proxied request if auth here succeeds. I'm not going to do this now
+        # because the gateway isn't configured to use JWT token auth yet.
+
         return external_auth_pb2.CheckResponse(
             ok_response=external_auth_pb2.OkHttpResponse(
                 headers=[HeaderValueOption(header=HeaderValue(key=get_preference_value('proxy', 'gateway_token_name'), value=jwt))]
@@ -34,41 +65,21 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
     def Check(self, request, context):
         logger.info("Starting authentication.")
         try:
-            cookie = SimpleCookie()
-            session_id = None
+            drf_request = get_drf_request(request.attributes.request.http)
+            user = drf_request.user
 
-            if cookie_header := request.attributes.request.http.headers.get("cookie"):
-                cookie.load(cookie_header)
-
-                if session_id := cookie.get(settings.SESSION_COOKIE_NAME):
-                    session_id = session_id.value
-                else:
-                    logger.info(f"'{settings.SESSION_COOKIE_NAME}' cookie does not exist")
-                    return self._return_not_authenticated()
-            else:
-                logger.info("Cookie header not set.")
+            if not user.pk:
+                logger.info("No valid credentials found for user.")
                 return self._return_not_authenticated()
 
-            if jwt := JWTSessionCache.get(session_id):
+            if jwt := JWTSessionCache.get(user.pk):
                 logger.info("Loading cached JWT token")
                 return self._return_authenticated(jwt)
-            try:
-                session = Session.objects.get(session_key=session_id)
-                user = User.objects.get(pk=session.get_decoded()["_auth_user_id"])
-                logger.info("Creating new JWT token.")
+            else:
+                logger.info("Issuing new JWT token")
                 jwt = create_signed_jwt(user)
-                JWTSessionCache.set(session_id, jwt)
+                JWTSessionCache.set(user.pk, jwt)
                 return self._return_authenticated(jwt)
-
-            except Session.DoesNotExist:
-                logger.info("Session is invalid.")
-                return self._return_not_authenticated()
-            except KeyError:
-                logger.info("Session is not associated with a user.")
-                return self._return_not_authenticated()
-            except User.DoesNotExist:
-                logger.info(f"User pk={session.get_decoded()['_auth_user_id']} was deleted, returning no session")
-                return self._return_not_authenticated()
 
         # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
         except Exception as e:
