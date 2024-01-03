@@ -8,8 +8,6 @@ from rest_framework.negotiation import DefaultContentNegotiation
 from rest_framework.renderers import StaticHTMLRenderer
 from rest_framework.response import Response
 
-from aap_gateway_api.utils.jwt_cache import JWTSessionCache
-
 logger = logging.getLogger('aap.gateway.views.local_login')
 
 
@@ -49,8 +47,6 @@ class LoggedLoginView(views.LoginView):
 
 class LoggedLogoutView(views.LogoutView):
     def dispatch(self, request, *args, **kwargs):
-        if session := request.session._session_key:
-            JWTSessionCache.remove(session)
         original_user = getattr(request, 'user', None)
         ret = super().dispatch(request, *args, **kwargs)
         current_user = getattr(request, 'user', None)
