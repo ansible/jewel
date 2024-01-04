@@ -38,7 +38,7 @@
         <ul class="nav navbar-nav navbar-right">
           {% if user.is_authenticated and not inside_login_context %}
           <li><a href="{% url 'me-list'%}" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Logged in as {{ user }}{% if user.get_full_name %} ({{ user.get_full_name }}){% endif %}"><span class="glyphicon glyphicon-user"></span> <span class="visible-xs-inline">Logged in as </span>{{ user }}{% if user.get_full_name %}<span class="visible-xs-inline"> ({{ user.get_full_name }})</span>{% endif %}</a></li>
-          <li><a href="{% url 'logout' %}?next=/api/gateway/v1/" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log out"><span class="glyphicon glyphicon-log-out"></span> Log out</a></li>
+          <li><a href="#" onClick="document.logoutForm.submit()" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log out"><span class="glyphicon glyphicon-log-out"></span> Log out</a></li>
           {% else %}
           <li><a href="{% url 'login' %}?next={{ request.get_full_path }}" data-toggle="tooltip" data-placement="bottom" data-delay="1000" title="Log in"><span class="glyphicon glyphicon-log-in"></span> Log in</a></li>
           {% endif %}
@@ -74,4 +74,7 @@
 </div>
 {{ block.super }}
 <script src="{% static 'api/api.js' %}?v={{ gateway_version }}"></script>
+<form name="logoutForm" action="{% url 'logout' %}?next=/api/gateway/v1/" role="form" method="post">
+  {% csrf_token %}
+</form>
 {% endblock %}
