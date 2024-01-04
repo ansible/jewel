@@ -70,9 +70,9 @@ def test_login_get_accept_unknown(unauthenticated_api_client):
 
 
 @mock.patch("aap_gateway_api.views.api.v1.local_login.logger")
-def test_logout_view(logger, unauthenticated_api_client, admin_user, local_authenticator):
+def test_logout_view_with_post(logger, unauthenticated_api_client, admin_user, local_authenticator):
     """
-    Test GETing the logout view.
+    Test POSTing the logout view.
     """
     # First we need to login
     url = reverse("login")
@@ -82,6 +82,23 @@ def test_logout_view(logger, unauthenticated_api_client, admin_user, local_authe
 
     # Now we can logout
     url = reverse("logout")
-    response = unauthenticated_api_client.get(url)
+    response = unauthenticated_api_client.post(url)
     assert response.status_code == 302
     assert response.wsgi_request.user.is_anonymous
+
+
+@mock.patch("aap_gateway_api.views.api.v1.local_login.logger")
+def test_logout_view_with_get(logger, unauthenticated_api_client, admin_user, local_authenticator):
+    """
+    Test GETing the logout view.
+    """
+    # First we need to login
+    url = reverse("login")
+    data = {"username": "admin", "password": "password"}
+    response = unauthenticated_api_client.post(url, data)
+    assert response.status_code == 302
+
+    # log out and assert error response code
+    url = reverse("logout")
+    response = unauthenticated_api_client.get(url)
+    assert response.status_code == 405

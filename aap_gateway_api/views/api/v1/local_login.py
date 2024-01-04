@@ -2,6 +2,8 @@ import logging
 import re
 
 from django.contrib.auth import views
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
 from rest_framework import status
 from rest_framework.exceptions import NotAcceptable
 from rest_framework.negotiation import DefaultContentNegotiation
@@ -45,6 +47,7 @@ class LoggedLoginView(views.LoginView):
             return ret
 
 
+@method_decorator(require_http_methods(["POST"]), name="dispatch")
 class LoggedLogoutView(views.LogoutView):
     def dispatch(self, request, *args, **kwargs):
         original_user = getattr(request, 'user', None)
