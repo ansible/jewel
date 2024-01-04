@@ -1,5 +1,6 @@
 import logging
 
+from ansible_base.models import AuthenticatorUser
 from ansible_base.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
@@ -88,4 +89,17 @@ class UserSerializer(CommonModelSerializer):
         else:
             # User does not have a local password so pop this field
             ret.pop('password', None)
+
+        # Add last login results but only for yourself unless you are a superuser or auditor
+        request = self.context.get('request', None)
+        if request and request.user and (request.user.is_superuser or request.user.is_system_auditor or request.user.username == obj.username):
+            ret['last_login_results'] = {}
+            authentications = AuthenticatorUser.objects.filter(user=obj)
+            for authentication in authentications:
+                ret['last_login_results'][authentication.provider.id] = {
+                    'access_allowed': authentication.access_allowed,
+                    'last_login_map_results': authentication.last_login_map_results,
+                    'last_login_attempt': authentication.extra_data.get('auth_time', 'Unknown'),
+                }
+
         return ret
