@@ -49,7 +49,7 @@ COPY LICENSE.md django-ansible-base/pyproject.toml* /opt/aap_gateway/ansible_bas
 COPY django-ansible-base/requirements /opt/aap_gateway/ansible_base/requirements
 RUN if [[ -f /opt/aap_gateway/ansible_base/pyproject.toml ]]; then \
       /opt/aap_gateway/venv/bin/pip uninstall -y django-ansible-base && \
-      /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/ansible_base ; \
+      /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/ansible_base[filtering,swagger,authentication] ; \
     fi && \
     rm -rf /opt/aap_gateway/ansible_base
 
