@@ -1,1 +1,1 @@
-django-ansible-base @ git+https://github.com/ansible/django-ansible-base@devel#egg=django-ansible-base
+django-ansible-base @ git+https://github.com/ansible/django-ansible-base@devel#egg=django-ansible-base[filtering,swagger,authentication]
