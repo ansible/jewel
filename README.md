@@ -48,7 +48,7 @@ Please have the following prerequisites already installed on your development ma
   * make
   * openssl
 
-1. Create a python virtual envenvironment: `python3 -m venv <location>`
+1. Create a python virtual environment: `python3 -m venv <location>`
 2. Activate the virtual environment: `source <location>/bin/activate`
 3. Install the tools for development: `pip install -r requirements/requirements_dev.txt`
 4. Optionally generate and edit the proxy config file to point it to services you have running:
@@ -70,6 +70,10 @@ Please have the following prerequisites already installed on your development ma
 7. Start up your environment: `make docker-compose`
 
 This will build an `admin` user with the password `admin` and create any services you have defined in your proxy.yml file.
+
+## Starting other AAP services
+
+See [development doc](docs/development.md)
 
 ## Side cars
 
