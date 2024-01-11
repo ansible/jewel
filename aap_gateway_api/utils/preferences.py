@@ -7,7 +7,7 @@ from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
 from aap_gateway_api.models import gateway_preference_registry
-from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preference_types import MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
@@ -55,6 +55,7 @@ preference_type_mapping = {
     "bool": types.BooleanPreference,
     "url": URLPreference,
     "pem_private_key": PEMPrivateKeyPreference,
+    "image": MimeTypedImagePreference,
 }
 
 

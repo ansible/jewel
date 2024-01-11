@@ -1,5 +1,6 @@
 import logging
 
+from ansible_base.utils.validation import validate_image_data
 from cryptography.hazmat.primitives import serialization
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -33,4 +34,11 @@ class PEMPrivateKeyPreference(types.LongStringPreference):
             logger.exception("Unable to load private key from PEM key")
             raise ValidationError("Unable to load private key from PEM key")
 
+        return value
+
+
+class MimeTypedImagePreference(types.LongStringPreference):
+    def validate(self, value):
+        """Check that an uploaded image file is valid data and in valid format"""
+        validate_image_data(value)
         return value
