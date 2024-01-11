@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from ansible_base.utils.encryption import ENCRYPTED_STRING
+from ansible_base.utils.settings import SettingNotSetException
 from django.core.exceptions import ValidationError
 from dynamic_preferences.serializers import SerializationError
 
@@ -147,3 +148,40 @@ def test_preference_on_update(register_preference):
     # The callback gets 2 parameters, the old value, and the new value
     assert on_update_callback.call_args[0][0] == "hey"
     assert on_update_callback.call_args[0][1] == "hello test"
+
+
+def test_get_setting_not_set():
+    with pytest.raises(SettingNotSetException):
+        preferences.get_setting('junk_preference_name')
+
+
+def test_get_setting_set(register_preference):
+    register_preference(
+        section="general",
+        preference_name="test_preference",
+        default="hey",
+        encrypted=False,
+        preference_type="string",
+    )
+    value = preferences.get_setting('test_preference')
+    assert value == "hey"
+
+
+def test_get_setting_too_many(register_preference):
+    register_preference(
+        section="general",
+        preference_name="test_preference",
+        default="hey",
+        encrypted=False,
+        preference_type="string",
+    )
+    register_preference(
+        section="generic",
+        preference_name="test_preference",
+        default="hey there",
+        encrypted=False,
+        preference_type="string",
+    )
+    with pytest.raises(preferences.TooManyPreferencesException) as e:
+        preferences.get_setting('test_preference')
+    assert 'unable to get a setting by name' in str(e.value)
