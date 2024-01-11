@@ -114,6 +114,12 @@ container-startup.yml: tools/configs/container-startup.yml
 	fi;
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
+## Generate the Dockerfile file
+tools/generated/Dockerfile: tools/ansible/roles/sources/templates/Dockerfile.j2
+	ansible-playbook tools/ansible/generate-docker-compose.yml \
+	    -e @tools/ansible/vars/container_config.yml \
+	    -e @container-startup.yml
+
 ## Generate the docker-compose.yml file
 tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
 	ansible-playbook tools/ansible/generate-docker-compose.yml \
