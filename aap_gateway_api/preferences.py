@@ -154,3 +154,23 @@ register(
     help_text="URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page.",
     encrypted=False,
 )
+
+register(
+    section="local_login",
+    preference_name="custom_login_info",
+    default="",
+    required=False,
+    preference_type="longstring",
+    help_text="Provide a specific information (such as a legal notice or a disclaimer) to a text box in the login modal",
+    encrypted=False,
+)
+
+register(
+    section="local_login",
+    preference_name="custom_logo",
+    required=False,
+    default="",
+    preference_type="image",
+    help_text="Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)",
+    encrypted=False,
+)

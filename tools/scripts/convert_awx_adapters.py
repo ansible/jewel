@@ -604,6 +604,8 @@ def import_settings():
         ("LOCAL_PASSWORD_MIN_DIGITS", "password_min_digits"),
         ("LOCAL_PASSWORD_MIN_UPPER", "password_min_upper"),
         ("LOCAL_PASSWORD_MIN_SPECIAL", "password_min_special"),
+        ("CUSTOM_LOGIN_INFO", "custom_login_info"),
+        ("CUSTOM_LOGO", "custom_logo"),
     ]
     gateway_settings = {}
     for awx_setting_name, gateway_setting_name in settings_to_convert:
