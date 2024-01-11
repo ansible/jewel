@@ -1,4 +1,7 @@
+from typing import Any
+
 from ansible_base.utils.encryption import ENCRYPTED_STRING
+from ansible_base.utils.settings import SettingNotSetException
 from django.conf import settings
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
@@ -8,6 +11,10 @@ from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPrefere
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
+
+
+class TooManyPreferencesException(Exception):
+    pass
 
 
 def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
@@ -109,3 +116,17 @@ def initialize_preferences():
     # Then we ask the global_preferences for the value of the key and it will take the actions above and populate our DB for us
     for preference_name in gateway_preference_manager.keys():
         gateway_preference_manager[preference_name]
+
+
+def get_setting(name: str) -> Any:
+    possible_preferences = []
+    for preference in gateway_preference_registry.preferences():
+        if preference.name == name:
+            possible_preferences.append(preference)
+
+    if len(possible_preferences) == 0:
+        raise SettingNotSetException()
+    elif len(possible_preferences) == 1:
+        return get_preference_value_by_preference(possible_preferences[0])
+    else:
+        raise TooManyPreferencesException(f"There were {len(possible_preferences)} for setting {name}, unable to get a setting by name")
