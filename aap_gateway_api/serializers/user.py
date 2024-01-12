@@ -29,6 +29,7 @@ class UserSerializer(CommonModelSerializer):
             'is_superuser',
             'is_system_auditor',
         ]
+        read_only_fields = ["last_login"]
 
     def get_fields(self, *args, **kwargs):
         fields = super().get_fields(*args, **kwargs)
