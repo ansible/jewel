@@ -97,7 +97,8 @@ INSTALLED_APPS = [
 
 # User our own user model
 AUTH_USER_MODEL = 'aap_gateway_api.User'
-
+# Set our own Team model
+ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
