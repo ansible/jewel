@@ -69,7 +69,9 @@ Please have the following prerequisites already installed on your development ma
 6. Optionally clone `django-ansible-base` if you are going to be making changes to it. If you clone it, it must live directly inside your `aap-gateway` directory, and be called `django-ansible-base`. If you skip this step, the latest git version of `django-ansible-base` will be built into your development image.
 7. Start up your environment: `make docker-compose`
 
-This will build an `admin` user with the password `admin` and create any services you have defined in your proxy.yml file.
+This will build an `admin` user with random password (see value for `gateway_admin_password` in `container-startup.yml`) and create any services you have defined in your `proxy.yml` file.
+
+Note: You can force your own password by setting the `ADMIN_PASSWORD` environment variable before running `make docker-compose`.
 
 ## Starting other AAP services
 
