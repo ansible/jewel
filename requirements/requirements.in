@@ -1,4 +1,4 @@
-cryptography
+cryptography >= 41.0.6 # Required by django 
 Django>=4.2.7,<4.3.0
 djangorestframework
 django-crum
