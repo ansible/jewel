@@ -89,10 +89,11 @@ INSTALLED_APPS = [
     'dynamic_preferences',
     'django_extensions',
     'rest_framework',
-    'drf_spectacular',
     'aap_gateway_api',
     'django_grpc',
-    'ansible_base',
+    'ansible_base.authentication',
+    'ansible_base.rest_filters',
+    'ansible_base.api_documentation',
 ]
 
 # User our own user model
@@ -119,7 +120,6 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
     'PAGE_SIZE': 50,
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
@@ -273,9 +273,10 @@ ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentic
 
 ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
 
-ANSIBLE_BASE_FEATURES = {'AUTHENTICATION': True, 'SWAGGER': True, 'FILTERING': True}
+ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
+ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 
-from ansible_base import settings  # noqa: E402
+from ansible_base.lib import dynamic_config  # noqa: E402
 
-settings_file = os.path.join(os.path.dirname(settings.__file__), 'dynamic_settings.py')
+settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)

@@ -1,6 +1,6 @@
 import logging
 
-from ansible_base.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from django.core.exceptions import ValidationError
 from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError

@@ -1,7 +1,7 @@
 import logging
 
-from ansible_base.models import AuthenticatorUser
-from ansible_base.utils.encryption import ENCRYPTED_STRING
+from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
 from django.utils.translation import gettext_lazy as _

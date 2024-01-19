@@ -1,6 +1,6 @@
 import logging
 
-from ansible_base.utils.validation import validate_image_data
+from ansible_base.lib.utils.validation import validate_image_data
 from cryptography.hazmat.primitives import serialization
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator

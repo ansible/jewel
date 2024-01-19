@@ -38,4 +38,4 @@ ldap_configuration:
     GROUP_TYPE_PARAMS:
       name_attr: "cn"
       member_attr: "member"
-  type: "ansible_base.authenticator_plugins.ldap"
+  type: "ansible_base.authentication.authenticator_plugins.ldap"

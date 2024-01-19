@@ -21,7 +21,7 @@ class Preference(models.BasePreferenceModel):
         unique_together = ("section", "name")
 
     def save(self, *args, **kwargs):
-        from ansible_base.utils.encryption import ansible_encryption
+        from ansible_base.lib.utils.encryption import ansible_encryption
 
         if self.preference.encrypted:
             self.value = ansible_encryption.encrypt_string(self.value)
@@ -29,7 +29,7 @@ class Preference(models.BasePreferenceModel):
 
     @classmethod
     def from_db(cls, db, field_names, values):
-        from ansible_base.utils.encryption import ENCRYPTED_STRING, ansible_encryption
+        from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 
         instance = super().from_db(db, field_names, values)
         # We don't want to check the instance.preference.encrypted here because we could have a Fallback

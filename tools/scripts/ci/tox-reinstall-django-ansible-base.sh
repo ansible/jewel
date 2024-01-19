@@ -8,7 +8,7 @@
 ENV_NAME="$1"
 
 DAB_DIR="django-ansible-base"
-REQ_FILE="${DAB_DIR}/requirements/requirements.txt"
+REQ_FILE="${DAB_DIR}/requirements/requirements_all.txt"
 TOX_REQ_FILE=".tox/${ENV_NAME}/django_ansible_base_requirements.txt"
 
 # Exit if $DAB_DIR/.git doesn't exist
@@ -25,7 +25,7 @@ fi
 
 if [ "$REQS_CHANGED" -ne 0 ]; then
     echo "Changes detected in requirements. Installing django-ansible-base..."
-    pip install "./${DAB_DIR}/"
+    pip install "./${DAB_DIR}/"[rest_filters,api_documentation,authentication]
     echo "Caching requirements to avoid needlessly reinstalling..."
     cp "$REQ_FILE" "$TOX_REQ_FILE"
 else

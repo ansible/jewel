@@ -1,9 +1,8 @@
 import logging
 
-from ansible_base.urls import urls as base_urls
+from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
 from django.contrib import admin
 from django.urls import include, path, re_path
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from aap_gateway_api import views
 from aap_gateway_api.router import router
@@ -17,7 +16,9 @@ view_only_list = {'get': 'list'}
 
 urlpatterns = [
     # Load base URLs first
-    path(r'api/gateway/v1/', include(base_urls)),
+    path('api/gateway/v1/', include(api_version_urls)),
+    path('api/gateway/', include(api_urls)),
+    path('', include(root_urls)),
     path('admin/', admin.site.urls),
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
@@ -38,10 +39,5 @@ urlpatterns = [
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
     # Social auth
-    path('api/gateway/social/', include('social_django.urls', namespace='social')),
-    # drf spectacular (open api)
-    path('api/gateway/v1/docs/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/gateway/v1/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/gateway/v1/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('api/gateway/v1/', include(router.urls)),
 ]

@@ -21,7 +21,7 @@ oidc_configuration:
     SECRET: "7b1c3527-8702-4742-af69-2b74ee5742e8"
     ADDITIONAL_UNVERIFIED_ARGS:
       VERIFY_SSL: False
-  type: "ansible_base.authenticator_plugins.keycloak"
+  type: "ansible_base.authentication.authenticator_plugins.keycloak"
 
 saml_adapter_name: "Dev Keycloak SAML"
 saml_configuration:
@@ -60,4 +60,4 @@ saml_configuration:
       emailAddress: noone@nowhere.com
     ADDITIONAL_UNVERIFIED_ARGS:
       VERIFY_SSL: False
-  type: ansible_base.authenticator_plugins.saml
+  type: ansible_base.authentication.authenticator_plugins.saml

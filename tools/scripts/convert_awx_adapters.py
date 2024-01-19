@@ -114,7 +114,7 @@ def import_ldap_adapters():
             "users_unique": False,
             "remove_users": False,
             "configuration": {},
-            "type": "ansible_base.authenticator_plugins.ldap",
+            "type": "ansible_base.authentication.authenticator_plugins.ldap",
         }
         for setting in [
             'BIND_DN',
@@ -306,7 +306,7 @@ def import_saml_adapters(SAML_DATA=None):
             "users_unique": False,
             "remove_users": False,
             "configuration": {},
-            "type": "ansible_base.authenticator_plugins.saml",
+            "type": "ansible_base.authentication.authenticator_plugins.saml",
         }
         for setting in [
             'SP_ENTITY_ID',

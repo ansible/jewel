@@ -3,7 +3,7 @@ import uuid
 from collections import namedtuple
 
 import pytest
-from ansible_base.tests.conftest import (  # noqa: F401
+from test_app.tests.conftest import (  # noqa: F401
     admin_api_client,
     copy_fixture,
     local_authenticator,
