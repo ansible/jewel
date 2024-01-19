@@ -1,7 +1,7 @@
 from typing import Any
 
-from ansible_base.utils.encryption import ENCRYPTED_STRING
-from ansible_base.utils.settings import SettingNotSetException
+from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.settings import SettingNotSetException
 from django.conf import settings
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section

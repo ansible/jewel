@@ -1,4 +1,4 @@
-from ansible_base.models.common import NamedCommonModel
+from ansible_base.lib.abstract_models.common import NamedCommonModel
 from django.db import models
 
 from aap_gateway_api.models.environment import Environment

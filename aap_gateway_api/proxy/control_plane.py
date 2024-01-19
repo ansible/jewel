@@ -1,6 +1,6 @@
 import logging
 
-from ansible_base.utils.middleware import AuthenticatorBackendMiddleware
+from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
 from django.contrib.auth import get_user_model
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware

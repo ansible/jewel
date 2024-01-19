@@ -1,7 +1,7 @@
 from unittest import mock
 from unittest.mock import MagicMock
 
-from ansible_base.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from django.urls import reverse
 
 from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key
