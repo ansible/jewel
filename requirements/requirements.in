@@ -15,4 +15,5 @@ requests
 uwsgi
 xds-protos>=1.58
 PyYAML
-urllib3 >= 2.0.7 # not directly imported but pinned per https://github.com/ansible/aap-gateway/security/dependabot/6
+# Not directly imported but pinned per dependabot alerts
+urllib3 == 1.26.18 # https://github.com/ansible/aap-gateway/security/dependabot/6; edit: changed to 1.26.18 to fix build pipelines
