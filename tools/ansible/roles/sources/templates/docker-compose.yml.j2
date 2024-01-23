@@ -27,6 +27,7 @@ services:
       - db
     networks:
       - dbnet
+      - service-mesh
     ports:
       - "8000:8000"
       - "4444:4444"
@@ -55,8 +56,9 @@ services:
     image: quay.io/sclorg/postgresql-15-c9s
     networks:
       - dbnet
+      - service-mesh
     ports:
-      - "5432:5432"
+      - "5440:5432"
     volumes:
       - "aap_gw_db:/var/lib/psql/data"
 
@@ -77,6 +79,7 @@ services:
       localhost: "host-gateway"
     networks:
       - dbnet
+      - service-mesh
 
 # Optional containers
 {% if enabled_containers['keycloak']|bool %}
@@ -136,6 +139,8 @@ services:
 
 networks:
   dbnet:
+  service-mesh:
+    name: service-mesh
 
 volumes:
   aap_gw_db:
