@@ -1,5 +1,6 @@
+from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+
 from aap_gateway_api.models import Organization
-from aap_gateway_api.serializers.common import NamedCommonModelSerializer
 
 
 class OrganizationSerializer(NamedCommonModelSerializer):

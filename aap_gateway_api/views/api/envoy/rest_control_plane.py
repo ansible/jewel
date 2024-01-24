@@ -1,5 +1,3 @@
-import logging
-
 from envoy.config.cluster.v3.cluster_pb2 import Cluster
 from envoy.config.listener.v3.listener_pb2 import Listener
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryResponse
@@ -22,8 +20,6 @@ from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: 40
 from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: 401
 
 # isort: on
-
-logger = logging.getLogger('aap.gateway.views.proxy.rest_control_plane')
 
 
 class XDSView(APIView):

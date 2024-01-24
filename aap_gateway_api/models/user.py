@@ -26,6 +26,7 @@ class User(AbstractUser):
     is_system_auditor = models.BooleanField(default=False, null=False)
 
     reverse_foreign_key_fields = ['teams']
+    encrypted_fields = ()  # handed as special case by UserSerializer
 
     def save(self, *args, **kwargs):
         update_fields = list(kwargs.get('update_fields', []))

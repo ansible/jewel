@@ -1,7 +1,6 @@
 import logging
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
-from django.contrib.auth import get_user_model
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest, parse_cookie
@@ -14,7 +13,6 @@ from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_prefer
 
 MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware]
 
-User = get_user_model()
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 

@@ -1,6 +1,7 @@
 import logging
 
 from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
@@ -8,7 +9,6 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework.serializers import ValidationError
 
 from aap_gateway_api.models import User
-from aap_gateway_api.serializers.common import CommonModelSerializer
 from aap_gateway_api.utils import get_preference_value
 
 logger = logging.getLogger('aap.gateway.serializer.user')
