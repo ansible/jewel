@@ -1,9 +1,5 @@
-import logging
-
 from dynamic_preferences import models
 from dynamic_preferences.registries import GlobalPreferenceRegistry, preference_models
-
-logger = logging.getLogger('aap.gateway.models.preference')
 
 
 class PreferenceRegistry(GlobalPreferenceRegistry):

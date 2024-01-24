@@ -1,5 +1,4 @@
 import collections
-import logging
 
 from django.utils.translation import gettext_lazy as _
 from rest_framework.response import Response
@@ -9,8 +8,6 @@ from aap_gateway_api.models import Preference
 from aap_gateway_api.serializers import SettingSectionSerializer, SettingSingletonSerializer
 from aap_gateway_api.utils import get_preference_sections
 from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ViewWithHeaders
-
-logger = logging.getLogger('aap.gateway.views.preference')
 
 
 class PreferenceSingletonView(ViewWithHeaders):

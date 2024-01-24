@@ -1,8 +1,8 @@
+from ansible_base.lib.serializers.common import CommonModelSerializer, NamedCommonModelSerializer
 from rest_framework import serializers
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 from aap_gateway_api.models.service import API_PREFIX
-from aap_gateway_api.serializers.common import CommonModelSerializer, NamedCommonModelSerializer
 
 
 class HTTPPortSerializer(CommonModelSerializer):

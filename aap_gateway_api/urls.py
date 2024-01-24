@@ -10,9 +10,6 @@ from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverSe
 
 logger = logging.getLogger('aap.gateway.urls')
 
-list_actions = {'get': 'list', 'post': 'create'}
-detail_actions = {'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}
-view_only_list = {'get': 'list'}
 
 urlpatterns = [
     # Load base URLs first
@@ -32,7 +29,7 @@ urlpatterns = [
         name='login',
     ),
     path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
-    path('api/gateway/v1/me/', views.MeViewSet.as_view(view_only_list), name='me-list'),
+    path('api/gateway/v1/me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
     # settings
     re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
     # xDS
