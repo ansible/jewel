@@ -38,7 +38,7 @@ EXAMPLES = """
 - name: Make changes to the settings in automation platform gateway
   settings:
     settings:
-      gateway_token_name: X-AAP-GW-TOKEN
+      gateway_token_name: X-DAB-JW-TOKEN
       gateway_access_token_expiration: 600
       gateway_basic_auth_enabled: true
       gateway_proxy_url: https://localhost:9080

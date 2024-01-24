@@ -209,7 +209,7 @@ LOG_ROOT = '/var/log/gateway/'
 SESSION_COOKIE_SECURE = True
 
 # Seconds before sessions expire.
-# Note: This setting may be overridden by database settings.
+# TODO: Figure out how to make this note accurate! Note: This setting may be overridden by database settings.
 SESSION_COOKIE_AGE = 1800
 
 SESSION_COOKIE_NAME = 'gateway_sessionid'

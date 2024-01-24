@@ -8,5 +8,5 @@ def test_jwt_token_encode_decode(admin_user, set_preference, rsa_keypair):
     decoded = decode_signed_jwt(jwt_token)
     assert decoded["sub"] == admin_user.username
     assert decoded["email"] == admin_user.email
-    assert decoded["iss"] == "aap-gateway"
-    assert decoded["aud"] == "aap-services"
+    assert decoded["iss"] == "ansible-issuer"
+    assert decoded["aud"] == "ansible-services"

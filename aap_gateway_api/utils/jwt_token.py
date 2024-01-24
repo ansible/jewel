@@ -17,9 +17,9 @@ def create_signed_jwt(user):
     due_date = datetime.now() + timedelta(seconds=get_preference_value("proxy", "gateway_access_token_expiration"))
     teams = [{"name": team.name, "organization": team.organization.name} for team in user.teams.select_related("organization").all()]
     payload = {
-        "iss": "aap-gateway",
+        "iss": "ansible-issuer",
         "exp": int(due_date.timestamp()),
-        "aud": "aap-services",
+        "aud": "ansible-services",
         "sub": user.username,
         "first_name": user.first_name,
         "last_name": user.last_name,
@@ -36,7 +36,7 @@ def create_signed_jwt(user):
 
 
 def decode_signed_jwt(token):
-    return jwt.decode(token, get_jwt_rsa_key(public=True), algorithms=['RS256'], audience='aap-services')
+    return jwt.decode(token, get_jwt_rsa_key(public=True), algorithms=['RS256'], audience='ansible-services')
 
 
 def get_jwt_rsa_key(public=False):

@@ -4,7 +4,7 @@ from aap_gateway_api.utils.jwt_token import generate_jwt_keypair, update_jwt_pub
 register(
     section="proxy",
     preference_name='gateway_token_name',
-    default='X-AAP-GW-TOKEN',
+    default='X-DAB-JW-TOKEN',
     required=True,
     preference_type="string",
     help_text="The header name to push from the proxy to the backend service. WARNING: if this is changed, backends must be updated to compensate!",
