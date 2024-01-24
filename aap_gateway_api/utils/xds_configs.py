@@ -6,7 +6,7 @@ def path_rewrite_filter():
         "name": "lua_path_rewrite",
         "typed_config": {
             "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
-            "source_codes": {"rewrite.lua": {"filename": "/etc/envoy/envoy-path-rewrite.lua"}},
+            "source_codes": {"rewrite.lua": {"filename": settings.GATEWAY_PATH_REWRITE_SCRIPT_FILE}},
         },
     }
 

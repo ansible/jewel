@@ -238,6 +238,7 @@ if not read_key:
 
 GATEWAY_CERT_FILE = os.environ.get('GATEWAY_CERT_FILE', '/etc/gateway/gateway.crt')
 GATEWAY_KEY_FILE = os.environ.get('GATEWAY_KEY_FILE', '/etc/gateway/gateway.key')
+GATEWAY_PATH_REWRITE_SCRIPT_FILE = os.environ.get('GATEWAY_PATH_REWRITE_SCRIPT_FILE', '/etc/envoy/envoy-path-rewrite.lua')
 
 DYNAMIC_PREFERENCES = {
     'REGISTRY_MODULE': 'preferences',
