@@ -2,7 +2,7 @@
 - block:
     - name: Start database
       shell:
-        cmd: "docker-compose -f {{ sources_dest }}/docker-compose.yml up db -d --wait"
+        cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE') | default('docker compose') }} -f {{ sources_dest }}/docker-compose.yml up db -d --wait"
 
     - name: Wait for port to be opened
       ansible.builtin.wait_for:
@@ -25,7 +25,7 @@
 
     - name: Start keycloak
       shell:
-        cmd: "docker-compose -f {{ sources_dest }}/docker-compose.yml up keycloak -d --wait"
+        cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE') | default('docker compose') }} -f {{ sources_dest }}/docker-compose.yml up keycloak -d --wait"
 
     - name: Generate certificates for keycloak
       command: 'openssl req -new -x509 -days 365 -nodes -out {{ public_key_file }} -keyout {{ private_key_file }} -subj "{{ cert_subject }}"'
@@ -98,7 +98,7 @@
   always:
     - name: Shutdown containers we started
       shell:
-        cmd: "docker-compose -f {{ sources_dest }}/docker-compose.yml stop {{ container }}"
+        cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE') | default('docker compose') }} -f {{ sources_dest }}/docker-compose.yml stop {{ container }}"
       loop:
         - keycloak
         - db
