@@ -1,24 +1,24 @@
-from ansible_base.lib.serializers.common import CommonModelSerializer, NamedCommonModelSerializer
+from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from rest_framework import serializers
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 from aap_gateway_api.models.service import API_PREFIX
 
 
-class HTTPPortSerializer(CommonModelSerializer):
+class HTTPPortSerializer(NamedCommonModelSerializer):
     reverse_url_name = 'http_port-detail'
 
     class Meta:
         model = HTTPPort
-        fields = CommonModelSerializer.Meta.fields + ['number', 'use_https', 'is_api_port']
+        fields = NamedCommonModelSerializer.Meta.fields + ['number', 'use_https', 'is_api_port']
 
 
-class ServiceClusterSerializer(CommonModelSerializer):
+class ServiceClusterSerializer(NamedCommonModelSerializer):
     reverse_url_name = 'service_cluster-detail'
 
     class Meta:
         model = ServiceCluster
-        fields = CommonModelSerializer.Meta.fields + [
+        fields = NamedCommonModelSerializer.Meta.fields + [
             'service_type',
         ]
 
@@ -43,12 +43,12 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
         read_only_fields = ('gateway_path',)
 
 
-class ServiceNodeSerializer(CommonModelSerializer):
+class ServiceNodeSerializer(NamedCommonModelSerializer):
     reverse_url_name = 'service_node-detail'
 
     class Meta:
         model = ServiceNode
-        fields = CommonModelSerializer.Meta.fields + ['address', 'service']
+        fields = NamedCommonModelSerializer.Meta.fields + ['address', 'service']
 
 
 class AdditionalRouteSerializer(NamedCommonModelSerializer):

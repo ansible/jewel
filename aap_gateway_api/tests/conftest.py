@@ -113,7 +113,7 @@ def http_port_factory():
         port_number = random.randint(10000, 20000)
         while port_number in port_numbers:
             port_number = random.randint(10000, 20000)
-        port = HTTPPort.objects.create(number=port_number)
+        port = HTTPPort.objects.create(name=f"port-{port_number}", number=port_number)
         return port
 
     yield _http_port
@@ -131,7 +131,7 @@ def http_api_port_factory():
         # There can only be one API port
         api_port = HTTPPort.objects.filter(is_api_port=True).first()
         if api_port is None:
-            api_port = HTTPPort.objects.create(number=9080, is_api_port=True)
+            api_port = HTTPPort.objects.create(name="port-9080", number=9080, is_api_port=True)
         else:
             api_port.number = 9080
             api_port.save()
@@ -152,13 +152,14 @@ ServiceHierarchy = namedtuple("ServiceHierarchy", ["service_cluster", "service_n
 for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
 
     def _service_cluster(shortname=shortname):
-        cluster = ServiceCluster.objects.create(service_type=shortname)
+        cluster = ServiceCluster.objects.create(name=shortname, service_type=shortname)
         yield cluster
         cluster.delete()
 
-    def _service_node(request, name=name):
+    def _service_node(request, randname, name=name):  # noqa: F402
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         node = ServiceNode.objects.create(
+            name=randname("Service Node"),
             service=service_cluster,
             address=f"10.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}",
         )
