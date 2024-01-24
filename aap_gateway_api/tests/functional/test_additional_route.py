@@ -116,3 +116,20 @@ def test_additional_route_api_port_cannot_start_with_api_prefix(admin_api_client
     assert response.status_code == 400
     assert AdditionalRoute.objects.count() == 0
     assert response.data['gateway_path'][0] == "Custom routes on the API port cannot start with '/api/'"
+
+
+def test_additional_route_name_must_be_unique(admin_api_client, additional_route_controller):
+    url = reverse('route-list')
+    data = {
+        'name': additional_route_controller.name,
+        'port': additional_route_controller.port.pk,
+        'service_cluster': additional_route_controller.service_cluster.pk,
+        'service_path': '/test',
+        'service_port': 8080,
+        'description': 'test',
+        'gateway_path': '/test',
+        'is_service_https': False,
+    }
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == 400
+    assert response.data['name'][0].code == 'unique'

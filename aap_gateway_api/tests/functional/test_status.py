@@ -121,10 +121,12 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
     get.return_value = Mock(status_code=200, json=lambda: {"test": "test"})
 
     new_service_node = ServiceNode.objects.create(
+        name="Node 127.0.0.99",
         service=full_service_hierarchy_controller.service_cluster,
         address="127.0.0.99",
     )
     another_service_node = ServiceNode.objects.create(
+        name="Node 127.0.0.100",
         service=full_service_hierarchy_controller.service_cluster,
         address="127.0.0.100",
     )

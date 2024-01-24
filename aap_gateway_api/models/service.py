@@ -1,4 +1,4 @@
-from ansible_base.lib.abstract_models.common import CommonModel, NamedCommonModel
+from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -8,7 +8,7 @@ from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_
 API_PREFIX = "/api/"
 
 
-class HTTPPort(CommonModel):
+class HTTPPort(UniqueNamedCommonModel):
     """
     Represents a port that Envoy will listen for HTTP traffic on.
     """
@@ -76,7 +76,7 @@ class HTTPPort(CommonModel):
         return f"port-{self.number}"
 
 
-class ServiceCluster(CommonModel):
+class ServiceCluster(UniqueNamedCommonModel):
     """
     Represents an Ansible service which can be comprised of multiple load balanced nodes.
     """
@@ -105,19 +105,19 @@ class ServiceCluster(CommonModel):
         return self.get_service_type_display()
 
 
-class ServiceNode(CommonModel):
+class ServiceNode(UniqueNamedCommonModel):
     """
     Individual node in a service cluster.
     """
 
     class Meta:
-        unique_together = ('service', 'address')
+        models.UniqueConstraint("address", name="one_address_per_gateway")
 
     service = models.ForeignKey(ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text="Ansible service cluster that this node belongs to.")
     address = models.CharField(max_length=255, help_text="Network address to route traffic for this service to.")
 
 
-class Route(NamedCommonModel):
+class Route(UniqueNamedCommonModel):
     """
     Represents one route to a specific Ansible service cluster. Each route must be
     configured to listen on a pre configured HTTP port, and multiple routes can

@@ -26,7 +26,9 @@ class Command(BaseCommand):
 
         self.stdout.write(f'Creating listener on port {config["proxy"]["api_port"]}')
         api_port, _ = HTTPPort.objects.update_or_create(
-            is_api_port=True, defaults={"number": config["proxy"]["api_port"], "use_https": config["proxy"]["use_tls"]}
+            name=f"port-{config['proxy']['api_port']}",
+            is_api_port=True,
+            defaults={"number": config["proxy"]["api_port"], "use_https": config["proxy"]["use_tls"]},
         )
 
         services = config.get("services", {})
@@ -38,7 +40,7 @@ class Command(BaseCommand):
                 raise CommandError(f"{service_type} is not allowed.")
 
             self.stdout.write(f'Creating cluster for {service_type}')
-            service, _ = ServiceCluster.objects.get_or_create(service_type=service_type)
+            service, _ = ServiceCluster.objects.get_or_create(name=service_type, service_type=service_type)
 
             api_route, _ = ServiceAPIRoute.objects.update_or_create(
                 service_cluster=service,
@@ -55,7 +57,7 @@ class Command(BaseCommand):
             ServiceNode.objects.filter(service=service).delete()
 
             for instance in cfg["nodes"]:
-                ServiceNode.objects.create(service=service, **instance)
+                ServiceNode.objects.create(name=f"Node {name} - {instance['address']}", service=service, **instance)
 
             if service_type == "hub":
                 self.stdout.write(f'Creating /v2/ route for {service_type}')
