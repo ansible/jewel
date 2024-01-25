@@ -9,6 +9,7 @@ services:
     command:
       - /usr/bin/launch-gateway
     container_name: aap_gw_1
+    hostname: aap-gw-1
     depends_on:
       - db
     expose:
@@ -64,6 +65,7 @@ services:
 
   proxy:
     container_name: aap_gw_proxy_1
+    hostname: aap-gw-proxy-1
     image: envoyproxy/envoy:v1.24-latest
     environment:
       - ENVOY_UID=0
