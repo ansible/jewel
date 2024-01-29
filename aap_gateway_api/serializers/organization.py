@@ -10,4 +10,6 @@ class OrganizationSerializer(NamedCommonModelSerializer):
         model = Organization
         fields = NamedCommonModelSerializer.Meta.fields + [
             'environment',
+            'description',
+            'users',
         ]

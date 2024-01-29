@@ -12,5 +12,6 @@ class TeamSerializer(NamedCommonModelSerializer):
         fields = NamedCommonModelSerializer.Meta.fields + [
             'organization',
             'users',
+            'description',
         ]
         lookup_field = 'users'

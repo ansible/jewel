@@ -6,9 +6,10 @@ from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
 from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
 from rest_framework.serializers import ValidationError
 
-from aap_gateway_api.models import User
+from aap_gateway_api.models import Organization, User
 from aap_gateway_api.utils import get_preference_value
 
 logger = logging.getLogger('aap.gateway.serializer.user')
@@ -16,6 +17,8 @@ logger = logging.getLogger('aap.gateway.serializer.user')
 
 class UserSerializer(CommonModelSerializer):
     reverse_url_name = 'user-detail'
+    # This needs to be explicitly so it's not required
+    organizations = serializers.PrimaryKeyRelatedField(many=True, queryset=Organization.objects.all(), required=False)
 
     class Meta(CommonModelSerializer.Meta):
         model = User
@@ -28,6 +31,7 @@ class UserSerializer(CommonModelSerializer):
             'password',
             'is_superuser',
             'is_system_auditor',
+            'organizations',
         ]
         read_only_fields = ["last_login"]
 
