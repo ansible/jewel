@@ -205,3 +205,4 @@ collection-test: collection-install
 	cd ~/.ansible/collections/ansible_collections/infra/gateway_configuration && \
 	  ansible-test integration --venv --requirements --coverage
 
+include aap-dev/makefile.mk

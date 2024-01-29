@@ -51,18 +51,21 @@ line-length = 160
 fast = true
 skip-string-normalization = true
 force-exclude = '''
-.*/migrations/
+(
+   .*/migrations/
+ | aap-dev/*
+)
 '''
 
 [tool.isort]
 profile = "black"
 line_length = 160
-extend_skip = ["aap_gateway_api/migrations", "django-ansible-base"]
+extend_skip = ["aap_gateway_api/migrations", "django-ansible-base", "aap-dev"]
 
 [tool.flake8]
 max-line-length = 160
 extend-ignore = ["E203"]
-exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base']
+exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base', 'aap-dev/*']
 # E402: module level import not at top of file. Ansible modules follow a
 # somewhat different convention here because DOCUMENTATION, EXAMPLES, and
 # RETRUN module variables contain documentation.
