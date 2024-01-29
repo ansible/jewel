@@ -145,6 +145,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'aap_gateway_api.wsgi.application'
 
+# This is a gateway system account that gets created. If you change this after
+# the account is created, you will need to manually update the username of the
+# account to match.
+#
+# We use an underscore prefix to make it less likely to conflict with a real
+# user.
+SYSTEM_USERNAME = '_system'
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases

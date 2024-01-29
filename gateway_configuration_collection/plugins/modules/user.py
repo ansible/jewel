@@ -55,6 +55,10 @@ options:
       description:
         - Write-only field used to change the password.
       type: str
+    organizations:
+      description:
+        - List of organizations to associate with the user
+      type: list
     update_secrets:
       description:
         - C(true) will always change password if user specifies password, even if API gives $encrypted$ for password.
@@ -111,6 +115,7 @@ def main():
         is_superuser=dict(type="bool", aliases=["superuser"]),
         is_system_auditor=dict(type="bool", aliases=["auditor"]),
         password=dict(no_log=True),
+        organizations=dict(type="list"),
         update_secrets=dict(type="bool", default=True, no_log=False),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
@@ -126,6 +131,7 @@ def main():
     is_superuser = module.params.get("is_superuser")
     is_system_auditor = module.params.get("is_system_auditor")
     password = module.params.get("password")
+    organizations = module.params.get("organizations")
     state = module.params.get("state")
 
     # Attempt to look up an existing item based on the provided data
@@ -154,6 +160,8 @@ def main():
         new_fields["is_system_auditor"] = is_system_auditor
     if password is not None:
         new_fields["password"] = password
+    if organizations is not None:
+        new_fields["organizations"] = organizations
 
     # module.fail_json(msg="mod {name}".format(name=new_fields))
     module.create_or_update_if_needed(existing_item, new_fields, endpoint="users", item_type="user")

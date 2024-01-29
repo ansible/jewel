@@ -142,6 +142,7 @@ router.register(
     views.UserViewSet,
     related_views={
         'teams': (views.TeamViewSet, 'teams'),
+        'organizations': (views.OrganizationViewSet, 'organizations'),
     },
 )
 router.register(
@@ -155,7 +156,8 @@ router.register(
     r'organizations',
     views.OrganizationViewSet,
     related_views={
-        'teams': (views.TeamViewSet, 'team_set'),
+        'teams': (views.TeamViewSet, 'teams'),
+        'users': (views.UserViewSet, 'users'),
     },
 )
 router.register(
