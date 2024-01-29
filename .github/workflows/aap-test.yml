@@ -1,0 +1,19 @@
+---
+name: aap dev env tests
+on: workflow_dispatch
+
+jobs:
+  aap-smoke:
+    name: aap dev env smoke tests
+    runs-on: ubuntu-latest
+    env:
+      HEADLESS: "yes"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Spin up the dev env
+        run: make dev-up
+
+      - name: Perform smoke tests
+        run: make smoke
