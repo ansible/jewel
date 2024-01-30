@@ -59,7 +59,7 @@ services:
       - dbnet
       - service-mesh
     ports:
-      - "5440:5432"
+      - "{{ db_port }}:5432"
     volumes:
       - "aap_gw_db:/var/lib/psql/data"
 
@@ -86,7 +86,7 @@ services:
 # Optional containers
 {% if enabled_containers['keycloak']|bool %}
   keycloak:
-    image: quay.io/keycloak/keycloak:{{ keycloak_container_version }}
+    image: {{ keycloak_image }}:{{ keycloak_image_version }}
     container_name: aap_gw_keycloak_1
     hostname: keycloak
     user: "${UID}"
@@ -100,6 +100,7 @@ services:
       DB_DATABASE: keycloak
       DB_USER: {{ db_username }}
       DB_PASSWORD: {{ db_password }}
+      DB_PORT: 5432
     depends_on:
       - db
     networks:
