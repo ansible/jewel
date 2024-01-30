@@ -102,7 +102,7 @@ help/generate:
 
 ## Start the docker container
 docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
-	ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
+	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Generate the default container-startup.yml file

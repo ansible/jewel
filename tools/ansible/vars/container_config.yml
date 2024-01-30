@@ -4,6 +4,7 @@ gateway_port: 8000
 proxy_port: 443
 db_username: gateway
 db_password: gateway
+db_port: 5440
 container_reference: localhost
 # This is where to put all the docker source files relative to the tools/docker-compose/ansible directory
 sources_dest: '../generated'
@@ -15,7 +16,8 @@ enabled_containers:
 
 # Keycloak settings
 keycloak_exposed_port: 8443
-keycloak_container_version: 15.0.2
+keycloak_image: quay.io/keycloak/keycloak
+keycloak_image_version: 15.0.2
 keycloak_username: admin
 keycloak_password: admin
 cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN="

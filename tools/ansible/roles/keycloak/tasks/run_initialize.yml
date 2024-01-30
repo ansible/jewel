@@ -6,7 +6,7 @@
 
     - name: Wait for port to be opened
       ansible.builtin.wait_for:
-        port: 5432
+        port: "{{ db_port }}"
         delay: 2
 
     - name: See if keycloak database already exists
