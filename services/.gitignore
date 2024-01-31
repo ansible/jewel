@@ -1,0 +1,5 @@
+# This file exists so that this directory will exist in git land
+# Ignore everything in this directory
+*
+# Except this file
+!.gitignore
