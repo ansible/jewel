@@ -6,14 +6,25 @@ from aap_gateway_api.models import User
 
 
 class Team(AbstractTeam):
-    class Meta:
+    class Meta(AbstractTeam.Meta):
         app_label = 'aap_gateway_api'
-        ordering = ('organization', 'name')
-        models.UniqueConstraint("name", "organization", name="unique_name_organization")
 
     users = models.ManyToManyField(
         User,
         related_name='teams',
         blank=True,
         help_text=_("The list of users on this team"),
+    )
+
+    admins = models.ManyToManyField(
+        User,
+        related_name='teams_administered',
+        blank=True,
+        help_text=_("The list of admins for this team"),
+    )
+
+    parents = models.ManyToManyField(
+        'self',
+        blank=True,
+        help_text=_("The list of teams that are parents of this team"),
     )

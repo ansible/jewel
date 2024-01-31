@@ -1,4 +1,5 @@
 from ansible_base.lib.abstract_models.organization import AbstractOrganization
+from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -20,6 +21,20 @@ class Organization(AbstractOrganization):
         null=True,
         help_text=_("The environment this organization belongs to"),
         related_name='organizations',
+    )
+
+    users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="organizations",
+        blank=True,
+        help_text=_("The list of users in this organization."),
+    )
+
+    admins = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="organizations_administered",
+        blank=True,
+        help_text=_("The list of admins for this organization."),
     )
 
     reverse_foreign_key_fields = ['teams']

@@ -205,3 +205,21 @@ def test_organizations_summary_fields_counts(admin_api_client, organization, org
     assert response.status_code == 200
     assert response.data["summary_fields"]["related_field_counts"]["users"] == 1
     assert response.data["summary_fields"]["related_field_counts"]["teams"] == 2
+
+
+def test_organizations_admins_association(admin_api_client, organization, user):
+    """
+    Test that we can (dis)associate admins with an organization (from the org side).
+    """
+    assert organization.admins.count() == 0
+
+    url = reverse("organization-admins-associate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [user.pk]})
+    assert response.status_code == 204
+    assert organization.admins.count() == 1
+    assert organization.admins.first() == user
+
+    url = reverse("organization-admins-disassociate", kwargs={"pk": organization.pk})
+    response = admin_api_client.post(url, data={"instances": [user.pk]})
+    assert response.status_code == 204
+    assert organization.admins.count() == 0

@@ -158,6 +158,7 @@ router.register(
     related_views={
         'teams': (views.TeamViewSet, 'teams'),
         'users': (views.UserViewSet, 'users'),
+        'admins': (views.UserViewSet, 'admins'),
     },
 )
 router.register(
@@ -173,6 +174,11 @@ router.register(
 router.register(
     r'teams',
     views.TeamViewSet,
+    related_views={
+        'users': (views.UserViewSet, 'users'),
+        'admins': (views.UserViewSet, 'admins'),
+        'parents': (views.TeamViewSet, 'parents'),
+    },
 )
 router.register(
     r'service_nodes',
