@@ -1,7 +1,8 @@
 ---
 name: aap dev env tests
-on: workflow_dispatch
-
+on:
+  pull_request:
+  push:
 jobs:
   aap-smoke:
     name: aap dev env smoke tests
