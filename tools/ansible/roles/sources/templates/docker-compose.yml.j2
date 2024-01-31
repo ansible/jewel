@@ -35,7 +35,7 @@ services:
     user: "${UID:-1000}"
     volumes:
       - $PWD:/opt/aap_gateway/src:z
-      - $PWD/django-ansible-base:/opt/aap_gateway/ansible_base:z
+      - $PWD/django-ansible-base:/opt/aap_gateway/django-ansible-base:z
       - $PWD/tools/configs/nginx.conf:/etc/gateway/nginx.conf:z
       - $PWD/tools/configs/nginx-gateway.conf:/etc/gateway/nginx-gateway.conf:z
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
