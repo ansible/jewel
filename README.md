@@ -83,7 +83,7 @@ There are additional services available to be started alongside gateway to enabl
 
 At the beginning of you file you will see the following options:
 ```
-gateway_host: https://localhost:8043
+gateway_host: https://localhost:8000
 gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 10.0.0.71
