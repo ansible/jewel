@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import os
+import socket
 from pathlib import Path
 
 from split_settings.tools import include, optional
@@ -226,6 +227,8 @@ GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
 
 # Disallow sending csrf cookies over insecure connections
 CSRF_COOKIE_SECURE = True
+
+CLUSTER_HOST_ID = socket.gethostname()
 
 # Make this unique, and don't share it with anybody.
 secret_key_file = os.environ.get('GATEWAY_SECRET_KEY_FILE', '/etc/gateway/SECRET_KEY')
