@@ -12,4 +12,5 @@ class OrganizationSerializer(NamedCommonModelSerializer):
             'environment',
             'description',
             'users',
+            'admins',
         ]
