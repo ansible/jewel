@@ -51,3 +51,6 @@ tools/generated/*
 
 # Dev
 aap_gateway_dev
+
+# aap-dev
+awx/
