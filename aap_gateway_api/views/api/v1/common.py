@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import views, viewsets
 
 from aap_gateway_api.utils import get_api_version
@@ -8,6 +9,7 @@ class ViewWithHeaders(views.APIView):
         response = super().finalize_response(request, response, *args, **kwargs)
         response['X-API-Product-Version'] = get_api_version()
         response['X-API-Product-Name'] = 'Gateway'
+        response['X-API-Node'] = getattr(settings, 'CLUSTER_HOST_ID', 'Unknown')
         return response
 
 
