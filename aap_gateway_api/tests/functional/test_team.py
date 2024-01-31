@@ -43,8 +43,10 @@ def test_teams_parents_works(admin_api_client, randname, organization, team):
     assert response.status_code == 200
     results = response.data["results"]
     assert len(results) == 2
-    assert results[1]["name"] == random_name
-    assert results[1]["parents"] == [team.id]
+    for result in results:
+        assert result["name"] in [random_name, team.name]
+        if result["name"] == random_name:
+            assert result["parents"] == [team.id]
 
 
 def test_teams_users_association(admin_api_client, team, user):
