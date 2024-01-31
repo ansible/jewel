@@ -1,5 +1,5 @@
 ### Quick Start
-From the root of `aap-gateway`.
+From the `aap-dev` directory.
 
 `make dev-up`
 
@@ -19,11 +19,11 @@ Just in case it is not obvious.
 aap-gateway/
 ├── aap-dev						   <-- all the aap developer stuff jammed in here
 │   ├── controller_settings.py	   <-- awx settings that makes it controller
-│   ├── makefile.mk				   <-- included by parent Makefile
+│   ├── Makefile				   <-- Entrypoint for the aap dev env
 │   ├── README.md				   <-- (you are here)
 │   └── smoke.py				   <-- smoke tests for gateway and controller behind gateway
 ├── aap_gateway_api	               <-- gateway source code
-├── awx                            <-- awx git clone location
+├── services                       <-- awx git clone location
 ├── container-startup.yml		   <-- gateway dev env config
 ├── Makefile					   <-- root Makefile
 ```
