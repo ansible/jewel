@@ -33,7 +33,6 @@ Configure your local controller and hub instances in tools/configs/proxy.yml. Th
 services:
   hub:
     use_tls: false              <- set to true if the instance you're proxying to uses HTTPS
-    proxy_root: /api/hub/       <- path on the proxy host that the service will be served from
     service_root: /api/galaxy/  <- path on the service host where the service's API lives
 
     load_balance:               <- multiple hosts for the service can be listed here for load balancing
