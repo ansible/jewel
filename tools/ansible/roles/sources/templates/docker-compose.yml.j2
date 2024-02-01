@@ -66,7 +66,9 @@ services:
   proxy:
     container_name: aap_gw_proxy_1
     hostname: aap-gw-proxy-1
-    image: envoyproxy/envoy:v1.24-latest
+    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    entrypoint: /usr/local/bin/envoy
+    command: --config-path /etc/envoy/envoy.yaml
     environment:
       - ENVOY_UID=0
     ports:
