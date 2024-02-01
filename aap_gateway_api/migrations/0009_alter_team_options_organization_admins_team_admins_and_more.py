@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='team',
             name='parents',
-            field=models.ManyToManyField(blank=True, help_text='The list of teams that are parents of this team', to='aap_gateway_api.team'),
+            field=models.ManyToManyField(blank=True, symmetrical=False, help_text='The list of teams that are parents of this team', to='aap_gateway_api.team'),
         ),
         migrations.AlterUniqueTogether(
             name='team',
