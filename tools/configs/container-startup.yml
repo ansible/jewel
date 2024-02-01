@@ -5,3 +5,4 @@ gateway_admin_password: admin
 container_reference: 'localhost'
 # keycloak_enabled: True
 # ldap_enabled: True
+# tacacs_enabled: True

@@ -137,7 +137,7 @@ services:
     container_name: aap_gw_tacacs_1
     hostname: tacacs
     ports:
-      - "49:49"
+      - "{{ tacacs_exposed_tacacs_port }}:49"
 {% endif %}
 
 networks:
