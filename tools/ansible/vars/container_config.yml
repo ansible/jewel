@@ -34,3 +34,6 @@ ldap_private_key_file_name: 'ldap.key'
 
 # Tacacs plus
 tacacs_container_version: latest
+tacacs_exposed_tacacs_port: 49
+
+
