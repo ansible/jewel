@@ -1,5 +1,5 @@
 ---
-- name: Add gateway user  # noqa fqcn[action-core]
+- name: "Users | Configuration"  # noqa fqcn[action-core]
   infra.gateway_configuration.user:
     username:                 "{{ __gateway_user_accounts_item.username | mandatory }}"
     # the 'true' in the second default leads to no password being set if the default password is empty
@@ -19,7 +19,7 @@
     gateway_token:            "{{ gateway_oauthtoken | default(omit, true) }}"
     gateway_request_timeout:  "{{ gateway_request_timeout | default(omit, true) }}"
     gateway_validate_certs:   "{{ gateway_validate_certs | default(omit) }}"
-  loop: "{{ users if users is defined else gateway_user_accounts }}"
+  loop: "{{ gateway_users if gateway_users is defined else gateway_user_accounts }}"
   loop_control:
     loop_var: __gateway_user_accounts_item
   no_log: "{{ gateway_configuration_users_secure_logging }}"
@@ -30,7 +30,7 @@
   vars:
     ansible_async_dir: '{{ gateway_configuration_async_dir }}'
 
-- name: "Configure Users | Wait for finish the Users creation"
+- name: "Users | Wait for finish the configuration"
   ansible.builtin.async_status:
     jid: "{{ __gateway_user_accounts_job_async_results_item.ansible_job_id }}"
   register: __gateway_user_accounts_job_async_result

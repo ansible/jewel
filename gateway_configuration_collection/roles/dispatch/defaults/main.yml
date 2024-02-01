@@ -6,4 +6,19 @@ gateway_configuration_dispatcher_roles:
   - role: users
     var: infra.gateway_configuration.gateway_user_accounts
     tags: users
+  - role: http_ports
+    var: infra.gateway_configuration.http_ports
+    tags: http_ports
+  - role: service_clusters
+    var: infra.gateway_configuration.gateway_service_clusters
+    tags: service_clusters
+  - role: service_nodes
+    var: infra.gateway_configuration.gateway_service_nodes
+    tags: service_nodes
+  - role: services
+    var: infra.gateway_configuration.gateway_services
+    tags: services
+  - role: routes
+    vars: infra.gateway_configuration.gateway_routes
+    tags: routes
 ...

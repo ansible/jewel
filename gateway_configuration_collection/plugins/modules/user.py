@@ -65,14 +65,10 @@ options:
         - C(false) will only set the password if other values change too.
       type: bool
       default: true
-    state:
-      description:
-        - Desired state of the resource.
-        - Enforced state C(enforced) will default values of any option not provided.
-      choices: ["present", "absent", "exists", "enforced"]
-      default: "present"
-      type: str
-extends_documentation_fragment: infra.gateway_configuration.auth
+
+extends_documentation_fragment:
+- infra.gateway_configuration.state
+- infra.gateway_configuration.auth
 """
 
 
@@ -102,7 +98,8 @@ EXAMPLES = """
 ...
 """
 
-from ..module_utils.aap_module import AAPModule
+from ..module_utils.aap_module import AAPModule  # noqa
+from ..module_utils.aap_user import AAPUser  # noqa
 
 
 def main():
@@ -123,48 +120,7 @@ def main():
     # Create a module for ourselves
     module = AAPModule(argument_spec=argument_spec, supports_check_mode=True)
 
-    # Extract our parameters
-    username = module.params.get("username")
-    first_name = module.params.get("first_name")
-    last_name = module.params.get("last_name")
-    email = module.params.get("email")
-    is_superuser = module.params.get("is_superuser")
-    is_system_auditor = module.params.get("is_system_auditor")
-    password = module.params.get("password")
-    organizations = module.params.get("organizations")
-    state = module.params.get("state")
-
-    # Attempt to look up an existing item based on the provided data
-    existing_item = module.get_one("users", name_or_id=username, check_exists=(state == "exists"))
-
-    if state == "absent":
-        # If the state was absent we can let the module delete it if needed, the module will handle exiting from this
-        module.delete_if_needed(existing_item)
-    elif state == "enforced":
-        new_fields = module.get_enforced_defaults("users")[0]
-    else:
-        new_fields = {}
-
-    # Create the data that gets sent for create and update
-    if username is not None:
-        new_fields["username"] = module.get_item_name(existing_item) if existing_item else username
-    if first_name is not None:
-        new_fields["first_name"] = first_name
-    if last_name is not None:
-        new_fields["last_name"] = last_name
-    if email is not None:
-        new_fields["email"] = email
-    if is_superuser is not None:
-        new_fields["is_superuser"] = is_superuser
-    if is_system_auditor is not None:
-        new_fields["is_system_auditor"] = is_system_auditor
-    if password is not None:
-        new_fields["password"] = password
-    if organizations is not None:
-        new_fields["organizations"] = organizations
-
-    # module.fail_json(msg="mod {name}".format(name=new_fields))
-    module.create_or_update_if_needed(existing_item, new_fields, endpoint="users", item_type="user")
+    AAPUser(module).manage()
 
 
 if __name__ == "__main__":

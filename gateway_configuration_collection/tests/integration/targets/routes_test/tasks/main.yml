@@ -1,0 +1,235 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_http_ports_secure_logging: false
+    gateway_configuration_service_clusters_secure_logging: false
+    gateway_configuration_routes_secure_logging: false
+
+
+- block:
+  ### Create Http Port ###
+  - name: Create Http Ports
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      http_ports:
+      - name: "Port 9082"
+        number: 9082
+        use_https: true
+      - name: "Port 8050"
+        number: 8050
+  - debug:
+      var: __gateway_http_ports_job_async_result
+
+  - name: Assert Create Http Ports
+    assert:
+      that:
+      - __gateway_http_ports_job_async_result.results[0] is changed
+      - __gateway_http_ports_job_async_result.results[1] is changed
+
+  ### Create Service Clusters ###
+  - name: Create Service Clusters
+    include_role:
+      name: infra.gateway_configuration.service_clusters
+    vars:
+      gateway_service_clusters:
+        - name: "gateway"
+          service_type: "gateway"
+        - name: "hub"
+          service_type: "hub"
+        - name: "controller"
+          service_type: "controller"
+  - debug:
+      var: __gateway_service_clusters_job_async_result
+
+  - name: Assert Create Service Clusters Port tests passed
+    assert:
+      that:
+        - __gateway_service_clusters_job_async_result.results[0] is changed
+        - __gateway_service_clusters_job_async_result.results[1] is changed
+        - __gateway_service_clusters_job_async_result.results[1] is changed
+
+  ### Create Routes ###
+  - name: Create Routes
+    include_role:
+      name: infra.gateway_configuration.routes
+    vars:
+      gateway_routes:
+      - name: Gateway Svc Route
+        description: Gateway Service Route
+        gateway_path: '/gw-svc-1/v1/'
+        http_port: Port 9082
+        service_cluster: gateway
+        service_path: '/aaa/v1/'
+        service_port: 1234
+      - name: Gateway Svc Route 2
+        gateway_path: '/gw-svc-2/v1/'
+        http_port: "{{ __gateway_http_ports_job_async_result.results[0].id }}"  # Port 9082
+        service_cluster: gateway
+        is_service_https: true
+        service_path: '/bbb/v2/'
+        service_port: 2345
+      - name: Hub Svc Route
+        gateway_path: '/hub-svc-1/'
+        http_port: Port 8050
+        service_cluster: hub
+        service_path: '/ccc/v1/'
+        service_port: 1111
+  - name: Assert Create Routes tests passed
+    assert:
+      that:
+      - __gateway_routes_job_async_result.results[0] is changed
+      - __gateway_routes_job_async_result.results[1] is changed
+      - __gateway_routes_job_async_result.results[2] is changed
+
+  ### 2nd run for Routes ###
+  - name: Check Routes Idempotency
+    include_role:
+      name: infra.gateway_configuration.routes
+    vars:
+      gateway_routes:
+      # No change
+      - name: Gateway Svc Route
+        description: Gateway Service Route
+        gateway_path: '/gw-svc-1/v1/'
+        http_port: Port 9082
+        service_cluster: gateway
+        service_path: '/aaa/v1/'
+        service_port: 1234
+      # Update
+      - name: Gateway Svc Route 2
+        gateway_path: '/gw-svc-2/v1/'
+        http_port: Port 9082
+        service_cluster: gateway
+        is_service_https: false  # Changed
+      # Check for existence, no changes
+      - name: Hub Svc Route
+        gateway_path: '/hub-svc-1/'
+        http_port: Port 8050
+        state: exists
+      # Check for existence, no changes
+      - name: Hub Svc Route
+        state: exists
+      # Change cluster
+      - name: Hub Svc Route
+        gateway_path: '/hub-svc-1/'
+        http_port: Port 8050
+        service_cluster: controller
+        service_path: '/ccc/v1/'
+        service_port: 1111
+      # Check for existence
+      - name: Hub Svc Route
+        state: exists
+      # Non-existing cluster
+      - name: Wrong cluster
+        gateway_path: '/xxx/'
+        http_port: Port 8050
+        service_cluster: eda
+        state: absent
+      # Non-existing port
+      - name: Wrong Port
+        gateway_path: '/yyy/'
+        http_port: Port 1234
+        service_cluster: controller
+        state: absent
+      # Non-existing port and cluster
+      - name: Wrong Port and Cluster
+        gateway_path: '/zzz/'
+        http_port: 1234
+        service_cluster: eda
+        state: absent
+      # Existing port and cluster, non-existing route
+      - name: Wrong Route
+        gateway_path: '/non-existing/'
+        http_port: Port 9082
+        service_cluster: gateway
+        state: absent
+  - debug:
+      var: __gateway_routes_job_async_result.results
+  - name: Assert Check Routes tests passed
+    assert:
+      that:
+        - __gateway_routes_job_async_result.results[0] is not changed
+        - __gateway_routes_job_async_result.results[1] is changed
+        - __gateway_routes_job_async_result.results[2] is not changed
+        - __gateway_routes_job_async_result.results[3] is not changed
+        - __gateway_routes_job_async_result.results[4] is changed
+        - __gateway_routes_job_async_result.results[5] is not changed
+        - __gateway_routes_job_async_result.results[6] is not changed
+        - __gateway_routes_job_async_result.results[7] is not changed
+        - __gateway_routes_job_async_result.results[8] is not changed
+        - __gateway_routes_job_async_result.results[9] is not changed
+
+  - name: Rename Routes
+    include_role:
+      name: infra.gateway_configuration.routes
+    vars:
+      gateway_routes:
+        - name: "Gateway Svc Route"
+          new_name: "Gateway Config Route"
+
+  - name: Assert Rename Routes tests passed
+    assert:
+      that:
+        - __gateway_routes_job_async_result.results[0] is changed
+
+  - name: Check Rename Routes
+    include_role:
+      name: infra.gateway_configuration.routes
+    vars:
+      gateway_routes:
+        - name: "Gateway Svc Route"
+          state: absent
+        - name: "Gateway Config Route"
+          state: exists
+
+  - name: Assert Check Rename Routes tests passed
+    assert:
+      that:
+        - __gateway_routes_job_async_result.results[0] is not changed
+        - __gateway_routes_job_async_result.results[1] is not changed
+  always:
+  ### Delete Routes ###
+  - name: Delete Routes
+    include_role:
+      name: infra.gateway_configuration.routes
+    vars:
+      gateway_state: absent
+      gateway_routes:
+      # Does not exist
+      - name: Gateway Svc Route
+      # Exists
+      - name: "Gateway Config Route"
+      # Exists
+      - name: Gateway Svc Route 2
+      # Exists
+      - name: Hub Svc Route
+      # Does not exist
+      - name: Wrong cluster
+      # Does not exist
+      - name: Wrong Port
+      # Does not exist
+      - name: Wrong Port and Cluster
+      # Does not exist
+      - name: Wrong Route
+
+  ### Delete Clusters ###
+  - name: Delete Service Clusters
+    include_role:
+      name: infra.gateway_configuration.service_clusters
+    vars:
+      gateway_state: absent
+      gateway_service_clusters:
+        - name: "gateway"
+        - name: "controller"
+        - name: "hub"
+
+  ### Delete Ports ###
+  - name: Delete Http Ports
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      gateway_state: absent
+      gateway_http_ports:
+      - name: Port 9082
+      - name: Port 8050

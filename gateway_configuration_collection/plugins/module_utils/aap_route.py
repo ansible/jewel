@@ -1,0 +1,18 @@
+from ..module_utils.aap_service import AAPService
+
+
+class AAPRoute(AAPService):
+    API_ENDPOINT_NAME = "routes"
+    ITEM_TYPE = "route"
+
+    def unique_field(self):
+        return self.module.IDENTITY_FIELDS["routes"]
+
+    def get_api_slug(self):
+        # Route doesn't have API slug
+        return None
+
+    def get_gateway_path(self):
+        if self.data:
+            return self.data['gateway_path']
+        return self.params.get('gateway_path')

@@ -81,10 +81,7 @@ class AAPModule(AnsibleModule):
         "request_timeout": "gateway_request_timeout",
         "oauth_token": "gateway_token",
     }
-    IDENTITY_FIELDS = {
-        "users": "username",
-    }
-    ENCRYPTED_STRING = "$encrypted$"
+    IDENTITY_FIELDS = {"http_ports": "name", "routes": "name", "services": "name", "service_clusters": "name", "service_nodes": "name", "users": "username"}
     host = "127.0.0.1"
     username = None
     password = None
@@ -440,7 +437,7 @@ class AAPModule(AnsibleModule):
             except KeyError as ke:
                 self.fail_json(msg="Unable to process create of item due to missing data {0}".format(ke))
         else:
-            # If we don't have an exisitng_item, we can try to create it
+            # If we don't have an existing_item, we can try to create it
             # We have to rely on item_type being passed in since we don't have an existing item that declares its type
             # We will pull the item_name out from the new_item, if it exists
             item_name = self.get_item_name(new_item, allow_unknown=True)
@@ -506,7 +503,7 @@ class AAPModule(AnsibleModule):
             needs_patch = self.objects_could_be_different(existing_item, new_item)
 
             if needs_patch:
-                response = self.make_request("PUT", item_url, **{"data": new_item})
+                response = self.make_request("PATCH", item_url, **{"data": new_item})
                 if response["status_code"] == 200:
                     # compare apples-to-apples, old API data to new API data
                     # but do so considering the fields given in parameters

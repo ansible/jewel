@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Clear proxy.yml
+        run: cp tools/configs/proxy-config-no-services.yml tools/configs/proxy-config-sample.yml
+
       - name: Build the image
         run: make docker-compose-build
 

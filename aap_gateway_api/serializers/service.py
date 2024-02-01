@@ -67,7 +67,7 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
         ]
 
     def validate(self, attrs):
-        if attrs["port"].is_api_port and attrs["gateway_path"].startswith(API_PREFIX):
+        if attrs.get("port") and attrs["port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):
             raise serializers.ValidationError({'gateway_path': f"Custom routes on the API port cannot start with '{API_PREFIX}'"})
 
         return attrs
