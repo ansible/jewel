@@ -44,9 +44,9 @@ RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_gi
 # Set up django-ansible-base to be mounted in the container and used as an editable dependency if we have a clone.
 # LICENSE.md (from gateway) is specified because COPY needs at least one valid/existing source.
 # The * at the end of pyproject.toml means we skip it if it's not found.
-COPY LICENSE.md django-ansible-base /opt/aap_gateway
 # Create the directory just incase we didn't have it before
 RUN mkdir -p /opt/aap_gateway/django-ansible-base
+COPY LICENSE.md django-ansible-base /opt/aap_gateway/django-ansible-base/
 RUN if [[ -f /opt/aap_gateway/django-ansible-base/pyproject.toml ]]; then \
       /opt/aap_gateway/venv/bin/pip uninstall -y django-ansible-base && \
       /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/django-ansible-base[filtering,swagger,authentication] ; \
