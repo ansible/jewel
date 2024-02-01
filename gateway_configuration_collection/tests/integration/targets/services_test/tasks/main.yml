@@ -1,0 +1,223 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_http_ports_secure_logging: false
+    gateway_configuration_service_clusters_secure_logging: false
+    gateway_configuration_services_secure_logging: false
+
+
+- block:
+  ### Create Http Port ###
+  - name: Create Http Ports
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      http_ports:
+      - name: "Port 9081"
+        number: 9081
+        use_https: true
+      - name: "Port 9000"
+        number: 9000
+  - debug:
+      var: __gateway_http_ports_job_async_result
+
+  - name: Assert Create Http Ports
+    assert:
+      that:
+      - __gateway_http_ports_job_async_result.results[0] is changed
+      - __gateway_http_ports_job_async_result.results[1] is changed
+
+  ### Create Service Clusters ###
+  - name: Create Service Clusters
+    include_role:
+      name: infra.gateway_configuration.service_clusters
+    vars:
+      gateway_service_clusters:
+        - name: "gateway"
+          service_type: "gateway"
+        - name: "hub"
+          service_type: "hub"
+        - name: "controller"
+          service_type: "controller"
+  - debug:
+      var: __gateway_service_clusters_job_async_result
+
+  - name: Assert Create Service Clusters Port tests passed
+    assert:
+      that:
+        - __gateway_service_clusters_job_async_result.results[0] is changed
+        - __gateway_service_clusters_job_async_result.results[1] is changed
+        - __gateway_service_clusters_job_async_result.results[2] is changed
+
+  ### Create Services ###
+  - name: Create Services
+    include_role:
+      name: infra.gateway_configuration.services
+    vars:
+      gateway_services:
+      - name: Gateway API
+        description: Proxy to the Gateway
+        http_port: Port 9081
+        service_cluster: gateway
+        is_service_https: true
+        service_path: '/'
+        service_port: 8000
+        order: 100
+      - name: Automation Hub API
+        description: Proxy to the Automation Hub
+        http_port: Port 9081
+        service_cluster: hub
+        service_path: '/api/hub/'
+        service_port: 5001
+        order: 1
+      - name: Controller API
+        description: Proxy to the Controller
+        http_port: Port 9081
+        service_cluster: controller
+        is_service_https: true
+        service_path: '/api/'
+        service_port: 8043
+  - debug:
+      var: __gateway_services_job_async_result.results
+
+  - name: Assert Create Services
+    assert:
+      that:
+      - __gateway_services_job_async_result.results[0] is changed
+      - __gateway_services_job_async_result.results[1] is changed
+      - __gateway_services_job_async_result.results[2] is changed
+
+  ### 2nd run for Services ###
+  - name: Check Services Idempotency
+    include_role:
+      name: infra.gateway_configuration.services
+    vars:
+      gateway_services:
+      # No change
+      - name: Gateway API
+        description: Proxy to the Gateway
+        http_port: Port 9081
+        service_cluster: gateway
+        is_service_https: true
+        service_path: '/'
+        service_port: 8000
+        order: 100
+      # Check for existence, no changes
+      - name: "{{ __gateway_services_job_async_result.results[1].id }}"  # Automation Hub API
+        order: 99 # Doesn't change with state:exists
+        state: exists
+      # Change api version and port
+      - name: "{{ __gateway_services_job_async_result.results[2].id }}"  # Controller API
+        http_port: "{{ __gateway_http_ports_job_async_result.results[1].id}} " # Port 9000
+        service_cluster: "{{ __gateway_service_clusters_job_async_result.results[2].id }}"  # controller
+        is_service_https: true
+        service_path: '/api/v3/'
+        service_port: 8043
+      # Non-existing cluster
+      - name: Wrong cluster
+        http_port: Port 9081
+        service_cluster: eda
+        state: absent
+      # Non-existing port
+      - name: Wrong Port
+        http_port: Port 1111
+        service_cluster: controller
+        state: absent
+      # Non-existing port and cluster
+      - name: Wrong Port and Cluster
+        http_port: 1111  # ID
+        service_cluster: eda
+        state: absent
+      # Existing port and cluster, but non-existing service
+      - name: Wrong API
+        http_port: Port 9000
+        service_cluster: controller
+        state: absent
+  - debug:
+      var: __gateway_services_job_async_result.results
+  - name: Assert Check Services Idempotency
+    assert:
+      that:
+      - __gateway_services_job_async_result.results[0] is not changed
+      - __gateway_services_job_async_result.results[1] is not changed
+      - __gateway_services_job_async_result.results[2] is changed
+      - __gateway_services_job_async_result.results[3] is not changed
+      - __gateway_services_job_async_result.results[4] is not changed
+      - __gateway_services_job_async_result.results[5] is not changed
+      - __gateway_services_job_async_result.results[6] is not changed
+
+  - name: Rename Services
+    include_role:
+      name: infra.gateway_configuration.services
+    vars:
+      gateway_services:
+        - name: "Gateway API"
+          new_name: "Central API"
+
+  - name: Assert Rename Services tests passed
+    assert:
+      that:
+        - __gateway_services_job_async_result.results[0] is changed
+
+  - name: Check Rename Services
+    include_role:
+      name: infra.gateway_configuration.services
+    vars:
+      gateway_services:
+        - name: "Gateway API"
+          state: absent
+        - name: "Central API"
+          state: exists
+
+  - name: Assert Check Rename Services tests passed
+    assert:
+      that:
+        - __gateway_services_job_async_result.results[0] is not changed
+        - __gateway_services_job_async_result.results[1] is not changed
+
+  always:
+  ### Delete Services ###
+  - name: Delete Services
+    include_role:
+      name: infra.gateway_configuration.services
+    vars:
+      gateway_state: absent
+      gateway_services:
+      # Does not exist
+      - name: Gateway API
+      # Exists
+      - name: Central API
+      # Exists
+      - name: Automation Hub API
+      # Exists
+      - name: Controller API
+      # Does not exist
+      - name: Wrong cluster
+      # Does not exist
+      - name: Wrong Port
+      # Does not exist
+      - name: Wrong Port and Cluster
+      # Does not exist
+      - name: Wrong API
+
+
+  ### Delete Clusters ###
+  - name: Delete Service Clusters
+    include_role:
+      name: infra.gateway_configuration.service_clusters
+    vars:
+      gateway_state: absent
+      gateway_service_clusters:
+        - name: "gateway"
+        - name: "controller"
+        - name: "hub"
+
+  ### Delete Ports ###
+  - name: Delete Http Ports
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      gateway_state: absent
+      gateway_http_ports:
+      - name: Port 9081
+      - name: Port 9000

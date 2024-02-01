@@ -1,60 +1,32 @@
-# gateway_configuration.settings
+# Ansible Role infra.gateway_configuration.settings
 
 An Ansible role to alter Settings on Ansible Automation gateway settings.
 
 ## Variables
 
-|Variable Name|Default Value|Required|Description|Example|
-|:---|:---:|:---:|:---|:---|
-|`gateway_state`|"present"|no|The state all objects will take unless overridden by object default|'absent'|
-|`gateway_hostname`|""|yes|URL to the automation platform gateway server.|127.0.0.1|
-|`gateway_validate_certs`|`True`|no|Whether or not to validate the automation platform gateway server's SSL certificate.||
-|`gateway_username`|""|no|user on the automation platform gateway server. Either username / password or oauthtoken need to be specified.||
-|`gateway_password`|""|no|gateway user's password on the automation platform gateway server. This should be stored in an Ansible Vault at vars/gateway-secrets.yml or elsewhere and called from a parent playbook. Either username / password or oauthtoken need to be specified.||
-|`gateway_oauthtoken`|""|no|gateway user's token on the automation platform gateway server. This should be stored in an Ansible Vault at or elsewhere and called from a parent playbook. Either username / password or oauthtoken need to be specified.||
-|`gateway_request_timeout`|`10`|no|Specify the timeout in seconds Ansible should use in requests to the gateway host.||
-|`gateway_settings`|`see below`|yes|Data structure describing your settings described below.||
+Detailed description of variables are provided in the [top-level README](../../README.md).  
+Settings doesn't implement the `gateway_configuration_enforce_defaults` because it's not applicable.
 
-### Secure Logging Variables
+Variables specific for this role are following:
 
-The following Variables compliment each other.
-If Both variables are not set, secure logging defaults to false.
-The role defaults to False as normally the add settings task does not include sensitive information.
-gateway_configuration_settings_secure_logging defaults to the value of gateway_configuration_secure_logging if it is not explicitly called. This allows for secure logging to be toggled for the entire suite of configuration roles with a single variable, or for the user to selectively use it.
+| Variable Name                                   |                   Default Value                    | Required | Description                                                                                                                                                     |                                                      |
+|:------------------------------------------------|:--------------------------------------------------:|:--------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------:|
+| `gateway_settings` (Alias: `settings`)          |            [below](#settings-arguments)            |   yes    | Data structure describing your setting entries described below.                                                                                                 |        [more](../../README.md#data-variables)        |
+| `gateway_configuration_settings_secure_logging` | `gateway_configuration_secure_logging` OR `false`  |    no    | Whether or not to include the sensitive settings role tasks in the log. Set this value to `True` if you will be providing your sensitive values from elsewhere. |   [more](../../README.md#secure-logging-variables)   |
+| `gateway_configuration_settings_async_retries`  |   `gateway_configuration_async_retries` OR `30`    |    no    | This variable sets the number of retries to attempt for the role.                                                                                               | [more](../../README.md#asynchronous-retry-variables) |
+| `gateway_configuration_settings_async_delay`    |     `gateway_configuration_async_delay` OR `1`     |    no    | This sets the delay between retries for the role.                                                                                                               | [more](../../README.md#asynchronous-retry-variables) |
 
-|Variable Name|Default Value|Required|Description|
-|:---:|:---:|:---:|:---:|
-|`gateway_configuration_settings_secure_logging`|`False`|no|Whether or not to include the sensitive Settings role tasks in the log. Set this value to `True` if you will be providing your sensitive values from elsewhere.|
-|`gateway_configuration_secure_logging`|`False`|no|This variable enables secure logging as well, but is shared across multiple roles, see above.|
-
-### Asynchronous Retry Variables
-
-The following Variables set asynchronous retries for the role.
-If neither of the retries or delay or retries are set, they will default to their respective defaults.
-This allows for all items to be created, then checked that the task finishes successfully.
-This also speeds up the overall role.
-
-|Variable Name|Default Value|Required|Description|
-|:---:|:---:|:---:|:---:|
-|`gateway_configuration_async_retries`|30|no|This variable sets the number of retries to attempt for the role globally.|
-|`gateway_configuration_settings_async_retries`|`{{ gateway_configuration_async_retries }}`|no|This variable sets the number of retries to attempt for the role.|
-|`gateway_configuration_async_delay`|1|no|This sets the delay between retries for the role globally.|
-|`gateway_configuration_settings_async_delay`|`gateway_configuration_async_delay`|no|This sets the delay between retries for the role.|
-|`gateway_configuration_async_dir`|`null`|no|Sets the directory to write the results file for async tasks. The default value is set to `null` which uses the Ansible Default of `/root/.ansible_async/`.|
+**Note**: Secure Logging defaults to `True` if both variables are not set
 
 ## Data Structure
 
-Provide settings as a single dict under `settings`.
+### Settings arguments
 
-### Setting Variables
+Provide settings as a single dict under `gateway_settings`.
 
-|Variable Name|Default Value|Required|Description|
-|:---:|:---:|:---:|:---:|
-|`settings`|{}|yes|Dict of key-value pairs of settings|
+## Usage
 
-### Standard Setting Data Structure - as a dict
-
-#### Json Dict Example
+#### Json Example
 
 ```json
 {
@@ -74,7 +46,9 @@ Provide settings as a single dict under `settings`.
 
 ```
 
-#### Yaml Dict Example
+#### Yaml Example
+
+File name: `data/gateway_settings.yml`
 
 ```yaml
 ---
@@ -93,32 +67,14 @@ gateway_settings:
 
 ```
 
-## Playbook Examples
+### Run Playbook
 
-### Standard Role Usage
+File name: [manage_data.yml](../../README.md#example-ansible-playbook) can be found in the top-level README.
 
-```yaml
----
-- name: Playbook to configure automation platform gateway settings
-  hosts: localhost
-  connection: local
-  # Define following vars here, or in gateway_configs/gateway_auth.yml
-  # gateway_hostname: ansible-gateway-web-svc-test-project.example.com
-  # gateway_username: admin
-  # gateway_password: changeme
-  pre_tasks:
-    - name: Include vars from gateway_configs directory
-      ansible.builtin.include_vars:
-        dir: ./yaml
-        ignore_files: [gateway_config.yml.template]
-        extensions: ["yml"]
-  roles:
-    - {role: infra.gateway_configuration.settings, when: gateway_settings is defined}
+```shell
+ansible-playbook manage_data.yml -e @data/gateway_settings.yml
 ```
 
 ## License
 
 [Apache-2.0](https://github.com/ansible/aap-gateway/blob/devel/LICENSE.md)
-
-## Author
-[Sean Sullivan](https://github.com/sean-m-sullivan)

@@ -1,0 +1,90 @@
+- block:
+  - name: Run primary http port tests
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      gateway_http_ports:
+      - name: "Port 65530"
+        number: 65530
+        use_https: false
+      - name: "Port 65531"
+        number: 65531
+        state: present
+      - name: "Port 65532"
+        number: 65532
+        use_https: true
+      - name: "Port 65533"
+        number: 65533
+  - debug:
+      var: __gateway_http_ports_job_async_result
+
+  - name: Assert http port tests passed
+    assert:
+      that:
+      - __gateway_http_ports_job_async_result.results[0] is changed
+      - __gateway_http_ports_job_async_result.results[1] is changed
+      - __gateway_http_ports_job_async_result.results[2] is changed
+      - __gateway_http_ports_job_async_result.results[3] is changed
+
+  - name: Run secondary http port tests
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      gateway_http_ports:
+      # Check idempotency
+      - name: "Port 65530"
+        number: 65530
+        use_https: false
+      # Check existence
+      - name: "Port 65531"
+        state: exists
+      # Check changing attributes
+      - name: "Port 65532"
+        use_https: false
+      # Changing name
+      - name: "Port 65533"
+        new_name: "Port 65534"
+  - debug:
+      var: __gateway_http_ports_job_async_result
+
+  - name: Assert http port tests passed
+    assert:
+      that:
+      - __gateway_http_ports_job_async_result.results[0] is not changed
+      - __gateway_http_ports_job_async_result.results[1] is not changed
+      - __gateway_http_ports_job_async_result.results[2] is changed
+      - __gateway_http_ports_job_async_result.results[3] is changed
+
+  - name: Check renaming http port tests
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      gateway_http_ports:
+      # Check 65533 doesn't exist
+      - name: "Port 65533"
+        state: absent
+      # Check 65534 exists
+      - name: "Port 65534"
+        state: exists
+  - debug:
+      var: __gateway_http_ports_job_async_result
+
+  - name: Assert renaming http port tests passed
+    assert:
+      that:
+      - __gateway_http_ports_job_async_result.results[0] is not changed
+      - __gateway_http_ports_job_async_result.results[1] is not changed
+
+  always:
+    # Always Cleanup
+  - name: Delete http ports
+    include_role:
+      name: infra.gateway_configuration.http_ports
+    vars:
+      gateway_state: absent
+      gateway_http_ports:
+        - name: "Port 65530"
+        - name: "Port 65531"
+        - name: "Port 65532"
+        - name: "Port 65533"
+        - name: "Port 65534"
