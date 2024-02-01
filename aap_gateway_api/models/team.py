@@ -26,5 +26,6 @@ class Team(AbstractTeam):
     parents = models.ManyToManyField(
         'self',
         blank=True,
+        symmetrical=False,
         help_text=_("The list of teams that are parents of this team"),
     )
