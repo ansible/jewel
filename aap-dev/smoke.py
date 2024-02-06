@@ -25,6 +25,7 @@ class Config:
         self.URLS = {
             'login': '/api/gateway/v1/login/',
             'controller_me': '/api/controller/v2/me/',
+            'eda_server_me': '/api/eda/eda/v1/users/me/',
         }
 
         self._session = requests.Session()
@@ -70,22 +71,29 @@ class Config:
         return self._session.post(url, *args, **kwargs)
 
 
-def test_get_controller(conf: Config):
-    res = conf.get('controller_me')
-    assert res.status_code == 200, f"Got status code {res.status_code}"
-    print("Success test_get_controller")
-
-
 def test_gateway_login(conf: Config):
     res = conf.login()
     assert res == True
     print("Success test_gateway_login")
 
 
+def test_controller_authed(conf: Config):
+    res = conf.get('controller_me')
+    assert res.status_code == 200, f"Got status code {res.status_code}"
+    print("Success test_controller_authed")
+
+
+def test_eda_server_authed(conf: Config):
+    res = conf.get('eda_server_me')
+    assert res.status_code == 200, f"Got status code {res.status_code} {res.content}"
+    print("Success test_eda_server_authed")
+
+
 def run():
     conf = Config()
     test_gateway_login(conf)
-    test_get_controller(conf)
+    test_controller_authed(conf)
+    test_eda_server_authed(conf)
 
 
 if __name__ == "__main__":

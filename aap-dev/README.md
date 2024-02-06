@@ -15,17 +15,28 @@ Just in case it is not obvious.
 
 #### Dir Structure
 
+
+
+*UP* - Script to test if dev env is up and healthy
+*SETTINGS OVERRIDES* - Django settings overrides to turn the upstream into downstream
+*HACK* - One-off hacks that hopefully go away
+
 ```
 aap-gateway/
-├── aap-dev						   <-- all the aap developer stuff jammed in here
-│   ├── controller_settings.py	   <-- awx settings that makes it controller
-│   ├── Makefile				   <-- Entrypoint for the aap dev env
-│   ├── README.md				   <-- (you are here)
-│   └── smoke.py				   <-- smoke tests for gateway and controller behind gateway
-├── aap_gateway_api	               <-- gateway source code
-├── services                       <-- awx git clone location
-├── container-startup.yml		   <-- gateway dev env config
-├── Makefile					   <-- root Makefile
+├── aap-dev						            <-- aap developer environment (not gateway things)
+│   ├── controller_settings.py				<-- SETTINGS OVERRIDES
+│   ├── awx-up-check.sh						<-- UP
+│   ├── eda_server_settings.py				<-- SETTINGS OVERRIDES
+│   ├── eda-server-up-check.sh				<-- UP
+│   ├── gateway-eda_server-config-hack.py	<-- HACK
+│   ├── gateway-up-check.sh					<-- UP
+│   ├── Makefile				            <-- Entrypoint for the aap dev env
+│   ├── README.md				            <-- (you are here)
+│   └── smoke.py				            <-- smoke tests for gateway and controller behind gateway
+├── aap_gateway_api	                        <-- gateway source code
+├── services                                <-- awx git clone location
+├── container-startup.yml		            <-- gateway dev env config
+├── Makefile					            <-- root Makefile
 ```
 
 Feel free to rethink the directory structure and organization here. For example, I would personally prefer if all the components are cloned one directory back. Maybe this could happen when we move this dev env code out of `aap-gateway`.
