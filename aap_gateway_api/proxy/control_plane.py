@@ -16,6 +16,10 @@ MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationM
 
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
+# TODO: Someday we should look through the services and find gateway services
+#       and get its `/api/gateway` endpoint and stuff it into these instead of hardcoding it.
+no_authentication_required = ['/api/gateway/v1/ui_auth/', '/api/gateway/v1/jwt_key/']
+
 
 def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest) -> DRFRequest:
     d_request = HttpRequest()
@@ -38,12 +42,14 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
 
 
 class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
-    def _return_authenticated(self, jwt, remove_auth_header):
-        logger.info("User successfully authenticated")
+    def _return_authenticated(self, jwt, path, username):
+        logger.info(f"User {username} successfully authenticated for {path}")
 
+        # Gateway will not accept JWT tokens from itself so we have to allow the auth header to remain if we are going to talk with a gateway endpoint
         # TODO: If we changed gateway to accept its own JWT tokens we could remove this section and just always remove Authorization
         headers_to_remove = []
-        if remove_auth_header:
+        if not path.startswith('/api/gateway/'):
+            logger.debug(f"Removing authorization header for {path}")
             headers_to_remove.append('Authorization')
 
         response = external_auth_pb2.OkHttpResponse(
@@ -55,8 +61,13 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
         return external_auth_pb2.CheckResponse(ok_response=response)
 
-    def _return_not_authenticated(self):
-        logger.info("No authentication")
+    def _return_no_authentication_required(self, path):
+        # This endpoint did not require authentication so no logs required
+        logger.debug(f"No authentication required for {path}")
+        return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse())
+
+    def _return_not_authenticated(self, path):
+        logger.info(f"No valid credentials found for user when requesting {path}.")
 
         # We're returning an OK response instead of a 403 because the user may have
         # a local credential for the service, or may be requesting an API endpoint
@@ -65,7 +76,11 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse())
 
     def Check(self, request, context):
-        logger.info("Starting authentication.")
+        request_path = request.attributes.request.http.path
+        if request_path in no_authentication_required or request_path.startswith('/static/'):
+            return self._return_no_authentication_required(request_path)
+
+        logger.info(f"Starting authentication for {request_path}.")
         try:
             drf_request = get_drf_request(request.attributes.request.http)
             try:
@@ -76,22 +91,16 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
                 user = None
 
             if not user or not user.pk:
-                logger.info("No valid credentials found for user.")
-                return self._return_not_authenticated()
-
-            # Gateway will not accept JWT tokens from itself so we have to allow the auth header to remain if we are going to talk with a gateway endpoint
-            remove_auth_header = True
-            if request.attributes.request.http.path.startswith('/api/gateway/'):
-                remove_auth_header = False
+                return self._return_not_authenticated(request_path)
 
             if jwt := JWTSessionCache.get(user.pk):
-                logger.info("Loading cached JWT token")
-                return self._return_authenticated(jwt, remove_auth_header)
+                logger.debug(f"Loading cached JWT token for {user.username}")
             else:
-                logger.info("Issuing new JWT token")
+                logger.debug(f"Issuing new JWT token for {user.username}")
                 jwt = create_signed_jwt(user)
                 JWTSessionCache.set(user.pk, jwt)
-                return self._return_authenticated(jwt, remove_auth_header)
+
+            return self._return_authenticated(jwt, request_path, user.username)
 
         # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
         except Exception as e:
