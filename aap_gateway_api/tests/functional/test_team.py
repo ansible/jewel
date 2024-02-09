@@ -3,6 +3,23 @@ from django.urls import reverse
 
 
 @pytest.mark.parametrize(
+    "key, route",
+    [
+        ("users", "team-users-list"),
+        ("admins", "team-admins-list"),
+        ("parents", "team-parents-list"),
+    ],
+)
+def test_teams_related_fields(admin_api_client, team, key, route):
+    url = reverse("team-detail", kwargs={"pk": team.id})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    team = response.data
+    assert key in team["related"]
+    assert team["related"][key] == reverse(route, kwargs={"pk": team["id"]})
+
+
+@pytest.mark.parametrize(
     "description",
     [
         "A test team, which is thusly described.",
