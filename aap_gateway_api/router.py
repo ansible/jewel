@@ -126,7 +126,7 @@ class ResourceRouter(routers.SimpleRouter):
                 },
             )
 
-            self.registry.append((f"{prefix}/(?P<pk>[^/.]+)/{related_name}", modified_related_viewset, f'{basename}-{related_name}'))
+            self.registry.append((f"{prefix}/(?P<pk>[^/.]+)/{related_name}", modified_related_viewset, f'{basename}-{fk}'))
 
         super().register(prefix, viewset, basename)
 

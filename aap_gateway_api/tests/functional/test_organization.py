@@ -13,6 +13,23 @@ def test_organizations_list(admin_api_client, organization):
     assert results[0]["name"] == organization.name
 
 
+@pytest.mark.parametrize(
+    "key, route",
+    [
+        ("users", "organization-users-list"),
+        ("admins", "organization-admins-list"),
+        ("teams", "organization-teams-list"),
+    ],
+)
+def test_organizations_related_fields(admin_api_client, organization, key, route):
+    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    organization = response.data
+    assert key in organization["related"]
+    assert organization["related"][key] == reverse(route, kwargs={"pk": organization["id"]})
+
+
 def test_organizations_list_unauthenticated(unauthenticated_api_client):
     url = reverse("organization-list")
     response = unauthenticated_api_client.get(url)
