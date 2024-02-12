@@ -7,3 +7,5 @@ colorama
 logutils
 psycopg[binary]
 requests
+setuptools # Needed for the plumbing of the side cars
+docker     # Needed for the plumbing of the side cars
