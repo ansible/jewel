@@ -33,6 +33,9 @@ def network_manager_filter(http_filters=[], routes=[]):
         "typed_config": {
             "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
             "stat_prefix": "ingress_http",
+            "upgrade_configs": [
+                {"upgrade_type": "websocket"},
+            ],
             "access_log": [
                 {
                     "name": "envoy.access_loggers.stdout",
