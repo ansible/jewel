@@ -16,7 +16,6 @@ logger = logging.getLogger('aap.gateway.serializer.user')
 
 
 class UserSerializer(CommonModelSerializer):
-    reverse_url_name = 'user-detail'
     # This needs to be explicitly so it's not required
     organizations = serializers.PrimaryKeyRelatedField(many=True, queryset=Organization.objects.all(), required=False)
 
