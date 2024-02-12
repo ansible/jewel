@@ -3,6 +3,12 @@ function envoy_on_response(handle)
     -- in Location headers and in the request body.
     -- ex: translates /service-path/galaxy/ to /gateway-path/hub/ in service response bodies
     handle:logDebug("Running lua script to rewrite response body.")
+    
+    -- Ignore this script if the response is an upgrade response to prevent websockets from breaking
+    local status_code = handle:headers():getStatus()
+    if status_code == "101" then
+        return
+    end
 
     local location = handle:headers():get("Location")
     local prefix_rewrite = handle:metadata():get("prefix")
@@ -27,6 +33,12 @@ function envoy_on_request(handle)
     -- Translate urls in the request body back to the service's base path.
     -- ex: translates /gateway-path/hub/ to /service-path/galaxy/ in service request bodies
     handle:logDebug("Running lua script to rewrite request body.")
+
+    -- Ignore this script if the request is an upgrade request to prevent websockets from breaking
+    local upgrade_header = handle:headers():get("upgrade")
+    if upgrade_header then
+        return
+    end
 
     local prefix_rewrite = handle:metadata():get("prefix")
     local prefix = handle:metadata():get("prefix_rewrite")
