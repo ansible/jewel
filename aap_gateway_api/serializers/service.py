@@ -6,7 +6,6 @@ from aap_gateway_api.models.service import API_PREFIX
 
 
 class HTTPPortSerializer(NamedCommonModelSerializer):
-    reverse_url_name = 'http_port-detail'
 
     class Meta:
         model = HTTPPort
@@ -14,7 +13,6 @@ class HTTPPortSerializer(NamedCommonModelSerializer):
 
 
 class ServiceClusterSerializer(NamedCommonModelSerializer):
-    reverse_url_name = 'service_cluster-detail'
 
     class Meta:
         model = ServiceCluster
@@ -24,7 +22,6 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
 
 
 class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
-    reverse_url_name = 'service-detail'
 
     class Meta:
         model = ServiceAPIRoute
@@ -44,7 +41,6 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
 
 
 class ServiceNodeSerializer(NamedCommonModelSerializer):
-    reverse_url_name = 'service_node-detail'
 
     class Meta:
         model = ServiceNode

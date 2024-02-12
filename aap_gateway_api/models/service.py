@@ -13,6 +13,8 @@ class HTTPPort(UniqueNamedCommonModel):
     Represents a port that Envoy will listen for HTTP traffic on.
     """
 
+    router_basename = 'http_port'
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -81,6 +83,8 @@ class ServiceCluster(UniqueNamedCommonModel):
     Represents an AAP Service which can be comprised of multiple load balanced nodes.
     """
 
+    router_basename = 'service_cluster'
+
     class ServiceType(models.TextChoices):
         HUB = "hub", "hub"
         CONTROLLER = "controller", "controller"
@@ -109,6 +113,8 @@ class ServiceNode(UniqueNamedCommonModel):
     """
     Individual node in a service cluster.
     """
+
+    router_basename = 'service_node'
 
     class Meta:
         models.UniqueConstraint("address", name="one_address_per_gateway")
@@ -238,6 +244,8 @@ class ServiceAPIRoute(Route):
     xDS configurations.
     """
 
+    router_basename = 'service'
+
     api_slug = models.SlugField(max_length=20)
 
     class Meta:
@@ -263,6 +271,8 @@ class AdditionalRoute(Route):
     This model contains extra validation to ensure that custom routes don't conflict with the services
     that run on the api port.
     """
+
+    router_basename = 'route'
 
     def clean(self):
         if self.port.is_api_port and self.gateway_path.startswith(API_PREFIX):
