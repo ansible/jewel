@@ -7,10 +7,10 @@ from django.db.utils import OperationalError
 from rest_framework.response import Response
 
 from aap_gateway_api.utils import get_preference_value
-from aap_gateway_api.views.api.v1.common import ViewWithHeaders
+from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
 
-class PingView(ViewWithHeaders):
+class PingView(AnsibleBaseView):
     permission_classes = []
 
     def get(self, request):

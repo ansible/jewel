@@ -290,6 +290,9 @@ ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 
+ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
+ANSIBLE_BASE_PRODUCT_NAME = 'AAP Gateway'
+
 from ansible_base.lib import dynamic_config  # noqa: E402
 
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')

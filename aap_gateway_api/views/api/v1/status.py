@@ -6,12 +6,12 @@ from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
 from aap_gateway_api.utils.preferences import get_preference_value
-from aap_gateway_api.views.api.v1.common import ViewWithHeaders
+from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
 ping_pages = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/_healthz"}
 
 
-class StatusView(ViewWithHeaders):
+class StatusView(AnsibleBaseView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):

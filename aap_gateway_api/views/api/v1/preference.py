@@ -7,10 +7,10 @@ from rest_framework.reverse import reverse
 from aap_gateway_api.models import Preference
 from aap_gateway_api.serializers import SettingSectionSerializer, SettingSingletonSerializer
 from aap_gateway_api.utils import get_preference_sections
-from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ViewWithHeaders
+from aap_gateway_api.views.api.v1.common import AnsibleBaseView, GatewayModelViewSet
 
 
-class PreferenceSingletonView(ViewWithHeaders):
+class PreferenceSingletonView(AnsibleBaseView):
     def get_serializer(self, *args, **kwargs):
         return self.serializer
 

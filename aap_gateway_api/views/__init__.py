@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from django.core.exceptions import FieldError
 from django.db import IntegrityError
 from django.db.models import Q
@@ -10,7 +11,7 @@ from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from rest_framework.views import APIView, exception_handler
+from rest_framework.views import exception_handler
 
 from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
@@ -45,7 +46,7 @@ def gateway_exception_handler(exc, context):
     return exception_handler(exc, context)
 
 
-class ApiRootView(APIView):
+class ApiRootView(AnsibleBaseView):
     permission_classes = (AllowAny,)
     name = _('REST API')
     versioning_class = None
