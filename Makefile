@@ -99,11 +99,26 @@ help/generate:
 
 # Container related targets
 # --------------------------------------
+# Start the docker container in detached mode, wait for finish
+docker-compose-detached: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
+	- env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
+	- env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
-## Start the docker container
-docker-compose: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
-	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
+# Attach to the container logs if docker in detached mode
+docker-compose-attach:
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate
+
+#
+# Start the docker container + plumb the sidecar containers
+#
+docker-compose: docker-compose-detached plumb
+	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
+		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate; \
+  	 fi
+
+# Delete the containers and docker networks
+docker-compose-down:
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down
 
 ## Generate the default container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
@@ -183,7 +198,7 @@ requirements/requirements.txt: requirements/requirements.in
 
 ## Plumb the sidecar containers
 plumb:
-	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
+	- ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Remove all generated files when starting up docker
 docker-reset: tools/generated/docker-compose.yml
