@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     'ansible_base.authentication',
     'ansible_base.rest_filters',
     'ansible_base.api_documentation',
+    'ansible_base.resource_registry',
 ]
 
 # User our own user model
@@ -283,6 +284,8 @@ SPECTACULAR_SETTINGS = {
 ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
 
 ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
+
+ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
 
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
