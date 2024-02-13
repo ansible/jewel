@@ -1,6 +1,6 @@
 import uuid
 
-from aap_gateway_api.utils import get_api_version
+from aap_gateway_api.version import get_api_version
 
 
 def version(request):

@@ -1,17 +1,6 @@
-from django.conf import settings
-from rest_framework import views, viewsets
-
-from aap_gateway_api.utils import get_api_version
+from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
+from rest_framework import viewsets
 
 
-class ViewWithHeaders(views.APIView):
-    def finalize_response(self, request, response, *args, **kwargs):
-        response = super().finalize_response(request, response, *args, **kwargs)
-        response['X-API-Product-Version'] = get_api_version()
-        response['X-API-Product-Name'] = 'Gateway'
-        response['X-API-Node'] = getattr(settings, 'CLUSTER_HOST_ID', 'Unknown')
-        return response
-
-
-class GatewayModelViewSet(viewsets.ModelViewSet, ViewWithHeaders):
+class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
     pass

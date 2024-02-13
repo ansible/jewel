@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 
+from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from django.urls.exceptions import NoReverseMatch
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
@@ -9,7 +10,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.schemas.generators import EndpointEnumerator
-from rest_framework.views import APIView
 
 logger = logging.getLogger('aap.gateway.views')
 
@@ -17,7 +17,7 @@ logger = logging.getLogger('aap.gateway.views')
 ignore_endpoints = ['docs']
 
 
-class V1RootView(APIView):
+class V1RootView(AnsibleBaseView):
     permission_classes = (AllowAny,)
     name = _('v1')
     versioning_class = None
