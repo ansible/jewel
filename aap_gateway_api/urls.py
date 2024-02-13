@@ -1,6 +1,7 @@
 import logging
 
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
+from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from django.contrib import admin
 from django.urls import include, path, re_path
 
@@ -37,4 +38,5 @@ urlpatterns = [
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
     # Social auth
     path('api/gateway/v1/', include(router.urls)),
+    path('api/gateway/v1/', include(resource_api_urls)),
 ]
