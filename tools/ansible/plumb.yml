@@ -2,6 +2,15 @@
 - name: Plumb Gateway for enabled side containers
   hosts: localhost
   gather_facts: False
+  pre_tasks:
+  - name: Check if API is available and returning status 200
+    uri:
+      url: "{{ gateway_host }}/api/"
+      validate_certs: "{{ gateway_validate_certs|default(False) }}"
+    register: result
+    until: "result.status == 200"
+    retries: 5
+    delay: 5
   tasks:
     - include_role:
         name: "{{ item.key }}"
