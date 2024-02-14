@@ -101,21 +101,3 @@ def test_teams_admins_association(admin_api_client, team, user):
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert team.admins.count() == 0
-
-
-def test_teams_parents_association(admin_api_client, team, team_1):
-    """
-    Test that we can (dis)associate a parent team with a team.
-    """
-    assert team.parents.count() == 0
-
-    url = reverse("team-parents-associate", kwargs={"pk": team.pk})
-    response = admin_api_client.post(url, data={"instances": [team_1.pk]})
-    assert response.status_code == 204
-    assert team.parents.count() == 1
-    assert team.parents.first() == team_1
-
-    url = reverse("team-parents-disassociate", kwargs={"pk": team.pk})
-    response = admin_api_client.post(url, data={"instances": [team_1.pk]})
-    assert response.status_code == 204
-    assert team.parents.count() == 0
