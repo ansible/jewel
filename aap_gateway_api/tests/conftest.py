@@ -220,10 +220,14 @@ def http_api_port_factory():
         # There can only be one API port
         api_port = HTTPPort.objects.filter(is_api_port=True).first()
         if api_port is None:
-            api_port = HTTPPort.objects.create(name="port-9080", number=9080, is_api_port=True)
+            api_port = HTTPPort()
+            api_port.name = "port-9080"
+            api_port.number = 9080
+            api_port.is_api_port = True
+            api_port.save(non_existent_user_fatal=False)
         else:
             api_port.number = 9080
-            api_port.save()
+            api_port.save(non_existent_user_fatal=False)
         return api_port
 
     yield _http_api_port

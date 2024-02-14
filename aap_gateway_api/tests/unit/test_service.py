@@ -9,7 +9,11 @@ def test_httpport_api_port_unique(http_api_port_factory):
 
     http_api_port_factory()
     with pytest.raises(IntegrityError):
-        HTTPPort.objects.create(name="port-1337", number=1337, is_api_port=True)
+        port = HTTPPort()
+        port.name = "port-1337"
+        port.number = 1337
+        port.is_api_port = True
+        port.save(non_existent_user_fatal=False)
 
 
 @pytest.mark.django_db
