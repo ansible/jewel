@@ -43,12 +43,14 @@ class V1RootView(AnsibleBaseView):
             singular_endpoint = endpoint.rstrip('s')
             if endpoint == 'status':
                 singular_endpoint = endpoint
-            try:
-                data[endpoint] = reverse(f'{singular_endpoint}-list')
-            except NoReverseMatch:
+
+            for possible_view_name in [f'{singular_endpoint}-list', f'{singular_endpoint}-view', f"{singular_endpoint.replace('_', '')}-list"]:
                 try:
-                    data[endpoint] = reverse(f'{singular_endpoint}-view')
+                    data[endpoint] = reverse(possible_view_name)
                 except NoReverseMatch:
-                    logger.error(f'{singular_endpoint} had neither a -list nor -view reverse lookup method, ignoring')
+                    pass
+
+            if endpoint not in data:
+                logger.error(f'{singular_endpoint} had neither a -list nor -view reverse lookup method, ignoring')
 
         return Response(data)
