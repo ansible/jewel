@@ -72,7 +72,7 @@ services:
     environment:
       - ENVOY_UID=0
     ports:
-      - "443:9080"
+      - "{{ proxy_port }}:9080"
       - "19000:19000"
     volumes:
       - $PWD/tools/configs/envoy.yml:/etc/envoy/envoy.yaml:z

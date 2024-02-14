@@ -1,6 +1,7 @@
 ---
 gateway_host: https://localhost:8000
 gateway_port: 8000
+# If you are running on Linux you likely will want to change this port to 9043 or something else > 1024 if not running podman as root
 proxy_port: 443
 db_username: gateway
 db_password: gateway
