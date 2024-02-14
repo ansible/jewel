@@ -12,7 +12,6 @@ logger = logging.getLogger('aap.gateway.models.user')
 class User(AbstractUser, CommonModel):
     is_system_auditor = models.BooleanField(default=False, null=False)
 
-    reverse_foreign_key_fields = ['teams', 'organizations']
     encrypted_fields = ()  # handed as special case by UserSerializer
 
     def save(self, *args, **kwargs):
