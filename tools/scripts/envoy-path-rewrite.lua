@@ -5,7 +5,7 @@ function envoy_on_response(handle)
     handle:logDebug("Running lua script to rewrite response body.")
     
     -- Ignore this script if the response is an upgrade response to prevent websockets from breaking
-    local status_code = handle:headers():getStatus()
+    local status_code = handle:headers():get(":status")
     if status_code == "101" then
         return
     end
@@ -49,8 +49,8 @@ function envoy_on_request(handle)
         local match = "%=" .. string.gsub(prefix_rewrite, "%-", "%%-")
         local replace = "%=" .. string.gsub(prefix, "%-", "%%-")
 
-        handle:logInfo(match)
-        handle:logInfo(replace)
+        handle:logDebug(match)
+        handle:logDebug(replace)
 
         local new_path = string.gsub(path, match, replace)
 
