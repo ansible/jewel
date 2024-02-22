@@ -29,5 +29,3 @@ class Team(AbstractTeam):
         symmetrical=False,
         help_text=_("The list of teams that are parents of this team"),
     )
-
-    reverse_foreign_key_fields = ['parents']
