@@ -3,28 +3,19 @@ import uuid
 from collections import namedtuple
 
 import pytest
+from ansible_base.lib.testing.fixtures import (  # noqa: F401
+    admin_api_client,
+    no_log_messages,
+    randname,
+    rsa_keypair,
+    rsa_keypair_factory,
+    shut_up_logging,
+    unauthenticated_api_client,
+    user,
+    user_api_client,
+)
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
-
-
-@pytest.fixture
-def shut_up_logging():
-    """
-    This fixture allows you to temporarily disable logging for a test.
-    """
-    import logging
-
-    logging.disable(logging.CRITICAL)
-    yield
-    logging.disable(logging.NOTSET)
-
-
-@pytest.fixture
-def randname():
-    def _randname(prefix):
-        return f"{prefix} {uuid.uuid4().hex[:6]}"
-
-    return _randname
 
 
 def copy_fixture(copies=1):
@@ -66,44 +57,6 @@ def local_authenticator(db):
     yield authenticator
     authenticator.authenticator_user.all().delete()
     authenticator.delete()
-
-
-@pytest.fixture
-def admin_api_client(db, admin_user, unauthenticated_api_client, local_authenticator):
-    client = unauthenticated_api_client
-    client.login(username="admin", password="password")
-    yield client
-    try:
-        client.logout()
-    except AttributeError:
-        # The test might have logged the user out already (e.g. to test the logout signal)
-        pass
-
-
-@pytest.fixture
-def user(db, django_user_model, local_authenticator):
-    user = django_user_model.objects.create_user(username="user", password="password")
-    yield user
-    user.delete()
-
-
-@pytest.fixture
-def user_api_client(db, user, unauthenticated_api_client, local_authenticator):
-    client = unauthenticated_api_client
-    client.login(username="user", password="password")
-    yield client
-    try:
-        client.logout()
-    except AttributeError:
-        # The test might have logged the user out already (e.g. to test the logout signal)
-        pass
-
-
-@pytest.fixture
-def unauthenticated_api_client(db):
-    from rest_framework.test import APIClient
-
-    return APIClient()
 
 
 @pytest.fixture
@@ -179,13 +132,6 @@ def organization(randname):  # noqa: F811
     organization = Organization.objects.create(name=random_name)
     yield organization
     organization.delete()
-
-
-@pytest.fixture
-def rsa_keypair():
-    from aap_gateway_api.utils.jwt_token import generate_jwt_keypair
-
-    return generate_jwt_keypair()
 
 
 @pytest.fixture
