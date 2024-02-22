@@ -6,7 +6,7 @@
 
 ADMIN_PASSWORD := admin
 SERVICE_DIR := ../services
-GW_DIR := ../
+GW_DIR := ..
 AAP_DEV_DIR := .
 
 $(SERVICE_DIR)/awx/.git/HEAD: ;
@@ -22,7 +22,7 @@ awx-down: $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml
 	-docker-compose -f $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml down
 
 $(GW_DIR)/tools/generated/proxy.yml:
-	$(AAP_DEV_DIR)/gateway-eda_server-config-hack.py $(GW_DIR)/tools/configs/proxy-config-sample.yml $(GW_DIR)/tools/generated/proxy.yml
+	cd $(GW_DIR) && make tools/generated/proxy.yml
 
 .awx-settings-hack:
 	$(AAP_DEV_DIR)/awx-up-check.sh
