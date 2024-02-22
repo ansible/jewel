@@ -10,6 +10,12 @@ logger = logging.getLogger('aap.gateway.models.user')
 
 
 class User(AbstractUser, CommonModel):
+    ignore_relations = [
+        'authenticator_user',  # private model
+        'groups',  # not using the auth app stuff, see Team model
+        'user_permissions',  # not using auth app permissions
+        'logentry',  # used for Django admin pages, not the API
+    ]
     is_system_auditor = models.BooleanField(default=False, null=False)
 
     encrypted_fields = ()  # handed as special case by UserSerializer
