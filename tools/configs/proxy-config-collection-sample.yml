@@ -1,0 +1,91 @@
+# Init by Ansible Collection infra.gateway_configuration_collection
+gateway_http_ports:   # Http port where the proxy will be listening, these ports should be exposed
+  - name: API Port    # -- name of the port, used by [gateway_services | gateway_routes]/http_port
+    number: 9080      # -- port number, by default it's routed to port 443 outside the container
+    use_https: true   # -- http/https flag
+    is_api_port: true # -- if true, port is used for gateway_services. Only one can be true
+
+gateway_service_clusters:  # Service clusters (1 per type)
+  - name: gateway # -- name of cluster, used by [gateway_service_nodes | gateway_services | gateway_routes]/service_cluster
+    service_type: gateway # -- type of cluster (allowed values: gateway/controller/eda/hub)
+  - name: controller
+    service_type: controller
+  - name: hub
+    service_type: hub
+  - name: eda
+    service_type: eda
+
+gateway_service_nodes:   # Nodes of service clusters
+  - name: Gateway Node        # -- name of node
+    service_cluster: gateway  # -- belonging service cluster
+    address: "gateway"        # -- hostname or IP of the service
+  - name: Controller Node
+    service_cluster: controller
+    address: "localhost"
+  - name: Hub Node
+    service_cluster: hub
+    address: "localhost"
+  - name: EDA Node
+    service_cluster: eda
+    address: "localhost"
+
+gateway_services:    # API Services (Hub/EDA/Controller/Gateway)
+    # It configures proxy requests from
+    # - from https://<gateway url>:9080/...
+    # - to https://gateway:8000/...  # gateway container name is taken from service node "Gateway Node"
+  - name: Gateway API                 # -- name of the API route
+    description: Proxy to the gateway # -- description
+    http_port: API Port               # -- http port name, where is the proxy listening
+    service_cluster: gateway          # -- service cluster name
+    is_service_https: true            # -- defines that the gateway API is listening on https
+    service_path: '/'                 # -- path on the gateway API
+    service_port: 8000                # -- port on the gateway API
+    order: 100
+
+    # It configures proxy requests from
+    # - from https://<gateway url>:9080/api/hub/...
+    # - to http://localhost:5001/api/hub/...  # localhost is taken from service node "Hub Node"
+  - name: Automation Hub API
+    description: Proxy to the Automation Hub
+    http_port: API Port               # -- http port name, where is the proxy listening
+    service_cluster: hub              # -- service cluster name (Automation Hub service)
+    service_path: '/api/hub/'         # -- API path on the Automation Hub
+    service_port: 5001                # -- API port on the Automation Hub
+    order: 1
+
+    # It configures proxy requests from
+    # - from https://<gateway url>:9080/api/controller/...
+    # - to https://localhost:8043/api/...  # localhost is taken from service node "Controller Node"
+  - name: Controller API
+    description: Proxy to the Controller
+    http_port: API Port
+    service_cluster: controller
+    is_service_https: true
+    service_path: '/api/'
+    service_port: 8043
+    order: 2
+
+    # It configures proxy requests from
+    # - from https://<gateway url>:9080/api/eda/...
+    # - to http://localhost:8010/api/eda/...  # localhost is taken from service node "Controller Node"
+  - name: Event Driven Automation API
+    description: Proxy to the EDA
+    http_port: API Port
+    service_cluster: eda
+    is_service_https: false
+    service_path: '/api/eda/'
+    service_port: 8010
+    order: 3
+
+gateway_routes:
+    # It configures proxy requests from
+    # - from https://<gateway url>:9080/v2/...
+    # - to http://localhost:5001/v2/...  # localhost is taken from service node "Hub Node"
+  - name: Hub Container Registry
+    description: Hub Container Registry
+    gateway_path: '/v2/'
+    http_port: API Port
+    service_cluster: hub
+    is_service_https: false
+    service_path: '/v2/'
+    service_port: 5001

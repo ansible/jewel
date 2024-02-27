@@ -1,0 +1,24 @@
+---
+- name: Playbook to configure automation platform gateway data
+  hosts: localhost
+  connection: local
+  vars:
+    gateway_username: "{{ gateway_admin_username }}"
+    gateway_password: "{{ gateway_admin_password }}"
+    gateway_hostname: "{{ gateway_host }}"
+  pre_tasks:
+  - name: Check if API is available and returning status 200
+    uri:
+      url: "{{ gateway_hostname }}/api/"
+      validate_certs: "{{ gateway_validate_certs|default(False) }}"
+    register: result
+    until: "result.status == 200"
+    retries: 5
+    delay: 5
+  roles:
+    - {role: infra.gateway_configuration.http_ports, when: gateway_http_ports is defined}
+    - {role: infra.gateway_configuration.service_clusters, when: gateway_service_clusters is defined}
+    - {role: infra.gateway_configuration.service_nodes, when: gateway_service_nodes is defined}
+    - {role: infra.gateway_configuration.services, when: gateway_services is defined}
+    - {role: infra.gateway_configuration.routes, when: gateway_routes is defined}
+...

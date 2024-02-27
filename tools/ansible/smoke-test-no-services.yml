@@ -4,7 +4,7 @@
     - name: Run dev env smoke test
       block:
         - name: Start the development environment
-          command: make docker-compose
+          command: make docker-compose-basic
           args:
             chdir: "{{ repo_root }}"
           environment:
@@ -31,22 +31,6 @@
             validate_certs: false
           register: "admin_request"
           until: "admin_request is success and admin_request.json.results[0].username == 'admin'"
-
-        - name: Configure Proxy
-          command: make register-services
-          args:
-            chdir: "{{ repo_root }}"
-
-        - name: Make request as admin through proxy
-          uri:
-            url: https://localhost/api/gateway/v1/me/
-            user: "{{ gateway_admin_username }}"
-            password: "{{ gateway_admin_password }}"
-            force_basic_auth: true
-            validate_certs: false
-          register: "admin_proxy_request"
-          until: "admin_proxy_request is success and admin_proxy_request.json.results[0].username == 'admin'"
-
       always:
         - name: Print container logs
           command: docker compose -f tools/generated/docker-compose.yml logs

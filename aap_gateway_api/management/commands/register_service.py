@@ -7,7 +7,7 @@ SERVICES = ["gateway", "hub", "controller", "eda"]
 
 
 class Command(BaseCommand):
-    help = "Initialize Gateway service configuration from a proxy.yml file."
+    help = "Deprecated: Initialize Gateway service configuration from a proxy.yml file."
 
     def add_arguments(self, parser):
         parser.add_argument("--config", type=str, help="Service configuration yml file.", required=True)

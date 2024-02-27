@@ -1,3 +1,0 @@
-proxy:
-  use_tls: true
-  api_port: 9080
