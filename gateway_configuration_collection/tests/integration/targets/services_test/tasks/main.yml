@@ -13,9 +13,10 @@
       name: infra.gateway_configuration.http_ports
     vars:
       http_ports:
-      - name: "Port 9081"
-        number: 9081
+      - name: "API Port"
+        number: 9080
         use_https: true
+        is_api_port: true
       - name: "Port 9000"
         number: 9000
   - debug:
@@ -24,7 +25,6 @@
   - name: Assert Create Http Ports
     assert:
       that:
-      - __gateway_http_ports_job_async_result.results[0] is changed
       - __gateway_http_ports_job_async_result.results[1] is changed
 
   ### Create Service Clusters ###
@@ -57,7 +57,7 @@
       gateway_services:
       - name: Gateway API
         description: Proxy to the Gateway
-        http_port: Port 9081
+        http_port: API Port
         service_cluster: gateway
         is_service_https: true
         service_path: '/'
@@ -65,14 +65,14 @@
         order: 100
       - name: Automation Hub API
         description: Proxy to the Automation Hub
-        http_port: Port 9081
+        http_port: API Port
         service_cluster: hub
         service_path: '/api/hub/'
         service_port: 5001
         order: 1
       - name: Controller API
         description: Proxy to the Controller
-        http_port: Port 9081
+        http_port: API Port
         service_cluster: controller
         is_service_https: true
         service_path: '/api/'
@@ -96,7 +96,7 @@
       # No change
       - name: Gateway API
         description: Proxy to the Gateway
-        http_port: Port 9081
+        http_port: API Port
         service_cluster: gateway
         is_service_https: true
         service_path: '/'
@@ -115,7 +115,7 @@
         service_port: 8043
       # Non-existing cluster
       - name: Wrong cluster
-        http_port: Port 9081
+        http_port: API Port
         service_cluster: eda
         state: absent
       # Non-existing port
@@ -219,5 +219,5 @@
     vars:
       gateway_state: absent
       gateway_http_ports:
-      - name: Port 9081
+      - name: API Port
       - name: Port 9000

@@ -24,53 +24,55 @@ This repo is internal only at this time.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Proxy Configuration
-
-Configure your local controller and hub instances in tools/configs/proxy.yml. This will be used to create the envoy configuration from tools/templates/envoy.yml.j2.
-
-
-```
-services:
-  hub:
-    use_tls: false              <- set to true if the instance you're proxying to uses HTTPS
-    service_root: /api/galaxy/  <- path on the service host where the service's API lives
-
-    load_balance:               <- multiple hosts for the service can be listed here for load balancing
-      - address: "localhost"    <- hostname where the service is running
-        port: 5001              <- port that the service is listening on
-```
-
 ## Starting Gateway
+
+### Install prerequisites
 
 Please have the following prerequisites already installed on your development machine:
   * docker
   * make
   * openssl
 
-1. Create a python virtual environment: `python3 -m venv <location>`
-2. Activate the virtual environment: `source <location>/bin/activate`
-3. Install the tools for development: `pip install -r requirements/requirements_dev.txt`
-4. Optionally generate and edit the proxy config file to point it to services you have running:
-    `make tools/generated/proxy.yml`
-    ```yml
-    [...]
-      hub:
-        use_tls: true
-        service_root: /api/galaxy/
-        api_port: 5043
-        type: hub
+### Install python dependencies
 
-        nodes:
-          - address: "localhost"
-    [...]
-    ```
-5. Log into quay.io: `docker login quay.io`
-6. Optionally clone `django-ansible-base` if you are going to be making changes to it. If you clone it, it must live directly inside your `aap-gateway` directory, and be called `django-ansible-base`. If you skip this step, the latest git version of `django-ansible-base` will be built into your development image.
-7. Start up your environment: `make docker-compose`
+  * Create a python virtual environment: `python3 -m venv <location>`
+  * Activate the virtual environment: `source <location>/bin/activate`
+  * Install the tools for development: `pip install -r requirements/requirements_dev.txt`
+  * Optionally clone `django-ansible-base` if you are going to be making changes to it. If you clone it, it must live directly inside your `aap-gateway` directory, and be called `django-ansible-base`. If you skip this step, the latest git version of `django-ansible-base` will be built into your development image.
 
-This will build an `admin` user with random password (see value for `gateway_admin_password` in `container-startup.yml`) and create any services you have defined in your `proxy.yml` file.
+### Proxy Configuration
 
-Note: You can force your own password by setting the `ADMIN_PASSWORD` environment variable before running `make docker-compose`.
+This is an optional step.  
+Configure your proxy routes to the local Gateway, Controller, Hub and EDA instances.
+
+  * Generate a tools/generated/proxy.yml file.
+  * * Run command `make tools/generated/proxy.yml`.
+  * * File is based on sample configuration [tools/configs/proxy-config-collection-sample.yml](tools/configs/proxy-config-collection-sample.yml) 
+  * Modify endpoints in tools/generated/proxy.yml according to comments
+
+This will be used to create the envoy configuration from [tools/configs/envoy.yml](tools/configs/envoy.yml).
+
+### Run the environment 
+
+* Log into quay.io: `docker login quay.io`
+* Start up your environment: `make docker-compose`
+  * Alternatively, you can split it into standalone steps:
+    * `make docker-compose-basic` - Build & run the gateway containers
+    * `make register-services` - Configure the proxy 
+    * `make plumb` - Plumb the side cars (below)
+
+This will:
+- `make docker-compose-basic`:
+  - build an `admin` user with random password (see value for `gateway_admin_password` in `container-startup.yml`)
+    - You can force your own password by setting the `ADMIN_PASSWORD` environment variable before running `make docker-compose`.
+- `make register-services`:
+  - create http ports, services and routes you have defined in your `proxy.yml` file
+- `make plumb`: 
+  - plumb (connects) containers enabled in `container-startup.yml` (mode detailed in chapters below):
+    - `keycloak_enabled: True`  (auth)
+    - `ldap_enabled: True` (auth)
+    - `tacacs_enabled: True` (auth)
+    - `splunk_enabled: true` (logging)
 
 ## Starting other AAP services
 

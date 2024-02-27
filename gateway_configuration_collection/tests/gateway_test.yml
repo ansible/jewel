@@ -4,24 +4,15 @@
   gather_facts: false
   connection: local
   vars:
-    gateway_hostname: https://gateway.nas:9080/
-    gateway_username: admin
-    gateway_password: admin
+    gateway_hostname: "{{ gateway_host | default('https://localhost:8000/') }}"
+    gateway_username: "{{ gateway_admin_user | default('admin') }}"
+    gateway_password: "{{ gateway_admin_password | default('admin') }}"
     gateway_validate_certs: false
     gateway_configuration_users_secure_logging: false
 
   collections:
   - infra.gateway_configuration
   tasks:
-    # Disabled until we get tokens working
-    # - name: Create a new token using username/password
-    #   infra.gateway_configuration.token:
-    #     state: present
-    #     gateway_hostname: "{{ gateway_hostname }}"
-    #     gateway_username: "{{ gateway_username }}"
-    #     gateway_password: "{{ gateway_username }}"
-    #     gateway_validate_certs: false
-
     - name: Add settings
       infra.gateway_configuration.settings:
         settings:

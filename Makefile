@@ -99,6 +99,21 @@ help/generate:
 
 # Container related targets
 # --------------------------------------
+
+#
+# Start docker containers without additional playbooks
+#
+docker-compose-basic: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
+
+#
+# Start the docker container + plumb the sidecar containers and register services' proxy
+#
+docker-compose: docker-compose-detached register-services plumb
+	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
+		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate; \
+  	 fi
+
 # Start the docker container in detached mode, wait for finish
 docker-compose-detached: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
 	- env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
@@ -107,14 +122,6 @@ docker-compose-detached: tools/generated/docker-compose.yml docker-compose-build
 # Attach to the container logs if docker in detached mode
 docker-compose-attach:
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate
-
-#
-# Start the docker container + plumb the sidecar containers
-#
-docker-compose: docker-compose-detached plumb
-	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
-		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate; \
-  	 fi
 
 # Delete the containers and docker networks
 docker-compose-down:
@@ -188,13 +195,20 @@ tools/generated/gateway.crt:
 
 ## Build the proxy config file
 tools/generated/proxy.yml:
-	cp tools/configs/proxy-config-sample.yml tools/generated/proxy.yml
+	cp tools/configs/proxy-config-collection-sample.yml tools/generated/proxy.yml
 
 ## Build the requirements.txt file
 requirements/requirements.txt: requirements/requirements.in
 	cd requirements && \
 	    ./updater.sh run
 	@-cd .. || true
+
+## Register services and ports
+register-services: tools/generated/proxy.yml collection-install
+	- ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml
+
+cleanup-services: tools/generated/proxy.yml collection-install
+	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml -e gateway_state=absent
 
 ## Plumb the sidecar containers
 plumb:

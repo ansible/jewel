@@ -55,7 +55,6 @@ done
 
 ${GATEWAY_MANAGE} migrate --noinput
 ${GATEWAY_MANAGE} collectstatic --noinput
-${GATEWAY_MANAGE} register_service --config /opt/aap_gateway/src/tools/generated/proxy.yml
 
 export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
 if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
