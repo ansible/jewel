@@ -59,6 +59,7 @@
         description: Gateway Service Route
         gateway_path: '/gw-svc-1/v1/'
         http_port: Port 9082
+        enable_gateway_auth: false
         service_cluster: gateway
         service_path: '/aaa/v1/'
         service_port: 1234

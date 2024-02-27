@@ -52,6 +52,9 @@ options:
       description: Flag whether or not the service cluster uses https
       default: false
       type: bool
+    enable_gateway_auth:
+      description: If false, the gateway will not insert a Gateway token into the proxied request
+      type: bool
     service_path:
       description:
       - URL path on the Ansible service cluster to route traffic to
@@ -110,6 +113,7 @@ def main():
         http_port=dict(type="str"),
         service_cluster=dict(type="str"),
         is_service_https=dict(type="bool", default=False),
+        enable_gateway_auth=dict(type="bool"),
         service_path=dict(type="str"),
         service_port=dict(type="int"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),

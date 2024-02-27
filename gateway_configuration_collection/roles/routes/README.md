@@ -26,18 +26,19 @@ Variables specific for this role are following:
 
 Options for the `gateway_routes` variable:
 
-| Variable Name      | Default Value | Required | Type | Description                                                                      |
-|:-------------------|:-------------:|:--------:|:----:|:---------------------------------------------------------------------------------|
-| `name`             |      N/A      |   yes    | str  | The name of the route                                                            |
-| `new_name`         |      N/A      |    no    | str  | Setting this option will change the existing name (looked up via the name field) |
-| `description`      |      ""       |    no    | str  | Description of the route                                                         |
-| `gateway_path`     |      N/A      |    no    | str  | Path on the gateway to listen to traffic on                                  |
-| `http_port`        |      N/A      |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                  |
-| `service_cluster`  |      N/A      |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)      | 
-| `is_service_https` |    `false`    |    no    | bool | Flag whether or not the service cluster uses https                               |
-| `service_path`     |      N/A      |    no    | str  | URL path on the Ansible service cluster to route traffic to                          | 
-| `service_port`     |      N/A      |    no    | int  | Port on the service cluster to route traffic to                                  | 
-| `state`            |   `present`   |    no    | str  | [more](../../README.md#state-variable)                                           | 
+| Variable Name         |    Default Value    | Required | Type | Description                                                                        |
+|:----------------------|:-------------------:|:--------:|:----:|:-----------------------------------------------------------------------------------|
+| `name`                |         N/A         |   yes    | str  | The name of the route                                                              |
+| `new_name`            |         N/A         |    no    | str  | Setting this option will change the existing name (looked up via the name field)   |
+| `description`         |         ""          |    no    | str  | Description of the route                                                           |
+| `gateway_path`        |         N/A         |    no    | str  | Path on the gateway to listen to traffic on                                    |
+| `http_port`           |         N/A         |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                    |
+| `service_cluster`     |         N/A         |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)        | 
+| `is_service_https`    |       `false`       |    no    | bool | Flag whether or not the service cluster uses https                                 |
+| `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the gateway will not insert a Gateway token into the proxied request |
+| `service_path`        |         N/A         |    no    | str  | URL path on the Ansible service cluster to route traffic to                            | 
+| `service_port`        |         N/A         |    no    | int  | Port on the service cluster to route traffic to                                    | 
+| `state`               |      `present`      |    no    | str  | [more](../../README.md#state-variable)                                             | 
 
 **Unique value:**
 
@@ -64,7 +65,8 @@ Options for the `gateway_routes` variable:
     {
       "name": "Gateway Non-api Route",
       "http_port": "Port 8000",
-      "gateway_path": "/non-api/v2"
+      "gateway_path": "/non-api/v2",
+      "enable_gateway_auth": false
     },
     {
       "name": "EDA Config Route",
