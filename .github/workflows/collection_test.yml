@@ -23,5 +23,8 @@ jobs:
             -e repo_root=$(pwd) \
             -e gateway_vars=$(readlink -f container-startup.yml)
 
+      - name: Cleanup services
+        run: make cleanup-services
+
       - name: Perform integration tests
         run: make collection-test

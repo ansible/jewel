@@ -8,10 +8,6 @@ class AAPRoute(AAPService):
     def unique_field(self):
         return self.module.IDENTITY_FIELDS["routes"]
 
-    def get_api_slug(self):
-        # Route doesn't have API slug
-        return None
-
     def get_gateway_path(self):
         if self.data:
             return self.data['gateway_path']

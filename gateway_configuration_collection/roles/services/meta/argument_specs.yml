@@ -19,6 +19,11 @@ argument_specs:
           description:
             type: str
             description: Description of the service
+          api_slug:
+            type: str
+            description:
+            - URL slug for the gateway API path for the Controller, Hub and EDA services
+            - Gateway API route requires value "gateway", but the slug is not used
           http_port:
             description:
             - Name or ID referencing the Http Port
@@ -33,6 +38,9 @@ argument_specs:
             type: bool
             default: false
             description: Set this to true if the service cluster requires HTTPS
+          enable_gateway_auth:
+            type: bool
+            description: If false, the AAP Gateway will not insert a Gateway token into the proxied request
           service_path:
             type: str
             description:

@@ -58,20 +58,24 @@
       - name: Gateway API
         description: Proxy to the Gateway
         http_port: API Port
+        api_slug: gateway
         service_cluster: gateway
         is_service_https: true
+        enable_gateway_auth: false
         service_path: '/'
         service_port: 8000
         order: 100
       - name: Automation Hub API
         description: Proxy to the Automation Hub
         http_port: API Port
+        api_slug: hub
         service_cluster: hub
         service_path: '/api/hub/'
         service_port: 5001
         order: 1
       - name: Controller API
         description: Proxy to the Controller
+        api_slug: controller
         http_port: API Port
         service_cluster: controller
         is_service_https: true

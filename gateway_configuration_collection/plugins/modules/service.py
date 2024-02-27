@@ -35,6 +35,12 @@ options:
     description:
       description: The description of the Service
       type: str
+    api_slug:
+      description:
+      - URL slug for the gateway API path for the Controller, Hub and EDA services
+      - Gateway API route requires value "gateway", but the slug is not used
+      type: str
+      default: ''
     http_port:
       description:
       - Name or ID referencing the Http Port
@@ -48,6 +54,9 @@ options:
     is_service_https:
       description: Flag whether or not the service cluster uses https
       default: false
+      type: bool
+    enable_gateway_auth:
+      description: If false, the AAP Gateway will not insert a Gateway token into the proxied request
       type: bool
     service_path:
       description:
@@ -75,6 +84,7 @@ EXAMPLES = """
   infra.gateway_configuration.service:
   - name: Hub API
     description: Proxy to the Automation Hub
+    api_slug: "hub"
     http_port: "Port 8080"
     service_cluster: "Automation Hub"
     is_service_https: true
@@ -108,9 +118,11 @@ def main():
         name=dict(type="str", required=True),
         new_name=dict(type="str"),
         description=dict(type="str"),
+        api_slug=dict(type="str"),
         http_port=dict(type="str"),
         service_cluster=dict(type="str"),
         is_service_https=dict(type="bool", default=False),
+        enable_gateway_auth=dict(type="bool"),
         service_path=dict(type="str"),
         service_port=dict(type="int"),
         order=dict(type="int"),

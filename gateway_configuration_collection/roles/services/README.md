@@ -26,25 +26,27 @@ Variables specific for this role are following:
 
 Options for the `gateway_services` variable:
 
-| Variable Name      |  Default Value   | Required | Type | Description                                                                                                  |
-|:-------------------|:----------------:|:--------:|:----:|:-------------------------------------------------------------------------------------------------------------|
-| `name`             |       N/A        |   yes    | str  | The name of the api                                                                                          |
-| `new_name`         |       N/A        |    no    | str  | Setting this option will change the existing name (looked up via the name field)                             |
-| `description`      |        ""        |    no    | str  | Description of the service                                                                                   |
-| `http_port`        |       N/A        |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                                              |
-| `service_cluster`  |       N/A        |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)                                  | 
-| `is_service_https` |     `false`      |    no    | bool | Flag whether or not the service cluster uses https                                                           |
-| `service_path`     |        ""        |    no    | str  | URL path on the AAP Service cluster to route traffic to                                                      | 
-| `service_port`     |       N/A        |    no    | int  | Port on the service cluster to route traffic to                                                              | 
-| `order`            | "" (`50` by API) |    no    | int  | The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order | 
-| `state`            |    `present`     |    no    | str  | [more](../../README.md#state-variable)                                                                       | 
+| Variable Name         |    Default Value    | Required | Type | Description                                                                                                                                       |
+|:----------------------|:-------------------:|:--------:|:----:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
+| `name`                |         N/A         |   yes    | str  | The name of the api                                                                                                                               |
+| `new_name`            |         N/A         |    no    | str  | Setting this option will change the existing name (looked up via the name field)                                                                  |
+| `description`         |         ""          |    no    | str  | Description of the service                                                                                                                        |
+| `api_slug`            |         ""          |    no    | str  | URL slug for the gateway API path for the Controller, Hub and EDA services (Gateway API route requires value "gateway", but the slug is not used) |
+| `http_port`           |         N/A         |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                                                                                   |
+| `service_cluster`     |         N/A         |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)                                                                       | 
+| `is_service_https`    |       `false`       |    no    | bool | Flag whether or not the service cluster uses https                                                                                                |
+| `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the AAP Gateway will not insert a Gateway token into the proxied request                                                                |
+| `service_path`        |         ""          |    no    | str  | URL path on the AAP Service cluster to route traffic to                                                                                           | 
+| `service_port`        |         N/A         |    no    | int  | Port on the service cluster to route traffic to                                                                                                   | 
+| `order`               |  "" (`50` by API)   |    no    | int  | The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order                                      | 
+| `state`               |      `present`      |    no    | str  | [more](../../README.md#state-variable)                                                                                                            | 
 
 **Unique value:**
 
 - `name`
 - `http_port` + `service_cluster`
 
-**Note**: field `gateway_path` is inferred from the `service_cluster`, always starts with `/api/` and is read only.
+**Note**: field `gateway_path` is inferred from the `api_slug`, always starts with `/api/` and is read only.
 
 ## Usage
 
@@ -74,6 +76,7 @@ Options for the `gateway_services` variable:
       "name": "EDA API",
       "new_name": "Event Driven Automation API",
       "http_port": "Port 8000",
+      "api_slug": "eda",
       "service_cluster": "eda",
       "service_path": "/api/v2/",
       "service_port": 9000

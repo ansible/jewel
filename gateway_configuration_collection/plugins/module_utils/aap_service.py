@@ -45,9 +45,7 @@ class AAPService(AAPObject):
     def set_new_fields(self):
         self.set_name_field()
 
-        # !! API Slug corresponds with Service Type (1 type per gateway only)
-        api_slug = self.get_api_slug()
-        if api_slug is not None:
+        if (api_slug := self.params.get('api_slug')) is not None:
             self.new_fields['api_slug'] = api_slug
 
         if (description := self.params.get('description')) is not None:
@@ -67,6 +65,9 @@ class AAPService(AAPObject):
             if service_cluster_id is not None:
                 self.new_fields['service_cluster'] = service_cluster_id
 
+        if (enable_gateway_auth := self.params.get('enable_gateway_auth')) is not None:
+            self.new_fields['enable_gateway_auth'] = enable_gateway_auth
+
         if (is_service_https := self.params.get('is_service_https')) is not None:
             self.new_fields['is_service_https'] = is_service_https
 
@@ -79,18 +80,17 @@ class AAPService(AAPObject):
         if (order := self.params.get('order')) is not None:
             self.new_fields['order'] = order
 
-    def get_api_slug(self):
-        return self.params.get('service_cluster')
-
     def get_gateway_path(self):
         if self.data:
             gateway_path = self.data['gateway_path']
         else:
-            api_slug = self.params.get('service_cluster')
+            api_slug = self.params.get('api_slug')
             # Taken from:
             # https://github.com/ansible/aap-gateway/blob/382b27f458b5f957b49b2e8d4c86a72cc36eebfa/aap_gateway_api/models/service.py#L248  # noqa
             if api_slug == 'gateway':
                 gateway_path = '/'
-            else:
+            elif api_slug:
                 gateway_path = API_PREFIX + api_slug + "/"
+            else:
+                gateway_path = None
         return gateway_path
