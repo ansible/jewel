@@ -52,7 +52,7 @@ def test_register_service_yaml_success(service_config):
         sc = ServiceCluster.objects.get(service_type=service_type)
         assert ServiceAPIRoute.objects.filter(service_cluster=sc, name=f"{service_type} api").exists()
         for instance in params['nodes']:
-            assert ServiceNode.objects.filter(service=sc, **instance).exists()
+            assert ServiceNode.objects.filter(service_cluster=sc, **instance).exists()
 
         if service_type in ("hub"):
             assert AdditionalRoute.objects.filter(service_port=params['api_port'], service_cluster=sc).exists()

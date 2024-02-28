@@ -27,7 +27,7 @@ class StatusView(AnsibleBaseView):
             port_number = route.service_port
             http_or_s = 'https' if route.is_service_https else 'http'
 
-            nodes = ServiceNode.objects.filter(service=route.service_cluster)
+            nodes = ServiceNode.objects.filter(service_cluster=route.service_cluster)
             for node in nodes:
                 node_id = f'{node.address}:{port_number}'
                 if node_id in response['services'][service_type]:

@@ -37,4 +37,4 @@ class AAPServiceNode(AAPObject):
         if self.service_cluster:
             service_cluster_id = (self.service_cluster.data or {}).get('id')
             if service_cluster_id is not None:
-                self.new_fields['service'] = service_cluster_id
+                self.new_fields['service_cluster'] = service_cluster_id

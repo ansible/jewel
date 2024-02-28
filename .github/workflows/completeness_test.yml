@@ -1,0 +1,37 @@
+---
+name: collection completeness test
+on:
+  push:
+  pull_request:
+
+jobs:
+  completeness_test:
+    name: collection completeness test
+    runs-on: ubuntu-latest
+    env:
+      HEADLESS: "yes"
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build the image
+        run: make docker-compose-build
+
+      - name: Spin up the dev env
+        run: |
+          ansible-playbook -v tools/ansible/smoke-test-no-services.yml \
+            -e repo_root=$(pwd) \
+            -e gateway_vars=$(readlink -f container-startup.yml)
+
+      - name: Install make
+        run: sudo apt install make
+
+      - name: Install python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install requirements
+        run: pip3.11 install -r requirements/requirements_dev.txt
+
+      - name: Perform completeness tests
+        run: make collection-test-completeness

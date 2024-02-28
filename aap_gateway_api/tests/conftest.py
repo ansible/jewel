@@ -199,7 +199,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         node = ServiceNode.objects.create(
             name=randname("Service Node"),
-            service=service_cluster,
+            service_cluster=service_cluster,
             address=f"10.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}",
         )
         yield node
@@ -211,7 +211,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         randstr2 = uuid.uuid4().hex[:6]
         route = AdditionalRoute.objects.create(
             name=randname("Test route"),
-            port=http_port_factory(),
+            http_port=http_port_factory(),
             is_service_https=False,
             service_cluster=service_cluster,
             service_port=random.randint(1000, 65536),
@@ -229,7 +229,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         slug = f"my-api-slug-{uuid.uuid4().hex[:6]}"
         route = ServiceAPIRoute.objects.create(
             name=randname("Test API route"),
-            port=http_api_port_factory(),
+            http_port=http_api_port_factory(),
             is_service_https=False,
             service_cluster=service_cluster,
             service_port=random.randint(1000, 65536),
@@ -244,7 +244,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
 
     def _full_service_hierarchy(request, name=name):
         service_node = request.getfixturevalue(f"service_node_{name}")
-        service_cluster = service_node.service
+        service_cluster = service_node.service_cluster
         route = request.getfixturevalue(f"additional_route_{name}")
         route.service_cluster = service_cluster
         route.save()

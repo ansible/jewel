@@ -9,7 +9,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # display each of the these route properties
         route_props = [
-            'port',
+            'http_port',
             'gateway_path',
             'enable_gateway_auth',
             'is_service_https',
@@ -24,7 +24,7 @@ class Command(BaseCommand):
             self.stdout.write(f'\ncluster: {cluster}')
 
             # print out all the nodes in the cluster
-            for node in ServiceNode.objects.filter(service=cluster):
+            for node in ServiceNode.objects.filter(service_cluster=cluster):
                 self.stdout.write(f'\tnode: {node}')
 
             # iterate through route types

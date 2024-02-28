@@ -58,7 +58,7 @@ class AAPService(AAPObject):
         if self.http_port:
             http_port_id = (self.http_port.data or {}).get('id')
             if http_port_id is not None:
-                self.new_fields['port'] = http_port_id
+                self.new_fields['http_port'] = http_port_id
 
         if self.service_cluster:
             service_cluster_id = (self.service_cluster.data or {}).get('id')

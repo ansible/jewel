@@ -54,15 +54,15 @@ class Command(BaseCommand):
                 },
             )
 
-            ServiceNode.objects.filter(service=service).delete()
+            ServiceNode.objects.filter(service_cluster=service).delete()
 
             for instance in cfg["nodes"]:
-                ServiceNode.objects.create(name=f"Node {name} - {instance['address']}", service=service, **instance)
+                ServiceNode.objects.create(name=f"Node {name} - {instance['address']}", service_cluster=service, **instance)
 
             if service_type == "hub":
                 self.stdout.write(f'Creating /v2/ route for {service_type}')
                 AdditionalRoute.objects.update_or_create(
-                    port=api_port,
+                    http_port=api_port,
                     gateway_path="/v2/",
                     name=f"{name}-container-registry",
                     defaults={
