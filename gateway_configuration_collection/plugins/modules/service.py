@@ -21,9 +21,7 @@ author: Martin Slemr (@slemrmartin)
 short_description: Configure a gateway service.
 description:
     - Configure an automation platform gateway service.
-    - Their gateway API paths have a prefixes:
-       - '/' in case of gateway
-       - '/api/' otherwise
+    - Their gateway API paths have a prefixes: / in case of gateway, /api/ otherwise
 options:
     name:
       required: true

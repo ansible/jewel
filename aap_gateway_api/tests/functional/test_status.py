@@ -98,7 +98,7 @@ def test_status_two_routes_same_service_cluster(get, admin_api_client, full_serv
     route_copy = full_service_hierarchy_controller.route
     route_copy.pk = None
     route_copy.id = None
-    route_copy.port = port
+    route_copy.http_port = port
     route_copy.name = randname('Different Route')
     route_copy.save()
 
@@ -122,12 +122,12 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
 
     new_service_node = ServiceNode.objects.create(
         name="Node 127.0.0.99",
-        service=full_service_hierarchy_controller.service_cluster,
+        service_cluster=full_service_hierarchy_controller.service_cluster,
         address="127.0.0.99",
     )
     another_service_node = ServiceNode.objects.create(
         name="Node 127.0.0.100",
-        service=full_service_hierarchy_controller.service_cluster,
+        service_cluster=full_service_hierarchy_controller.service_cluster,
         address="127.0.0.100",
     )
 

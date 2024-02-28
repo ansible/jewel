@@ -119,7 +119,9 @@ class ServiceNode(UniqueNamedCommonModel):
     class Meta:
         models.UniqueConstraint("address", name="one_address_per_gateway")
 
-    service = models.ForeignKey(ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text="AAP Service cluster that this node belongs to.")
+    service_cluster = models.ForeignKey(
+        ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text="AAP Service cluster that this node belongs to."
+    )
     address = models.CharField(max_length=255, help_text="Network address to route traffic for this service to.")
 
 
@@ -145,9 +147,9 @@ class Route(UniqueNamedCommonModel):
     """
 
     class Meta:
-        unique_together = ('port', 'gateway_path')
+        unique_together = ('http_port', 'gateway_path')
 
-    port = models.ForeignKey(
+    http_port = models.ForeignKey(
         HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text="Port on the AAP Gateway to listen to traffic on."
     )
     service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text="AAP Service to route traffic to.")
@@ -252,7 +254,7 @@ class ServiceAPIRoute(Route):
         models.UniqueConstraint("service_cluster", name="one_service_api_per_service")
 
     def save(self, *args, **kwargs):
-        self.port = HTTPPort.objects.get(is_api_port=True)
+        self.http_port = HTTPPort.objects.get(is_api_port=True)
         # gateway_path is part of unique key + read only, which means it's repeated in
         # GatewayConfiguration collection::AAPService
         # Note: when this code is changed, AAPService has to be changed too
@@ -275,7 +277,7 @@ class AdditionalRoute(Route):
     router_basename = 'route'
 
     def clean(self):
-        if self.port.is_api_port and self.gateway_path.startswith(API_PREFIX):
+        if self.http_port.is_api_port and self.gateway_path.startswith(API_PREFIX):
             raise ValidationError({'gateway_path': f"Custom routes on the API port cannot start with '{API_PREFIX}'"})
 
     def save(self, *args, **kwargs):

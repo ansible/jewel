@@ -4,7 +4,6 @@ from aap_gateway_api.models import Organization
 
 
 class OrganizationSerializer(NamedCommonModelSerializer):
-
     class Meta:
         model = Organization
         fields = NamedCommonModelSerializer.Meta.fields + [

@@ -16,7 +16,7 @@ def test_list_services_with_objects(service_cluster_hub, service_node_hub, addit
     assert 'cluster: hub' in stdout
     assert 'node: Service Node' in stdout
     assert 'AdditionalRoute: Test route' in stdout
-    assert 'port: ' in stdout
+    assert 'http_port: ' in stdout
     assert 'gateway_path: ' in stdout
     assert 'enable_gateway_auth: ' in stdout
     assert 'is_service_https: ' in stdout

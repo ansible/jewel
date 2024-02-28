@@ -6,14 +6,12 @@ from aap_gateway_api.models.service import API_PREFIX
 
 
 class HTTPPortSerializer(NamedCommonModelSerializer):
-
     class Meta:
         model = HTTPPort
         fields = NamedCommonModelSerializer.Meta.fields + ['number', 'use_https', 'is_api_port']
 
 
 class ServiceClusterSerializer(NamedCommonModelSerializer):
-
     class Meta:
         model = ServiceCluster
         fields = NamedCommonModelSerializer.Meta.fields + [
@@ -22,11 +20,10 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
 
 
 class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
-
     class Meta:
         model = ServiceAPIRoute
         fields = NamedCommonModelSerializer.Meta.fields + [
-            'port',
+            'http_port',
             'service_cluster',
             'service_port',
             'is_service_https',
@@ -34,6 +31,7 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
             'gateway_path',
             'description',
             'api_slug',
+            'enable_gateway_auth',
             'order',
         ]
 
@@ -41,10 +39,9 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
 
 
 class ServiceNodeSerializer(NamedCommonModelSerializer):
-
     class Meta:
         model = ServiceNode
-        fields = NamedCommonModelSerializer.Meta.fields + ['address', 'service']
+        fields = NamedCommonModelSerializer.Meta.fields + ['address', 'service_cluster']
 
 
 class AdditionalRouteSerializer(NamedCommonModelSerializer):
@@ -53,17 +50,18 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
     class Meta:
         model = AdditionalRoute
         fields = NamedCommonModelSerializer.Meta.fields + [
-            'port',
+            'http_port',
             'service_cluster',
             'service_port',
             'is_service_https',
             'service_path',
             'gateway_path',
             'description',
+            'enable_gateway_auth',
         ]
 
     def validate(self, attrs):
-        if attrs.get("port") and attrs["port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):
+        if attrs.get("http_port") and attrs["http_port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):
             raise serializers.ValidationError({'gateway_path': f"Custom routes on the API port cannot start with '{API_PREFIX}'"})
 
         return attrs

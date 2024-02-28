@@ -25,7 +25,7 @@ def test_additional_route_model_clean(http_api_port_factory, service_cluster_eda
         AdditionalRoute.objects.create(
             name="foo",
             is_service_https=False,
-            port=http_api_port,
+            http_port=http_api_port,
             service_path="/test",
             service_cluster=service_cluster_eda,
             service_port=6667,

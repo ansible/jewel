@@ -9,7 +9,7 @@ def test_additional_route_detail(admin_api_client, additional_route_controller):
     assert response.status_code == 200
     assert response.data['id'] == additional_route_controller.pk
     assert response.data['name'] == additional_route_controller.name
-    assert response.data['port'] == additional_route_controller.port.pk
+    assert response.data['http_port'] == additional_route_controller.http_port.pk
     assert response.data['service_cluster'] == additional_route_controller.service_cluster.pk
     assert response.data['service_path'] == additional_route_controller.service_path
     assert response.data['service_port'] == additional_route_controller.service_port
@@ -23,17 +23,17 @@ def test_additional_route_list(admin_api_client, additional_route_controller, ad
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert len(response.data["results"]) == 2
-    assert response.data["results"][0]['port'] == additional_route_controller.port.pk
-    assert response.data["results"][1]['port'] == additional_route_eda.port.pk
-    assert additional_route_eda.port.pk != additional_route_controller.port.pk
+    assert response.data["results"][0]['http_port'] == additional_route_controller.http_port.pk
+    assert response.data["results"][1]['http_port'] == additional_route_eda.http_port.pk
+    assert additional_route_eda.http_port.pk != additional_route_controller.http_port.pk
 
 
 def test_additional_route_create(admin_api_client, http_port_factory, service_cluster_hub):
-    port = http_port_factory()
+    http_port = http_port_factory()
     url = reverse('route-list')
     data = {
         'name': 'test',
-        'port': port.pk,
+        'http_port': http_port.pk,
         'service_cluster': service_cluster_hub.pk,
         'service_path': '/test',
         'service_port': 8080,
@@ -45,7 +45,7 @@ def test_additional_route_create(admin_api_client, http_port_factory, service_cl
     assert response.status_code == 201
     assert AdditionalRoute.objects.count() == 1
     assert AdditionalRoute.objects.get().name == 'test'
-    assert AdditionalRoute.objects.get().port == port
+    assert AdditionalRoute.objects.get().http_port == http_port
     assert AdditionalRoute.objects.get().service_cluster == service_cluster_hub
     assert AdditionalRoute.objects.get().service_path == '/test'
     assert AdditionalRoute.objects.get().service_port == 8080
@@ -58,7 +58,7 @@ def test_additional_route_update(admin_api_client, additional_route_controller):
     url = reverse('route-detail', kwargs={'pk': additional_route_controller.pk})
     data = {
         'name': 'test',
-        'port': additional_route_controller.port.pk,
+        'http_port': additional_route_controller.http_port.pk,
         'service_cluster': additional_route_controller.service_cluster.pk,
         'service_path': '/test',
         'service_port': 8080,
@@ -70,7 +70,7 @@ def test_additional_route_update(admin_api_client, additional_route_controller):
     assert response.status_code == 200
     assert AdditionalRoute.objects.count() == 1
     assert AdditionalRoute.objects.get().name == 'test'
-    assert AdditionalRoute.objects.get().port == additional_route_controller.port
+    assert AdditionalRoute.objects.get().http_port == additional_route_controller.http_port
     assert AdditionalRoute.objects.get().service_cluster == additional_route_controller.service_cluster
     assert AdditionalRoute.objects.get().service_path == '/test'
     assert AdditionalRoute.objects.get().service_port == 8080
@@ -100,11 +100,11 @@ def test_additional_route_delete_nonexistent(admin_api_client):
 
 
 def test_additional_route_api_port_cannot_start_with_api_prefix(admin_api_client, http_api_port_factory, service_cluster_eda):
-    port = http_api_port_factory()
+    http_port = http_api_port_factory()
     url = reverse('route-list')
     data = {
         'name': 'test',
-        'port': port.pk,
+        'http_port': http_port.pk,
         'service_cluster': service_cluster_eda.pk,
         'service_path': '/test',
         'service_port': 8080,
@@ -122,7 +122,7 @@ def test_additional_route_name_must_be_unique(admin_api_client, additional_route
     url = reverse('route-list')
     data = {
         'name': additional_route_controller.name,
-        'port': additional_route_controller.port.pk,
+        'http_port': additional_route_controller.http_port.pk,
         'service_cluster': additional_route_controller.service_cluster.pk,
         'service_path': '/test',
         'service_port': 8080,

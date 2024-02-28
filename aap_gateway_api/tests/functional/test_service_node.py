@@ -9,7 +9,7 @@ def test_service_node_detail(admin_api_client, service_node_controller):
     assert response.status_code == 200
     assert response.data["name"] == service_node_controller.name
     assert response.data["address"] == service_node_controller.address
-    assert response.data["service"] == service_node_controller.service.pk
+    assert response.data["service_cluster"] == service_node_controller.service_cluster.pk
 
 
 def test_service_node_list(admin_api_client, service_node_controller, service_node_hub):
@@ -24,7 +24,7 @@ def test_service_node_list(admin_api_client, service_node_controller, service_no
 
 def test_service_node_create(admin_api_client, service_node_controller):
     url = reverse("service_node-list")
-    data = {"name": "Node 10.10.10.10 for Controller", "address": "10.10.10.10", "service": service_node_controller.service.pk}
+    data = {"name": "Node 10.10.10.10 for Controller", "address": "10.10.10.10", "service_cluster": service_node_controller.service_cluster.pk}
     response = admin_api_client.post(url, data=data)
     assert response.status_code == 201
     assert ServiceNode.objects.filter(address="10.10.10.10").exists()

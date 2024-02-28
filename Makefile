@@ -234,3 +234,5 @@ collection-test: collection-install
 	cd ~/.ansible/collections/ansible_collections/infra/gateway_configuration && \
 	  ansible-test integration --venv --requirements --coverage
 
+collection-test-completeness:
+	./gateway_configuration_collection/tests/test_completeness.py
