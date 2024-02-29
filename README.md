@@ -193,6 +193,12 @@ Once the containers come up a new port (49) should be exposed and the tacacs+ se
 ```
 tacacs_container_version: latest <- Container version
 ```
+You will need to make a few changes to `container-startup.yml` to enable tacacs+.If you are running a Docker instance you will need to  change the `container_reference:` to either your workstation IP address or `host.docker.internal`. This will vary if you are not using Docker. 
+
+To enable the sidecar, you will also need to uncomment `tacacs_enabled: True`. Once the containers come up you will have access to the following user:
+1. iosadmin: cisco
+
+This is the admin user for TACACS+.For additional configuration and user information, please visit https://hub.docker.com/r/dchidell/docker-tacacs.
 
 #### Plumbing
 
