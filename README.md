@@ -134,14 +134,14 @@ In addition, OIDC works similar but slightly differently. OIDC has browser redir
 
 #### Plumbing
 The plumbing of Keycloak will:
-* Backup and configure a SMAL SP and OIDC authenticator in Gateway. NOTE: the private key of any existing SAML or OIDC authenticators can not be backed up through the API, you need a DB backup to recover this.
+* Backup and configure a SAML SP and OIDC authenticator in Gateway. NOTE: the private key of any existing SAML or OIDC authenticators can not be backed up through the API, you need a DB backup to recover this.
 
 Once the playbook is done running both SAML and OIDC should now be setup in your development environment. This realm has three users with the following username/passwords:
 1. gateway_unpriv:unpriv123
 2. gateway_admin:admin123
 3. gateway_auditor:audit123
 
-The first account is a normal user. The second account has the SMAL attribute is_superuser set in Keycloak so will be a super user in Gateway if logged in through SAML. The third account has the SAML is_system_auditor attribute in Keycloak so it will be a system auditor in Gateway if logged in through SAML. To log in with one of these Keycloak users go to the Gateway login screen and <TBD>.
+The first account is a normal user. The second account has the SAML attribute is_superuser set in Keycloak so will be a super user in Gateway if logged in through SAML. The third account has the SAML is_system_auditor attribute in Keycloak so it will be a system auditor in Gateway if logged in through SAML. To log in with one of these Keycloak users go to the Gateway login screen and <TBD>.
 
 <TBD>
 # Note: The OIDC adapter performs authentication only, not authorization. So any user created in Gateway will not have any permissions on it at all.
