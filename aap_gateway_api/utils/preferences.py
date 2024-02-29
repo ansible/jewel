@@ -1,6 +1,6 @@
 from typing import Any
 
-from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from ansible_base.lib.utils.settings import SettingNotSetException
 from django.conf import settings
 from dynamic_preferences import types
@@ -37,10 +37,16 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
         raise ValueError("You must pass get_preference_value a section and a name")
 
     preference_name = get_preference_key(section, name)
-    if encrypted and gateway_preference_registry.get(name, section).encrypted:
-        return ENCRYPTED_STRING
+    value = gateway_preference_registry.manager().get(preference_name)
 
-    return gateway_preference_registry.manager().get(preference_name)
+    if gateway_preference_registry.get(name, section).encrypted:
+        if encrypted:
+            return ENCRYPTED_STRING
+        # If we retrieve from cache instead of the DB it could be encrypted so we do a double check for encrypted values here
+        if value.startswith(ENCRYPTED_STRING):
+            value = ansible_encryption.decrypt_string(value)
+
+    return value
 
 
 def get_preference_sections() -> [Section]:

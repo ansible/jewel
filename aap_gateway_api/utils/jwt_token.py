@@ -29,7 +29,7 @@ def create_signed_jwt(user):
     }
     if hasattr(user, 'claim'):
         payload["claims"] = user.claim.data
-    token = jwt.encode(payload, get_private_jwt_key(), algorithm='RS256')
+    token = jwt.encode(payload, get_jwt_rsa_key(public=False), algorithm='RS256')
     return token
 
 
@@ -37,40 +37,42 @@ def decode_signed_jwt(token):
     return jwt.decode(token, get_jwt_rsa_key(public=True), algorithms=['RS256'], audience='ansible-services')
 
 
-# Converting the private key to PEM format wastes precious miliseconds when generating JWT tokens
-def get_private_jwt_key():
-    return get_preference_value("proxy", "jwt_private_key", encrypted=False)
-
-
 def get_jwt_rsa_key(public=False):
-    jwt_key = get_private_jwt_key()
+    if public:
+        pub_key = get_preference_value("proxy", "jwt_public_key", encrypted=False)
+        # Just in case the public key is not yet loaded into preferences regenerate the key and get it into the cache
+        if not pub_key:
+            key_to_return = update_jwt_public_key(get_preference_value("proxy", "jwt_private_key", encrypted=False))
+        else:
+            key_to_return = pub_key
+    else:
+        key_to_return = get_preference_value("proxy", "jwt_private_key", encrypted=False)
 
+    return key_to_return
+
+
+def update_jwt_public_key(new_private_key):
     try:
-        private_key = serialization.load_pem_private_key(bytes(jwt_key, "UTF-8"), password=None)
+        private_key = serialization.load_pem_private_key(bytes(new_private_key, "UTF-8"), password=None)
     except Exception as e:
         logger.exception("Unable to load private key from JWT key")
         raise e
 
-    if public:
-        try:
-            return (
-                private_key.public_key()
-                .public_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
-                )
-                .decode()
+    try:
+        public_key = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
             )
-        except Exception as e:
-            logger.exception("Unable to export public key from JWT key")
-            raise e
+            .decode()
+        )
+        update_preference_value("proxy", "jwt_public_key", public_key)
+    except Exception as e:
+        logger.exception("Unable to export public key from JWT key")
+        raise e
 
-    return jwt_key
-
-
-def update_jwt_public_key(new_private_key):
-    public_key = get_jwt_rsa_key(public=True)
-    update_preference_value("proxy", "jwt_public_key", public_key)
+    return public_key
 
 
 def generate_jwt_keypair():
