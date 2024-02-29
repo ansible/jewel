@@ -22,6 +22,8 @@ from aap_gateway_api.models import User
 )
 def test_password_constraints(admin_api_client, user, set_preference, pref_name, pref_value, password, error_substr):
     url = reverse('user-detail', kwargs={'pk': user.id})
+    for preference_name in ['password_min_length', 'password_min_digits', 'password_min_upper', 'password_min_special']:
+        set_preference('local_login', preference_name, 0)
     set_preference('local_login', pref_name, pref_value)
     response = admin_api_client.patch(url, {'password': password})
     if error_substr is None:
@@ -64,7 +66,7 @@ def test_password_constraints_max_length(admin_api_client, user, password, expec
     url = reverse('user-detail', kwargs={'pk': user.id})
 
     response = admin_api_client.patch(url, {'password': password})
-    assert response.status_code == expected_status
+    assert response.status_code == expected_status, f'{response.data}'
 
     if expected_status == 400:
         assert f'Password max length is {password_max_length}' in response.data['password'][0]
