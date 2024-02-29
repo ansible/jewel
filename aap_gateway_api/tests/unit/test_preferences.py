@@ -1,9 +1,10 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.settings import SettingNotSetException
 from django.core.exceptions import ValidationError
+from dynamic_preferences.managers import PreferencesManager
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
@@ -185,3 +186,28 @@ def test_get_setting_too_many(register_preference):
     with pytest.raises(preferences.TooManyPreferencesException) as e:
         preferences.get_setting('test_preference')
     assert 'unable to get a setting by name' in str(e.value)
+
+
+class CustomManager(PreferencesManager):
+    def __init__(self, value):
+        self.value = value
+
+    def get(self, key, no_cache=False):
+        from ansible_base.lib.utils.encryption import ansible_encryption
+
+        encrypted_value = ansible_encryption.encrypt_string(self.value)
+        return encrypted_value
+
+
+def test_get_preference_value_gets_encrypted_value(register_preference):
+    expected_value = 'hello'
+    register_preference(
+        section="general",
+        preference_name="encrypted_test_value",
+        default="Wrong Value",
+        encrypted=True,
+        preference_type="string",
+    )
+
+    with patch('aap_gateway_api.models.preference.gateway_preference_registry.manager', return_value=CustomManager(expected_value)):
+        assert preferences.get_preference_value('general', 'encrypted_test_value', encrypted=False) == expected_value

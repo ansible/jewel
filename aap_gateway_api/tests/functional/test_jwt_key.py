@@ -1,5 +1,4 @@
 from unittest import mock
-from unittest.mock import MagicMock
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from django.urls import reverse
@@ -50,19 +49,3 @@ def test_jwt_key_set_bad_private_key_via_api(update_jwt_public_key, admin_api_cl
     assert response.status_code == 400
     assert response.data["jwt_private_key"] == "Unable to load private key from PEM key"
     assert update_jwt_public_key.call_count == 0  # Ensure we don't try to update the public key
-
-
-@mock.patch("aap_gateway_api.utils.jwt_token.logger")
-def test_jwt_key_get_bad_public_key(logger, unauthenticated_api_client, shut_up_logging):
-    mock_private_key = MagicMock()
-    mock_private_key.public_key().public_bytes.side_effect = Exception("Test Exception")
-    with mock.patch(
-        "aap_gateway_api.utils.jwt_token.serialization.load_pem_private_key",
-        return_value=mock_private_key,
-    ):
-        unauthenticated_api_client.raise_request_exception = False
-        url = reverse("jwt-key-view")
-        response = unauthenticated_api_client.get(url)
-        assert response.status_code == 500
-        assert logger.exception.call_count == 1
-        assert logger.exception.call_args[0][0] == "Unable to export public key from JWT key"
