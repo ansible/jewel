@@ -4,6 +4,8 @@ argon2-cffi-bindings==21.2.0
     # via argon2-cffi
 asgiref==3.7.2
     # via django
+async-timeout==4.0.3
+    # via redis
 certifi==2023.7.22
     # via requests
 cffi==1.15.1
@@ -56,6 +58,8 @@ pyjwt==2.8.0
 pytz==2023.3
     # via djangorestframework
 pyyaml==6.0.1
+    # via -r requirements/requirements.in
+redis==5.0.2
     # via -r requirements/requirements.in
 requests==2.31.0
     # via -r requirements/requirements.in

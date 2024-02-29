@@ -1,3 +1,5 @@
+from fakeredis import FakeConnection
+
 from aap_gateway_api.settings import *  # noqa: F403
 
 # noqa: F405
@@ -7,6 +9,17 @@ DATABASES = {
         "NAME": "aap_gateway_api/tests/db.sqlite3",
         "TEST": {
             "NAME": "aap_gateway_api/tests/db_test.sqlite3",
+        },
+    }
+}
+
+# Mock the redis cache with fakeredis
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://localhost:6379",
+        "OPTIONS": {
+            "connection_class": FakeConnection,
         },
     }
 }

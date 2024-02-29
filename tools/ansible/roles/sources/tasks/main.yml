@@ -6,3 +6,9 @@
   loop:
     - docker-compose.yml
     - Dockerfile
+
+- name: Render Redis ACL
+  template:
+    src: "redis-users.acl.j2"
+    dest: "{{ sources_dest }}/redis-users.acl"
+    mode: '0600'

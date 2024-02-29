@@ -215,12 +215,12 @@ LOG_ROOT = '/var/log/gateway/'
 
 # Disallow sending session cookies over insecure connections
 SESSION_COOKIE_SECURE = True
-
 # Seconds before sessions expire.
 # TODO: Figure out how to make this note accurate! Note: This setting may be overridden by database settings.
 SESSION_COOKIE_AGE = 1800
-
 SESSION_COOKIE_NAME = 'gateway_sessionid'
+SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+SESSION_COOKIE_HTTPONLY = True
 
 # Time in seconds that the gateway access tokens are valid for.
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
@@ -256,8 +256,15 @@ DYNAMIC_PREFERENCES = {
     'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
 }
 
-include(optional('settings_dev.py'), scope=locals())
+redis_url = f"redis://{os.environ.get('REDIS_USER')}:{os.environ.get('REDIS_PASS')}@{os.environ.get('REDIS_HOST')}:{os.environ.get('REDIS_PORT', 6380)}"
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": redis_url,
+    }
+}
 
+include(optional('settings_dev.py'), scope=locals())
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'AAP Gateway API',

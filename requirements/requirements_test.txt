@@ -1,0 +1,6 @@
+# Additional libraries to install for testing purposes
+fakeredis
+pytest
+pytest-xdist
+pytest-cov
+pytest-django

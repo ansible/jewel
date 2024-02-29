@@ -37,4 +37,8 @@ ldap_private_key_file_name: 'ldap.key'
 tacacs_container_version: latest
 tacacs_exposed_tacacs_port: 49
 
-
+# Redis
+redis_container_version: latest
+redis_exposed_port: 6380
+redis_username: gateway1
+redis_password: redis_password
