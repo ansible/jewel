@@ -60,7 +60,7 @@ force-exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 160
-extend_skip = ["aap_gateway_api/migrations", "django-ansible-base", "aap-dev"]
+extend_skip = ["aap_gateway_api/migrations", "django-ansible-base", "aap-dev", "services"]
 
 [tool.flake8]
 max-line-length = 160
