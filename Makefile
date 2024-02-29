@@ -124,8 +124,15 @@ docker-compose-attach:
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate
 
 # Delete the containers and docker networks
-docker-compose-down:
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down
+# Remove all generated files when starting up docker
+docker-reset: tools/generated/docker-compose.yml
+	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
+	rm -fr tools/generated/{,.[!.],..?}*
+	touch tools/generated/.gitkeep
+
+## Remove the container volumes and docker networks
+docker-reset-volumes: tools/generated/docker-compose.yml
+	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 
 ## Generate the default container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
@@ -213,16 +220,6 @@ cleanup-services: tools/generated/proxy.yml collection-install
 ## Plumb the sidecar containers
 plumb:
 	- ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
-
-## Remove all generated files when starting up docker
-docker-reset: tools/generated/docker-compose.yml
-	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
-	rm -fr tools/generated/{,.[!.],..?}*
-	touch tools/generated/.gitkeep
-
-## Remove the container volumes
-docker-reset-volumes: tools/generated/docker-compose.yml
-	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 
 collection-install:
 	cd gateway_configuration_collection && ansible-galaxy collection install . --force
