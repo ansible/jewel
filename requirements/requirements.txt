@@ -1,9 +1,15 @@
+argon2-cffi==23.1.0
+    # via -r requirements/requirements.in
+argon2-cffi-bindings==21.2.0
+    # via argon2-cffi
 asgiref==3.7.2
     # via django
 certifi==2023.7.22
     # via requests
 cffi==1.15.1
-    # via cryptography
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
 charset-normalizer==3.2.0
     # via requests
 cryptography==41.0.6
@@ -20,8 +26,6 @@ django-crum==0.7.9
 django-dynamic-preferences==1.15.0
     # via -r requirements/requirements.in
 django-extensions==3.2.3
-    # via -r requirements/requirements.in
-django-grpc==1.0.21
     # via -r requirements/requirements.in
 django-split-settings==1.2.0
     # via -r requirements/requirements.in
@@ -62,7 +66,9 @@ sqlparse==0.4.4
 typing-extensions==4.8.0
     # via psycopg
 urllib3==1.26.18
-    # via requests
+    # via
+    #   -r requirements/requirements.in
+    #   requests
 uwsgi==2.0.22
     # via -r requirements/requirements.in
 xds-protos==1.58.0
@@ -70,6 +76,4 @@ xds-protos==1.58.0
 
 # The following packages are considered to be unsafe in a requirements file:
 setuptools==68.1.0
-    # via
-    #   django-grpc
-    #   grpcio-tools
+    # via grpcio-tools
