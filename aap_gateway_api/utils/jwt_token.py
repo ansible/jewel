@@ -12,10 +12,8 @@ logger = logging.getLogger('aap.gateway.utils.jwt_token')
 
 
 def create_signed_jwt(user):
-    from aap_gateway_api.utils import get_preference_value
-
     due_date = datetime.now() + timedelta(seconds=get_preference_value("proxy", "gateway_access_token_expiration"))
-    teams = [{"name": team.name, "organization": team.organization.name} for team in user.teams.select_related("organization").all()]
+    teams = [{"name": team["name"], "organization": team["organization__name"]} for team in user.teams.values("name", "organization__name").all()]
     payload = {
         "iss": "ansible-issuer",
         "exp": int(due_date.timestamp()),
@@ -31,7 +29,7 @@ def create_signed_jwt(user):
     }
     if hasattr(user, 'claim'):
         payload["claims"] = user.claim.data
-    token = jwt.encode(payload, get_jwt_rsa_key(), algorithm='RS256')
+    token = jwt.encode(payload, get_private_jwt_key(), algorithm='RS256')
     return token
 
 
@@ -39,8 +37,13 @@ def decode_signed_jwt(token):
     return jwt.decode(token, get_jwt_rsa_key(public=True), algorithms=['RS256'], audience='ansible-services')
 
 
+# Converting the private key to PEM format wastes precious miliseconds when generating JWT tokens
+def get_private_jwt_key():
+    return get_preference_value("proxy", "jwt_private_key", encrypted=False)
+
+
 def get_jwt_rsa_key(public=False):
-    jwt_key = get_preference_value("proxy", "jwt_private_key", encrypted=False)
+    jwt_key = get_private_jwt_key()
 
     try:
         private_key = serialization.load_pem_private_key(bytes(jwt_key, "UTF-8"), password=None)

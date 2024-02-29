@@ -13,3 +13,10 @@ DATABASES = {
 
 for logger in LOGGING["loggers"]:  # noqa: F405
     LOGGING["loggers"][logger]["level"] = "ERROR"  # noqa: F405
+
+# Caching breaks unit tests.
+DYNAMIC_PREFERENCES = {
+    'REGISTRY_MODULE': 'preferences',
+    'ENABLE_CACHE': False,
+    'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
+}

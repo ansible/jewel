@@ -91,7 +91,6 @@ INSTALLED_APPS = [
     'django_extensions',
     'rest_framework',
     'aap_gateway_api',
-    'django_grpc',
     'ansible_base.authentication',
     'ansible_base.rest_filters',
     'ansible_base.api_documentation',
@@ -253,22 +252,8 @@ GATEWAY_PATH_REWRITE_SCRIPT_FILE = os.environ.get('GATEWAY_PATH_REWRITE_SCRIPT_F
 
 DYNAMIC_PREFERENCES = {
     'REGISTRY_MODULE': 'preferences',
-    'ENABLE_CACHE': False,
+    'ENABLE_CACHE': True,
     'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
-}
-
-GRPCSERVER = {
-    'servicers': ['aap_gateway_api.proxy.control_plane.grpc_hook'],  # see `grpc_hook()` below
-    # 'interceptors': ['dotted.path.to.interceptor_class',],  # optional, interceprots are similar to middleware in Django
-    'maximum_concurrent_rpcs': None,
-    # optional, list of key-value pairs to configure the channel. The full list of available channel
-    # arguments: https://grpc.github.io/grpc/core/group__grpc__arg__keys.html
-    # 'options': [("grpc.max_receive_message_length", 1024 * 1024 * 100)],
-    # 'credentials': [{
-    #     'private_key': 'private_key.pem',
-    #     'certificate_chain': 'certificate_chain.pem'
-    # }],    # required only if SSL/TLS support is required to be enabled
-    'async': True,  # Default: False, if True then gRPC server will start in ASYNC mode
 }
 
 include(optional('settings_dev.py'), scope=locals())
@@ -298,3 +283,19 @@ from ansible_base.lib import dynamic_config  # noqa: E402
 
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)
+
+
+# NEVER remove anything from this list.
+# https://docs.djangoproject.com/en/5.0/topics/auth/passwords/#password-upgrading
+PASSWORD_HASHERS = [
+    "aap_gateway_api.authentication.hashers.OwaspRecommendedArgon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+]
+
+GRPC_SERVER_PROCESSES = 5
+GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10
+GRPC_SERVER_PORT = "50051"
+GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"

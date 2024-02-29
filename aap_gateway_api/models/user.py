@@ -2,11 +2,18 @@ import logging
 
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.utils.models import user_summary_fields
-from django.contrib.auth.hashers import is_password_usable, make_password
+from django.contrib.auth.hashers import get_hashers_by_algorithm, is_password_usable, make_password
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 logger = logging.getLogger('aap.gateway.models.user')
+
+
+def password_is_hashed(password):
+    for algo in get_hashers_by_algorithm().keys():
+        if password.startswith(algo):
+            return True
+    return False
 
 
 class User(AbstractUser, CommonModel):
@@ -21,7 +28,7 @@ class User(AbstractUser, CommonModel):
     encrypted_fields = ()  # handed as special case by UserSerializer
 
     def save(self, *args, **kwargs):
-        if is_password_usable(self.password) and not self.password.startswith("pbkdf2_sha256$"):
+        if is_password_usable(self.password) and not password_is_hashed(self.password):
             self.password = make_password(self.password)
 
         super().save(*args, **kwargs)
