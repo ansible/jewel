@@ -5,7 +5,6 @@ public_key_cert: ../generated/keycloak.pub
 keycloak_realm_template: ../generated/keycloak.gateway.realm.json
 oidc_adapter_name: "Dev Keycloak OIDC"
 url_base: "https://{{ (oidc_reference == '') | ternary(oidc_reference, container_reference) }}:{{ keycloak_exposed_port }}"
-init_file: "{{ sources_dest }}/keycloak_initialized"
 
 oidc_configuration:
   name: "{{ oidc_adapter_name }}"
