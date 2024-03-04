@@ -1,4 +1,5 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
@@ -62,6 +63,8 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
 
     def validate(self, attrs):
         if attrs.get("http_port") and attrs["http_port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):
-            raise serializers.ValidationError({'gateway_path': f"Custom routes on the API port cannot start with '{API_PREFIX}'"})
+            raise serializers.ValidationError(
+                {'gateway_path': _("Custom routes on the API port cannot start with '{API_PREFIX}'".format(API_PREFIX=API_PREFIX))}
+            )
 
         return attrs
