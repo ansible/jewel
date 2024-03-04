@@ -2,6 +2,7 @@ import logging
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from django.core.exceptions import ValidationError
+from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
@@ -95,7 +96,9 @@ class SettingSingletonSerializer(serializers.Serializer):
 
             if current_value != new_value and registered_preference.read_only:
                 # We are trying to change a read only setting
-                errors[registered_preference.name] = f"Cannot change read-only setting {registered_preference.name}"
+                errors[registered_preference.name] = _("Cannot change read-only setting {registered_preference_name}").format(
+                    registered_preference_name=registered_preference.name
+                )
                 continue
 
             if current_value != new_value and new_value != ENCRYPTED_STRING:
@@ -135,7 +138,7 @@ class SettingSingletonSerializer(serializers.Serializer):
         # Search for user sending us additional random data
         if data.keys() != validated_fields.keys():
             for additional_key in list(set(data.keys()) - set(validated_fields.keys())):
-                errors[additional_key] = f'Invalid key for category {self.category_slug}'
+                errors[additional_key] = _("Invalid key for category {category_slug}").format(category_slug=self.category_slug)
 
         if errors:
             raise serializers.ValidationError(errors)

@@ -201,7 +201,7 @@ tools/generated/gateway.crt:
 	openssl x509 -req -days 365 -in tools/generated/gateway.csr -signkey tools/generated/gateway.key -out tools/generated/gateway.crt
 
 ## Build the proxy config file
-tools/generated/proxy.yml:
+tools/generated/proxy.yml: tools/configs/proxy-config-collection-sample.yml
 	cp tools/configs/proxy-config-collection-sample.yml tools/generated/proxy.yml
 
 ## Build the requirements.txt file
