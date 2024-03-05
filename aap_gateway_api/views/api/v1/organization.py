@@ -8,5 +8,5 @@ class OrganizationViewSet(GatewayModelViewSet):
     API endpoint that allows groups to be viewed or edited.
     """
 
-    queryset = Organization.objects.all()
+    queryset = Organization.objects.select_related("resource").all()
     serializer_class = OrganizationSerializer

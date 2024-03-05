@@ -169,3 +169,11 @@ def test_organizations_admins_association(admin_api_client, organization, user):
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert organization.admins.count() == 0
+
+
+def test_organizations_resource_summary_fields(admin_api_client, organization):
+    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    assert response.data["summary_fields"]["resource"]["ansible_id"] == organization.resource.ansible_id
+    assert response.data["summary_fields"]["resource"]["resource_type"] == organization.resource.resource_type

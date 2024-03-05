@@ -8,5 +8,5 @@ class UserViewSet(GatewayModelViewSet):
     API endpoint that allows users to be viewed or edited.
     """
 
-    queryset = User.objects.all()
+    queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer

@@ -101,3 +101,11 @@ def test_teams_admins_association(admin_api_client, team, user):
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert team.admins.count() == 0
+
+
+def test_teams_resource_summary_fields(admin_api_client, team):
+    url = reverse("team-detail", kwargs={"pk": team.pk})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    assert response.data["summary_fields"]["resource"]["ansible_id"] == team.resource.ansible_id
+    assert response.data["summary_fields"]["resource"]["resource_type"] == team.resource.resource_type
