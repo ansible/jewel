@@ -90,3 +90,11 @@ def test_password_constraints_superuser_exemption(logger, admin_api_client, user
         logger.warning.assert_called_with(f'User admin was allowed to save an insecure password for user {user.id}')
     else:
         logger.warning.assert_not_called()
+
+
+def test_users_resource_summary_fields(admin_api_client, user):
+    url = reverse("user-detail", kwargs={"pk": user.pk})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    assert response.data["summary_fields"]["resource"]["ansible_id"] == user.resource.ansible_id
+    assert response.data["summary_fields"]["resource"]["resource_type"] == user.resource.resource_type

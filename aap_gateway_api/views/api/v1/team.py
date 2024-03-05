@@ -8,5 +8,5 @@ class TeamViewSet(GatewayModelViewSet):
     API endpoint that allows groups to be viewed or edited.
     """
 
-    queryset = Team.objects.all()
+    queryset = Team.objects.select_related("resource").all()
     serializer_class = TeamSerializer

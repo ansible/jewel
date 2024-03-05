@@ -1,4 +1,5 @@
 from ansible_base.lib.abstract_models.organization import AbstractOrganization
+from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -14,6 +15,8 @@ class Organization(AbstractOrganization):
             'name',
         )
         models.UniqueConstraint("name", "environment", name="unique_name_environment")
+
+    resource = AnsibleResourceField(primary_key_field="id")
 
     environment = models.ForeignKey(
         Environment,

@@ -1,4 +1,5 @@
 from ansible_base.lib.abstract_models import AbstractTeam
+from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -8,6 +9,8 @@ from aap_gateway_api.models import User
 class Team(AbstractTeam):
     class Meta(AbstractTeam.Meta):
         app_label = 'aap_gateway_api'
+
+    resource = AnsibleResourceField(primary_key_field="id")
 
     users = models.ManyToManyField(
         User,

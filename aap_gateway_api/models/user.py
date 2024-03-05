@@ -2,6 +2,7 @@ import logging
 
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.utils.models import user_summary_fields
+from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.contrib.auth.hashers import get_hashers_by_algorithm, is_password_usable, make_password
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -26,6 +27,8 @@ class User(AbstractUser, CommonModel):
     is_system_auditor = models.BooleanField(default=False, null=False)
 
     encrypted_fields = ()  # handed as special case by UserSerializer
+
+    resource = AnsibleResourceField(primary_key_field="id")
 
     def save(self, *args, **kwargs):
         if is_password_usable(self.password) and not password_is_hashed(self.password):
