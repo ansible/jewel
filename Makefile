@@ -20,6 +20,7 @@ GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 	docker-compose plumb update_django_ansible_base_hash \
 	collection-install collection-test
 
+## Get the version of python we are working with
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
 
@@ -100,31 +101,26 @@ help/generate:
 # Container related targets
 # --------------------------------------
 
-#
-# Start docker containers without additional playbooks
-#
+## Start docker containers without additional playbooks
 docker-compose-basic: tools/generated/sources docker-compose-build .git/hooks/pre-commit
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
-#
-# Start the docker container + plumb the sidecar containers and register services' proxy
-#
+## Start the docker container + plumb the sidecar containers and register services' proxy
 docker-compose: docker-compose-detached register-services plumb
 	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
 		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate; \
   	 fi
 
-# Start the docker container in detached mode, wait for finish
+## Start the docker container in detached mode, wait for finish
 docker-compose-detached: tools/generated/sources docker-compose-build .git/hooks/pre-commit
 	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
-# Attach to the container logs if docker in detached mode
+## Attach to the container logs if docker in detached mode
 docker-compose-attach: tools/generated/sources
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate
 
-# Delete the containers and docker networks
-# Remove all generated files when starting up docker
+## Delete the containers and docker networks and Remove all generated files when starting up docker
 docker-reset: tools/generated/sources
 	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
@@ -152,11 +148,11 @@ tools/generated/sources: tools/ansible/roles/sources/templates/Dockerfile.j2 too
 ## Build the docker containers
 docker-compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
 
-## Build the API container
 API_TARGETS = tools/generated/.django_ansible_base_head tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/generated/sources requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
     API_TARGETS += tools/generated/.has_built_ui
 endif
+## Build the API container
 tools/generated/.has_built_api: $(API_TARGETS)
 	mkdir -p django-ansible-base/requirements
 	$(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml \
@@ -165,6 +161,7 @@ tools/generated/.has_built_api: $(API_TARGETS)
 	    gateway
 	touch $@
 
+## Internal target for target tools/generated/.django_ansible_base_head
 update_django_ansible_base_hash:
 	@if [ ! -d "django-ansible-base/.git" ]; then \
 		echo "Checking for updates to django-ansible-base"; \
@@ -180,8 +177,10 @@ update_django_ansible_base_hash:
 		echo local > tools/generated/.django_ansible_base_head; \
 	fi
 
+## Generate the tools/generated/.django_ansible_base_head file for tracking django-ansible-base
 tools/generated/.django_ansible_base_head: update_django_ansible_base_hash
 
+## Check to pull the latest platform-ui if needed
 tools/generated/.has_built_ui:
 	docker pull quay.io/ansible/platform-ui:latest > tools/generated/last_ui_pull
 	if [ ! -f $@ ] || [ `cat tools/generated/last_ui_pull | grep "Image is up to date" | wc -l` == "0" ] ; then \
@@ -208,6 +207,7 @@ requirements/requirements.txt: requirements/requirements.in
 register-services: tools/generated/proxy.yml collection-install
 	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml
 
+## Remove the services and ports generated from the register-services target
 cleanup-services: tools/generated/proxy.yml collection-install
 	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml -e gateway_state=absent
 
@@ -215,9 +215,11 @@ cleanup-services: tools/generated/proxy.yml collection-install
 plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
+## Install the collection locally on your machine
 collection-install:
 	cd gateway_configuration_collection && ansible-galaxy collection install . --force
 
+## Run the collection tests
 collection-test: collection-install
 	$(eval ADMIN_PW=$(shell awk '/gateway_admin_password/{print $$2}' container-startup.yml | xargs echo))
 	echo 'gateway_password: $(ADMIN_PW)' > \
@@ -225,5 +227,6 @@ collection-test: collection-install
 	cd ~/.ansible/collections/ansible_collections/infra/gateway_configuration && \
 	  ansible-test integration --venv --requirements --coverage
 
+## Run the collections test-completness check
 collection-test-completeness:
 	./gateway_configuration_collection/tests/test_completeness.py
