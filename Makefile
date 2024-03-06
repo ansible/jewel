@@ -116,8 +116,8 @@ docker-compose: docker-compose-detached register-services plumb
 
 # Start the docker container in detached mode, wait for finish
 docker-compose-detached: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
-	- env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	- env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
+	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
 # Attach to the container logs if docker in detached mode
 docker-compose-attach:
@@ -212,14 +212,14 @@ requirements/requirements.txt: requirements/requirements.in
 
 ## Register services and ports
 register-services: tools/generated/proxy.yml collection-install
-	- ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml
+	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml
 
 cleanup-services: tools/generated/proxy.yml collection-install
 	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml -e gateway_state=absent
 
 ## Plumb the sidecar containers
 plumb:
-	- ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
+	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 collection-install:
 	cd gateway_configuration_collection && ansible-galaxy collection install . --force
