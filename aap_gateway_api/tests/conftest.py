@@ -170,10 +170,10 @@ def http_api_port_factory():
             api_port.name = "port-9080"
             api_port.number = 9080
             api_port.is_api_port = True
-            api_port.save(non_existent_user_fatal=False)
+            api_port.save()
         else:
             api_port.number = 9080
-            api_port.save(non_existent_user_fatal=False)
+            api_port.save()
         return api_port
 
     yield _http_api_port

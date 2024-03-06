@@ -13,7 +13,7 @@ def test_httpport_api_port_unique(http_api_port_factory):
         port.name = "port-1337"
         port.number = 1337
         port.is_api_port = True
-        port.save(non_existent_user_fatal=False)
+        port.save()
 
 
 @pytest.mark.django_db
