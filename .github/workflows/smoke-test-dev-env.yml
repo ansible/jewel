@@ -21,11 +21,16 @@ jobs:
       - name: Upgrade ansible-core
         run: python3 -m pip install --upgrade ansible-core
 
-      - name: Build the image
-        run: make docker-compose-build
+      - name: Start the dev environment
+        run: COMPOSE_UP_OPTS='-d' make docker-compose
 
       - name: Try out the dev env
         run: |
           ansible-playbook -v tools/ansible/smoke-test.yml \
             -e repo_root=$(pwd) \
-            -e gateway_vars=$(readlink -f container-startup.yml)
+            -e gateway_vars=$(readlink -f container-startup.yml) \
+            --skip-tags start_dev_environment,dump_container_logs
+
+      - name: Dump the container logs on failure
+        run: docker compose -f tools/generated/docker-compose.yml logs
+        if: failure()
