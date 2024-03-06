@@ -5,6 +5,7 @@ from collections import namedtuple
 import pytest
 from ansible_base.lib.testing.fixtures import (  # noqa: F401
     admin_api_client,
+    expected_log,
     no_log_messages,
     randname,
     rsa_keypair,
