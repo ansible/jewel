@@ -103,7 +103,7 @@ help/generate:
 #
 # Start docker containers without additional playbooks
 #
-docker-compose-basic: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
+docker-compose-basic: tools/generated/sources docker-compose-build .git/hooks/pre-commit
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 #
@@ -115,23 +115,23 @@ docker-compose: docker-compose-detached register-services plumb
   	 fi
 
 # Start the docker container in detached mode, wait for finish
-docker-compose-detached: tools/generated/docker-compose.yml docker-compose-build .git/hooks/pre-commit
+docker-compose-detached: tools/generated/sources docker-compose-build .git/hooks/pre-commit
 	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
 # Attach to the container logs if docker in detached mode
-docker-compose-attach:
+docker-compose-attach: tools/generated/sources
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate
 
 # Delete the containers and docker networks
 # Remove all generated files when starting up docker
-docker-reset: tools/generated/docker-compose.yml
+docker-reset: tools/generated/sources
 	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
 
 ## Remove the container volumes and docker networks
-docker-reset-volumes: tools/generated/docker-compose.yml
+docker-reset-volumes: tools/generated/sources
 	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 
 ## Generate the default container-startup.yml file
@@ -143,23 +143,17 @@ container-startup.yml: tools/configs/container-startup.yml
 	fi;
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
-## Generate the Dockerfile file
-tools/generated/Dockerfile: tools/ansible/roles/sources/templates/Dockerfile.j2
-	ansible-playbook tools/ansible/generate-docker-compose.yml \
-	    -e @tools/ansible/vars/container_config.yml \
-	    -e @container-startup.yml
-
-## Generate the docker-compose.yml file
-tools/generated/docker-compose.yml: container-startup.yml tools/ansible/roles/sources/templates/docker-compose.yml.j2
-	ansible-playbook tools/ansible/generate-docker-compose.yml \
+## Generate all files from generate-source playbook
+tools/generated/sources: tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 container-startup.yml
+	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
 
 ## Build the docker containers
-docker-compose-build: tools/generated/docker-compose.yml update_django_ansible_base_hash tools/generated/.has_built_api
+docker-compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
 
 ## Build the API container
-API_TARGETS = tools/generated/.django_ansible_base_head tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/generated/Dockerfile requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+API_TARGETS = tools/generated/.django_ansible_base_head tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/generated/sources requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
     API_TARGETS += tools/generated/.has_built_ui
 endif
