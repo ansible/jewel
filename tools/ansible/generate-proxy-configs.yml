@@ -1,0 +1,9 @@
+---
+- name: Generate the proxy.yml file for gateway
+  hosts: localhost
+  connection: localhost
+  gather_facts: False
+  tasks:
+    - name: Generate configs
+      include_role:
+        name: proxy-config

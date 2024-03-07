@@ -1,0 +1,8 @@
+- name: Render proxy.yml config
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ sources_dest }}/{{ item }}"
+    mode: '0600'
+  loop:
+    - "proxy.yml"
+    - "envoy.yml"

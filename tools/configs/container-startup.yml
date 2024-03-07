@@ -1,5 +1,6 @@
 ---
 gateway_host: https://localhost:8000
+gateway_node_count: 1
 gateway_validate_certs: False
 gateway_admin_username: admin
 gateway_admin_password: admin
