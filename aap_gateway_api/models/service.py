@@ -2,6 +2,7 @@ from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils.translation import gettext as _
 
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
 
@@ -24,13 +25,15 @@ class HTTPPort(UniqueNamedCommonModel):
             )
         ]
 
-    number = models.IntegerField(blank=False, unique=True, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text="Port number to listen on.")
+    number = models.IntegerField(
+        blank=False, unique=True, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("Port number to listen on.")
+    )
 
-    use_https = models.BooleanField(default=True, help_text="Secure this port with HTTPS.")
+    use_https = models.BooleanField(default=True, help_text=_("Secure this port with HTTPS."))
 
     # only one can be true
     is_api_port = models.BooleanField(
-        default=False, help_text="If true, this port will be used to serve the Ansible service APIs. Only one port can be the API port."
+        default=False, help_text=_("If true, this port will be used to serve the Ansible service APIs. Only one port can be the API port.")
     )
 
     envoy_listener_name = models.CharField(max_length=255)
@@ -96,7 +99,9 @@ class ServiceCluster(UniqueNamedCommonModel):
         unique=True,
         max_length=11,
         choices=ServiceType.choices,
-        help_text="The type of service for this cluster.",
+        help_text=_(
+            "The type of service for this cluster.",
+        ),
     )
 
     def summary_fields(self):
@@ -120,9 +125,9 @@ class ServiceNode(UniqueNamedCommonModel):
         models.UniqueConstraint("address", name="one_address_per_gateway")
 
     service_cluster = models.ForeignKey(
-        ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text="Ansible service cluster that this node belongs to."
+        ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text=_("Ansible service cluster that this node belongs to.")
     )
-    address = models.CharField(max_length=255, help_text="Network address to route traffic for this service to.")
+    address = models.CharField(max_length=255, help_text=_("Network address to route traffic for this service to."))
 
 
 class Route(UniqueNamedCommonModel):
@@ -150,23 +155,23 @@ class Route(UniqueNamedCommonModel):
         unique_together = ('http_port', 'gateway_path')
 
     http_port = models.ForeignKey(
-        HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text="Port on the gateway to listen to traffic on."
+        HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text=_("Port on the gateway to listen to traffic on.")
     )
-    service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text="Ansible service to route traffic to.")
+    service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text=_("Ansible service to route traffic to."))
 
     service_port = models.IntegerField(
-        blank=False, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text="Port on the service cluster to route traffic to."
+        blank=False, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("Port on the service cluster to route traffic to.")
     )
-    is_service_https = models.BooleanField(help_text="Set this to true if the service cluster requires HTTPS.")
+    is_service_https = models.BooleanField(help_text=_("Set this to true if the service cluster requires HTTPS."))
 
-    service_path = models.CharField(max_length=255, blank=False, help_text="URL path on the Ansible service cluster to route traffic to.")
-    gateway_path = models.CharField(max_length=255, blank=False, help_text="Path on the gateway to listen to traffic on.")
+    service_path = models.CharField(max_length=255, blank=False, help_text=_("URL path on the Ansible service cluster to route traffic to."))
+    gateway_path = models.CharField(max_length=255, blank=False, help_text=_("Path on the gateway to listen to traffic on."))
 
     description = models.CharField(max_length=255, blank=True, null=True)
 
     # Some routes, such as EDA webhooks, have their own authentication and my not need
     # gateway authentication tokens.
-    enable_gateway_auth = models.BooleanField(default=True, help_text="If false, the gateway will not insert a Gateway token into the proxied request.")
+    enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the gateway will not insert a Gateway token into the proxied request."))
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every
@@ -180,7 +185,7 @@ class Route(UniqueNamedCommonModel):
     order = models.IntegerField(
         default=50,
         validators=[MaxValueValidator(100), MinValueValidator(0)],
-        help_text="The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order",
+        help_text=_("The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order"),
     )
 
     def save(self, *args, **kwargs):
@@ -278,7 +283,7 @@ class AdditionalRoute(Route):
 
     def clean(self):
         if self.http_port.is_api_port and self.gateway_path.startswith(API_PREFIX):
-            raise ValidationError({'gateway_path': f"Custom routes on the API port cannot start with '{API_PREFIX}'"})
+            raise ValidationError({'gateway_path': _("Custom routes on the API port cannot start with '{API_PREFIX}'").format(API_PREFIX=API_PREFIX)})
 
     def save(self, *args, **kwargs):
         self.clean()
