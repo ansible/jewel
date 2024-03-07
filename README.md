@@ -33,6 +33,12 @@ Please have the following prerequisites already installed on your development ma
   * make
   * openssl
 
+#### Fedora dnf packages
+Dependencies can be provided by the following packages:
+```
+sudo dnf install libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel python-devel openldap-devel xmlsec1
+```
+
 ### Install python dependencies
 
   * Create a python virtual environment: `python3 -m venv <location>`
