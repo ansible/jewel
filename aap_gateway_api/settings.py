@@ -250,18 +250,39 @@ GATEWAY_CERT_FILE = os.environ.get('GATEWAY_CERT_FILE', '/etc/gateway/gateway.cr
 GATEWAY_KEY_FILE = os.environ.get('GATEWAY_KEY_FILE', '/etc/gateway/gateway.key')
 GATEWAY_PATH_REWRITE_SCRIPT_FILE = os.environ.get('GATEWAY_PATH_REWRITE_SCRIPT_FILE', '/etc/envoy/envoy-path-rewrite.lua')
 
+using_cache = True
+for env_var in ['REDIS_USER', 'REDIS_PASS', 'REDIS_HOST', 'REDIS_PORT']:
+    if os.environ.get(env_var, None) is None:
+        using_cache = False
+        print(f"Warning, missing {env_var}")
+
+if using_cache:
+    redis_url = f"redis://{os.environ.get('REDIS_USER')}:{os.environ.get('REDIS_PASS')}@{os.environ.get('REDIS_HOST')}:{os.environ.get('REDIS_PORT')}"
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": redis_url,
+        }
+    }
+else:
+    print("===================================================================================")
+    print("|                                                                                 |")
+    print("|   WARNING: Redis cache is disabled, defaulting to memory cache.                 |")
+    print("|            Note: this is not a valid configuration for a clustered environment. |")
+    print("|                                                                                 |")
+    print("===================================================================================")
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "not-optimal",
+        }
+    }
+
+
 DYNAMIC_PREFERENCES = {
     'REGISTRY_MODULE': 'preferences',
-    'ENABLE_CACHE': True,
+    'ENABLE_CACHE': using_cache,
     'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
-}
-
-redis_url = f"redis://{os.environ.get('REDIS_USER')}:{os.environ.get('REDIS_PASS')}@{os.environ.get('REDIS_HOST')}:{os.environ.get('REDIS_PORT', 6380)}"
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": redis_url,
-    }
 }
 
 include(optional('settings_dev.py'), scope=locals())

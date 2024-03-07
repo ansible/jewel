@@ -27,6 +27,7 @@ services:
       - REDIS_USER={{ redis_username }}
       - REDIS_PASS={{ redis_password }}
       - REDIS_HOST=redis
+      - REDIS_PORT=6380
     links:
       - db
       - redis
