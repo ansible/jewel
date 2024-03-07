@@ -216,10 +216,10 @@ LOG_ROOT = '/var/log/gateway/'
 # Disallow sending session cookies over insecure connections
 SESSION_COOKIE_SECURE = True
 # Seconds before sessions expire.
-# TODO: Figure out how to make this note accurate! Note: This setting may be overridden by database settings.
+# Note: This setting may be overridden by database settings.
 SESSION_COOKIE_AGE = 1800
 SESSION_COOKIE_NAME = 'gateway_sessionid'
-SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+SESSION_ENGINE = "ansible_base.lib.sessions.stores.cached_dynamic_timeout"
 SESSION_COOKIE_HTTPONLY = True
 
 # Time in seconds that the gateway access tokens are valid for.
