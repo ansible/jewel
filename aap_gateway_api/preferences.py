@@ -174,3 +174,13 @@ register(
     help_text="Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)",
     encrypted=False,
 )
+
+register(
+    section="configuration",
+    preference_name="SESSION_COOKIE_AGE",
+    required=False,
+    default=15 * 60,
+    preference_type="int",
+    help_text="Time in seconds before a session expires",
+    encrypted=False,
+)
