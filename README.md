@@ -53,7 +53,7 @@ Configure your proxy routes to the local Gateway, Controller, Hub and EDA instan
 
   * Generate a tools/generated/proxy.yml file.
   * * Run command `make tools/generated/proxy.yml`.
-  * * File is based on sample configuration [tools/configs/proxy-config-collection-sample.yml](tools/configs/proxy-config-collection-sample.yml) 
+  * * File is based on sample configuration [tools/ansible/roles/proxy-config/templates/proxy.yml.j2](tools/ansible/roles/proxy-config/templates/proxy.yml.j2) 
   * Modify endpoints in tools/generated/proxy.yml according to comments
 
 This will be used to create the envoy configuration from [tools/configs/envoy.yml](tools/configs/envoy.yml).

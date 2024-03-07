@@ -2,18 +2,21 @@
 ---
 version: '2.1'
 services:
-  gateway:
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+  {% set exposed_port = 7999 + container_id | int %}
+  gateway{{ container_id }}:
     build:
       context: $PWD
       dockerfile: tools/generated/Dockerfile
     command:
       - /usr/bin/launch-gateway
-    container_name: aap_gw_1
-    hostname: aap-gw-1
+    container_name: aap_gw_{{ container_id }}
+    hostname: aap-gw-{{ container_id }}
     depends_on:
       - db
     expose:
-      - "8000"
+      - "{{ exposed_port }}"
     environment:
       - DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
       - SECRET_KEY=${SECRET_KEY:-somesecret}
@@ -35,8 +38,8 @@ services:
       - dbnet
       - service-mesh
     ports:
-      - "8000:8000"
-      - "4444:4444"
+      - "{{ exposed_port }}:8000"
+      - "{{ container_id }}4444:4444"
     user: "${UID:-1000}"
     volumes:
       - $PWD:/opt/aap_gateway/src:z
@@ -51,6 +54,7 @@ services:
       nofile:
         soft: 4096
         hard: 4096
+  {% endfor %}
 
   redis:
     container_name: aap_gw_redis_1
@@ -94,7 +98,7 @@ services:
       - "{{ proxy_port }}:9080"
       - "19000:19000"
     volumes:
-      - $PWD/tools/configs/envoy.yml:/etc/envoy/envoy.yaml:z
+      - $PWD/tools/generated/envoy.yml:/etc/envoy/envoy.yaml:z
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z

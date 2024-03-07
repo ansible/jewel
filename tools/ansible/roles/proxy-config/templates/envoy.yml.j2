@@ -36,11 +36,14 @@ static_resources:
       cluster_name: gateway-control-plane-rest
       endpoints:
       - lb_endpoints:
+{% for i in range(gateway_node_count|int) %}
+{% set container_id = loop.index %}
         - endpoint:
             address:
               socket_address:
-                address: gateway
+                address: gateway{{ container_id }}
                 port_value: 8000
+{% endfor %}
     transport_socket:
       name: envoy.transport_sockets.tls
       typed_config:
@@ -57,11 +60,14 @@ static_resources:
       cluster_name: gateway_control_plane
       endpoints:
       - lb_endpoints:
+{% for i in range(gateway_node_count|int) %}
+{% set container_id = loop.index %}
         - endpoint:
             address:
               socket_address:
-                address: gateway
+                address: gateway{{ container_id }}
                 port_value: 50051
+{% endfor %}
 
 admin:
   address:

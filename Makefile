@@ -158,7 +158,7 @@ tools/generated/.has_built_api: $(API_TARGETS)
 	$(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
-	    gateway
+	    gateway1
 	touch $@
 
 ## Internal target for target tools/generated/.django_ansible_base_head
@@ -194,8 +194,8 @@ tools/generated/gateway.crt:
 	openssl x509 -req -days 365 -in tools/generated/gateway.csr -signkey tools/generated/gateway.key -out tools/generated/gateway.crt
 
 ## Build the proxy config file
-tools/generated/proxy.yml: tools/configs/proxy-config-collection-sample.yml
-	cp tools/configs/proxy-config-collection-sample.yml tools/generated/proxy.yml
+tools/generated/proxy.yml: $(shell find tools/ansible/roles/proxy-config/templates -type f)
+	ansible-playbook tools/ansible/generate-proxy-configs.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the requirements.txt file
 requirements/requirements.txt: requirements/requirements.in

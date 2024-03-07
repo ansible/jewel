@@ -200,7 +200,11 @@ class Route(UniqueNamedCommonModel):
 
         cfg = {
             "name": self.envoy_cluster_name,
-            "type": "LOGICAL_DNS",
+            # LOGICAL_DNS can not have multiple endpoints defined in it because they assume that DNS for a single node will respond with multiple hosts
+            # STRICT_DNS should give us the characteristics we want where if a node is removed from a cluster
+            #            the connections we be drained and traffic will stop being routed there.
+            "type": "STRICT_DNS",
+            "lb_policy": "LEAST_REQUEST",
             "dns_lookup_family": "ALL",
             "load_assignment": {"cluster_name": self.envoy_cluster_name, "endpoints": [{"lb_endpoints": endpoints}]},
         }

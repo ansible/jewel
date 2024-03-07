@@ -16,9 +16,12 @@ gateway_service_clusters:  # Service clusters (1 per type)
     service_type: eda
 
 gateway_service_nodes:   # Nodes of service clusters
-  - name: Gateway Node        # -- name of node
-    service_cluster: gateway  # -- belonging service cluster
-    address: "gateway"        # -- hostname or IP of the service
+{% for i in range(gateway_node_count|int) %}
+{% set container_id = loop.index %}
+  - name: Gateway Node {{ container_id }}        # -- name of node
+    service_cluster: gateway                     # -- belonging service cluster
+    address: "gateway{{ container_id }}"         # -- hostname or IP of the service
+{% endfor %}
   - name: Controller Node
     service_cluster: controller
     address: "localhost"
