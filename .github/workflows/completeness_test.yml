@@ -13,14 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Build the image
-        run: make docker-compose-build
-
-      - name: Spin up the dev env
-        run: |
-          ansible-playbook -v tools/ansible/smoke-test-no-services.yml \
-            -e repo_root=$(pwd) \
-            -e gateway_vars=$(readlink -f container-startup.yml)
+      - name: Start the dev environment
+        run: COMPOSE_UP_OPTS='-d' make docker-compose
 
       - name: Install make
         run: sudo apt install make
