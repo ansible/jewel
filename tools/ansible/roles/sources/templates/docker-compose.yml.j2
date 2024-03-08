@@ -49,6 +49,7 @@ services:
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
       - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini:z
+      - $PWD/tools/configs/settings.py:/etc/gateway/settings.py:z
       - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf:z
     ulimits:
       nofile:

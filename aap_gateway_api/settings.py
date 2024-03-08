@@ -327,3 +327,7 @@ GRPC_SERVER_PROCESSES = 5
 GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10
 GRPC_SERVER_PORT = "50051"
 GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"
+
+# Load settings from the global settings file if specified in the
+# environment, defaulting to /etc/gateway/settings.py.
+include(optional(os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/gateway/settings.py')), scope=locals())

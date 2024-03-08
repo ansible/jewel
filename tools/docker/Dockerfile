@@ -64,6 +64,8 @@ COPY tools/configs/nginx.conf /etc/gateway/nginx.conf
 COPY tools/configs/nginx-gateway.conf /etc/gateway/nginx-gateway.conf
 COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
 COPY tools/configs/supervisord.conf /etc/supervisord.conf
+COPY tools/configs/settings.py /etc/gateway/settings.py
+
 
 RUN for dir in \
       /etc/nginx \
