@@ -182,5 +182,24 @@ register(
     default=15 * 60,
     preference_type="int",
     help_text="Time in seconds before a session expires",
+)
+
+register(
+    section="configuration",
+    preference_name="DEFAULT_PAGE_SIZE",
+    required=False,
+    default=50,
+    preference_type="int",
+    help_text="The default number of items to show on a list page",
+    encrypted=False,
+)
+
+register(
+    section="configuration",
+    preference_name="MAX_PAGE_SIZE",
+    required=False,
+    default=200,
+    preference_type="int",
+    help_text="The maximum number of items allowed on a list page",
     encrypted=False,
 )

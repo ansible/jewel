@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     'ansible_base.rest_filters',
     'ansible_base.api_documentation',
     'ansible_base.resource_registry',
+    'ansible_base.rest_pagination',
 ]
 
 # User our own user model
@@ -118,9 +119,7 @@ REST_FRAMEWORK = {
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
-    'PAGE_SIZE': 50,
 }
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
