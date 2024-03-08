@@ -41,7 +41,7 @@
 
         - name: Make request as admin through proxy
           uri:
-            url: https://localhost/api/gateway/v1/me/
+            url: "https://localhost:{{proxy_port}}/api/gateway/v1/me/"
             user: "{{ gateway_admin_username }}"
             password: "{{ gateway_admin_password }}"
             force_basic_auth: true
