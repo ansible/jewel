@@ -16,7 +16,6 @@ from rest_framework.views import exception_handler
 from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
 from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
-from aap_gateway_api.views.api.v1.environment import EnvironmentViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_key import JWTKeyView  # noqa: F401
 from aap_gateway_api.views.api.v1.local_login import LoggedLoginView, LoggedLogoutView  # noqa: F401
 from aap_gateway_api.views.api.v1.me import MeViewSet  # noqa: F401

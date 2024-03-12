@@ -4,27 +4,12 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from aap_gateway_api.models.environment import Environment
-
 
 class Organization(AbstractOrganization):
     class Meta:
         app_label = 'aap_gateway_api'
-        ordering = (
-            'environment',
-            'name',
-        )
-        models.UniqueConstraint("name", "environment", name="unique_name_environment")
 
     resource = AnsibleResourceField(primary_key_field="id")
-
-    environment = models.ForeignKey(
-        Environment,
-        on_delete=models.SET_NULL,
-        null=True,
-        help_text=_("The environment this organization belongs to"),
-        related_name='organizations',
-    )
 
     users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

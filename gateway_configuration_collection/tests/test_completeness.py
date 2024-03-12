@@ -41,7 +41,7 @@ no_api_parameter_ok = {}
 # When this tool was created we were not feature complete. Adding something in here indicates a module
 # that needs to be developed. If the module is found on the file system it will auto-detect that the
 # work is being done and will bypass this check. At some point this module should be removed from this list.
-needs_development = ['authenticator', 'authenticator_map', 'environment', 'organization', 'team']
+needs_development = ['authenticator', 'authenticator_map', 'organization', 'team']
 needs_param_development = {}
 # -----------------------------------------------------------------------------------------------------------
 
