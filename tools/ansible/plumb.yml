@@ -1,5 +1,5 @@
 ---
-- name: Plumb Gateway for enabled side containers
+- name: Plumb gateway for enabled side containers
   hosts: localhost
   gather_facts: False
   pre_tasks:

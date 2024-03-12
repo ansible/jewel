@@ -14,7 +14,7 @@
           service_type: "controller"
         - name: "Automation Hub"
           service_type: "hub"
-        - name: "Gateway"
+        - name: "gateway"
           service_type: "gateway"
   - debug:
       var: __gateway_service_clusters_job_async_result
@@ -39,10 +39,10 @@
         service_type: "hub"
         state: exists
         # Change service type
-      - name: "{{ __gateway_service_clusters_job_async_result.results[2].id }}" # Gateway
+      - name: "{{ __gateway_service_clusters_job_async_result.results[2].id }}" # gateway
         service_type: "eda"
         # Rename
-      - name: "{{ __gateway_service_clusters_job_async_result.results[2].id }}" # Gateway
+      - name: "{{ __gateway_service_clusters_job_async_result.results[2].id }}" # gateway
         new_name: "Event Driven Automation"
   - debug:
       var: __gateway_service_clusters_job_async_result
@@ -60,7 +60,7 @@
       name: infra.gateway_configuration.service_clusters
     vars:
       gateway_service_clusters:
-      - name: "Gateway"
+      - name: "gateway"
         state: absent
       - name: "Event Driven Automation"
         state: exists
@@ -83,5 +83,5 @@
       gateway_service_clusters:
         - name: "Automation Controller"
         - name: "Automation Hub"
-        - name: "Gateway"
+        - name: "gateway"
         - name: "Event Driven Automation"

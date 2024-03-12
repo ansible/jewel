@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to add proxy Http Ports on Ansible Automation Gateway.
+An Ansible Role to add proxy Http Ports on Ansible Automation gateway.
 
 ## Variables
 

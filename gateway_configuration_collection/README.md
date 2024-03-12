@@ -3,7 +3,7 @@
 ## Description
 
 This collection provides Ansible Roles for configuration of the gateway.
-Roles manage Gateway data through Gateway API.
+Roles manage gateway data through gateway API.
 
 ## Available Roles
 
@@ -86,7 +86,7 @@ or is overriden by `state` in each item
 gateway_service_clusters:
 - name: Automation Controller
   state: exists
-- name: Gateway 
+- name: gateway 
   service_type: gateway
 # state: present  # by default
 ```

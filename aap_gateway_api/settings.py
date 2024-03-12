@@ -304,7 +304,7 @@ ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 
 ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
-ANSIBLE_BASE_PRODUCT_NAME = 'Gateway'
+ANSIBLE_BASE_PRODUCT_NAME = 'Jewel'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
 
 from ansible_base.lib import dynamic_config  # noqa: E402

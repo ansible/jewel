@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to configure Gateway API routes (called Service) on Ansible Automation Gateway.
+An Ansible Role to configure gateway API routes (called Service) on Ansible Automation gateway.
 They define http port and path (starting with prefix /api/) used in gateway and
 http port and path in the destination service (gateway, controller, hub, eda).
 
@@ -31,11 +31,11 @@ Options for the `gateway_services` variable:
 | `name`                |         N/A         |   yes    | str  | The name of the api                                                                                                                               |
 | `new_name`            |         N/A         |    no    | str  | Setting this option will change the existing name (looked up via the name field)                                                                  |
 | `description`         |         ""          |    no    | str  | Description of the service                                                                                                                        |
-| `api_slug`            |         ""          |    no    | str  | URL slug for the gateway API path for the Controller, Hub and EDA services (Gateway API route requires value "gateway", but the slug is not used) |
+| `api_slug`            |         ""          |    no    | str  | URL slug for the gateway API path for the Controller, Hub and EDA services (gateway API route requires value "gateway", but the slug is not used) |
 | `http_port`           |         N/A         |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                                                                                   |
 | `service_cluster`     |         N/A         |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)                                                                       | 
 | `is_service_https`    |       `false`       |    no    | bool | Flag whether or not the service cluster uses https                                                                                                |
-| `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the gateway will not insert a Gateway token into the proxied request                                                                |
+| `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the gateway will not insert a gateway token into the proxied request                                                                |
 | `service_path`        |         ""          |    no    | str  | URL path on the Ansible service cluster to route traffic to                                                                                           | 
 | `service_port`        |         N/A         |    no    | int  | Port on the service cluster to route traffic to                                                                                                   | 
 | `order`               |  "" (`50` by API)   |    no    | int  | The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order                                      | 
@@ -53,7 +53,7 @@ Options for the `gateway_services` variable:
 #### Json Example
 
 - Check that Controller API Route exists
-- Create or update Gateway API Route on proxy port (http port) with id 1 and path '/' proxying Gateway on path '
+- Create or update gateway API Route on proxy port (http port) with id 1 and path '/' proxying gateway on path '
   /api/v1/' and port 9000
 - Create or update EDA API Route on proxy port (http port) 8000 and path '/api/eda/' proxying Event Driven
   Automation on path '/api/v2/' and port 9000. Lookup for existing name "EDA API", but create/update with different name
@@ -66,7 +66,7 @@ Options for the `gateway_services` variable:
       "state": "exists"
     },
     {
-      "name": "Gateway API",
+      "name": "gateway API",
       "http_port": 1,
       "service_cluster": "gateway",
       "service_path": "/api/v1/",
@@ -87,7 +87,7 @@ Options for the `gateway_services` variable:
 
 ### Yaml Example
 
-- Remove all Gateway Services (resp. their proxy configurations)
+- Remove all gateway Services (resp. their proxy configurations)
 
 File name: `data/gateway_services.yml`
 

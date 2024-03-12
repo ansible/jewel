@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to configure Gateway non-API Routes to services (controller, hub,...) on Ansible Automation Gateway.
+An Ansible Role to configure gateway non-API Routes to services (controller, hub,...) on Ansible Automation gateway.
 They define http port and path (**not** starting with prefix /api/) used in gateway and
 http port and path in the destination service (gateway, controller, hub, eda).
 
@@ -35,7 +35,7 @@ Options for the `gateway_routes` variable:
 | `http_port`           |         N/A         |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                    |
 | `service_cluster`     |         N/A         |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)        | 
 | `is_service_https`    |       `false`       |    no    | bool | Flag whether or not the service cluster uses https                                 |
-| `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the gateway will not insert a Gateway token into the proxied request |
+| `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the gateway will not insert a gateway token into the proxied request |
 | `service_path`        |         N/A         |    no    | str  | URL path on the Ansible service cluster to route traffic to                            | 
 | `service_port`        |         N/A         |    no    | int  | Port on the service cluster to route traffic to                                    | 
 | `state`               |      `present`      |    no    | str  | [more](../../README.md#state-variable)                                             | 
@@ -52,7 +52,7 @@ Options for the `gateway_routes` variable:
 #### Json Example
 
 - Check that Controller's config route exists
-- Update Gateway route to the port 8000 and path '/non-api/v2'
+- Update gateway route to the port 8000 and path '/non-api/v2'
 - Create or update EDA Route to gateway proxy port (http port) with id 1 and Service Cluster with id 2 (in the database)
 
 ```json

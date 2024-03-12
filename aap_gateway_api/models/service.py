@@ -171,7 +171,7 @@ class Route(UniqueNamedCommonModel):
 
     # Some routes, such as EDA webhooks, have their own authentication and my not need
     # gateway authentication tokens.
-    enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the gateway will not insert a Gateway token into the proxied request."))
+    enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the gateway will not insert a gateway token into the proxied request."))
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every

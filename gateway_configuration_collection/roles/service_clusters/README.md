@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to configure Service Clusters on Ansible Automation Gateway.
+An Ansible Role to configure Service Clusters on Ansible Automation gateway.
 
 ## Variables
 
@@ -41,7 +41,7 @@ Options for the `gateway_service_clusters` variable:
 #### Json Example
 
 - Check that Controller and EDA (Event Driven Automation) services are deleted (if present) (from the database):
-- Check that Gateway service exists (in the database)
+- Check that gateway service exists (in the database)
 
 ```json
 {
@@ -54,7 +54,7 @@ Options for the `gateway_service_clusters` variable:
       "name": "Event Driven Automation"
     },
     {
-      "name": "Gateway",
+      "name": "gateway",
       "state": "exists"
     }
   ]

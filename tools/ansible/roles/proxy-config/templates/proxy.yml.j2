@@ -32,10 +32,10 @@ gateway_service_nodes:   # Nodes of service clusters
     service_cluster: eda
     address: "localhost"
 
-gateway_services:    # API Services (Hub/EDA/Controller/Gateway)
+gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     # It configures proxy requests
     # - from https://<gateway url>:9080/...
-    # - to https://gateway:8000/...  # gateway container name is taken from service node "Gateway Node"
+    # - to https://gateway:8000/...  # gateway container name is taken from service node "gateway Node"
   - name: Gateway API                 # -- name of the API route
     description: Proxy to the gateway # -- description
     api_slug: gateway                 # -- constant value "gateway" required, but not used
