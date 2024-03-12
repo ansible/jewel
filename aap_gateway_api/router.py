@@ -14,13 +14,6 @@ router.register(
     },
 )
 router.register(
-    r'environments',
-    views.EnvironmentViewSet,
-    related_views={
-        'organizations': (views.OrganizationViewSet, 'organizations'),
-    },
-)
-router.register(
     r'organizations',
     views.OrganizationViewSet,
     related_views={

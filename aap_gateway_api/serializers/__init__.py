@@ -1,4 +1,3 @@
-from aap_gateway_api.serializers.environment import EnvironmentSerializer  # noqa: 401
 from aap_gateway_api.serializers.organization import OrganizationSerializer  # noqa: 401
 from aap_gateway_api.serializers.preferences import SettingSectionSerializer, SettingSingletonSerializer  # noqa: 401
 from aap_gateway_api.serializers.service import (  # noqa: 401

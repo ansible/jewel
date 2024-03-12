@@ -114,16 +114,6 @@ def team(randname, organization):  # noqa: F811
     team.delete()
 
 
-@pytest.fixture
-def environment(randname):  # noqa: F811
-    from aap_gateway_api.models import Environment
-
-    random_name = randname("Test Environment")
-    environment = Environment.objects.create(name=random_name)
-    yield environment
-    environment.delete()
-
-
 @copy_fixture(copies=3)
 @pytest.fixture
 def organization(randname):  # noqa: F811
