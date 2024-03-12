@@ -49,7 +49,7 @@ sudo dnf install libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-
 ### Proxy Configuration
 
 This is an optional step.  
-Configure your proxy routes to the local Gateway, Controller, Hub and EDA instances.
+Configure your proxy routes to the local gateway, controller, hub and eda instances.
 
   * Generate a tools/generated/proxy.yml file.
   * * Run command `make tools/generated/proxy.yml`.
@@ -96,11 +96,11 @@ gateway_admin_password: admin
 container_reference: 10.0.0.71
 ```
 
-gateway_host, username and password tell us how to connect to your Gateway instance once its running. This is used to configure things like settings inside your Gateway instance to connect to to the side containers. If you change the admin password, please update it in this file.
+gateway_host, username and password tell us how to connect to your gateway instance once its running. This is used to configure things like settings inside your gateway instance to connect to to the side containers. If you change the admin password, please update it in this file.
 
-`container_reference` is used for several of the authentication mechanisms. For example, SAML works by sending redirects between Gateway and Keycloak through the browser. Because of this we have to tell both Gateway and Keycloak how they will construct the redirect URLs. On the Keycloak side, this is done within the realm configuration and on the Gateway side its done through the SAML settings. The container_reference variable needs to be how your browser will be able to talk to the running containers. Here are some examples of how to choose a proper container_reference.
-* If you develop on a mac which runs a Fedora VM which has Gateway running within that and the browser you use to access Gateway runs on the mac. The the VM with the container has its own IP that is mapped to a name like `gateway.home.net`. In this scenario your "container_reference" could be either the IP of the VM or the gateway.home.net friendly name.
-* If you are on a Fedora work station running Gateway and also using a browser on your workstation you could use localhost, your work stations IP or hostname as the container_reference.
+`container_reference` is used for several of the authentication mechanisms. For example, SAML works by sending redirects between gateway and Keycloak through the browser. Because of this we have to tell both gateway and Keycloak how they will construct the redirect URLs. On the Keycloak side, this is done within the realm configuration and on the gateway side its done through the SAML settings. The container_reference variable needs to be how your browser will be able to talk to the running containers. Here are some examples of how to choose a proper container_reference.
+* If you develop on a mac which runs a Fedora VM which has gateway running within that and the browser you use to access gateway runs on the mac. The the VM with the container has its own IP that is mapped to a name like `gateway.home.net`. In this scenario your "container_reference" could be either the IP of the VM or the gateway.home.net friendly name.
+* If you are on a Fedora work station running gateway and also using a browser on your workstation you could use localhost, your work stations IP or hostname as the container_reference.
 
 By default, all side cars are disabled. The next section of the file has lines which say which side containers to start. i.e.:
 ```
@@ -111,14 +111,14 @@ These can be any valid true or false statements ansible can handle. A `true` val
 
 There are two times these variables are checked. First when we run `make docker-compose` an additional step to initialize any containers will be run. These steps vary per container type but all are idempotent so running them multiple times should not cause issues.
 
-Secondly, we have a plumb playbook which will configure your Gateway instance to use the containers. When running the plumb playbook this will only plumb for containers which are initialized.
+Secondly, we have a plumb playbook which will configure your gateway instance to use the containers. When running the plumb playbook this will only plumb for containers which are initialized.
 
 In addition to this file, there is a file `tools/ansible/vars/container_config.yml` which has default information for the various services. These allow for further customization of the containers (such as default account credentials for services or exposed ports and image versions, etc).
 
 In the following sections of this document we will discuss individual integrations and some of the extended variables which can be set in your container-startup.yml to override the defaults in `tools/ansible/vars/container_config.yml`
 
 ### SAML and OIDC Integration
-Keycloak can be used as both a SAML and OIDC provider and can be used to test Gateway social auth. This section describes how to build a reference Keycloak instance and plumb it with Gateway for testing purposes.
+Keycloak can be used as both a SAML and OIDC provider and can be used to test gateway social auth. This section describes how to build a reference Keycloak instance and plumb it with gateway for testing purposes.
 
 _Note_: If you are using M1 Mac, refer to building [keycloak image for M1](./docs/keycloak_on_m1.md) documentation.
 
@@ -133,30 +133,30 @@ cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN="  <- The CN for the self signe
 oidc_reference:                                     <- See note below
 ```
 
-Note: SAML works by sending redirects between Gateway and Keycloak through the browser. Because of this we have to tell both Gateway and Keycloak how they will construct the redirect URLs. On the Keycloak side, this is done within the realm configuration and on the Gateway side its done through the SAML settings. The `container_reference` variable in the general section above is used for the configuration.
+Note: SAML works by sending redirects between gateway and Keycloak through the browser. Because of this we have to tell both gateway and Keycloak how they will construct the redirect URLs. On the Keycloak side, this is done within the realm configuration and on the gateway side its done through the SAML settings. The `container_reference` variable in the general section above is used for the configuration.
 
-In addition, OIDC works similar but slightly differently. OIDC has browser redirection but OIDC will also communicate from the Gateway docker instance to the Keycloak docker instance directly. Any hostnames you might have are likely not propagated down into the Gateway container. So we need a method for both the browser and Gateway container to talk to Keycloak. For this we will likely use your machines IP address. This can be passed in as a variable called `oidc_reference`. If unset this will default to container_reference which may be viable for some configurations.
+In addition, OIDC works similar but slightly differently. OIDC has browser redirection but OIDC will also communicate from the gateway docker instance to the Keycloak docker instance directly. Any hostnames you might have are likely not propagated down into the gateway container. So we need a method for both the browser and gateway container to talk to Keycloak. For this we will likely use your machines IP address. This can be passed in as a variable called `oidc_reference`. If unset this will default to container_reference which may be viable for some configurations.
 
 
 #### Plumbing
 The plumbing of Keycloak will:
-* Backup and configure a SAML SP and OIDC authenticator in Gateway. NOTE: the private key of any existing SAML or OIDC authenticators can not be backed up through the API, you need a DB backup to recover this.
+* Backup and configure a SAML SP and OIDC authenticator in gateway. NOTE: the private key of any existing SAML or OIDC authenticators can not be backed up through the API, you need a DB backup to recover this.
 
 Once the playbook is done running both SAML and OIDC should now be setup in your development environment. This realm has three users with the following username/passwords:
 1. gateway_unpriv:unpriv123
 2. gateway_admin:admin123
 3. gateway_auditor:audit123
 
-The first account is a normal user. The second account has the SAML attribute is_superuser set in Keycloak so will be a super user in Gateway if logged in through SAML. The third account has the SAML is_system_auditor attribute in Keycloak so it will be a system auditor in Gateway if logged in through SAML. To log in with one of these Keycloak users go to the Gateway login screen and <TBD>.
+The first account is a normal user. The second account has the SAML attribute is_superuser set in Keycloak so will be a super user in gateway if logged in through SAML. The third account has the SAML is_system_auditor attribute in Keycloak so it will be a system auditor in gateway if logged in through SAML. To log in with one of these Keycloak users go to the gateway login screen and <TBD>.
 
 <TBD>
-# Note: The OIDC adapter performs authentication only, not authorization. So any user created in Gateway will not have any permissions on it at all.
+# Note: The OIDC adapter performs authentication only, not authorization. So any user created in gateway will not have any permissions on it at all.
 
-If you Keycloak configuration is not working and you need to rerun the playbook to try a different `container_reference` or `oidc_reference` you can log into the Keycloak admin console on port 8443 and select the Gateway realm in the upper left drop down. Then make sure you are on "Realm Settings" in the Configure menu option and click the trashcan next to Gateway in the main page window pane. This will completely remove the Gateway ream (which has both SAML and OIDC settings) enabling you to re-run the plumb playbook.
+If you Keycloak configuration is not working and you need to rerun the playbook to try a different `container_reference` or `oidc_reference` you can log into the Keycloak admin console on port 8443 and select the gateway realm in the upper left drop down. Then make sure you are on "Realm Settings" in the Configure menu option and click the trashcan next to gateway in the main page window pane. This will completely remove the gateway ream (which has both SAML and OIDC settings) enabling you to re-run the plumb playbook.
 
 ### OpenLDAP Integration
 
-OpenLDAP is an LDAP provider that can be used to test Gateway with LDAP integration.
+OpenLDAP is an LDAP provider that can be used to test gateway with LDAP integration.
 
 Once the containers come up two new ports (389, 636 by default) should be exposed and the LDAP server should be running on those ports. The first port (389) is non-SSL and the second port (636) is SSL enabled.
 
@@ -171,12 +171,12 @@ ldap_public_key_file_name: 'ldap.cert'  <- Name of the public cert file in tools
 ldap_private_key_file_name: 'ldap.key'  <- Name of the private key file in tools/generated/ldap
 ```
 
-Note: LDAP will be communicated to from within the Gateway container. Because of this, we have to tell Gateway how to route traffic to the LDAP container through the `Server URI` authenticator configuration. This setting is constructed via the `container_reference` variable in the general section above.
+Note: LDAP will be communicated to from within the gateway container. Because of this, we have to tell gateway how to route traffic to the LDAP container through the `Server URI` authenticator configuration. This setting is constructed via the `container_reference` variable in the general section above.
 
 #### Plumbing
 The plumb playbook for OpenLDAP will:
 
-* Backup and configure an LDAP authenticator in Gateway. NOTE: this will back up your existing settings but the password fields can not be backed up through the API, you need a DB backup to recover this.
+* Backup and configure an LDAP authenticator in gateway. NOTE: this will back up your existing settings but the password fields can not be backed up through the API, you need a DB backup to recover this.
 
 Note: The default configuration will utilize the non-tls connection. If you want to use the tls configuration you will need to work through TLS negotiation issues because the LDAP server is using a self signed certificate.
 
@@ -186,12 +186,12 @@ Once the playbook is done running LDAP should now be setup in your development e
 3. ldap_auditor:audit123
 4. ldap_org_admin:orgadmin123
 
-The first account is a normal user. The second account will be a super user in Gateway. The third account will be a system auditor in Gateway. The fourth account is an org admin. All users belong to an org called "LDAP Organization". To log in with one of these users go to the Gateway login screen enter the username/password.
+The first account is a normal user. The second account will be a super user in gateway. The third account will be a system auditor in gateway. The fourth account is an org admin. All users belong to an org called "LDAP Organization". To log in with one of these users go to the gateway login screen enter the username/password.
 
 
 ### tacacs+ Integration
 
-tacacs+ is an networking protocol that provides external authentication which can be used with Gateway. This section describes how to build a reference tacacs+ instance and plumb it with your Gateway for testing purposes.
+tacacs+ is an networking protocol that provides external authentication which can be used with gateway. This section describes how to build a reference tacacs+ instance and plumb it with your gateway for testing purposes.
 
 Once the containers come up a new port (49) should be exposed and the tacacs+ server should be running on that port.
 
@@ -209,6 +209,6 @@ This is the admin user for TACACS+.For additional configuration and user informa
 #### Plumbing
 
 The plumb playbook will:
-* Backup and configure a tacacsplus authenticator in Gateway. NOTE: this will back up your existing settings but the password fields can not be backed up through the API, you need a DB backup to recover this.
+* Backup and configure a tacacsplus authenticator in gateway. NOTE: this will back up your existing settings but the password fields can not be backed up through the API, you need a DB backup to recover this.
 
 Once the playbook is done running tacacs+ should now be setup in your development environment. This server has the accounts listed on https://hub.docker.com/r/dchidell/docker-tacacs

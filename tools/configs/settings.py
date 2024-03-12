@@ -1,4 +1,4 @@
-# Gateway override settings. Settings here will override the default django settings
+# gateway override settings. Settings here will override the default django settings
 
 # GRPC_SERVER_PROCESSES = 5
 # GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10

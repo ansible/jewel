@@ -288,8 +288,8 @@ DYNAMIC_PREFERENCES = {
 include(optional('settings_dev.py'), scope=locals())
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'AAP Gateway API',
-    'DESCRIPTION': 'AAP Gateway API',
+    'TITLE': 'AAP gateway API',
+    'DESCRIPTION': 'AAP gateway API',
     'VERSION': 'v1',
     'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
 }
@@ -304,7 +304,7 @@ ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 
 ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
-ANSIBLE_BASE_PRODUCT_NAME = 'AAP Gateway'
+ANSIBLE_BASE_PRODUCT_NAME = 'AAP gateway'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
 
 from ansible_base.lib import dynamic_config  # noqa: E402

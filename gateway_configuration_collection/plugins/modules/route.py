@@ -35,7 +35,7 @@ options:
       type: str
     gateway_path:
       description:
-      - Path on the AAP Gateway to listen to traffic on
+      - Path on the AAP gateway to listen to traffic on
       - Required when creating a new route
       type: str
     http_port:
@@ -53,7 +53,7 @@ options:
       default: false
       type: bool
     enable_gateway_auth:
-      description: If false, the AAP Gateway will not insert a Gateway token into the proxied request
+      description: If false, the AAP gateway will not insert a gateway token into the proxied request
       type: bool
     service_path:
       description:

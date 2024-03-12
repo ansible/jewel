@@ -155,7 +155,7 @@ class Route(UniqueNamedCommonModel):
         unique_together = ('http_port', 'gateway_path')
 
     http_port = models.ForeignKey(
-        HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text=_("Port on the AAP Gateway to listen to traffic on.")
+        HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text=_("Port on the AAP gateway to listen to traffic on.")
     )
     service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text=_("AAP Service to route traffic to."))
 
@@ -165,13 +165,13 @@ class Route(UniqueNamedCommonModel):
     is_service_https = models.BooleanField(help_text=_("Set this to true if the service cluster requires HTTPS."))
 
     service_path = models.CharField(max_length=255, blank=False, help_text=_("URL path on the AAP Service cluster to route traffic to."))
-    gateway_path = models.CharField(max_length=255, blank=False, help_text=_("Path on the AAP Gateway to listen to traffic on."))
+    gateway_path = models.CharField(max_length=255, blank=False, help_text=_("Path on the AAP gateway to listen to traffic on."))
 
     description = models.CharField(max_length=255, blank=True, null=True)
 
     # Some routes, such as EDA webhooks, have their own authentication and my not need
     # gateway authentication tokens.
-    enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the AAP Gateway will not insert a Gateway token into the proxied request."))
+    enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the AAP gateway will not insert a gateway token into the proxied request."))
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every

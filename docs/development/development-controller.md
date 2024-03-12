@@ -38,7 +38,7 @@ Clone to the `aap folder`:
 
 - port 8888 conflicts with EDA
   - configurable by ENV `AWX_JUPYTER_PORT` 
-- port 5432 conflicts with EDA, Gateway, Analytics
+- port 5432 conflicts with EDA, gateway, Analytics
   - configurable by ENV `AWX_API_PORT`
 
 ```shell

@@ -63,13 +63,13 @@
       retries: 50
       delay: 6
 
-    - name: Template the Gateway realm
+    - name: Template the gateway realm
       template:
         src: keycloak.gateway.realm.json.j2
         dest: "{{ keycloak_realm_template }}"
 
     # Sometimes the API is up and running and we can get a key but things are fully initialized so we get a Loading... message
-    - name: See if the Gateway realm already exists
+    - name: See if the gateway realm already exists
       community.docker.docker_container_exec:
         command: /usr/bin/psql -U {{ db_username }} keycloak --command "SELECT 1 FROM realm WHERE id = 'gateway';"
         container: aap_gw_db_pgsql_1
@@ -77,7 +77,7 @@
       register: realm_check
 
     # We want to see if we can make a call to the keycloak realm to see if the gateway realm exists and not do this step if so
-    - name: Create the Gateway realm if it does not exists
+    - name: Create the gateway realm if it does not exists
       uri:
         url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms"
         method: POST

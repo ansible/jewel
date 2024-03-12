@@ -9,7 +9,7 @@ def test_api_root_view(unauthenticated_api_client):
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 200
     assert "description" in response.data
-    assert response.data["description"] == "AAP Gateway REST API"
+    assert response.data["description"] == "AAP gateway REST API"
 
     gateway = reverse("api_gateway_root_view")
     assert "apis" in response.data

@@ -54,7 +54,7 @@ options:
       default: false
       type: bool
     enable_gateway_auth:
-      description: If false, the AAP Gateway will not insert a Gateway token into the proxied request
+      description: If false, the AAP gateway will not insert a gateway token into the proxied request
       type: bool
     service_path:
       description:

@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to configure Service Nodes on Ansible Automation Gateway.
+An Ansible Role to configure Service Nodes on Ansible Automation gateway.
 
 ## Variables
 

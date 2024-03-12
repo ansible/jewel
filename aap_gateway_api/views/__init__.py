@@ -54,7 +54,7 @@ class ApiRootView(AnsibleBaseView):
     def get(self, request, format=None):
         gateway = reverse('api_gateway_root_view')
         data = OrderedDict()
-        data['description'] = _('AAP Gateway REST API')
+        data['description'] = _('AAP gateway REST API')
         data['apis'] = OrderedDict(
             gateway=gateway,
         )

@@ -56,7 +56,7 @@
     vars:
       gateway_services:
       - name: Gateway API
-        description: Proxy to the Gateway
+        description: Proxy to the gateway
         http_port: API Port
         api_slug: gateway
         service_cluster: gateway
@@ -99,7 +99,7 @@
       gateway_services:
       # No change
       - name: Gateway API
-        description: Proxy to the Gateway
+        description: Proxy to the gateway
         http_port: API Port
         service_cluster: gateway
         is_service_https: true

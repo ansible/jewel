@@ -27,7 +27,7 @@ register(
     default=True,
     required=True,
     preference_type="bool",
-    help_text="Enable basic auth to the Gateway API",
+    help_text="Enable basic auth to the gateway API",
     encrypted=False,
 )
 
@@ -37,7 +37,7 @@ register(
     default='https://localhost:9080',
     required=True,
     preference_type="url",
-    help_text="URL to the Gateway proxy layer",
+    help_text="URL to the gateway proxy layer",
     encrypted=False,
 )
 
@@ -47,7 +47,7 @@ register(
     default=False,
     required=True,
     preference_type="bool",
-    help_text="Ignore certificate to the Gateway proxy layer",
+    help_text="Ignore certificate to the gateway proxy layer",
     encrypted=False,
 )
 

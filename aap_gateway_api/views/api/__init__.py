@@ -11,7 +11,7 @@ from rest_framework.reverse import reverse
 
 class GatewayRootView(AnsibleBaseView):
     permission_classes = (AllowAny,)
-    name = _('Gateway')
+    name = _('gateway')
     versioning_class = None
 
     @method_decorator(ensure_csrf_cookie)

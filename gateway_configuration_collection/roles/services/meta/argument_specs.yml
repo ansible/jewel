@@ -40,7 +40,7 @@ argument_specs:
             description: Set this to true if the service cluster requires HTTPS
           enable_gateway_auth:
             type: bool
-            description: If false, the AAP Gateway will not insert a Gateway token into the proxied request
+            description: If false, the AAP gateway will not insert a gateway token into the proxied request
           service_path:
             type: str
             description:

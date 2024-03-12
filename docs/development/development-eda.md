@@ -42,9 +42,9 @@ source ../venv/eda-server/bin/activate
 
 *Default port conflicts*:
 
-- port 5432 conflicts with Controller, Gateway, Analytics
+- port 5432 conflicts with Controller, gateway, Analytics
   - configurable by ENV `EDA_PG_PORT` 
-- port 8000 conflicts with Gateway
+- port 8000 conflicts with gateway
   - configurable by ENV `EDA_API_PORT` 
 - port 8888 conflicts with Controller
   - configurable by ENV `EDA_PODMAN_PORT`   

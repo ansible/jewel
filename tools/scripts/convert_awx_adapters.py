@@ -150,7 +150,7 @@ def import_ldap_adapters():
 
         print("Import successful!")
         if f"AUTH_LDAP{adapter_number}_BIND_PASSWORD" in LDAP_DATA:
-            print("you will need to update the BIND_PASSWORD setting in your Gateway adapter")
+            print("you will need to update the BIND_PASSWORD setting in your gateway adapter")
         adapter_id = response.json()['id']
         print(f"Adapter number is {adapter_id}")
 
@@ -336,7 +336,7 @@ def import_saml_adapters(SAML_DATA=None):
             post_data['configuration']['IDP_X509_CERT'] = public_cert
             post_data['configuration']['IDP_URL'] = "https://www.example.com"
 
-        # There are 2 fields in AWX that can be none but not in Gateway
+        # There are 2 fields in AWX that can be none but not in gateway
         for key, default in [('SP_EXTRA', {}), ('EXTRA_DATA', [])]:
             if not post_data['configuration'][key]:
                 post_data['configuration'][key] = default

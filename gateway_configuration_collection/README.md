@@ -2,8 +2,8 @@
 
 ## Description
 
-This collection provides Ansible Roles for configuration of the AAP Gateway.
-Roles manage Gateway data through Gateway API.
+This collection provides Ansible Roles for configuration of the AAP gateway.
+Roles manage gateway data through gateway API.
 
 ## Available Roles
 
@@ -86,7 +86,7 @@ or is overriden by `state` in each item
 gateway_service_clusters:
 - name: Automation Controller
   state: exists
-- name: AAP Gateway 
+- name: AAP gateway 
   service_type: gateway
 # state: present  # by default
 ```

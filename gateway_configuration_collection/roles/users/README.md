@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to configure users on Ansible Automation Gateway.
+An Ansible Role to configure users on Ansible Automation gateway.
 
 ## Variables
 
