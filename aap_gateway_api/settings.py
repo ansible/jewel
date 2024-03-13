@@ -256,7 +256,10 @@ for env_var in ['REDIS_USER', 'REDIS_PASS', 'REDIS_HOST', 'REDIS_PORT']:
         print(f"Warning, missing {env_var}")
 
 if using_cache:
-    redis_url = f"redis://{os.environ.get('REDIS_USER')}:{os.environ.get('REDIS_PASS')}@{os.environ.get('REDIS_HOST')}:{os.environ.get('REDIS_PORT')}"
+    # The double s in rediss is for a TLS secure connection
+    redis_url = f"rediss://{os.environ.get('REDIS_USER')}:{os.environ.get('REDIS_PASS')}@{os.environ.get('REDIS_HOST')}:{os.environ.get('REDIS_PORT')}"
+    if os.environ.get('REDIS_IGNORE_CERTS', False):
+        redis_url = f"{redis_url}?ssl_cert_reqs=none"
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
