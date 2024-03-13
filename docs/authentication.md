@@ -17,6 +17,8 @@ Security Assertion Markup Language (SAML) is an open standard for exchanging aut
 
 ## OAuth2
 
+https://oauth.net/2/
+
 OAuth 2.0 is an industry-standard protocol for authorization, designed to enable secure, third-party access to user data without exposing user credentials. It specifies a process by which users can grant web and desktop applications permission to act on their behalf without sharing their password. Essentially, OAuth 2.0 allows an application (the client) to access resources (such as user data stored on a web server) through a series of interactions involving the resource owner (the user), the client, the authorization server, and the resource server. The protocol defines several grant types for different scenarios, including authorization code, implicit, password, and client credentials, each catering to specific types of client applications and security requirements. OAuth 2.0's flexibility and security have made it the foundation for numerous standards and frameworks, such as OpenID Connect for authentication. For technical documentation writers and quality engineers (QEs) tasked with setting up client configurations for OAuth, understanding these grant types, the flow of tokens, and the roles of different endpoints is crucial. Documentation must clearly articulate how to register applications with the authorization server, how to handle redirections and capture tokens, and how to securely store and use these tokens to access APIs, ensuring that the integration adheres to best practices for security and user privacy.
 
 
@@ -44,7 +46,6 @@ An example authenticator payload ...
 }
 ```
 
-
 ## Github Enterprise OAuth2
 
 When configuring OAuth2 authentication for GitHub and GitHub Enterprise within the `social-core` library, the primary difference lies in the endpoints and domain configurations due to GitHub Enterprise's self-hosted nature. Both backends require setting up OAuth2 credentials (like `CLIENT_ID` and `CLIENT_SECRET`), but GitHub Enterprise requires additional steps to specify the custom hostname of your enterprise instance. Here's a breakdown of the key configuration differences:
@@ -60,7 +61,6 @@ In summary, while both backends operate on the same OAuth2 principles, the GitHu
 ### Configuring the github enterprise system oauth app
 
 https://docs.github.com/en/enterprise-server@3.12/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app
-
 
 ### Authenticator plugin
 
@@ -80,7 +80,6 @@ An example authenticator payload ...
     }
 }
 ```
-
 
 ## AzureAD OAuth2
 
@@ -103,7 +102,6 @@ In summary, while both backends facilitate OAuth2 authentication, the choice bet
 https://learn.microsoft.com/en-us/graph/auth-register-app-v2
 https://support.smartbear.com/readyapi/docs/requests/auth/types/oauth2/tutorial-azure.html
 
-
 ### Authenticator plugin
 
 An example authenticator payload ...
@@ -121,7 +119,6 @@ An example authenticator payload ...
     }
 }
 ```
-
 
 ## Google OAuth2
 
@@ -145,9 +142,9 @@ An example authenticator payload ...
 }
 ```
 
-
 ## OpenID Connect (OIDC)
 
+https://openid.net/developers/how-connect-works/
 
 OpenID Connect (OIDC) is both a derivative and a superset of OAuth 2.0, building upon the foundational OAuth 2.0 protocol to add an identity layer on top. While OAuth 2.0 is designed primarily for authorization, allowing applications to obtain access tokens to act on behalf of a user, OIDC extends this by adding user authentication. This means OIDC not only lets an application know that it has permission to access resources but also provides information about the identity of the user who has granted this permission.
 
@@ -156,8 +153,6 @@ The main difference between OAuth 2.0 and OIDC lies in this additional identity 
 In essence, while OAuth 2.0 focuses on client authorization without defining mechanisms for user authentication, OIDC builds upon OAuth 2.0 to provide a comprehensive solution that includes user authentication. This makes OIDC a more complete security protocol, suitable not just for authorizing application actions on behalf of the user but also for verifying who the user is, thereby enabling applications to manage user sessions and personalize user experiences more effectively.
 
 In OIDC, the well-known URL ends with /.well-known/openid-configuration. This URL returns a JSON document containing configuration information about the OpenID Provider (OP). The openid-configuration JSON document serves as a discovery document that contains key details necessary for initiating the OpenID Connect authentication process, such as the URIs of the authorization endpoint, token endpoint, userinfo endpoint, and the public keys used for signing ID tokens. This allows client applications to programmatically discover the endpoints and key details of the OpenID Provider, facilitating dynamic configuration and easing integration efforts.
-
-
 
 ### Authenticator plugin
 
