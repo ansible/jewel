@@ -14,8 +14,6 @@ If the login fails, the Authorization header will be left in the request and the
 
 Security Assertion Markup Language (SAML) is an open standard for exchanging authentication and authorization data between parties, specifically between an identity provider (IdP) and a service provider (SP). It is commonly used for single sign-on (SSO) services to enable users to access multiple applications with one set of login credentials. SAML works by transferring the user's identity from one place (the IdP) to another (the SP) securely. This process involves the generation of an XML document by the IdP, which contains assertions about the user's identity, attributes, and entitlements. This SAML assertion is then digitally signed and sent to the SP, which, after verifying the assertion's authenticity, grants the user access to the application.
 
-For technical documentation writers and quality engineers (QEs) tasked with setting up client configurations for SAML, understanding the specifics of SAML assertions, the concept of IdP and SP-initiated SSO, and the importance of SAML metadata is essential. Documentation should detail the steps for configuring the IdP and SP, including how to exchange metadata between the two, and explain the significance of key elements like assertion consumer service (ACS) URLs, entity IDs, and certificate management for securing SAML assertions. Additionally, the documentation must cover common troubleshooting scenarios, such as issues with assertion validation, to support users in diagnosing and resolving integration problems efficiently. Mastery of these concepts will enable technical writers and QEs to create comprehensive, clear guides that facilitate the secure and effective implementation of SAML-based authentication systems.
-
 
 ## OAuth2
 
@@ -27,6 +25,24 @@ OAuth 2.0 is an industry-standard protocol for authorization, designed to enable
 The GitHub OAuth2 backend in social-core (a Python social authentication/registration mechanism used by the popular social-auth-app-django among others) simplifies the process of integrating GitHub authentication into your application. Unlike a full OAuth2 setup that requires handling various endpoints, secrets, and client IDs manually, configuring GitHub authentication with social-core primarily involves specifying a few key settings. Users need to register their application with GitHub to obtain a CLIENT_ID and CLIENT_SECRET, which are then used in the social-core configuration. Additionally, they must specify the SOCIAL_AUTH_GITHUB_KEY and SOCIAL_AUTH_GITHUB_SECRET settings with these values, and optionally, define the SOCIAL_AUTH_GITHUB_SCOPE to customize the permissions requested (e.g., accessing public info, user emails, etc.). This approach abstracts away much of the complexity of direct OAuth2 interactions, focusing instead on a straightforward setup that leverages social-core's built-in mechanisms for handling the OAuth2 flow, token exchange, and user data retrieval from GitHub. By doing so, it enables developers to quickly and securely add GitHub as an authentication method in their applications, enhancing the user experience by allowing users to sign in with their existing GitHub accounts.
 
 https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app
+
+
+### Authenticator plugin
+
+An example authenticator payload ...
+
+```
+{
+    "name": "github test",
+    "type": "ansible_base.authentication.authenticator_plugins.github",
+    "enabled": True,
+    "order": 1,
+    "configuration": {
+        "KEY": "ASASDASDASD",
+        "SECRET": "ADASDASDASDSA",
+    }
+}
+```
 
 
 ## Github Enterprise OAuth2
@@ -44,6 +60,26 @@ In summary, while both backends operate on the same OAuth2 principles, the GitHu
 ### Configuring the github enterprise system oauth app
 
 https://docs.github.com/en/enterprise-server@3.12/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app
+
+
+### Authenticator plugin
+
+An example authenticator payload ...
+
+```
+{
+    "name": "github enterprise test",
+    "type": "ansible_base.authentication.authenticator_plugins.github_enterprise",
+    "enabled": True,
+    "order": 1,
+    "configuration": {
+        "URL: "https://github.mycorp.com",
+        "API_URL": "https://github.mycorp.com/api",
+        "KEY": "33b6fb2fde086aadca12",
+        "SECRET": "8ccc3ab0038481522a6f9f4efed3cde99ad67902",
+    }
+}
+```
 
 
 ## AzureAD OAuth2
@@ -68,10 +104,46 @@ https://learn.microsoft.com/en-us/graph/auth-register-app-v2
 https://support.smartbear.com/readyapi/docs/requests/auth/types/oauth2/tutorial-azure.html
 
 
+### Authenticator plugin
+
+An example authenticator payload ...
+
+```
+{
+    "name": "github enterprise test",
+    "type": "ansible_base.authentication.authenticator_plugins.azuread",
+    "enabled": True,
+    "order": 1,
+    "configuration": {
+        "CALLBACK_URL: "https://myapp.foobar.com/callback",
+        "KEY": "33b6fb2fde086aadca12",
+        "SECRET": "8ccc3ab0038481522a6f9f4efed3cde99ad67902",
+    }
+}
+```
+
+
 ## Google OAuth2
 
 https://support.google.com/cloud/answer/6158849?hl=en
 
+
+### Authenticator plugin
+
+An example authenticator payload ...
+
+```
+{
+    "name": "github enterprise test",
+    "type": "ansible_base.authentication.authenticator_plugins.google_oauth2",
+    "enabled": True,
+    "order": 1,
+    "configuration": {
+        "KEY": "33b6fb2fde086aadca12",
+        "SECRET": "8ccc3ab0038481522a6f9f4efed3cde99ad67902",
+    }
+}
+```
 
 
 ## OpenID Connect (OIDC)
@@ -84,3 +156,24 @@ The main difference between OAuth 2.0 and OIDC lies in this additional identity 
 In essence, while OAuth 2.0 focuses on client authorization without defining mechanisms for user authentication, OIDC builds upon OAuth 2.0 to provide a comprehensive solution that includes user authentication. This makes OIDC a more complete security protocol, suitable not just for authorizing application actions on behalf of the user but also for verifying who the user is, thereby enabling applications to manage user sessions and personalize user experiences more effectively.
 
 In OIDC, the well-known URL ends with /.well-known/openid-configuration. This URL returns a JSON document containing configuration information about the OpenID Provider (OP). The openid-configuration JSON document serves as a discovery document that contains key details necessary for initiating the OpenID Connect authentication process, such as the URIs of the authorization endpoint, token endpoint, userinfo endpoint, and the public keys used for signing ID tokens. This allows client applications to programmatically discover the endpoints and key details of the OpenID Provider, facilitating dynamic configuration and easing integration efforts.
+
+
+
+### Authenticator plugin
+
+An example authenticator payload ...
+
+```
+{
+    "name": "github enterprise test",
+    "type": "ansible_base.authentication.authenticator_plugins.oidc",
+    "enabled": True,
+    "order": 1,
+    "configuration": {
+        "OIDC_ENDPOINT: "https://myoidc.foobar.com",
+        "VERIFY_SSL": true,
+        "KEY": "33b6fb2fde086aadca12",
+        "SECRET": "8ccc3ab0038481522a6f9f4efed3cde99ad67902",
+    }
+}
+```
