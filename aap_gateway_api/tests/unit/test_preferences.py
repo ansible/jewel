@@ -8,6 +8,7 @@ from dynamic_preferences.managers import PreferencesManager
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
+from aap_gateway_api.models.preference import PreferenceRegistry
 from aap_gateway_api.utils import preferences
 
 
@@ -209,5 +210,33 @@ def test_get_preference_value_gets_encrypted_value(register_preference):
         preference_type="string",
     )
 
-    with patch('aap_gateway_api.models.preference.gateway_preference_registry.manager', return_value=CustomManager(expected_value)):
+    with patch('aap_gateway_api.preferences.registry.gateway_preference_registry.manager', return_value=CustomManager(expected_value)):
         assert preferences.get_preference_value('general', 'encrypted_test_value', encrypted=False) == expected_value
+
+
+def test_encrypted_manager(register_preference):
+    value = 'hey'
+    preference_name = 'enc_test'
+    section = 'general'
+    register_preference(
+        section=section,
+        preference_name=preference_name,
+        default=value,
+        encrypted=True,
+        preference_type="string",
+    )
+
+    assert preferences.get_preference_value(section, preference_name) == ENCRYPTED_STRING
+
+    encrypted_preference = preferences.gateway_preference_manager.get_db_pref(section, preference_name)
+
+    with patch('django.core.cache.backends.redis.RedisCacheClient.set_many') as patched_cache:
+        registry = PreferenceRegistry()
+        manager = registry.manager()
+        manager.to_cache(encrypted_preference)
+
+        patched_cache.assert_called_once()
+        settings_values = [*patched_cache.call_args_list[0][0][0].values()]
+        assert len(settings_values) == 1
+        assert value not in settings_values
+        assert settings_values[0].startswith(ENCRYPTED_STRING)
