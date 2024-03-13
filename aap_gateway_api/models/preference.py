@@ -1,9 +1,34 @@
+from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from dynamic_preferences import models
-from dynamic_preferences.registries import GlobalPreferenceRegistry, preference_models
+from dynamic_preferences.registries import GlobalPreferenceRegistry, PreferencesManager, preference_models
+from dynamic_preferences.settings import preferences_settings
 
 
 class PreferenceRegistry(GlobalPreferenceRegistry):
-    pass
+    def manager(self, **kwargs):
+        """Return a preference manager that can be used to retrieve preference values"""
+        return EncryptedPreferencesManager(registry=self, model=self.preference_model, **kwargs)
+
+
+class EncryptedPreferencesManager(PreferencesManager):
+    def to_cache(self, *prefs):
+        """
+        Update/create the cache value for the given preference model instances
+        """
+        update_dict = {}
+        for pref in prefs:
+            key = self.get_cache_key(pref.section, pref.name)
+            value = pref.raw_value
+            if pref.preference.encrypted:
+                value = ansible_encryption.encrypt_string(value)
+            if value is None or value == "":
+                # some cache backends refuse to cache None or empty values
+                # resulting in more DB queries, so we cache an arbitrary value
+                # to ensure the cache is hot (even with empty values)
+                value = preferences_settings.CACHE_NONE_VALUE
+            update_dict[key] = value
+
+        self.cache.set_many(update_dict)
 
 
 gateway_preference_registry = PreferenceRegistry()
@@ -17,16 +42,12 @@ class Preference(models.BasePreferenceModel):
         unique_together = ("section", "name")
 
     def save(self, *args, **kwargs):
-        from ansible_base.lib.utils.encryption import ansible_encryption
-
         if self.preference.encrypted:
             self.value = ansible_encryption.encrypt_string(self.value)
         super().save(*args, **kwargs)
 
     @classmethod
     def from_db(cls, db, field_names, values):
-        from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
-
         instance = super().from_db(db, field_names, values)
         # We don't want to check the instance.preference.encrypted here because we could have a Fallback
         # A fall back happens when there is a value in DB but not a corresponding register
