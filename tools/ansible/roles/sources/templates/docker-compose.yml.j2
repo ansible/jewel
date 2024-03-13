@@ -31,6 +31,7 @@ services:
       - REDIS_PASS={{ redis_password }}
       - REDIS_HOST=redis
       - REDIS_PORT=6380
+      - REDIS_IGNORE_CERTS=True
     links:
       - db
       - redis
@@ -69,7 +70,10 @@ services:
       - "{{ redis_exposed_port }}:6380"
     volumes:
       - $PWD/tools/configs/redis.conf:/usr/local/etc/redis/redis.conf:z
-      - $PWD/tools/generated/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
+      - $PWD/tools/generated/redis/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
+      - $PWD/tools/generated/redis/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis/ca.cert:/usr/local/etc/redis/ca.cert:z
 
   db:
     container_name: aap_gw_db_pgsql_1
