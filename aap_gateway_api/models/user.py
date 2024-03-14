@@ -23,6 +23,7 @@ class User(AbstractUser, CommonModel):
         'groups',  # not using the auth app stuff, see Team model
         'user_permissions',  # not using auth app permissions
         'logentry',  # used for Django admin pages, not the API
+        'social_auth',  # Social auth endpoint
     ]
     is_system_auditor = models.BooleanField(default=False, null=False)
 
