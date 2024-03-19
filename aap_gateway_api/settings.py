@@ -333,3 +333,10 @@ GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"
 # Load settings from the global settings file if specified in the
 # environment, defaulting to /etc/gateway/settings.py.
 include(optional(os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/gateway/settings.py')), scope=locals())
+
+
+# This is the hostname where the gateway API can make requests to envoy.
+# This is used to make API HTTP requests from the gateway to the services that
+# are configured to run behind it for operations like syncing and migration.
+ENVOY_HOSTNAME = os.environ.get("ENVOY_HOSTNAME", "localhost")
+VERIFY_ENVOY_HTTPS_CERTIFICATES = os.environ.get("VERIFY_ENVOY_HTTPS_CERTIFICATES", True)
