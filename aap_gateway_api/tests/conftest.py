@@ -1,6 +1,7 @@
 import random
 import uuid
 from collections import namedtuple
+from unittest.mock import patch
 
 import pytest
 from ansible_base.lib.testing.fixtures import (  # noqa: F401
@@ -17,6 +18,7 @@ from ansible_base.lib.testing.fixtures import (  # noqa: F401
 )
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
+from aap_gateway_api.tests.utils.mocked_resources import MOCKED_API, MockResourceClient
 
 
 def copy_fixture(copies=1):
@@ -246,3 +248,10 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
     globals()[f"additional_route_{name}"] = pytest.fixture(_route)
     globals()[f"service_api_route_{name}"] = pytest.fixture(_service_api_route)
     globals()[f"full_service_hierarchy_{name}"] = pytest.fixture(_full_service_hierarchy)
+
+
+@pytest.fixture
+def mocked_resources_client(service_api_route_controller):
+    with patch("aap_gateway_api.utils.resources_client.GWResourceAPIClient", MockResourceClient) as client:
+        MOCKED_API.set_resources()
+        yield client

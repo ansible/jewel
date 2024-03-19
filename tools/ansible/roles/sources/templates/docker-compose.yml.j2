@@ -32,6 +32,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6380
       - REDIS_IGNORE_CERTS=True
+      - ENVOY_HOSTNAME=proxy
+      - VERIFY_ENVOY_HTTPS_CERTIFICATES=false
     links:
       - db
       - redis

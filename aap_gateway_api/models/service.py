@@ -104,6 +104,8 @@ class ServiceCluster(UniqueNamedCommonModel):
         ),
     )
 
+    service_id = models.UUIDField(unique=True, help_text="The unique service ID, provided by the service.", null=True, editable=False)
+
     def summary_fields(self):
         response = {}
         response['id'] = self.id
