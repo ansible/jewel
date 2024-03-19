@@ -42,7 +42,7 @@ class AAPObject:
         if self.exists():
             if self.data is None:
                 if fail_when_not_exists:
-                    self.module.fail_json(msg=f"Item {self.ITEM_TYPE} doesn't exist: {self.unique_value()}")
+                    self.module.fail_json(msg=f"Item {self.ITEM_TYPE} does not exist: {self.unique_value()}")
                 else:
                     return
 

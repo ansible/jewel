@@ -81,7 +81,16 @@ class AAPModule(AnsibleModule):
         "request_timeout": "gateway_request_timeout",
         "oauth_token": "gateway_token",
     }
-    IDENTITY_FIELDS = {"http_ports": "name", "routes": "name", "services": "name", "service_clusters": "name", "service_nodes": "name", "users": "username"}
+    IDENTITY_FIELDS = {
+        "http_ports": "name",
+        "routes": "name",
+        "services": "name",
+        "service_clusters": "name",
+        "service_nodes": "name",
+        "organizations": "name",
+        "teams": ["name", "organization"],
+        "users": "username",
+    }
     host = "127.0.0.1"
     username = None
     password = None
@@ -555,8 +564,17 @@ class AAPModule(AnsibleModule):
                 return item["name"]
 
             for field_name in AAPModule.IDENTITY_FIELDS.values():
-                if field_name in item:
-                    return item[field_name]
+                if type(field_name) is list:
+                    found = True
+                    for sub_field_name in field_name:
+                        if sub_field_name not in item:
+                            found = False
+
+                    if found:
+                        return '_'.join([str(item[sub_field_name]) for sub_field_name in field_name])
+                else:
+                    if field_name in item:
+                        return item[field_name]
 
         if allow_unknown:
             return "unknown"
@@ -589,7 +607,11 @@ class AAPModule(AnsibleModule):
 
     @staticmethod
     def get_name_field_from_endpoint(endpoint):
-        return AAPModule.IDENTITY_FIELDS.get(endpoint, "name")
+        unique = AAPModule.IDENTITY_FIELDS.get(endpoint)
+        if type(unique) is list:
+            return unique[0]
+
+        return unique or "name"
 
     def get_one(self, endpoint, name_or_id=None, allow_none=True, check_exists=False, **kwargs):
         new_kwargs = kwargs.copy()

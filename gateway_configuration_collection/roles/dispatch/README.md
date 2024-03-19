@@ -13,6 +13,8 @@ gateway_configuration_dispatcher_roles:
   - {role: settings, var: gateway_settings, tags: settings}
   - {role: users, var: gateway_user_accounts, tags: users}
   - {role: http_ports, var: http_ports, tags: http_ports}
+  - {role: organizations, var: organizations, tags: organizations}
+  - {role: teams, var: teams, tags: teams}
   - {role: service_clusters, var: gateway_service_clusters, tags: service_clusters}
   - {role: service_nodes, var: gateway_service_nodes, tags: service_nodes}
   - {role: services, var: gateway_services, tags: services}

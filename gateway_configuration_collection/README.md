@@ -10,11 +10,13 @@ Roles manage gateway data through gateway API.
 |    Role name     |       Data variable        |               README               |
 |:----------------:|:--------------------------:|:----------------------------------:|
 |    http_ports    |    `gateway_http_ports`    |    [link](http_ports/README.md)    |
+|  organizations   |  `gateway_organizations`   |  [link](organizations/README.md)   |
 | service_clusters | `gateway_service_clusters` | [link](service_clusters/README.md) |
 |  service_nodes   |  `gateway_service_nodes`   |  [link](service_nodes/README.md)   |
 |      routes      |      `gateway_routes`      |      [link](routes/README.md)      | 
 |     services     |     `gateway_services`     |     [link](services/README.md)     |
 |     settings     |     `gateway_settings`     |     [link](settings/README.md)     |
+|      teams       |      `gateway_teams`       |      [link](teams/README.md)       |
 |      users       |      `gateway_users`       |      [link](users/README.md)       |
 
 ### Example: Ansible Playbook
@@ -33,6 +35,8 @@ Roles manage gateway data through gateway API.
   roles:
   - { role: infra.gateway_configuration.settings, when: gateway_settings is defined }
   - { role: infra.gateway_configuration.users, when: gateway_users is defined }
+  - { role: infra.gateway_configuration.organizations, when: gateway_organizations is defined }
+  - { role: infra.gateway_configuration.teams, when: gateway_teams is defined }
   - { role: infra.gateway_configuration.http_ports, when: gateway_http_ports is defined }
   - { role: infra.gateway_configuration.service_clusters, when: gateway_service_clusters is defined }
   - { role: infra.gateway_configuration.service_nodes, when: gateway_service_nodes is defined }
@@ -86,7 +90,7 @@ or is overriden by `state` in each item
 gateway_service_clusters:
 - name: Automation Controller
   state: exists
-- name: AAP gateway 
+- name: AAP gateway
   service_type: gateway
 # state: present  # by default
 ```

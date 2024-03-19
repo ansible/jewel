@@ -23,6 +23,8 @@
         gateway_validate_certs: false
     - include_tasks: integration/targets/settings_test/tasks/main.yml
     - include_tasks: integration/targets/users_test/tasks/main.yml
+    - include_tasks: integration/targets/organizations_test/tasks/main.yml
+    - include_tasks: integration/targets/teams_test/tasks/main.yml
     - include_tasks: integration/targets/service_clusters_test/tasks/main.yml
     - include_tasks: integration/targets/service_nodes_test/tasks/main.yml
     - include_tasks: integration/targets/http_ports_test/tasks/main.yml

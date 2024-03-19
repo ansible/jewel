@@ -10,6 +10,7 @@
     is_superuser:             "{{ __gateway_user_accounts_item.is_superuser | default(omit) }}"
     is_system_auditor:        "{{ __gateway_user_accounts_item.is_system_auditor | default(omit) }}"
     update_secrets:           "{{ __gateway_user_accounts_item.update_secrets | default(omit) }}"
+    organizations:            "{{ __gateway_user_accounts_item.organizations | default(omit) }}"
     state:                    "{{ __gateway_user_accounts_item.state | default(gateway_state | default(omit, true)) }}"
 
     # Role Standard Options

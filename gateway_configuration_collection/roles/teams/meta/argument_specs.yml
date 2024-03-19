@@ -1,10 +1,10 @@
 ---
 argument_specs:
   main:
-    short_description: An Ansible Role to create services on automation platform gateway.
+    short_description: An Ansible Role to create teams on automation platform gateway.
     options:
-      gateway_services:
-        description: Data structure describing your services
+      gateway_teams:
+        description: Data structure describing your teams
         type: list
         required: True
         elements: dict
@@ -18,51 +18,32 @@ argument_specs:
             description: Setting this option will change the existing name (looked up via the name field)
           description:
             type: str
-            description: Description of the service
-          api_slug:
+            description: Description of the team
+          organization:
             type: str
-            description:
-            - URL slug for the gateway API path for the Controller, Hub and EDA services
-            - Gateway API route requires value "gateway", but the slug is not used
-          http_port:
-            description:
-            - Name or ID referencing the Http Port
-            - Required when creating a new Service
+            required: true
+            description: The name or ID referencing the Organization
+          new_organization:
             type: str
-          service_cluster:
-            description:
-            - Name or ID referencing the Service Cluster
-            - Required when creating a new Service
-            type: str
-          is_service_https:
-            type: bool
-            default: false
-            description: Set this to true if the service cluster requires HTTPS
-          enable_gateway_auth:
-            type: bool
-            description: If false, the AAP gateway will not insert a gateway token into the proxied request
-          service_path:
-            type: str
-            description:
-            - URL path on the AAP Service cluster to route traffic to
-            - Required when creating a new Service
-          service_port:
-            type: int
-            description:
-            - Port on the service to route traffic to
-            - Required when creating a new Service
-          order:
-            type: int
-            description: The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order
+            description: Setting this option will change the existing organization (looked up via the organization field)
+          users:
+            type: list
+            description: List of user IDs associated with the team
+          admins:
+            type: list
+            description: List of user IDs associated with the team as administrators
+          parents:
+            type: list
+            description: List of team IDs that are parents of this team
           state:
-            default: "{{ gateway_state | default('present') }}"
-            required: false
-            type: str
-            description: Desired state of the resource.
+              default: "{{ gateway_state | default('present') }}"
+              required: false
+              type: str
+              description: Desired state of the resource.
 
 
       # Async variables
-      gateway_configuration_services_async_retries:
+      gateway_configuration_teams_async_retries:
         default: "{{ gateway_configuration_async_retries | default(30) }}"
         required: false
         description: This variable sets the number of retries to attempt for the role.
@@ -70,7 +51,7 @@ argument_specs:
         default: 30
         required: false
         description: This variable sets number of retries across all roles as a default.
-      gateway_configuration_services_async_delay:
+      gateway_configuration_teams_async_delay:
         default: "{{ gateway_configuration_async_delay | default(1) }}"
         required: false
         description: This variable sets delay between retries for the role.
@@ -85,7 +66,7 @@ argument_specs:
 
 
       # No_log variables
-      gateway_configuration_services_secure_logging:
+      gateway_configuration_teams_secure_logging:
         default: "{{ gateway_configuration_secure_logging | default(false) }}"
         required: false
         type: bool

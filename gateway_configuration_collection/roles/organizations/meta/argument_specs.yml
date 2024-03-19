@@ -1,68 +1,68 @@
 ---
 argument_specs:
   main:
-    short_description: An Ansible Role to call other roles to create objects on automation platform gateway.
+    short_description: An Ansible Role to create organizations on automation platform gateway.
     options:
-      gateway_configuration_dispatcher_roles:
-        default:
-          - role: settings
-            var: gateway_settings
-            tags: settings
-          - role: users
-            var: gateway_user_accounts
-            tags: users
-          - role: http_ports
-            var: http_ports
-            tags: http_ports
-          - role: organizations
-            var: organizations
-            tags: organizations
-          - role: service_clusters
-            var: gateway_service_clusters
-            tags: service_clusters
-          - role: service_nodes
-            var: gateway_service_nodes
-            tags: service_nodes
-          - role: services
-            var: gateway_services
-            tags: services
-          - role: routes
-            var: gateway_routes
-            tags: routes
-          - role: teams
-            var: gateway_teams
-            tags: teams
-        required: false
-        description: List of roles, variables and tags to run through
+      gateway_organizations:
+        description: Data structure describing your organizations
         type: list
+        required: True
         elements: dict
         options:
-          role:
+          name:
             required: true
-            description: Name of role from this collection to call
             type: str
-          var:
-            required: true
-            description: Name of variable to be passed to the role
+            description: Name of the resource
+          new_name:
             type: str
-          tags:
-            required: false
-            description: Tags to be applied to the role so tagging can be used to run only part of a playbook
+            description: Setting this option will change the existing name (looked up via the name field)
+          description:
+            type: str
+            description: Description of the organization
+          users:
+            type: list
+            description: List of user IDs associated with the organization
+          admins:
+            type: list
+            description: List of user IDs associated with the organization as administrators
+          state:
+              default: "{{ gateway_state | default('present') }}"
+              required: false
+              type: str
+              description: Desired state of the resource.
+
 
       # Async variables
+      gateway_configuration_organizations_async_retries:
+        default: "{{ gateway_configuration_async_retries | default(30) }}"
+        required: false
+        description: This variable sets the number of retries to attempt for the role.
       gateway_configuration_async_retries:
         default: 30
         required: false
         description: This variable sets number of retries across all roles as a default.
+      gateway_configuration_organizations_async_delay:
+        default: "{{ gateway_configuration_async_delay | default(1) }}"
+        required: false
+        description: This variable sets delay between retries for the role.
       gateway_configuration_async_delay:
         default: 1
         required: false
         description: This variable sets delay between retries across all roles as a default.
+      gateway_configuration_async_dir:
+        default: null
+        required: false
+        description: Sets the directory to write the results file for async tasks. The default value is set to `null` which uses the Ansible Default of `~/.ansible_async`.
 
 
       # No_log variables
+      gateway_configuration_organizations_secure_logging:
+        default: "{{ gateway_configuration_secure_logging | default(false) }}"
+        required: false
+        type: bool
+        description: Whether or not to include the sensitive tasks from this role in the log. Set this value to `true` if you will be providing your sensitive values from elsewhere.
       gateway_configuration_secure_logging:
-        default: false
+        default: true
         required: false
         type: bool
         description: This variable enables secure logging across all roles as a default.
