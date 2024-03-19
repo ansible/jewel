@@ -1,0 +1,143 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_organizations_secure_logging: false
+    gateway_configuration_users_secure_logging: false
+    gateway_user_default_password: "change-me"
+    name_prefix: "GW-Collection-Test-Organization"
+
+- block:
+  # <Users> ---------------------------
+  - name: Create users
+    include_role:
+      name: infra.gateway_configuration.users
+    vars:
+      gateway_users:
+        - username: "{{ name_prefix }}-User-1"
+        - username: "{{ name_prefix }}-User-2"
+        - username: "{{ name_prefix }}-Admin-1"
+          is_superuser: True
+  - debug:
+      var: __gateway_user_accounts_job_async_result
+  - name: Set Users var
+    set_fact:
+      _users: "{{ __gateway_user_accounts_job_async_result.results }}"
+
+  - name: Assert Create Users passed
+    assert:
+      that:
+      - _users[0] is changed
+      - _users[1] is changed
+      - _users[2] is changed
+  # </Users> --------------------------
+
+  # <Organizations> -------------------
+  - name: Create Organizations
+    include_role:
+      name: infra.gateway_configuration.organizations
+    vars:
+      gateway_organizations:
+      - name: "{{ name_prefix }}-Org-1"
+        admins:
+          - "{{ _users[1].id }}"
+          - "{{ _users[2].id }}"
+      - name: "{{ name_prefix }}-Org-2"
+        description: "Organization 2"
+      - name: "{{ name_prefix }}-Org-3"
+      - name: "{{ name_prefix }}-Org-4"
+        users:
+          - "{{ _users[0].id }}"
+          - "{{ _users[1].id }}"
+  - debug:
+      var: __gateway_organizations_job_async_result
+  - name: Set Organizations var
+    set_fact:
+      _organizations: "{{ __gateway_organizations_job_async_result.results }}"
+
+  - name: Assert Create Organizations passed
+    assert:
+      that:
+        - _organizations[0] is changed
+        - _organizations[1] is changed
+        - _organizations[2] is changed
+        - _organizations[3] is changed
+
+  - name: Check/Change organizations
+    include_role:
+      name: infra.gateway_configuration.organizations
+    vars:
+      gateway_organizations:
+        - name: "{{ name_prefix }}-Org-1"
+          state: exists
+        - name: "{{ _organizations[1].id }}"
+          description: "Totally new Organization"
+        - name: "{{ _organizations[2].id }}"
+          new_name: "{{ name_prefix}}-Renamed-Organization"
+        - name: "{{ name_prefix }}-Org-4"
+          users: []
+        - name: "{{ name_prefix }}-Non-Existing-Organization"
+          state: absent
+
+  - name: Set Organizations var
+    set_fact:
+      _organizations: "{{ __gateway_organizations_job_async_result.results }}"
+
+  - name: Assert Create Organizations passed
+    assert:
+      that:
+        - _organizations[0] is not changed
+        - _organizations[1] is changed
+        - _organizations[2] is changed
+        - _organizations[3] is changed
+        - _organizations[4] is not changed
+
+  - name: 2nd Check
+    include_role:
+      name: infra.gateway_configuration.organizations
+    vars:
+      gateway_organizations:
+        - name: "{{ name_prefix }}-Org-1"
+          admins:
+          - "{{ _users[1].id }}"
+          - "{{ _users[2].id }}"
+        - name: "{{ name_prefix }}-Org-3"
+          state: absent
+        - name: "{{ name_prefix}}-Renamed-Organization"
+          state: exists
+
+  - name: Set Organizations var
+    set_fact:
+      _organizations: "{{ __gateway_organizations_job_async_result.results }}"
+
+  - name: Assert Create Organizations passed
+    assert:
+      that:
+        - _organizations[0] is not changed
+        - _organizations[1] is not changed
+        - _organizations[2] is not changed
+
+  # </Organizations> ------------------
+
+  # <Cleanup>
+  always:
+  - name: Delete Organizations
+    include_role:
+      name: infra.gateway_configuration.organizations
+    vars:
+      gateway_state: absent
+      gateway_organizations:
+        - name: "{{ name_prefix }}-Org-1"
+        - name: "{{ name_prefix }}-Org-2"
+        - name: "{{ name_prefix }}-Org-3"
+        - name: "{{ name_prefix }}-Org-4"
+        - name: "{{ name_prefix}}-Renamed-Organization"
+        - name: "{{ name_prefix }}-Non-Existing-Organization"
+  - name: Delete Users
+    include_role:
+      name: infra.gateway_configuration.users
+    vars:
+      gateway_state: absent
+      gateway_users:
+        - username: "{{ name_prefix }}-User-1"
+        - username: "{{ name_prefix }}-User-2"
+        - username: "{{ name_prefix }}-Admin-1"

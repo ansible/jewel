@@ -3,11 +3,13 @@ requires_ansible: ">=2.14.0"
 action_groups:
   gateway:
   - http_port
+  - organization
   - route
   - service
   - service_cluster
   - service_node
   - settings
+  - team
   - token
   - user
 ...

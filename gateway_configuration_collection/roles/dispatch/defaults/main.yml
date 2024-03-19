@@ -9,6 +9,9 @@ gateway_configuration_dispatcher_roles:
   - role: http_ports
     var: infra.gateway_configuration.http_ports
     tags: http_ports
+  - role: organizations
+    var: infra.gateway_configuration.organizations
+    tags: organizations
   - role: service_clusters
     var: infra.gateway_configuration.gateway_service_clusters
     tags: service_clusters
@@ -21,4 +24,7 @@ gateway_configuration_dispatcher_roles:
   - role: routes
     vars: infra.gateway_configuration.gateway_routes
     tags: routes
+  - role: teams
+    vars: infra.gateway_configuration.gateway_teams
+    tags: teams
 ...

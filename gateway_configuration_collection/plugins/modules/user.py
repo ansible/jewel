@@ -57,7 +57,7 @@ options:
       type: str
     organizations:
       description:
-        - List of organizations to associate with the user
+        - List of organizations IDs to associate with the user
       type: list
     update_secrets:
       description:

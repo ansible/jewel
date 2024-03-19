@@ -8,7 +8,7 @@
 
 # These are the default variables specific to the license role
 
-# a list of dictionaries describing the service nodes
+# a list of dictionaries describing the services
 gateway_services: []
 
 gateway_configuration_services_secure_logging: "{{ gateway_configuration_secure_logging | default(false) }}"
