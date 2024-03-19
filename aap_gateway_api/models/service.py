@@ -289,7 +289,7 @@ class AdditionalRoute(Route):
 
     def clean(self):
         if self.http_port.is_api_port and self.gateway_path.startswith(API_PREFIX):
-            raise ValidationError({'gateway_path': _("Custom routes on the API port cannot start with '{API_PREFIX}'").format(API_PREFIX=API_PREFIX)})
+            raise ValidationError({"gateway_path": _("Custom routes on the API port cannot start with '%(API_PREFIX)s'") % {"API_PREFIX": API_PREFIX}})
 
     def save(self, *args, **kwargs):
         self.clean()
