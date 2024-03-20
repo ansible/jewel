@@ -47,14 +47,14 @@ options:
         - Only one can be set to True
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 
 EXAMPLES = """
 - name: Add API http port
-  infra.gateway_configuration.http_port:
+  ansible.gateway_configuration.http_port:
     name: "Port for APIs"
     number: 443
     use_https: true
@@ -62,12 +62,12 @@ EXAMPLES = """
     state: present
 
 - name: Remove API http port
-  infra.gateway_configuration.http_port:
+  ansible.gateway_configuration.http_port:
     name: "Port for APIs"
     state: absent
 
 - name: Update http port
-  infra.gateway_configuration.http_port:
+  ansible.gateway_configuration.http_port:
   name: "Port for APIs"
   number: 80
   use_https: false

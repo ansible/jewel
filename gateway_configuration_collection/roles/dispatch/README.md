@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to run all roles in the infra.gateway_configuration collection.
+An Ansible Role to run all roles in the ansible.gateway_configuration collection.
 
 ## Variables
 
@@ -23,7 +23,7 @@ gateway_configuration_dispatcher_roles:
 
 Note that each item has three elements:
 
-- `role` which is the name of the role within infra.gateway_configuration
+- `role` which is the name of the role within ansible.gateway_configuration
 - `var` which is the variable which is used in that role. We use this to prevent the role being called if the variable is not set
 - `tags` the tags which are applied to the role so it is possible to apply tags to a playbook using the dispatcher with these tags.
 

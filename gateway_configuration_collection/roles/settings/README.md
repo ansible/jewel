@@ -1,4 +1,4 @@
-# Ansible Role infra.gateway_configuration.settings
+# Ansible Role ansible.gateway_configuration.settings
 
 An Ansible role to alter Settings on Ansible Automation gateway settings.
 

@@ -1,30 +1,30 @@
 ---
 gateway_configuration_dispatcher_roles:
-  - role: infra.gateway_configuration.settings
+  - role: ansible.gateway_configuration.settings
     var: gateway_settings
     tags: settings
   - role: users
-    var: infra.gateway_configuration.gateway_user_accounts
+    var: ansible.gateway_configuration.gateway_user_accounts
     tags: users
   - role: http_ports
-    var: infra.gateway_configuration.http_ports
+    var: ansible.gateway_configuration.http_ports
     tags: http_ports
   - role: organizations
-    var: infra.gateway_configuration.organizations
+    var: ansible.gateway_configuration.organizations
     tags: organizations
   - role: service_clusters
-    var: infra.gateway_configuration.gateway_service_clusters
+    var: ansible.gateway_configuration.gateway_service_clusters
     tags: service_clusters
   - role: service_nodes
-    var: infra.gateway_configuration.gateway_service_nodes
+    var: ansible.gateway_configuration.gateway_service_nodes
     tags: service_nodes
   - role: services
-    var: infra.gateway_configuration.gateway_services
+    var: ansible.gateway_configuration.gateway_services
     tags: services
   - role: routes
-    vars: infra.gateway_configuration.gateway_routes
+    vars: ansible.gateway_configuration.gateway_routes
     tags: routes
   - role: teams
-    vars: infra.gateway_configuration.gateway_teams
+    vars: ansible.gateway_configuration.gateway_teams
     tags: teams
 ...

@@ -1,6 +1,6 @@
 ---
 - name: "Organizations | Configuration"  # noqa fqcn[action-core]
-  infra.gateway_configuration.organization:
+  ansible.gateway_configuration.organization:
     name:                     "{{ __gateway_organizations_item.name | mandatory }}"
     new_name:                 "{{ __gateway_organizations_item.new_name | default(omit) }}"
     description:              "{{ __gateway_organizations_item.description | default(omit) }}"

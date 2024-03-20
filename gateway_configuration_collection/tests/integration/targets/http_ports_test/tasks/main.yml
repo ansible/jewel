@@ -1,7 +1,7 @@
 - block:
   - name: Run primary http port tests
     include_role:
-      name: infra.gateway_configuration.http_ports
+      name: ansible.gateway_configuration.http_ports
     vars:
       gateway_http_ports:
       - name: "Port 65530"
@@ -28,7 +28,7 @@
 
   - name: Run secondary http port tests
     include_role:
-      name: infra.gateway_configuration.http_ports
+      name: ansible.gateway_configuration.http_ports
     vars:
       gateway_http_ports:
       # Check idempotency
@@ -57,7 +57,7 @@
 
   - name: Check renaming http port tests
     include_role:
-      name: infra.gateway_configuration.http_ports
+      name: ansible.gateway_configuration.http_ports
     vars:
       gateway_http_ports:
       # Check 65533 doesn't exist
@@ -79,7 +79,7 @@
     # Always Cleanup
   - name: Delete http ports
     include_role:
-      name: infra.gateway_configuration.http_ports
+      name: ansible.gateway_configuration.http_ports
     vars:
       gateway_state: absent
       gateway_http_ports:

@@ -13,7 +13,7 @@
 
     - name: Run primary user tests
       include_role:
-        name: infra.gateway_configuration.users
+        name: ansible.gateway_configuration.users
       vars:
         gateway_user_accounts:
           # Create a User
@@ -48,7 +48,7 @@
 
     - name: Run secondary user tests
       include_role:
-        name: infra.gateway_configuration.users
+        name: ansible.gateway_configuration.users
       vars:
         gateway_user_accounts:
           # Check idempotency
@@ -78,7 +78,7 @@
     # Always Cleanup
     - name: Delete users
       include_role:
-        name: infra.gateway_configuration.users
+        name: ansible.gateway_configuration.users
       vars:
         gateway_state: absent
         gateway_user_accounts:

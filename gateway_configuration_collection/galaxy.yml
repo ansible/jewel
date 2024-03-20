@@ -1,5 +1,5 @@
 ---
-namespace: infra
+namespace: ansible
 name: gateway_configuration
 description: A collection of roles to manage Ansible automation platform gateway
 version: 1.0.0

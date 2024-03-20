@@ -1,6 +1,6 @@
 ---
 - name: "Http Ports | Configuration"  # noqa fqcn[action-core]
-  infra.gateway_configuration.http_port:
+  ansible.gateway_configuration.http_port:
     name:                     "{{ __gateway_http_ports_item.name | mandatory }}"
     new_name:                 "{{ __gateway_http_ports_item.new_name | default(omit) }}"
     number:                   "{{ __gateway_http_ports_item.number | default(omit) }}"

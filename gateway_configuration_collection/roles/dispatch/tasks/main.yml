@@ -1,5 +1,5 @@
 ---
-- name: "Run infra.gateway_configuration.{{ __role.role }}"
+- name: "Run ansible.gateway_configuration.{{ __role.role }}"
   ansible.builtin.include_role:
     name: "{{ __role.role }}"
     apply:

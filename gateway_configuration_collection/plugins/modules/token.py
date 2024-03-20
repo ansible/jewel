@@ -39,21 +39,21 @@ options:
       choices: ["present", "absent"]
       default: "present"
       type: str
-extends_documentation_fragment: infra.gateway_configuration.auth
+extends_documentation_fragment: ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """
 - name: Create a new token using an existing token
-  infra.gateway_configuration.aap_token:
+  ansible.gateway_configuration.aap_token:
     aap_token: "{{ my_existing_token }}"
 
 - name: Delete this token
-  infra.gateway_configuration.aap_token:
+  ansible.gateway_configuration.aap_token:
     aap_token: "{{ aap_token }}"
     state: absent
 
 - name: Create a new token using username/password
-  infra.gateway_configuration.aap_token:
+  ansible.gateway_configuration.aap_token:
     state: present
     aap_gateway: "{{ aap_gateway }}"
     aap_username: "{{ aap_username }}"

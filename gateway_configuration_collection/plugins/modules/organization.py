@@ -39,13 +39,13 @@ options:
       type: list
       description: List of user IDs associated with the organization as administrators
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """
 - name: Create Organization
-  infra.gateway_configuration.organization:
+  ansible.gateway_configuration.organization:
   - name: Ansible Product Development
     description: Organization for ansible developers
     users:
@@ -53,13 +53,13 @@ EXAMPLES = """
     - 2
 
 - name: Update Organization
-  infra.gateway_configuration.organization:
+  ansible.gateway_configuration.organization:
   - name: Ansible Product Development
     admins:
     - 5
 
 - name: Delete Organization
-  infra.gateway_configuration.organization:
+  ansible.gateway_configuration.organization:
   - name: Ansible Product Development
     state: absent
 """

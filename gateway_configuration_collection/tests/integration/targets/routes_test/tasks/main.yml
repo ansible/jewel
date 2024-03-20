@@ -10,7 +10,7 @@
   ### Create Http Port ###
   - name: Create Http Ports
     include_role:
-      name: infra.gateway_configuration.http_ports
+      name: ansible.gateway_configuration.http_ports
     vars:
       http_ports:
       - name: "Port 9082"
@@ -30,7 +30,7 @@
   ### Create Service Clusters ###
   - name: Create Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_service_clusters:
         - name: "gateway"
@@ -52,7 +52,7 @@
   ### Create Routes ###
   - name: Create Routes
     include_role:
-      name: infra.gateway_configuration.routes
+      name: ansible.gateway_configuration.routes
     vars:
       gateway_routes:
       - name: Gateway Svc Route
@@ -86,7 +86,7 @@
   ### 2nd run for Routes ###
   - name: Check Routes Idempotency
     include_role:
-      name: infra.gateway_configuration.routes
+      name: ansible.gateway_configuration.routes
     vars:
       gateway_routes:
       # No change
@@ -163,7 +163,7 @@
 
   - name: Rename Routes
     include_role:
-      name: infra.gateway_configuration.routes
+      name: ansible.gateway_configuration.routes
     vars:
       gateway_routes:
         - name: "Gateway Svc Route"
@@ -176,7 +176,7 @@
 
   - name: Check Rename Routes
     include_role:
-      name: infra.gateway_configuration.routes
+      name: ansible.gateway_configuration.routes
     vars:
       gateway_routes:
         - name: "Gateway Svc Route"
@@ -193,7 +193,7 @@
   ### Delete Routes ###
   - name: Delete Routes
     include_role:
-      name: infra.gateway_configuration.routes
+      name: ansible.gateway_configuration.routes
     vars:
       gateway_state: absent
       gateway_routes:
@@ -217,7 +217,7 @@
   ### Delete Clusters ###
   - name: Delete Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_state: absent
       gateway_service_clusters:
@@ -228,7 +228,7 @@
   ### Delete Ports ###
   - name: Delete Http Ports
     include_role:
-      name: infra.gateway_configuration.http_ports
+      name: ansible.gateway_configuration.http_ports
     vars:
       gateway_state: absent
       gateway_http_ports:

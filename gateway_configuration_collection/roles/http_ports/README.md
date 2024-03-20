@@ -1,4 +1,4 @@
-# Ansible Role infra.gateway_configuration.http_ports
+# Ansible Role ansible.gateway_configuration.http_ports
 
 ## Description
 

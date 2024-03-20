@@ -10,7 +10,7 @@
   # <Users> ---------------------------
   - name: Create users
     include_role:
-      name: infra.gateway_configuration.users
+      name: ansible.gateway_configuration.users
     vars:
       gateway_users:
         - username: "{{ name_prefix }}-User-1"
@@ -34,7 +34,7 @@
   # <Organizations> -------------------
   - name: Create Organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_organizations:
       - name: "{{ name_prefix }}-Org-1"
@@ -64,7 +64,7 @@
 
   - name: Check/Change organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_organizations:
         - name: "{{ name_prefix }}-Org-1"
@@ -93,7 +93,7 @@
 
   - name: 2nd Check
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_organizations:
         - name: "{{ name_prefix }}-Org-1"
@@ -122,7 +122,7 @@
   always:
   - name: Delete Organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_state: absent
       gateway_organizations:
@@ -134,7 +134,7 @@
         - name: "{{ name_prefix }}-Non-Existing-Organization"
   - name: Delete Users
     include_role:
-      name: infra.gateway_configuration.users
+      name: ansible.gateway_configuration.users
     vars:
       gateway_state: absent
       gateway_users:

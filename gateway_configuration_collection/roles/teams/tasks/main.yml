@@ -1,6 +1,6 @@
 ---
 - name: "Teams | Configuration"  # noqa fqcn[action-core]
-  infra.gateway_configuration.team:
+  ansible.gateway_configuration.team:
     name:                     "{{ __gateway_teams_item.name | mandatory }}"
     new_name:                 "{{ __gateway_teams_item.new_name | default(omit) }}"
     description:              "{{ __gateway_teams_item.description | default(omit) }}"

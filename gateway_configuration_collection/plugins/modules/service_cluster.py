@@ -38,25 +38,25 @@ options:
       type: str
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 
 EXAMPLES = """
 - name: Add service cluster
-  infra.gateway_configuration.service_cluster:
+  ansible.gateway_configuration.service_cluster:
     name: Automation Controller
     service_type: controller
     state: present
 
 - name: Delete service cluster
-  infra.gateway_configuration.service_cluster:
+  ansible.gateway_configuration.service_cluster:
     name: Automation Controller
     state: absent
 
 - name: Check if cluster exists
-  infra.gateway_configuration.service_cluster:
+  ansible.gateway_configuration.service_cluster:
     name: Automation Controller
     state: exists
 ...

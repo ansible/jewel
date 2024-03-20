@@ -27,6 +27,6 @@ sections:
   - Bugfixes
 - - known_issues
   - Known Issues
-title: infra.gateway_Configuration
+title: ansible.gateway_configuration
 trivial_section_name: trivial
 use_fqcn: true

@@ -1,5 +1,5 @@
 =========================================
-Infra.Gateway_Configuration Release Notes
+Ansible.Gateway_Configuration Release Notes
 =========================================
 
 .. contents:: Topics
