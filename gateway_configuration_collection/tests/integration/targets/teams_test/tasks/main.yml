@@ -11,7 +11,7 @@
   # <Organizations> -----------------------------
   - name: Create Organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_organizations:
       - name: "{{ name_prefix }}-Organization-1"
@@ -33,7 +33,7 @@
   # <Users> ---------------------------
   - name: Create users
     include_role:
-      name: infra.gateway_configuration.users
+      name: ansible.gateway_configuration.users
     vars:
       gateway_users:
         - username: "{{ name_prefix }}-User-1"
@@ -60,7 +60,7 @@
   # <Teams> -------------------------------------
   - name: Create Teams
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ name_prefix }}-Team-1"
@@ -98,7 +98,7 @@
 
   - name: Work with Teams
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ _teams[0].id }}"
@@ -135,7 +135,7 @@
 
   - name: Change Unique Key
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ name_prefix }}-Team-1"
@@ -152,7 +152,7 @@
 
   - name: Check Unique key changes
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ name_prefix }}-Team-1"
@@ -180,7 +180,7 @@
   always:
   - name: Delete Teams
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_state: absent
       gateway_teams:
@@ -199,7 +199,7 @@
 
   - name: Delete Users
     include_role:
-      name: infra.gateway_configuration.users
+      name: ansible.gateway_configuration.users
     vars:
       gateway_state: absent
       gateway_users:
@@ -210,7 +210,7 @@
 
   - name: Delete Organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_state: absent
       gateway_organizations:
@@ -222,7 +222,7 @@
   block:
   - name: Incomplete unique key - Should fail
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ name_prefix }}-Team-No-Org"
@@ -237,7 +237,7 @@
   block:
   - name: Create Organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_organizations:
       - name: "{{ name_prefix }}-Organization-1"
@@ -253,7 +253,7 @@
 
   - name: Create Teams
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ name_prefix }}-Team-1"
@@ -261,7 +261,7 @@
 
   - name: Org change to non-existing - Should fail
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_teams:
       - name: "{{ name_prefix }}-Team-1"
@@ -276,7 +276,7 @@
   always:
   - name: Delete Teams
     include_role:
-      name: infra.gateway_configuration.teams
+      name: ansible.gateway_configuration.teams
     vars:
       gateway_state: absent
       gateway_teams:
@@ -285,7 +285,7 @@
 
   - name: Delete Organizations
     include_role:
-      name: infra.gateway_configuration.organizations
+      name: ansible.gateway_configuration.organizations
     vars:
       gateway_state: absent
       gateway_organizations:

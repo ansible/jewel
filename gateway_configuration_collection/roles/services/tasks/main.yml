@@ -1,6 +1,6 @@
 ---
 - name: "Services | Configuration"  # noqa fqcn[action-core]
-  infra.gateway_configuration.service:
+  ansible.gateway_configuration.service:
     name:                     "{{ __gateway_services_item.name | mandatory }}"
     new_name:                 "{{ __gateway_services_item.new_name | default(omit) }}"
     description:              "{{ __gateway_services_item.description | default(omit) }}"

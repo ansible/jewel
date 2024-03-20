@@ -3,7 +3,7 @@
 
     - name: Run primary settings tests
       include_role:
-        name: infra.gateway_configuration.settings
+        name: ansible.gateway_configuration.settings
       vars:
         gateway_settings:
           gateway_access_token_expiration: 700
@@ -22,7 +22,7 @@
 
     - name: Run primary settings tests AGAIN
       include_role:
-        name: infra.gateway_configuration.settings
+        name: ansible.gateway_configuration.settings
       vars:
         gateway_settings:
           gateway_access_token_expiration: 700
@@ -44,7 +44,7 @@
     # Always Cleanup
     - name: Reset Settings
       include_role:
-        name: infra.gateway_configuration.settings
+        name: ansible.gateway_configuration.settings
       vars:
         gateway_settings:
           gateway_token_name: X-DAB-JW-TOKEN

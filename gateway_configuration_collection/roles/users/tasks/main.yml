@@ -1,6 +1,6 @@
 ---
 - name: "Users | Configuration"  # noqa fqcn[action-core]
-  infra.gateway_configuration.user:
+  ansible.gateway_configuration.user:
     username:                 "{{ __gateway_user_accounts_item.username | mandatory }}"
     # the 'true' in the second default leads to no password being set if the default password is empty
     password:                 "{{ __gateway_user_accounts_item.password | default(gateway_user_default_password | default(omit, true)) }}"

@@ -11,10 +11,10 @@
     gateway_configuration_users_secure_logging: false
 
   collections:
-  - infra.gateway_configuration
+  - ansible.gateway_configuration
   tasks:
     - name: Add settings
-      infra.gateway_configuration.settings:
+      ansible.gateway_configuration.settings:
         settings:
           gateway_access_token_expiration: 700
         gateway_hostname: "{{ gateway_hostname }}"

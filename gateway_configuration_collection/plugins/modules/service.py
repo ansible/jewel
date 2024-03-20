@@ -73,13 +73,13 @@ options:
       type: int
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """
 - name: Create service
-  infra.gateway_configuration.service:
+  ansible.gateway_configuration.service:
   - name: Hub API
     description: Proxy to the Automation Hub
     api_slug: "hub"
@@ -91,17 +91,17 @@ EXAMPLES = """
     order: 100
 
 - name: Update service
-  infra.gateway_configuration.service:
+  ansible.gateway_configuration.service:
   - name: Hub API
     service_path: '/api/v2/'
 
 - name: Check service
-  infra.gateway_configuration.service:
+  ansible.gateway_configuration.service:
   - name: Gateway API
     state: exists
 
 - name: Delete service
-  infra.gateway_configuration.service:
+  ansible.gateway_configuration.service:
   - name: Gateway API
     state: absent
 ...

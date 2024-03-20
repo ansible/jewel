@@ -67,14 +67,14 @@ options:
       default: true
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 
 EXAMPLES = """
 - name: Add user
-  infra.gateway_configuration.user:
+  ansible.gateway_configuration.user:
     username: jdoe
     password: foobarbaz
     email: jdoe@example.org
@@ -83,7 +83,7 @@ EXAMPLES = """
     state: present
 
 - name: Add user as a system administrator
-  infra.gateway_configuration.user:
+  ansible.gateway_configuration.user:
     username: jdoe
     password: foobarbaz
     email: jdoe@example.org
@@ -91,7 +91,7 @@ EXAMPLES = """
     state: present
 
 - name: Delete user
-  infra.gateway_configuration.user:
+  ansible.gateway_configuration.user:
     username: jdoe
     email: jdoe@example.org
     state: absent

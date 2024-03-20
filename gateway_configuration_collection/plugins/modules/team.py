@@ -50,19 +50,19 @@ options:
       description: List of team IDs that are parents of this team
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """
 - name: Create Team
-  infra.gateway_configuration.team:
+  ansible.gateway_configuration.team:
   - name: Gateway Developers
     description: AAP Gateway Developers Team
     organization: Ansible Product Development
 
 - name: Update Team
-  infra.gateway_configuration.team:
+  ansible.gateway_configuration.team:
   - name: Gateway Developers
     organization: "1"
     new_organization: "Red Hat Ansible"
@@ -71,7 +71,7 @@ EXAMPLES = """
     - "7"
 
 - name: Delete Team
-  infra.gateway_configuration.team:
+  ansible.gateway_configuration.team:
   - name: Gateway Developers
     organization: "Red Hat Ansible"
     state: absent

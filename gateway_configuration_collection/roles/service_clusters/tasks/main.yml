@@ -1,6 +1,6 @@
 ---
 - name: "Service Clusters | Configuration"  # noqa fqcn[action-core]
-  infra.gateway_configuration.service_cluster:
+  ansible.gateway_configuration.service_cluster:
     name:                     "{{ __gateway_service_clusters_item.name | mandatory }}"
     new_name:                 "{{ __gateway_service_clusters_item.new_name | default(omit) }}"
     service_type:             "{{ __gateway_service_clusters_item.service_type | default(omit) }}"

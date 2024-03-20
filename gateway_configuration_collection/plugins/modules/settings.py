@@ -31,7 +31,7 @@ options:
         - A data structure to be sent into the settings endpoint
       type: dict
       required: True
-extends_documentation_fragment: infra.gateway_configuration.auth
+extends_documentation_fragment: ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """

@@ -67,13 +67,13 @@ options:
       type: int
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """
 - name: Create route
-  infra.gateway_configuration_collection.route:
+  ansible.gateway_configuration_collection.route:
   - name: Controller API
     description: Proxy to the Controller
     http_port: 1                                # ID of http_port
@@ -84,17 +84,17 @@ EXAMPLES = """
     service_port: 3000
 
 - name: Update route
-  infra.gateway_configuration_collection.route:
+  ansible.gateway_configuration_collection.route:
   - name: 1                                     # ID of route
     gateway_path: '/controller-config/'
 
 - name: Check route
-  infra.gateway_configuration_collection.route:
+  ansible.gateway_configuration_collection.route:
   - name: Controller API
     state: exists
 
 - name: Delete route
-  infra.gateway_configuration_collection.route:
+  ansible.gateway_configuration_collection.route:
   - name: Controller API
     state: absent
 ...

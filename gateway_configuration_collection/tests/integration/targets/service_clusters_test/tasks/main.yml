@@ -7,7 +7,7 @@
 - block:
   - name: Create Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_service_clusters:
         - name: "Automation Controller"
@@ -28,7 +28,7 @@
 
   - name: Check update, existence and idempotency
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_service_clusters:
         # Check without params
@@ -57,7 +57,7 @@
 
   - name: Check renaming Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_service_clusters:
       - name: "AAP gateway"
@@ -77,7 +77,7 @@
     # Always Cleanup
   - name: Delete Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_state: absent
       gateway_service_clusters:

@@ -1,4 +1,4 @@
-# Ansible Collection - infra.gateway_configuration
+# Ansible Collection - ansible.gateway_configuration
 
 ## Description
 
@@ -33,15 +33,15 @@ Roles manage gateway data through gateway API.
     gateway_configuration_secure_logging: False
     gateway_state: present  # default value
   roles:
-  - { role: infra.gateway_configuration.settings, when: gateway_settings is defined }
-  - { role: infra.gateway_configuration.users, when: gateway_users is defined }
-  - { role: infra.gateway_configuration.organizations, when: gateway_organizations is defined }
-  - { role: infra.gateway_configuration.teams, when: gateway_teams is defined }
-  - { role: infra.gateway_configuration.http_ports, when: gateway_http_ports is defined }
-  - { role: infra.gateway_configuration.service_clusters, when: gateway_service_clusters is defined }
-  - { role: infra.gateway_configuration.service_nodes, when: gateway_service_nodes is defined }
-  - { role: infra.gateway_configuration.services, when: gateway_services is defined }
-  - { role: infra.gateway_configuration.routes, when: gateway_routes is defined }
+  - { role: ansible.gateway_configuration.settings, when: gateway_settings is defined }
+  - { role: ansible.gateway_configuration.users, when: gateway_users is defined }
+  - { role: ansible.gateway_configuration.organizations, when: gateway_organizations is defined }
+  - { role: ansible.gateway_configuration.teams, when: gateway_teams is defined }
+  - { role: ansible.gateway_configuration.http_ports, when: gateway_http_ports is defined }
+  - { role: ansible.gateway_configuration.service_clusters, when: gateway_service_clusters is defined }
+  - { role: ansible.gateway_configuration.service_nodes, when: gateway_service_nodes is defined }
+  - { role: ansible.gateway_configuration.services, when: gateway_services is defined }
+  - { role: ansible.gateway_configuration.routes, when: gateway_routes is defined }
 ```
 
 ## Variables

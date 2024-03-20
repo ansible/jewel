@@ -7,7 +7,7 @@
 - block:
   - name: Create Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_service_clusters:
         - name: Automation Controller
@@ -29,7 +29,7 @@
 
   - name: Create Service Nodes
     include_role:
-      name: infra.gateway_configuration.service_nodes
+      name: ansible.gateway_configuration.service_nodes
     vars:
       gateway_service_nodes:
       - name: "Controller on 10.10.0.1"
@@ -69,7 +69,7 @@
 
   - name: Check Service Nodes idempotency
     include_role:
-      name: infra.gateway_configuration.service_nodes
+      name: ansible.gateway_configuration.service_nodes
     vars:
       gateway_service_nodes:
         - name: "Controller on 10.10.0.1"
@@ -113,7 +113,7 @@
 
   - name: Rename Service Nodes
     include_role:
-      name: infra.gateway_configuration.service_nodes
+      name: ansible.gateway_configuration.service_nodes
     vars:
       gateway_service_nodes:
         - name: "Controller on 10.10.0.1"
@@ -126,7 +126,7 @@
 
   - name: Check Rename Service Nodes
     include_role:
-      name: infra.gateway_configuration.service_nodes
+      name: ansible.gateway_configuration.service_nodes
     vars:
       gateway_service_nodes:
         - name: "Controller on 10.10.0.1"
@@ -144,7 +144,7 @@
     # Always Cleanup
   - name: Delete Service Nodes
     include_role:
-      name: infra.gateway_configuration.service_nodes
+      name: ansible.gateway_configuration.service_nodes
     vars:
       gateway_state: absent
       gateway_service_nodes:
@@ -161,7 +161,7 @@
 
   - name: Delete Service Clusters
     include_role:
-      name: infra.gateway_configuration.service_clusters
+      name: ansible.gateway_configuration.service_clusters
     vars:
       gateway_state: absent
       gateway_service_clusters:

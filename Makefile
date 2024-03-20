@@ -223,8 +223,8 @@ collection-install:
 collection-test: collection-install
 	$(eval ADMIN_PW=$(shell awk '/gateway_admin_password/{print $$2}' container-startup.yml | xargs echo))
 	echo 'gateway_password: $(ADMIN_PW)' > \
-	  ~/.ansible/collections/ansible_collections/infra/gateway_configuration/tests/integration/integration_config.yml
-	cd ~/.ansible/collections/ansible_collections/infra/gateway_configuration && \
+	  ~/.ansible/collections/ansible_collections/ansible/gateway_configuration/tests/integration/integration_config.yml
+	cd ~/.ansible/collections/ansible_collections/ansible/gateway_configuration && \
 	  ansible-test integration --venv --requirements --coverage
 
 ## Run the collections test-completness check

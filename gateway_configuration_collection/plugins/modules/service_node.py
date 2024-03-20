@@ -43,25 +43,25 @@ options:
         type: str
 
 extends_documentation_fragment:
-- infra.gateway_configuration.state
-- infra.gateway_configuration.auth
+- ansible.gateway_configuration.state
+- ansible.gateway_configuration.auth
 """
 
 EXAMPLES = """
 - name: Create service node
-  infra.gateway_configuration.service_node:
+  ansible.gateway_configuration.service_node:
     name: "Controller - Node 1"
     address: 10.0.0.1
     service_cluster: controller
 
 - name: Delete service node
-  infra.gateway_configuration.service_node:
+  ansible.gateway_configuration.service_node:
     name: "Controller - Node 2"
     state: absent
     name: 3  # ID can be used
 
 - name: Update service node's cluster
-  infra.gateway_configuration.service_node:
+  ansible.gateway_configuration.service_node:
     name: "Controller - Node 1"
     address: 10.0.0.1
     service_cluster: 2 # service cluster's name or ID
