@@ -3,6 +3,7 @@ from typing import Any
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from ansible_base.lib.utils.settings import SettingNotSetException
 from django.conf import settings
+from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
@@ -34,7 +35,7 @@ def get_preference_key(section: str, name: str) -> str:
 
 def get_preference_value(section: str, name: str, encrypted: bool = True) -> str:
     if not section or not name:
-        raise ValueError("You must pass get_preference_value a section and a name")
+        raise ValueError(_("You must pass get_preference_value a section and a name"))
 
     preference_name = get_preference_key(section, name)
     value = gateway_preference_registry.manager().get(preference_name)
@@ -72,15 +73,15 @@ def register(
     required=False,
     encrypted=False,
     preference_type="string",
-    help_text="No help text specified",
+    help_text=_("No help text specified"),
     read_only=False,
     on_update=None,
 ):
     if not preference_name:
-        raise NameError("A preference must have a name")
+        raise NameError(_("A preference must have a name"))
 
     if preference_type not in preference_type_mapping:
-        raise NotImplementedError(f"Preference type {preference_type} is not yet implemented in preferences utils")
+        raise NotImplementedError(_("Preference type %(preference_type)s is not yet implemented in preferences utils") % {"preference_type": preference_type})
 
     if section not in sections:
         sections[section] = Section(section)
@@ -136,4 +137,7 @@ def get_setting(name: str) -> Any:
     elif len(possible_preferences) == 1:
         return get_preference_value_by_preference(possible_preferences[0])
     else:
-        raise TooManyPreferencesException(f"There were {len(possible_preferences)} for setting {name}, unable to get a setting by name")
+        raise TooManyPreferencesException(
+            _("There were %(possible_preferences)s for setting %(name)s, unable to get a setting by name")
+            % {"possible_preferences": len(possible_preferences), "name": name}
+        )
