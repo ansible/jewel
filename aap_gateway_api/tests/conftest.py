@@ -7,6 +7,7 @@ import pytest
 from ansible_base.lib.testing.fixtures import (  # noqa: F401
     admin_api_client,
     expected_log,
+    local_authenticator,
     no_log_messages,
     randname,
     rsa_keypair,
@@ -16,50 +17,10 @@ from ansible_base.lib.testing.fixtures import (  # noqa: F401
     user,
     user_api_client,
 )
+from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
 from aap_gateway_api.tests.utils.mocked_resources import MOCKED_API, MockResourceClient
-
-
-def copy_fixture(copies=1):
-    """
-    Decorator to create 'copies' copies of a fixture.
-
-    The copies will be named func_1, func_2, ..., func_n in the same module as
-    the original fixture.
-    """
-
-    def wrapper(func):
-        if '_pytestfixturefunction' not in dir(func):
-            raise TypeError(f"Can't apply copy_fixture to {func.__name__} because it is not a fixture. HINT: @copy_fixture must be *above* @pytest.fixture")
-
-        module_name = func.__module__
-        module = __import__(module_name, fromlist=[''])
-
-        for i in range(copies):
-            new_name = f"{func.__name__}_{i + 1}"
-            setattr(module, new_name, func)
-        return func
-
-    return wrapper
-
-
-@pytest.fixture
-def local_authenticator(db):
-    from ansible_base.authentication.models import Authenticator
-
-    authenticator = Authenticator.objects.create(
-        name="Test Local Authenticator",
-        enabled=True,
-        create_objects=True,
-        users_unique=False,
-        remove_users=True,
-        type="ansible_base.authentication.authenticator_plugins.local",
-        configuration={},
-    )
-    yield authenticator
-    authenticator.authenticator_user.all().delete()
-    authenticator.delete()
 
 
 @pytest.fixture
