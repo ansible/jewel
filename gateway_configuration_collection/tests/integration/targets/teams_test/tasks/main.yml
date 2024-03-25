@@ -145,10 +145,11 @@
         organization: "{{ _organizations[0].id }}"
         new_organization: "{{ _organizations[1].id }}"
 
-  - name: Assert Work with Teams passed
+  - name: Assert Change Unique Key passed
     assert:
       that:
         - __gateway_teams_job_async_result.results[0] is changed
+        - __gateway_teams_job_async_result.results[1] is changed
 
   - name: Check Unique key changes
     include_role:

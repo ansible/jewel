@@ -7,17 +7,19 @@ Roles manage gateway data through gateway API.
 
 ## Available Roles
 
-|    Role name     |       Data variable        |               README               |
-|:----------------:|:--------------------------:|:----------------------------------:|
-|    http_ports    |    `gateway_http_ports`    |    [link](http_ports/README.md)    |
-|  organizations   |  `gateway_organizations`   |  [link](organizations/README.md)   |
-| service_clusters | `gateway_service_clusters` | [link](service_clusters/README.md) |
-|  service_nodes   |  `gateway_service_nodes`   |  [link](service_nodes/README.md)   |
-|      routes      |      `gateway_routes`      |      [link](routes/README.md)      | 
-|     services     |     `gateway_services`     |     [link](services/README.md)     |
-|     settings     |     `gateway_settings`     |     [link](settings/README.md)     |
-|      teams       |      `gateway_teams`       |      [link](teams/README.md)       |
-|      users       |      `gateway_users`       |      [link](users/README.md)       |
+|     Role name      |        Data variable         |                   README                   |
+|:------------------:|:----------------------------:|:------------------------------------------:|
+|   authenticators   |   `gateway_authenticators`   |   [link](roles/authenticators/README.md)   |
+| authenticator_maps | `gateway_authenticator_maps` | [link](roles/authenticator_maps/README.md) |
+|     http_ports     |     `gateway_http_ports`     |     [link](roles/http_ports/README.md)     |
+|   organizations    |   `gateway_organizations`    |   [link](roles/organizations/README.md)    |
+|  service_clusters  |  `gateway_service_clusters`  |  [link](roles/service_clusters/README.md)  |
+|   service_nodes    |   `gateway_service_nodes`    |   [link](roles/service_nodes/README.md)    |
+|       routes       |       `gateway_routes`       |       [link](roles/routes/README.md)       | 
+|      services      |      `gateway_services`      |      [link](roles/services/README.md)      |
+|      settings      |      `gateway_settings`      |      [link](roles/settings/README.md)      |
+|       teams        |       `gateway_teams`        |       [link](roles/teams/README.md)        |
+|       users        |       `gateway_users`        |       [link](roles/users/README.md)        |
 
 ### Example: Ansible Playbook
 
@@ -37,6 +39,8 @@ Roles manage gateway data through gateway API.
   - { role: ansible.gateway_configuration.users, when: gateway_users is defined }
   - { role: ansible.gateway_configuration.organizations, when: gateway_organizations is defined }
   - { role: ansible.gateway_configuration.teams, when: gateway_teams is defined }
+  - { role: ansible.gateway_configuration.authenticators, when: gateway_authenticators is defined }
+  - { role: ansible.gateway_configuration.authenticator_maps, when: gateway_authenticator_maps is defined }
   - { role: ansible.gateway_configuration.http_ports, when: gateway_http_ports is defined }
   - { role: ansible.gateway_configuration.service_clusters, when: gateway_service_clusters is defined }
   - { role: ansible.gateway_configuration.service_nodes, when: gateway_service_nodes is defined }

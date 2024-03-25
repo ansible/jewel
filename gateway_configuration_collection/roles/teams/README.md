@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to add Teams on Ansible Automation Gateway.
+An Ansible Role to add Teams on Ansible Automation gateway.
 
 ## Variables
 

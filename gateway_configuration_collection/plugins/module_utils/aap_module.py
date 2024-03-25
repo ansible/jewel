@@ -82,6 +82,8 @@ class AAPModule(AnsibleModule):
         "oauth_token": "gateway_token",
     }
     IDENTITY_FIELDS = {
+        "authenticators": "name",
+        "authenticator_maps": ["name", "authenticator"],
         "http_ports": "name",
         "routes": "name",
         "services": "name",

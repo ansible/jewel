@@ -3,7 +3,7 @@ from ..module_utils.aap_object import AAPObject
 
 class AAPHttpPort(AAPObject):
     API_ENDPOINT_NAME = "http_ports"
-    ITEM_NAME = "http_port"
+    ITEM_TYPE = "http_port"
 
     def unique_field(self):
         return self.module.IDENTITY_FIELDS['http_ports']
