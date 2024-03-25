@@ -1,0 +1,102 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_authenticators_secure_logging: false
+    name_prefix: "GW-Collection-Test-Authenticators"
+
+- block:
+  - name: Create Authenticators
+    include_role:
+      name: ansible.gateway_configuration.authenticators
+    vars:
+      gateway_authenticators:
+      - name: "{{ name_prefix }}-local"
+        slug: "{{ name_prefix }}-local-url"
+        type: 'ansible_base.authentication.authenticator_plugins.local'
+        enabled: true
+        configuration: {}
+      - name: "{{ name_prefix }}-azuread"
+        slug: "{{ name_prefix}}-azuread-url"
+        type: 'ansible_base.authentication.authenticator_plugins.azuread'
+        enabled: true
+        configuration: # Defined in the django-ansible-base's module 'ansible_base.authentication.authenticator_plugins.azuread'
+          CALLBACK_URL: 'https://127.0.0.1'
+          KEY: 'some-key'
+          SECRET: 'super-secret' # Needs to be excluded from log
+      - name: "{{ name_prefix }}-github"
+        type: 'ansible_base.authentication.authenticator_plugins.github'
+        enabled: false
+        configuration:
+          CALLBACK_URL: "https://example.com"
+          KEY: "github-oauth2-key"
+          SECRET: "github-oauth2-secret"  # Needs to be excluded from log
+  - debug:
+      var: __gateway_authenticators_job_async_result
+  - name: Set Authenticators var
+    set_fact:
+      _authenticators: "{{ __gateway_authenticators_job_async_result.results }}"
+
+  - name: Assert Create Authenticators passed
+    assert:
+      that:
+      - _authenticators[0] is changed
+      - _authenticators[1] is changed
+      - _authenticators[2] is changed
+
+  - name: Check/Change Authenticators
+    include_role:
+      name: ansible.gateway_configuration.authenticators
+    vars:
+      gateway_authenticators:
+      - name: "{{ name_prefix }}-local"
+        state: exists
+      - name: "{{ _authenticators[0].id }}"  # no change
+        enabled: true
+      - name: "{{ _authenticators[1].name }}"
+        configuration:
+          CALLBACK_URL: "https://www.example.com/callback"
+          KEY: 'oidc'
+          SECRET: 'oidc-secret'
+      - name: "{{ name_prefix }}-github"
+        new_name: "{{ name_prefix }}-github-new"
+      - name: "{{ name_prefix }}-ldap"  # Does not exist
+        state: absent
+  - debug:
+      var: __gateway_authenticators_job_async_result
+
+  - name: Assert Check/Change Authenticators passed
+    assert:
+      that:
+        - __gateway_authenticators_job_async_result.results[0] is not changed
+        - __gateway_authenticators_job_async_result.results[1] is not changed
+        - __gateway_authenticators_job_async_result.results[2] is changed
+        - __gateway_authenticators_job_async_result.results[3] is changed
+        - __gateway_authenticators_job_async_result.results[4] is not changed
+
+  - name: Check Renaming
+    include_role:
+      name: ansible.gateway_configuration.authenticators
+    vars:
+      gateway_authenticators:
+        - name: "{{ name_prefix }}-github"
+          state: absent
+        - name: "{{ name_prefix }}-github-new"
+          state: exists
+  - name: Assert Check Renaming passed
+    assert:
+      that:
+        - __gateway_authenticators_job_async_result.results[0] is not changed
+        - __gateway_authenticators_job_async_result.results[1] is not changed
+
+  always:
+  - name: Delete Authenticators
+    include_role:
+      name: ansible.gateway_configuration.authenticators
+    vars:
+      gateway_state: absent
+      gateway_authenticators:
+      - name: "{{ name_prefix }}-azuread"
+      - name: "{{ name_prefix }}-github"
+      - name: "{{ name_prefix }}-github-new"
+      - name: "{{ name_prefix }}-ldap"
+      - name: "{{ name_prefix }}-local"

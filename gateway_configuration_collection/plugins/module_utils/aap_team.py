@@ -29,7 +29,7 @@ class AAPTeam(AAPObject):
 
         params = {"name": name_or_id, "state": self.STATE_EXISTS}
 
-        # If delete is required, cluster doesn't need to exist
+        # If delete is required, organization doesn't need to exist
         fail_when_not_exists = not self.absent()
 
         organization = AAPOrganization(module=self.module, params=params)

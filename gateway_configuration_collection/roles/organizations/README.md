@@ -2,7 +2,7 @@
 
 ## Description
 
-An Ansible Role to add Organizations on Ansible Automation Gateway.
+An Ansible Role to add Organizations on Ansible Automation gateway.
 
 ## Variables
 

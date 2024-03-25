@@ -12,6 +12,8 @@ Each role has its own variables, for information on those please see each role w
 gateway_configuration_dispatcher_roles:
   - {role: settings, var: gateway_settings, tags: settings}
   - {role: users, var: gateway_user_accounts, tags: users}
+  - {role: authenticators, var: authenticators, tags: authenticators}
+  - {role: authenticator_maps, var: authenticator_maps, tags: authenticator_maps}
   - {role: http_ports, var: http_ports, tags: http_ports}
   - {role: organizations, var: organizations, tags: organizations}
   - {role: teams, var: teams, tags: teams}

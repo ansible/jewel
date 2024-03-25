@@ -3,7 +3,7 @@ from ..module_utils.aap_object import AAPObject  # noqa
 
 class AAPUser(AAPObject):
     API_ENDPOINT_NAME = "users"
-    ITEM_NAME = "user"
+    ITEM_TYPE = "user"
 
     def unique_field(self):
         return self.module.IDENTITY_FIELDS['users']
