@@ -4,6 +4,7 @@ from ansible_base.lib.utils.validation import validate_image_data
 from cryptography.hazmat.primitives import serialization
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+from django.utils.translation import gettext as _
 from dynamic_preferences import types
 
 logger = logging.getLogger("aap.gateway.preference_types")
@@ -20,7 +21,7 @@ class URLPreference(types.StringPreference):
             validator = URLValidator(schemes=["https"])
             validator(value)
         except ValidationError:
-            raise ValidationError(f"{value} is not a valid URL")
+            raise ValidationError(_("%(value)s is not a valid URL") % {"value": value})
 
         return value
 
@@ -32,7 +33,7 @@ class PEMPrivateKeyPreference(types.LongStringPreference):
             serialization.load_pem_private_key(bytes(value, "UTF-8"), password=None)
         except Exception:
             logger.exception("Unable to load private key from PEM key")
-            raise ValidationError("Unable to load private key from PEM key")
+            raise ValidationError(_("Unable to load private key from PEM key"))
 
         return value
 
