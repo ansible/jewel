@@ -1,3 +1,5 @@
+from django.utils.translation import gettext as _
+
 from aap_gateway_api.utils import register
 from aap_gateway_api.utils.jwt_token import generate_jwt_keypair, update_jwt_public_key
 
@@ -7,7 +9,7 @@ register(
     default='X-DAB-JW-TOKEN',
     required=True,
     preference_type="string",
-    help_text="The header name to push from the proxy to the backend service. WARNING: if this is changed, backends must be updated to compensate!",
+    help_text=_("The header name to push from the proxy to the backend service. WARNING: if this is changed, backends must be updated to compensate!"),
     encrypted=False,
 )
 
@@ -17,7 +19,7 @@ register(
     default=600,
     required=True,
     preference_type="int",
-    help_text="How long the access tokens are valid for",
+    help_text=_("How long the access tokens are valid for"),
     encrypted=False,
 )
 
@@ -27,7 +29,7 @@ register(
     default=True,
     required=True,
     preference_type="bool",
-    help_text="Enable basic auth to the gateway API",
+    help_text=_("Enable basic auth to the gateway API"),
     encrypted=False,
 )
 
@@ -37,7 +39,7 @@ register(
     default='https://localhost:9080',
     required=True,
     preference_type="url",
-    help_text="URL to the gateway proxy layer",
+    help_text=_("URL to the gateway proxy layer"),
     encrypted=False,
 )
 
@@ -47,7 +49,7 @@ register(
     default=False,
     required=True,
     preference_type="bool",
-    help_text="Ignore certificate to the gateway proxy layer",
+    help_text=_("Ignore certificate to the gateway proxy layer"),
     encrypted=False,
 )
 
@@ -59,7 +61,7 @@ register(
     default=default_keypair.private,
     required=True,
     preference_type="pem_private_key",
-    help_text="JWT private key",
+    help_text=_("JWT private key"),
     encrypted=True,
     on_update=lambda preference, old, new: update_jwt_public_key(new),
 )
@@ -70,7 +72,7 @@ register(
     default=default_keypair.public,
     required=False,
     preference_type="longstring",
-    help_text="JWT public key (read-only)",
+    help_text=_("JWT public key (read-only)"),
     encrypted=False,
     read_only=True,
 )
@@ -81,7 +83,7 @@ register(
     default=5,
     required=True,
     preference_type="int",
-    help_text="Timeout (in seconds) for the status endpoint to wait when trying to connect to a backend.",
+    help_text=_("Timeout (in seconds) for the status endpoint to wait when trying to connect to a backend."),
     encrypted=False,
 )
 
@@ -91,7 +93,7 @@ register(
     default=0,
     required=False,
     preference_type="int",
-    help_text="How long does a local password have to be",
+    help_text=_("How long does a local password have to be"),
     encrypted=False,
 )
 
@@ -101,7 +103,7 @@ register(
     default=0,
     required=False,
     preference_type="int",
-    help_text="How many numerical characters need to be in a local password",
+    help_text=_("How many numerical characters need to be in a local password"),
     encrypted=False,
 )
 
@@ -111,7 +113,7 @@ register(
     default=0,
     required=False,
     preference_type="int",
-    help_text="How many upper case characters need to be in a local password",
+    help_text=_("How many upper case characters need to be in a local password"),
     encrypted=False,
 )
 
@@ -121,7 +123,7 @@ register(
     default=0,
     required=False,
     preference_type="int",
-    help_text="How many special characters need to be in a local password",
+    help_text=_("How many special characters need to be in a local password"),
     encrypted=False,
 )
 
@@ -131,7 +133,7 @@ register(
     default=False,
     required=False,
     preference_type="bool",
-    help_text="Can a superuser account save an insecure password",
+    help_text=_("Can a superuser account save an insecure password"),
     encrypted=False,
 )
 
@@ -141,7 +143,7 @@ register(
     default=False,
     required=False,
     preference_type="bool",
-    help_text="Enabling this setting will tell social auth to use the full email as username instead of the full name",
+    help_text=_("Enabling this setting will tell social auth to use the full email as username instead of the full name"),
     encrypted=False,
 )
 
@@ -151,7 +153,7 @@ register(
     default='',
     required=False,
     preference_type="url",
-    help_text="URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page.",
+    help_text=_("URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
     encrypted=False,
 )
 
@@ -161,7 +163,7 @@ register(
     default="",
     required=False,
     preference_type="longstring",
-    help_text="Provide a specific information (such as a legal notice or a disclaimer) to a text box in the login modal",
+    help_text=_("Provide a specific information (such as a legal notice or a disclaimer) to a text box in the login modal"),
     encrypted=False,
 )
 
@@ -171,7 +173,7 @@ register(
     required=False,
     default="",
     preference_type="image",
-    help_text="Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)",
+    help_text=_("Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)"),
     encrypted=False,
 )
 
@@ -181,7 +183,7 @@ register(
     required=False,
     default=15 * 60,
     preference_type="int",
-    help_text="Time in seconds before a session expires",
+    help_text=_("Time in seconds before a session expires"),
 )
 
 register(
@@ -190,7 +192,7 @@ register(
     required=False,
     default=50,
     preference_type="int",
-    help_text="The default number of items to show on a list page",
+    help_text=_("The default number of items to show on a list page"),
     encrypted=False,
 )
 
@@ -200,6 +202,6 @@ register(
     required=False,
     default=200,
     preference_type="int",
-    help_text="The maximum number of items allowed on a list page",
+    help_text=_("The maximum number of items allowed on a list page"),
     encrypted=False,
 )
