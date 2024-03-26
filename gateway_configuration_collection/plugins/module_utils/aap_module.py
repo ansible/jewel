@@ -117,8 +117,8 @@ class AAPModule(AnsibleModule):
 
         if direct_params is not None:
             self.params = direct_params
-        #        else:
-        super(AAPModule, self).__init__(argument_spec=full_argspec, **kwargs)
+        else:
+            super(AAPModule, self).__init__(argument_spec=full_argspec, **kwargs)
         self.session = Request(cookies=CookieJar(), validate_certs=self.verify_ssl, timeout=self.request_timeout)
 
         # Parameters specified on command line will override settings in any config
@@ -250,7 +250,7 @@ class AAPModule(AnsibleModule):
 
         :raises AAPModuleError: The API request failed.
 
-        :return: A dictionnary with two entries: ``status_code`` provides the
+        :return: A dictionary with two entries: ``status_code`` provides the
                  API call returned code and ``json`` provides the returned data
                  in JSON format.
         :rtype: dict
@@ -587,7 +587,7 @@ class AAPModule(AnsibleModule):
             self.fail_json(msg="Cannot determine identity field for Undefined object.")
 
     def get_endpoint(self, endpoint, *args, **kwargs):
-        url = self.build_url(endpoint)
+        url = self.build_url(endpoint, query_params=kwargs.get('data'))
         return self.make_request("GET", url, **kwargs)
 
     def get_all_endpoint(self, endpoint, *args, **kwargs):

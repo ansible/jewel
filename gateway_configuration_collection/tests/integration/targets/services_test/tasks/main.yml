@@ -4,19 +4,40 @@
     gateway_configuration_http_ports_secure_logging: false
     gateway_configuration_service_clusters_secure_logging: false
     gateway_configuration_services_secure_logging: false
-
+    name_prefix: "GW-Collection-Test-Services"
 
 - block:
-  ### Create Http Port ###
-  - name: Create Http Ports
+  # <Http Ports> --------------------------------
+  - block:
+    - name: Check for existing API Port
+      set_fact:
+        existing_api_port: "{{ lookup('ansible.gateway_configuration.gateway_api', 'http_ports', query_params={ 'is_api_port': true }, host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=false, expect_one=true) }}"
+    - name: Print it
+      debug:
+        msg: "Using existing API port: {{ existing_api_port.name }}"
+    rescue:
+    - name: Create API Port if not exists
+      include_role:
+        name: ansible.gateway_configuration.http_ports
+      vars:
+        gateway_http_ports:
+        - name: "{{ name_prefix }}-API Port"
+          number: 9080
+          use_https: true
+          is_api_port: true
+    - name: Set New API Port
+      set_fact:
+        new_api_port: "{{ __gateway_http_ports_job_async_result.results[0] }}"
+  - block:
+    - name: Set API Port
+      set_fact:
+        api_port: "{{ existing_api_port | default(new_api_port|default(omit, true)) }}"
+
+  - name: Create Non-API Http Ports
     include_role:
       name: ansible.gateway_configuration.http_ports
     vars:
       http_ports:
-      - name: "API Port"
-        number: 9080
-        use_https: true
-        is_api_port: true
       - name: "Port 9000"
         number: 9000
   - debug:
@@ -25,9 +46,10 @@
   - name: Assert Create Http Ports
     assert:
       that:
-      - __gateway_http_ports_job_async_result.results[1] is changed
+      - __gateway_http_ports_job_async_result.results[0] is changed
+  # </Http Ports> -------------------------------
 
-  ### Create Service Clusters ###
+  # <Service Clusters> --------------------------
   - name: Create Service Clusters
     include_role:
       name: ansible.gateway_configuration.service_clusters
@@ -48,8 +70,9 @@
         - __gateway_service_clusters_job_async_result.results[0] is changed
         - __gateway_service_clusters_job_async_result.results[1] is changed
         - __gateway_service_clusters_job_async_result.results[2] is changed
+  # </Service Clusters> -------------------------
 
-  ### Create Services ###
+  # <Services> ----------------------------------
   - name: Create Services
     include_role:
       name: ansible.gateway_configuration.services
@@ -57,7 +80,7 @@
       gateway_services:
       - name: Gateway API
         description: Proxy to the gateway
-        http_port: API Port
+        http_port: "{{ api_port.name }}"
         api_slug: gateway
         service_cluster: gateway
         is_service_https: true
@@ -67,7 +90,7 @@
         order: 100
       - name: Automation Hub API
         description: Proxy to the Automation Hub
-        http_port: API Port
+        http_port: "{{ api_port.name }}"
         api_slug: hub
         service_cluster: hub
         service_path: '/api/hub/'
@@ -76,7 +99,7 @@
       - name: Controller API
         description: Proxy to the Controller
         api_slug: controller
-        http_port: API Port
+        http_port: "{{ api_port.name }}"
         service_cluster: controller
         is_service_https: true
         service_path: '/api/'
@@ -100,7 +123,7 @@
       # No change
       - name: Gateway API
         description: Proxy to the gateway
-        http_port: API Port
+        http_port: "{{ api_port.id }}"
         service_cluster: gateway
         is_service_https: true
         service_path: '/'
@@ -110,16 +133,16 @@
       - name: "{{ __gateway_services_job_async_result.results[1].id }}"  # Automation Hub API
         order: 99 # Doesn't change with state:exists
         state: exists
-      # Change api version and port
+      # Change api version
       - name: "{{ __gateway_services_job_async_result.results[2].id }}"  # Controller API
-        http_port: "{{ __gateway_http_ports_job_async_result.results[1].id}} " # Port 9000
+        http_port: "{{ api_port.name }}"
         service_cluster: "{{ __gateway_service_clusters_job_async_result.results[2].id }}"  # controller
         is_service_https: true
         service_path: '/api/v3/'
         service_port: 8043
       # Non-existing cluster
       - name: Wrong cluster
-        http_port: API Port
+        http_port: "{{ api_port.name }}"
         service_cluster: eda
         state: absent
       # Non-existing port
@@ -179,6 +202,7 @@
         - __gateway_services_job_async_result.results[0] is not changed
         - __gateway_services_job_async_result.results[1] is not changed
 
+  # <Cleanup> -----------------------------------
   always:
   ### Delete Services ###
   - name: Delete Services
@@ -217,11 +241,11 @@
         - name: "hub"
 
   ### Delete Ports ###
-  - name: Delete Http Ports
+  - name: Delete Non-API Http Ports
     include_role:
       name: ansible.gateway_configuration.http_ports
     vars:
       gateway_state: absent
       gateway_http_ports:
-      - name: API Port
+      - name: "{{ name_prefix }}-API Port"
       - name: Port 9000

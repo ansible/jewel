@@ -1,3 +1,8 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_http_ports_secure_logging: false
+
 - block:
   - name: Run primary http port tests
     include_role:
