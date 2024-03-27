@@ -24,13 +24,13 @@ gateway_service_nodes:   # Nodes of service clusters
 {% endfor %}
   - name: Controller Node
     service_cluster: controller
-    address: "localhost"
+    address: "host-gateway"
   - name: Hub Node
     service_cluster: hub
-    address: "localhost"
+    address: "host-gateway"
   - name: EDA Node
     service_cluster: eda
-    address: "localhost"
+    address: "host-gateway"
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     # It configures proxy requests
