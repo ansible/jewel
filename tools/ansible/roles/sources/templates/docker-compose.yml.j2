@@ -161,6 +161,9 @@ services:
       - 'aap_gw_openldap_data:/bitnami/openldap'
       - '$PWD/tools/generated/ldap_certs:/opt/bitnami/openldap/certs'
       - '$PWD/tools/generated/ldap_diffs:/opt/bitnami/openldap/ldiffs'
+    networks:
+      - dbnet
+      - service-mesh
 {% endif %}
 
 {% if enabled_containers['tacacs']|bool %}
