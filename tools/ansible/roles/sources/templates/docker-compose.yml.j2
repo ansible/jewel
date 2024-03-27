@@ -110,7 +110,7 @@ services:
       - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
     extra_hosts:
-      localhost: "host-gateway"
+      host-gateway: "host-gateway"
     networks:
       - dbnet
       - service-mesh
