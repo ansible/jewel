@@ -46,7 +46,7 @@ class Team(MockedResource):
 
 class User(MockedResource):
     rtype = "shared.user"
-    name_field = "name"
+    name_field = "username"
 
     def __init__(self, name, **kwargs):
         super().__init__(name)
@@ -67,6 +67,22 @@ class MockResourcesAPI:
 
     def add_resource(self, resource):
         self.resources[resource.data["ansible_id"]] = resource
+        return resource
+
+    def create_resource(self, data):
+        rtypes = {"shared.user": User, "shared.team": Team, "shared.organization": Org}
+        klass = rtypes[data["resource_type"]]
+
+        if data["resource_type"] == "shared.team":
+            resource = klass(data["resource_data"][klass.name_field], Org(""))
+        else:
+            resource = klass(data["resource_data"][klass.name_field])
+
+        for k in resource.data.keys():
+            if val := data.get(k):
+                resource.data[k] = val
+
+        self.add_resource(resource)
         return resource
 
     def detail(self, ansible_id):
@@ -229,12 +245,15 @@ class MockResourceClient(GWResourceAPIClient):
             return Response({"service_id": service_id, "service_type": "awx"})
         elif "resources" in path:
             if len(path) == 1:
-                if params is None:
-                    params = {}
+                if method in ["get"]:
+                    if params is None:
+                        params = {}
 
-                data = api.list(service_id=params.get("service_id", None), resource_types=params.get("content_type__resource_type__name", None))
+                    data = api.list(service_id=params.get("service_id", None), resource_types=params.get("content_type__resource_type__name", None))
 
-                return Response(data)
+                    return Response(data)
+                elif method in ["post"]:
+                    return Response(api.create_resource(data))
 
             elif "additional_data" in path:
                 return Response(api.additional_data(path[1]))
@@ -246,3 +265,5 @@ class MockResourceClient(GWResourceAPIClient):
                     return Response(api.update(id, data))
                 elif method in ["delete"]:
                     return Response(api.delete(id))
+
+        raise NotImplementedError(f"Request {method} {path} is not implemented on mocked api.")

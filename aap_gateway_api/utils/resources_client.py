@@ -6,6 +6,7 @@ from ansible_base.lib.utils.validation import to_python_boolean
 from ansible_base.resource_registry.rest_client import ResourceAPIClient as DABResourceAPIClient
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from requests.models import Response as Response
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
 from aap_gateway_api.utils.jwt_token import create_signed_jwt
@@ -60,3 +61,27 @@ class GWResourceAPIClient(DABResourceAPIClient):
     @property
     def requests_auth_kwargs(self):
         return {"headers": {self.header_name: self.jwt}}
+
+
+class AllServicesClient(GWResourceAPIClient):
+    """
+    Resources API client that allows the gateway to make requests to all services at once.
+    """
+
+    def __init__(self):
+        # TODO: Switch to the system user once we can control access to resources api
+        user = get_user_model().objects.filter(is_superuser=True).first()
+
+        self.clients = []
+        raise_if_bad_request = False
+
+        for service in ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceCluster.ServiceType.GATEWAY):
+            self.clients.append(GWResourceAPIClient(service, user, raise_if_bad_request))
+
+    # TODO: Make this async
+    def _make_request(self, method: str, path: str, data: dict = None, params: dict = None) -> Response:
+        responses = {}
+        for client in self.clients:
+            responses[client.service.api_slug] = client._make_request(method, path, data, params)
+
+        return responses

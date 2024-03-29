@@ -1,9 +1,9 @@
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers import UserSerializer
-from aap_gateway_api.views.api.v1.common import GatewayModelViewSet
+from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPIUpdateMixin
 
 
-class UserViewSet(GatewayModelViewSet):
+class UserViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     """
     API endpoint that allows users to be viewed or edited.
     """
