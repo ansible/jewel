@@ -1,4 +1,6 @@
+import os
 import random
+import re
 import uuid
 from collections import namedtuple
 from unittest.mock import patch
@@ -20,7 +22,8 @@ from ansible_base.lib.testing.fixtures import (  # noqa: F401
 from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
-from aap_gateway_api.tests.utils.mocked_resources import MOCKED_API, MockResourceClient
+from aap_gateway_api.tests.service_test_app.launch import launch_service
+from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 
 @pytest.fixture
@@ -181,12 +184,33 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         service_cluster = request.getfixturevalue(f"service_cluster_{name}")
         randstr = uuid.uuid4().hex[:6]
         slug = f"my-api-slug-{uuid.uuid4().hex[:6]}"
+
+        # The port for this service may be opened on localhost in order to communicate
+        # with the service_test_app. This ensures that service ports won't conflict if
+        # multiple test apps are launched at the same time in different pytest workers.
+        # Conflicts may still occur if the developer has any ports greater than 10,000
+        # open on their machine.
+        port_prefixes = {
+            ServiceCluster.ServiceType.CONTROLLER: 1,
+            ServiceCluster.ServiceType.EDA: 2,
+            ServiceCluster.ServiceType.HUB: 3,
+            ServiceCluster.ServiceType.GATEWAY: 4,
+        }
+
+        port_prefix = port_prefixes[service_cluster.service_type]
+
+        if pytest_worker := os.environ.get("PYTEST_XDIST_WORKER"):
+            worker_num = re.sub("[^0-9]", "", pytest_worker).rjust(4, "0")
+            port = int(str(port_prefix) + worker_num)
+        else:
+            port = int(str(port_prefix) + str(random.randint(0, 1000).rjust(4, "0")))
+
         route = ServiceAPIRoute.objects.create(
             name=randname("Test API route"),
             http_port=http_api_port_factory(),
             is_service_https=False,
             service_cluster=service_cluster,
-            service_port=random.randint(1000, 65536),
+            service_port=port,
             service_path=f"/my-service-path-{randstr}",
             description="Test route",
             envoy_cluster_name=randname("envoy cluster"),
@@ -211,8 +235,40 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
     globals()[f"full_service_hierarchy_{name}"] = pytest.fixture(_full_service_hierarchy)
 
 
+class PatchedResourceClient(GWResourceAPIClient):
+    """
+    Patches the resources client so that traffic is routed directly to the test service,
+    rather than through envoy (which isn't available.)
+    """
+
+    def __init__(self, service, **kwargs):
+        super().__init__(service, **kwargs)
+
+        self.base_url = f"http://localhost:{service.service_port}/api/v1/service-index/"
+
+
 @pytest.fixture
-def mocked_resources_client(service_api_route_controller):
-    with patch("aap_gateway_api.utils.resources_client.GWResourceAPIClient", MockResourceClient) as client:
-        MOCKED_API.set_resources()
+def patched_resource_client():
+    with patch("aap_gateway_api.utils.resources_client.GWResourceAPIClient", PatchedResourceClient) as client:
         yield client
+
+
+@pytest.fixture
+def simulated_controller_resource_api(patched_resource_client, service_api_route_controller):
+    proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture=None)
+    yield service_api_route_controller
+    proc.kill()
+
+
+@pytest.fixture
+def simmulated_hub_resource_api(patched_resource_client, service_api_route_hub):
+    proc = launch_service("galaxy", service_api_route_hub.service_port, setup_fixture=None)
+    yield service_api_route_hub
+    proc.kill()
+
+
+@pytest.fixture
+def simulated_eda_resource_api(patched_resource_client, service_api_route_eda):
+    proc = launch_service("eda", service_api_route_eda.service_port, setup_fixture=None)
+    yield service_api_route_eda
+    proc.kill()

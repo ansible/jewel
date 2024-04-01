@@ -4,6 +4,7 @@ from django.core.management import call_command
 from django.urls import reverse
 
 from aap_gateway_api.models import Organization, Team
+from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 
 @pytest.fixture
@@ -20,68 +21,89 @@ def conflicting_team(conflicting_org):
     team.delete()
 
 
-def _assert_all_resources_synced(admin_api_client, service_api_route_controller, mocked_resources_client):
+@pytest.fixture
+def migration_service(patched_resource_client, service_api_route_controller):
+    proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture="migration_tests")
+    yield service_api_route_controller
+    proc.kill()
+
+
+def _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client):
     gw_service_id = str(service_id())
     service_api_route_controller.refresh_from_db()
 
-    assert str(service_api_route_controller.service_cluster.service_id) == mocked_resources_client.service_id
+    assert str(service_api_route_controller.service_cluster.service_id) == service_client.get_service_metadata().json()["service_id"]
 
-    assert mocked_resources_client.MOCKED_API.list(service_id=gw_service_id)["count"] != 0
+    assert service_client.list_resources(filters={"service_id": gw_service_id}).json()["count"] != 0
 
     migrated_types = ["shared.organization", "shared.team"]
-    resources = mocked_resources_client.MOCKED_API.list(resource_types=migrated_types)
-
     resource_api_types = set()
-    for resource in resources["results"]:
-        resp = admin_api_client.get(reverse("resource-detail", kwargs={"ansible_id": resource["ansible_id"]})).data
-        resource = mocked_resources_client.MOCKED_API.detail(resource["ansible_id"])
 
-        resource_api_types.add(resource["resource_type"])
+    page = 1
+    while True:
+        resources = service_client.list_resources(filters={"page": page, "content_type__resource_type__name__in": ",".join(migrated_types)}).json()
 
-        assert resp["ansible_id"] == resource["ansible_id"]
-        assert resource["service_id"] == str(gw_service_id)
-        assert resp["service_id"] == resource["service_id"]
-        assert resp["name"] == resource["name"]
+        if resources["next"] is None:
+            break
 
-        for k in resource["resource_data"]:
-            assert resource["resource_data"][k] == resp["resource_data"][k]
+        page += 1
+
+        for resource in resources["results"]:
+            resp = admin_api_client.get(reverse("resource-detail", kwargs={"ansible_id": resource["ansible_id"]})).data
+            resource = service_client.get_resource(resource["ansible_id"]).json()
+
+            print(resource)
+
+            resource_api_types.add(resource["resource_type"])
+
+            assert resp["ansible_id"] == resource["ansible_id"]
+            assert resource["service_id"] == str(gw_service_id)
+            assert resp["service_id"] == resource["service_id"]
+            assert resp["name"] == resource["name"]
+
+            for k in resource["resource_data"]:
+                assert resource["resource_data"][k] == resp["resource_data"][k]
 
     assert set(migrated_types) == resource_api_types
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_no_merge(mocked_resources_client, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team):
-    call_command(
-        "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False
-    )
+def test_migrate_no_merge(migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client):
+    service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, mocked_resources_client)
+    call_command("migrate_service_data", api_slug=migration_service.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
+
+    _assert_all_resources_synced(admin_api_client, migration_service, service_client)
 
     # Check that the org with the conflicting name was prefixed with the api slug
     assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert Organization.objects.filter(name=service_api_route_controller.api_slug + ":" + conflicting_org.name).exists()
+    assert Organization.objects.filter(name=migration_service.api_slug + ":" + conflicting_org.name).exists()
 
     # Since orgs are not merged, team names should be the same.
     original_org_teams = list(conflicting_org.teams.all().values_list("name", flat=True))
     assert original_org_teams == [conflicting_team.name]
 
-    new_org = Organization.objects.get(name=service_api_route_controller.api_slug + ":" + conflicting_org.name)
+    new_org = Organization.objects.get(name=migration_service.api_slug + ":" + conflicting_org.name)
 
     new_org_teams = list(new_org.teams.all().values_list("name", flat=True))
     assert new_org_teams == [conflicting_team.name]
 
     # Check that the org was renamed on the services.
-    updated_org = mocked_resources_client.MOCKED_API.detail(str(new_org.resource.ansible_id))
-    assert updated_org["name"] == service_api_route_controller.api_slug + ":" + conflicting_org.name
+    updated_org = service_client.get_resource(str(new_org.resource.ansible_id)).json()
+    assert updated_org["name"] == migration_service.api_slug + ":" + conflicting_org.name
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_merge_orgs(mocked_resources_client, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team):
+def test_migrate_merge_orgs(
+    migration_service, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team, patched_resource_client
+):
+    service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
+
     call_command(
         "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=True
     )
 
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, mocked_resources_client)
+    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
 
     # Check that only one organization exists
     assert Organization.objects.filter(name=conflicting_org.name).exists()
@@ -92,12 +114,16 @@ def test_migrate_merge_orgs(mocked_resources_client, admin_user, service_api_rou
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_merge_orgs_and_teams(mocked_resources_client, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team):
+def test_migrate_merge_orgs_and_teams(
+    migration_service, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team, patched_resource_client
+):
+    service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
+
     call_command(
         "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=True, merge_organizations=True
     )
 
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, mocked_resources_client)
+    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
 
     # Check that only one organization exists
     assert Organization.objects.filter(name=conflicting_org.name).exists()

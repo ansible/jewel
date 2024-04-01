@@ -76,7 +76,7 @@ class AllServicesClient(GWResourceAPIClient):
         raise_if_bad_request = False
 
         for service in ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceCluster.ServiceType.GATEWAY):
-            self.clients.append(GWResourceAPIClient(service, user, raise_if_bad_request))
+            self.clients.append(GWResourceAPIClient(service, user=user, raise_if_bad_request=raise_if_bad_request))
 
     # TODO: Make this async
     def _make_request(self, method: str, path: str, data: dict = None, params: dict = None) -> Response:
