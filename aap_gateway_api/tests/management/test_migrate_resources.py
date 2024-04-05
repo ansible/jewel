@@ -43,16 +43,11 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
     while True:
         resources = service_client.list_resources(filters={"page": page, "content_type__resource_type__name__in": ",".join(migrated_types)}).json()
 
-        if resources["next"] is None:
-            break
-
         page += 1
 
         for resource in resources["results"]:
             resp = admin_api_client.get(reverse("resource-detail", kwargs={"ansible_id": resource["ansible_id"]})).data
             resource = service_client.get_resource(resource["ansible_id"]).json()
-
-            print(resource)
 
             resource_api_types.add(resource["resource_type"])
 
@@ -63,6 +58,8 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
 
             for k in resource["resource_data"]:
                 assert resource["resource_data"][k] == resp["resource_data"][k]
+        if resources["next"] is None:
+            break
 
     assert set(migrated_types) == resource_api_types
 
