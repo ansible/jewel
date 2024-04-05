@@ -203,7 +203,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
             worker_num = re.sub("[^0-9]", "", pytest_worker).rjust(4, "0")
             port = int(str(port_prefix) + worker_num)
         else:
-            port = int(str(port_prefix) + str(random.randint(0, 1000).rjust(4, "0")))
+            port = int(str(port_prefix) + str(random.randint(0, 1000)).rjust(4, "0"))
 
         route = ServiceAPIRoute.objects.create(
             name=randname("Test API route"),
