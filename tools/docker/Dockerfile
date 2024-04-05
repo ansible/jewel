@@ -43,7 +43,7 @@ RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_gi
 FROM quay.io/centos/centos:stream9
 ARG PYTHON
 
-RUN dnf module install -y nginx/common && \
+RUN dnf module install -y nginx:1.22/common && \
     dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm  && \
     dnf install -y \
     inotify-tools \
