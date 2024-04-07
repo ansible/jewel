@@ -38,7 +38,7 @@ def test_jwt_key_set_via_api(admin_api_client, unauthenticated_api_client, rsa_k
     assert get_jwt_rsa_key(public=True) == rsa_keypair.public
 
 
-@mock.patch("aap_gateway_api.preferences.update_jwt_public_key")
+@mock.patch("aap_gateway_api.registered_preferences.update_jwt_public_key")
 def test_jwt_key_set_bad_private_key_via_api(update_jwt_public_key, admin_api_client, unauthenticated_api_client, shut_up_logging, rsa_keypair):
     """
     Test what happens when an invalid private key is set via the API.

@@ -27,9 +27,8 @@ CACHES = {
 for logger in LOGGING["loggers"]:  # noqa: F405
     LOGGING["loggers"][logger]["level"] = "ERROR"  # noqa: F405
 
-# Caching breaks unit tests.
-DYNAMIC_PREFERENCES = {
-    'REGISTRY_MODULE': 'preferences',
-    'ENABLE_CACHE': False,
-    'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
-}
+# Caching breaks unit tests because:
+#   1. we don't have anything that will clear the cache on a per-test basis
+#   2. even if we did, we have tests running in parallel so we would need each thread to have its own cache
+# Neither are insurmountable but we haven't solved it
+DYNAMIC_PREFERENCES['ENABLED_CACHE'] = False  # noqa: F405

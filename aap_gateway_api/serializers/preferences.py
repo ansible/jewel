@@ -7,8 +7,8 @@ from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
-from aap_gateway_api.models import gateway_preference_registry
-from aap_gateway_api.preference_types import PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences import gateway_preference_registry
+from aap_gateway_api.preferences.types import PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
 
 logger = logging.getLogger('aap.gateway.serializers.preferences')

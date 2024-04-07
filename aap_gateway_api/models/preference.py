@@ -1,41 +1,13 @@
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from dynamic_preferences import models
-from dynamic_preferences.registries import GlobalPreferenceRegistry, PreferencesManager, preference_models
-from dynamic_preferences.settings import preferences_settings
-
-
-class PreferenceRegistry(GlobalPreferenceRegistry):
-    def manager(self, **kwargs):
-        """Return a preference manager that can be used to retrieve preference values"""
-        return EncryptedPreferencesManager(registry=self, model=self.preference_model, **kwargs)
-
-
-class EncryptedPreferencesManager(PreferencesManager):
-    def to_cache(self, *prefs):
-        """
-        Update/create the cache value for the given preference model instances
-        """
-        update_dict = {}
-        for pref in prefs:
-            key = self.get_cache_key(pref.section, pref.name)
-            value = pref.raw_value
-            if pref.preference.encrypted:
-                value = ansible_encryption.encrypt_string(value)
-            if value is None or value == "":
-                # some cache backends refuse to cache None or empty values
-                # resulting in more DB queries, so we cache an arbitrary value
-                # to ensure the cache is hot (even with empty values)
-                value = preferences_settings.CACHE_NONE_VALUE
-            update_dict[key] = value
-
-        self.cache.set_many(update_dict)
-
-
-gateway_preference_registry = PreferenceRegistry()
 
 
 class Preference(models.BasePreferenceModel):
-    registry = gateway_preference_registry
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from aap_gateway_api.preferences import gateway_preference_registry
+
+        self.registry = gateway_preference_registry
 
     class Meta:
         app_label = "aap_gateway_api"
@@ -54,9 +26,3 @@ class Preference(models.BasePreferenceModel):
         if type(instance.value) is str and instance.value.startswith(ENCRYPTED_STRING):
             instance.value = ansible_encryption.decrypt_string(instance.value)
         return instance
-
-
-gateway_preference_registry.preference_model = Preference
-
-# Register the Preference model with our registry (seems redundant but :shrug:)
-preference_models.register(Preference, gateway_preference_registry)

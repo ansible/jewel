@@ -283,7 +283,7 @@ else:
 
 
 DYNAMIC_PREFERENCES = {
-    'REGISTRY_MODULE': 'preferences',
+    'REGISTRY_MODULE': 'registered_preferences',
     'ENABLE_CACHE': using_cache,
     'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
 }
