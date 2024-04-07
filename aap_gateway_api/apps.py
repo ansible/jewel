@@ -15,7 +15,7 @@ def _notify_on_preference_update(sender, section, name, old_value, new_value, **
     method of the preference if it exists. This means we don't have to hardcode preference
     names and sections here in the signal handler.
     '''
-    from aap_gateway_api.models import gateway_preference_registry
+    from aap_gateway_api.preferences import gateway_preference_registry
 
     preference = gateway_preference_registry.get(name, section)
     if preference.on_update:

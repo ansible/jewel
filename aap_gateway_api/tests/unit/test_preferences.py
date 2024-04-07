@@ -8,7 +8,7 @@ from dynamic_preferences.managers import PreferencesManager
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
-from aap_gateway_api.models.preference import PreferenceRegistry
+from aap_gateway_api.preferences.registry import PreferenceRegistry
 from aap_gateway_api.utils import preferences
 
 

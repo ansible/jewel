@@ -52,7 +52,8 @@ def register_preference(db):
     unregister it (and delete its value in the database) after the test is
     complete.
     """
-    from aap_gateway_api.models import Preference, gateway_preference_registry
+    from aap_gateway_api.models import Preference
+    from aap_gateway_api.preferences import gateway_preference_registry
     from aap_gateway_api.utils.preferences import get_preference_key, register
 
     kwargs_cache = {}
