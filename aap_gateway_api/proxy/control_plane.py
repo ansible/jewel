@@ -3,9 +3,11 @@ import logging
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.db import DatabaseError, connections
 from django.http import HttpRequest, parse_cookie
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
 from envoy.service.auth.v3 import attribute_context_pb2, external_auth_pb2, external_auth_pb2_grpc
+from psycopg import OperationalError
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
@@ -102,6 +104,11 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
             return self._return_authenticated(jwt, request_path, user.username)
 
+        except (DatabaseError, OperationalError) as e:
+            logger.warning("Database error. We think it's a connection error. Resetting the connection so it can be tried again.")
+            logger.debug(e, exc_info=True)
+            for conn in connections.all():
+                conn.close_if_unusable_or_obsolete()
         # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
         except Exception as e:
             logger.exception(e)
