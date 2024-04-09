@@ -189,6 +189,8 @@ services:
     hostname: tacacs
     ports:
       - "{{ tacacs_exposed_tacacs_port }}:49"
+    networks:
+      - dbnet
 {% endif %}
 
 networks:

@@ -8,7 +8,7 @@ tacacs_configuration:
   remove_users: True
   configuration:
     PORT: "{{ tacacs_exposed_tacacs_port }}"
-    HOST: "{{ container_reference }}"
+    HOST: "tacacs"
     AUTH_PROTOCOL: "ascii"
     REM_ADDR: "true"
     SECRET: "ciscotacacskey"
