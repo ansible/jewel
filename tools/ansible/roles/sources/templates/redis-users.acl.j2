@@ -1,2 +1,2 @@
-user {{ redis_username }} on >{{ redis_password }} ~* &* +@all
+user {{ redis_username }} on >{{ redis_password }} ~{{ cache_key_prefix }}:* &* +@all
 user default off

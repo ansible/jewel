@@ -27,16 +27,19 @@ services:
       - PYTHONBREAKPOINT=remote_pdb.set_trace
       - REMOTE_PDB_HOST=127.0.0.1
       - REMOTE_PDB_PORT=4444
-      - REDIS_USER={{ redis_username }}
-      - REDIS_PASS={{ redis_password }}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6380
-      - REDIS_IGNORE_CERTS=True
+      - REDIS_URL=rediss://{{ redis_username }}:{{ redis_password }}@{{ redis_node_prefix }}1:{{ redis_exposed_port }}
+      - REDIS_IS_CLUSTERED={{ redis_is_clustered }}
+      - REDIS_CLUSTERED_HOSTS={{ ",".join(redis_clustered_hosts) }}
+      - REDIS_TLS={{ redis_uses_tls }}
+      - CACHE_KEY_PREFIX={{ cache_key_prefix }}
       - ENVOY_HOSTNAME=proxy
       - VERIFY_ENVOY_HTTPS_CERTIFICATES=false
     links:
       - db
-      - redis
+{% for i in range(redis_node_count|int) %}
+{% set container_id = loop.index %}
+      - redis{{ container_id }}
+{% endfor %}
     networks:
       - dbnet
       - service-mesh
@@ -54,28 +57,41 @@ services:
       - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini:z
       - $PWD/tools/configs/settings.py:/etc/gateway/settings.py:z
       - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/etc/gateway/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/etc/gateway/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/etc/gateway/redis_ca.cert:z
     ulimits:
       nofile:
         soft: 4096
         hard: 4096
   {% endfor %}
 
-  redis:
-    container_name: aap_gw_redis_1
-    image: redis:{{ redis_container_version }}
+{% for i in range(redis_node_count|int) %}
+{% set container_id = loop.index %}
+  redis{{ container_id }}:
+    container_name: {{ redis_node_prefix }}{{ container_id }}
+    hostname: {{ redis_node_prefix }}{{ container_id }}
+    image: quay.io/fedora/redis-6:{{ redis_container_version }}
     entrypoint: ["redis-server"]
     command: 
       - /usr/local/etc/redis/redis.conf
-    networks:
-      - dbnet
+{% if container_id == 1 %}
     ports:
-      - "{{ redis_exposed_port }}:6380"
+      - "{{ redis_exposed_port }}:{{ redis_exposed_port }}"
+{% endif %}
     volumes:
-      - $PWD/tools/configs/redis.conf:/usr/local/etc/redis/redis.conf:z
-      - $PWD/tools/generated/redis/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
-      - $PWD/tools/generated/redis/redis.cert:/usr/local/etc/redis/redis.cert:z
-      - $PWD/tools/generated/redis/redis.key:/usr/local/etc/redis/redis.key:z
-      - $PWD/tools/generated/redis/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.conf:/usr/local/etc/redis/redis.conf:z
+      - $PWD/tools/generated/redis_cluster/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/nodes{{ container_id }}.conf:/usr/local/etc/redis/nodes.conf:z
+    networks:
+      dbnet:
+        aliases:
+          - {{ redis_node_prefix }}{{ container_id }}
+
+{% endfor %}
 
   db:
     container_name: aap_gw_db_pgsql_1

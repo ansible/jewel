@@ -6,6 +6,13 @@ gateway_validate_certs: False
 gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 'localhost'
+
+### Redis
+### Note: If you change the redis settings, please remove tools/generated/redis_cluster and let it rebuild
+redis_cluster_enabled: False
+redis_tls_enabled: True
+
+### Sidecars (uncomment to enable):
 # keycloak_enabled: True
 # ldap_enabled: True
 # tacacs_enabled: True

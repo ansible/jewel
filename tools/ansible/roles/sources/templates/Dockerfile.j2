@@ -49,7 +49,7 @@ RUN mkdir -p /opt/aap_gateway/django-ansible-base
 COPY LICENSE.md django-ansible-base /opt/aap_gateway/django-ansible-base/
 RUN if [[ -f /opt/aap_gateway/django-ansible-base/pyproject.toml ]]; then \
       /opt/aap_gateway/venv/bin/pip uninstall -y django-ansible-base && \
-      /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/django-ansible-base[filtering,swagger,authentication] ; \
+      /opt/aap_gateway/venv/bin/pip install -e /opt/aap_gateway/django-ansible-base[{{ optional_dab_deeps }}] ; \
     fi && \
     rm -rf /opt/aap_gateway/django-ansible-base
 

@@ -1,0 +1,107 @@
+---
+- name: Create Redis directory
+  file:
+    path: "{{ redis_generated_dir }}"
+    state: directory
+
+- name: Generate Redis node files
+  file:
+     path: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
+     state: touch
+     modification_time: preserve
+     access_time: preserve
+  loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+
+- name: Generate Redis CA
+  command: '{{ item.command }}'
+  args:
+    creates: "{{ item.creates }}"
+  loop:
+    - command: 'openssl genrsa -aes256 -out {{ redis_ca_root_key_file }} -passout pass:redis123 4096'
+      creates: '{{ redis_ca_root_key_file }}'
+      title: Generate Redis CA key
+    - command: 'openssl req -x509 -passin pass:redis123 -new -nodes -key {{ redis_ca_root_key_file }} -sha256 -days 1826 -out {{ redis_ca_root_certificate_file }} -subj "{{ cert_subject }}Redis CA"'
+      creates: '{{ redis_ca_root_certificate_file }}'
+      title: Generate Redis CA cert
+  loop_control:
+    label: "{{ item.title }}"
+
+- name: Generate Redis certs
+  command: '{{ item.command }}'
+  args:
+    creates: "{{ item.creates }}"
+  loop:
+    - title: Generate Redis key and csr
+      command: 'openssl req -new -nodes -out {{ redis_cert_csr_file }} -newkey rsa:4096 -keyout {{ redis_cert_private_key_file }} -subj "{{ cert_subject }}localhost" -addext "subjectAltName = {{ subject_alt_name }}"'
+      creates: "{{ redis_cert_private_key_file }}"
+    - title: Generate Redis cert
+      command: 'openssl x509 -req -passin pass:redis123 -in {{ redis_cert_csr_file }} -CA {{ redis_ca_root_certificate_file }} -CAkey {{ redis_ca_root_key_file }} -CAcreateserial -out {{ redis_cert_certificate_file }} -days 730 -sha256'
+      creates: "{{ redis_cert_certificate_file }}"
+  loop_control:
+    label: "{{ item.title }}"
+  vars:
+    subject_alt_name: "{{ ', '.join(sans) }}"
+
+- name: Render Redis Configs
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ redis_generated_dir }}/{{ item }}"
+    mode: '0644'
+  loop:
+    - redis.conf
+    - "redis-users.acl"
+
+- block:
+    - name: Generate cluster strings
+      set_fact:
+        nodes_to_start: "{{ nodes_to_start | default([]) + [ 'redis'+item ] }}"
+      loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+      vars:
+        node_name: "{{ redis_node_prefix }}{{ item }}"
+
+    - name: Start redis containers
+      shell:
+        cmd: "{{ docker_compose_cmd }} up -d --wait {{ ' '.join(nodes_to_start) }}"
+        chdir: '../../'
+
+    - name: Wait for port to open
+      ansible.builtin.wait_for:
+        port: "{{ redis_exposed_port }}"
+        delay: 2
+
+    - name: Check cluster nodes
+      shell:
+        cmd: "{{ docker_compose_cmd }} exec -t redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} cluster nodes"
+      changed_when: False
+      register: cluster_nodes
+
+    - name: Get IPs from Redis cluster
+      shell:
+        cmd: "docker inspect -f '{{ filter }}' {{ redis_node_prefix }}{{ item }}"
+      vars:
+        filter: !unsafe '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+      loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+      register: cluster_ips
+      changed_when: False
+
+    - name: Generate cluster join by IP list
+      set_fact:
+        nodes_to_cluster: "{{ nodes_to_cluster | default([]) + [ node_specification ] }}"
+      loop: "{{ cluster_ips['results'] }}"
+      loop_control:
+        label: "{{ item['stdout_lines'][0] | default('') }}"
+      vars:
+        node_specification: "{{ item['stdout_lines'][0] }}:{{ redis_exposed_port }}"
+
+    - name: Join the redis Redis cluster
+      shell:
+        cmd: "{{ docker_compose_cmd }} exec -t redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} --cluster create {{ ' '.join(nodes_to_cluster) }} --cluster-replicas 1 --cluster-yes"
+      register: cluster_command
+      when: cluster_nodes.stdout_lines | length == 1
+
+  always:
+    - name: Shutdown containers we started
+      shell:
+        cmd: "{{ docker_compose_cmd }} stop {{ ' '.join(nodes_to_start) }}"
+        chdir: '../../'
+  when: redis_is_clustered

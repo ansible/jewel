@@ -6,6 +6,10 @@ GATEWAY_APP_DIR="${GATEWAY_BASE_DIR}/src"
 GATEWAY_PYTHON="${GATEWAY_BASE_DIR}/venv/bin/python"
 GATEWAY_MANAGE="/usr/bin/gateway-manage"
 
+timestamp() {
+    TZ=UTC echo -n "[$(date +'%Y-%m-%d %H:%M:%S.%N %Z')]"
+}
+
 database_ready() {
 ${GATEWAY_PYTHON} <<EOF
 import sys
@@ -13,7 +17,8 @@ from django.db import connection
 
 try:
     connection.ensure_connection()
-except Exception:
+except Exception as e:
+    print(f'$(timestamp) {e}')
     sys.exit(1)
 EOF
 }
@@ -49,7 +54,7 @@ EOF
 
 until database_ready
 do
-    echo "Waiting until the database is ready..."
+    echo "$(timestamp) Waiting until the database is ready..."
     sleep 5
 done
 
@@ -58,12 +63,12 @@ ${GATEWAY_MANAGE} collectstatic --noinput
 
 export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
 if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
-    echo $output
+    echo "$(timestamp) $output"
 else
     # Make sure the password is set as required
     update_user_password
 fi
-echo ">>>>>>>> Admin password: ${DJANGO_SUPERUSER_PASSWORD}"
+echo "$(timestamp) >>>>>>>> Admin password: ${DJANGO_SUPERUSER_PASSWORD}"
 
 ${GATEWAY_MANAGE} authenticators --initialize
 if [ $? != 0 ] ; then
