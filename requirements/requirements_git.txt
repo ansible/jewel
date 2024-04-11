@@ -1,2 +1,1 @@
-# If you change the optional dependencies please also change them in tools/scripts/ci/tox-reinstall-django-ansible-base.sh
-django-ansible-base @ git+https://github.com/ansible/django-ansible-base@devel#egg=django-ansible-base[rest_filters,api_documentation,authentication]
+django-ansible-base @ git+https://github.com/ansible/django-ansible-base@devel#egg=django-ansible-base[rest_filters,api_documentation,authentication,redis_client]

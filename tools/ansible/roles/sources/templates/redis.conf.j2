@@ -1,0 +1,28 @@
+{% if redis_uses_tls %}
+port 0
+tls-port {{ redis_exposed_port }}
+tls-cert-file /usr/local/etc/redis/redis.cert
+tls-key-file /usr/local/etc/redis/redis.key
+tls-ca-cert-file /usr/local/etc/redis/ca.cert
+tls-auth-clients yes
+{% else %}
+port {{ redis_exposed_port }}
+{% endif %}
+bind 0.0.0.0
+aclfile /usr/local/etc/redis/redis-users.acl
+{% if redis_is_clustered %}
+{#
+# cluster-port appears to be a v7 thing
+cluster-port 1{{ redis_exposed_port }}
+#}
+cluster-enabled yes
+cluster-config-file /usr/local/etc/redis/nodes.conf
+cluster-node-timeout 5000
+appendonly yes
+{% if redis_uses_tls %}
+tls-replication yes
+tls-cluster yes
+{% endif %}
+masteruser {{ redis_username }}
+masterauth {{ redis_password }}
+{% endif %}

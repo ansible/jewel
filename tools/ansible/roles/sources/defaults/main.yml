@@ -1,8 +1,11 @@
+---
 headless: "{{ (lookup('env','HEADLESS') | bool) or false }}"
-redis_generated_dir: "{{ sources_dest }}/redis"
+redis_generated_dir: "{{ sources_dest }}/redis_cluster"
 redis_ca_root_key_file: "{{ redis_generated_dir }}/ca.key"
 redis_ca_root_csr_file: "{{ redis_generated_dir }}/ca.csr"
 redis_ca_root_certificate_file: "{{ redis_generated_dir }}/ca.cert"
 redis_cert_private_key_file: "{{ redis_generated_dir }}/redis.key"
 redis_cert_csr_file: "{{ redis_generated_dir }}/redis.csr"
 redis_cert_certificate_file: "{{ redis_generated_dir }}/redis.cert"
+base_redis_command: "redis-cli -p {{ redis_exposed_port }} --user {{ redis_username }} --pass {{ redis_password }}"
+base_redis_tls_command: "{{ base_redis_command }} --tls --cert /usr/local/etc/redis/redis.cert --cacert /usr/local/etc/redis/ca.cert --key /usr/local/etc/redis/redis.key"

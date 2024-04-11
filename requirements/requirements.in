@@ -10,7 +10,6 @@ grpcio-tools
 protobuf>=4.21
 psycopg
 pyjwt
-redis
 requests
 uwsgi
 xds-protos>=1.58

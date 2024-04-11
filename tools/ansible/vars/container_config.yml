@@ -8,12 +8,20 @@ db_password: gateway
 db_port: 5440
 container_reference: localhost
 # This is where to put all the docker source files relative to the tools/docker-compose/ansible directory
-sources_dest: '../generated'
+sources_dest: '{{ playbook_dir | dirname }}/generated'
+docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default='docker compose') }} -f {{ sources_dest }}/docker-compose.yml"
 
 enabled_containers:
   keycloak: "{{ keycloak_enabled | default(False) }}"
   ldap: "{{ ldap_enabled | default(False) }}"
   tacacs: "{{ tacacs_enabled | default(False) }}"
+
+# Redis settings
+redis_is_clustered: "{{ redis_cluster_enabled | default(False) }}"
+redis_node_count: "{{ redis_is_clustered | ternary(6, 1) }}"
+redis_uses_tls: "{{ redis_tls_enabled | default(True) }}"
+redis_node_prefix: 'aap-gw-redis-'
+cache_key_prefix: 'gateway'
 
 # Keycloak settings
 keycloak_exposed_port: 8443

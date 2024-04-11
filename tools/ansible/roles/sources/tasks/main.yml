@@ -1,3 +1,27 @@
+---
+- name: Generate Redis cert subjectAltName and clustered host list
+  set_fact:
+    sans: "{{ sans | default([]) + [host_sans] }}"
+    redis_clustered_hosts: "{{ redis_clustered_hosts | default([]) + [ host_port ] }}"
+  loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+  vars:
+    hostname: "{{ redis_node_prefix }}{{ item }}"
+    host_sans: 'DNS:{{ hostname }}'
+    host_port: "{{ hostname }}:{{ redis_exposed_port }}"
+
+- name: Read requirements_git.txt
+  slurp:
+    src: "{{ sources_dest }}/../../requirements/requirements_git.txt"
+  register: git_requirements
+
+- name: Get the optional dependencies for DAB
+  set_fact:
+    optional_dab_deeps: "{{ item | regex_replace('^.*egg=django-ansible-base\\[(.*)\\]', '\\1') }}"
+  when: "'egg=django-ansible-base' in item"
+  loop: "{{ git_requirements['content'] | b64decode | split('\n') }}"
+  loop_control:
+    label: 'reading line'
+
 - name: Render docker templates
   template:
     src: "{{ item }}.j2"
@@ -7,39 +31,6 @@
     - docker-compose.yml
     - Dockerfile
 
-- name: Create Redis cert directory
-  file:
-    path: "{{ redis_generated_dir }}"
-    state: directory
-
-- name: Generate Redis certs
-  command: '{{ item.command }}'
-  args:
-    creates: "{{ item.creates }}"
-  loop:
-    - command: 'openssl ecparam -out {{ redis_ca_root_key_file }} -name prime256v1 -genkey'
-      creates: "{{ redis_ca_root_key_file }}"
-      title: Generate Redis CA Key
-    - command: 'openssl req -new -sha256 -key {{ redis_ca_root_key_file }} -out {{ redis_ca_root_csr_file }} -subj "{{ cert_subject }}localhost"'
-      creates: "{{ redis_ca_root_csr_file }}"
-      title: Generate Redis CA CSR
-    - command: 'openssl x509 -req -sha256 -days 365 -in {{ redis_ca_root_csr_file }} -signkey {{ redis_ca_root_key_file }} -out {{ redis_ca_root_certificate_file }}'
-      creates: "{{ redis_ca_root_certificate_file }}"
-      title: Generate Redis CA cert
-    - title: Generate Redis key
-      command: 'openssl ecparam -out {{ redis_cert_private_key_file }} -name prime256v1 -genkey'
-      creates: "{{ redis_cert_private_key_file }}"
-    - title: Generate a Redis CSR
-      command: 'openssl req -new -sha256 -key {{ redis_cert_private_key_file }} -out {{ redis_cert_csr_file }} -subj "{{ cert_subject }}localhost"'
-      creates: "{{ redis_cert_csr_file }}"
-    - title: Generate the Redis cert
-      command: 'openssl x509 -req -in {{ redis_cert_csr_file }} -CA {{ redis_ca_root_certificate_file }} -CAkey {{ redis_ca_root_key_file }} -CAcreateserial -out {{ redis_cert_certificate_file }} -days 365 -sha256'
-      creates: "{{ redis_cert_certificate_file }}"
-  loop_control:
-    label: "{{ item.title }}"
-
-- name: Render Redis ACL
-  template:
-    src: "redis-users.acl.j2"
-    dest: "{{ redis_generated_dir }}/redis-users.acl"
-    mode: '0600'
+- name: Initialize Redis
+  include_tasks:
+    file: initialize_redis.yml
