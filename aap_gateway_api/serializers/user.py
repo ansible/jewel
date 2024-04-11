@@ -1,6 +1,7 @@
 import logging
 
 from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
@@ -44,13 +45,18 @@ class UserSerializer(CommonModelSerializer):
 
     def validate(self, data):
         # Validate the password
+        errors = []
         if data.get('password') and data.get('password') != ENCRYPTED_STRING:
+            user_instance = getattr(self, 'instance', None)
+            if user_instance is not None:
+                if not can_user_change_password(user_instance):
+                    raise ValidationError({'password': _('Password can not be set for this user')})
+
             password_min_length = get_preference_value('local_login', 'password_min_length')
             password_min_digits = get_preference_value('local_login', 'password_min_digits')
             password_min_upper = get_preference_value('local_login', 'password_min_upper')
             password_min_special = get_preference_value('local_login', 'password_min_special')
 
-            errors = []
             if password_min_length > 0 and len(data['password']) < password_min_length:
                 errors.append(_('Password must be at least {} characters long.'.format(password_min_length)))
             if password_min_digits > 0 and sum(c.isdigit() for c in data['password']) < password_min_digits:
@@ -67,10 +73,9 @@ class UserSerializer(CommonModelSerializer):
                     user = get_current_user()
                     username = data.get('username', None)
                     if username is None:
-                        instance = getattr(self, 'instance', None)
-                        if instance is None:
+                        if user_instance is None:
                             raise ValidationError("Either username needs to be present or we need an active instance")
-                        username = instance.username
+                        username = user_instance.username
                     logger.warning(f"User {user.username} was allowed to save an insecure password for user {username}")
                 else:
                     raise ValidationError({'password': errors})
