@@ -10,7 +10,6 @@ ldap_configuration:
   name: "{{ ldap_container_name }}"
   enabled: True
   create_objects: True
-  users_unique: False
   remove_users: True
   configuration:
     SERVER_URI:

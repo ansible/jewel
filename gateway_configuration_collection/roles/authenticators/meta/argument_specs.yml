@@ -29,10 +29,6 @@ argument_specs:
             type: bool
             default: true
             description: Allow authenticator to create objects (users, teams, organizations)
-          users_unique:
-            type: bool
-            default: false
-            description: Are users from this source the same as users from another source with the same id
           remove_users:
             type: bool
             default: true

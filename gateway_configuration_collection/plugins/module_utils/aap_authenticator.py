@@ -21,9 +21,6 @@ class AAPAuthenticator(AAPObject):
         if (create_objects := self.module.params.get('create_objects')) is not None:
             self.new_fields['create_objects'] = create_objects
 
-        if (users_unique := self.module.params.get('users_unique')) is not None:
-            self.new_fields['users_unique'] = users_unique
-
         if (remove_users := self.module.params.get('remove_users')) is not None:
             self.new_fields['remove_users'] = remove_users
 
