@@ -45,7 +45,6 @@ class UserSerializer(CommonModelSerializer):
 
     def validate(self, data):
         # Validate the password
-        errors = []
         if data.get('password') and data.get('password') != ENCRYPTED_STRING:
             user_instance = getattr(self, 'instance', None)
             if user_instance is not None:
@@ -57,6 +56,7 @@ class UserSerializer(CommonModelSerializer):
             password_min_upper = get_preference_value('local_login', 'password_min_upper')
             password_min_special = get_preference_value('local_login', 'password_min_special')
 
+            errors = []
             if password_min_length > 0 and len(data['password']) < password_min_length:
                 errors.append(_('Password must be at least {} characters long.'.format(password_min_length)))
             if password_min_digits > 0 and sum(c.isdigit() for c in data['password']) < password_min_digits:
