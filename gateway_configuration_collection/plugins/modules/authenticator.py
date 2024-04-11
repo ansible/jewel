@@ -44,11 +44,6 @@ options:
       description:
       - Allow authenticator to create objects (users, teams, organizations)
       - Defaults to true (by API)
-    users_unique:
-      type: bool
-      description:
-      - Are users from this source the same as users from another source with the same id
-      - Defaults to false (by API)
     remove_users:
       type: bool
       default: true
@@ -89,7 +84,6 @@ def main():
         slug=dict(type="str"),
         enabled=dict(type="bool"),
         create_objects=dict(type="bool"),
-        users_unique=dict(type="bool"),
         remove_users=dict(type="bool"),
         type=dict(type="str"),
         configuration=dict(type="dict", no_log=True),  # can contain secrets

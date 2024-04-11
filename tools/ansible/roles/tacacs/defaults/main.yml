@@ -5,7 +5,6 @@ tacacs_configuration:
   name: "{{ tacacs_container_name }}"
   enabled: True
   create_objects: True
-  users_unique: False
   remove_users: True
   configuration:
     PORT: "{{ tacacs_exposed_tacacs_port }}"

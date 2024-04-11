@@ -10,7 +10,6 @@ oidc_configuration:
   name: "{{ oidc_adapter_name }}"
   enabled: True
   create_objects: True
-  users_unique: False
   remove_users: True
   configuration:
     ACCESS_TOKEN_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token"
@@ -27,7 +26,6 @@ saml_configuration:
   name: "{{ saml_adapter_name }}"
   enabled: True
   create_objects: True
-  users_unique: False
   remove_users: True
   configuration:
     EXTRA_DATA: []
