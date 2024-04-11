@@ -42,6 +42,12 @@
   vars:
     subject_alt_name: "{{ ', '.join(sans) }}"
 
+- name: Set permissions on Redis key
+  file:
+    path: "{{ redis_cert_private_key_file }}"
+    state: file
+    mode: "0644"
+
 - name: Render Redis Configs
   template:
     src: "{{ item }}.j2"
