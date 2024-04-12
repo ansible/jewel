@@ -1,5 +1,6 @@
 import logging
 
+from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
@@ -17,7 +18,7 @@ def password_is_hashed(password):
     return False
 
 
-class User(AbstractUser, CommonModel):
+class User(AbstractUser, CommonModel, AuditableModel):
     ignore_relations = [
         'authenticator_user',  # private model
         'groups',  # not using the auth app stuff, see Team model
@@ -25,6 +26,8 @@ class User(AbstractUser, CommonModel):
         'logentry',  # used for Django admin pages, not the API
         'social_auth',  # Social auth endpoint
     ]
+    activity_stream_excluded_field_names = ['last_login']
+
     is_system_auditor = models.BooleanField(default=False, null=False)
 
     encrypted_fields = ()  # handed as special case by UserSerializer

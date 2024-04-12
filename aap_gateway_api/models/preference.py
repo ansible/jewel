@@ -1,8 +1,9 @@
+from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from dynamic_preferences import models
 
 
-class Preference(models.BasePreferenceModel):
+class Preference(models.BasePreferenceModel, AuditableModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from aap_gateway_api.preferences import gateway_preference_registry

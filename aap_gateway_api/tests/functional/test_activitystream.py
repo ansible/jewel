@@ -1,0 +1,32 @@
+from django.urls import reverse
+
+
+def test_activitystream_gets_logged(admin_api_client, user):
+    """
+    Ensure that activity stream is properly enabled in the gateway.
+    """
+    user.first_name = 'Jane'
+    user.save()
+
+    last_entry = user.activity_stream_entries.last()
+    assert last_entry.operation == 'update'
+    assert last_entry.changes == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
+
+    url = reverse('activitystream-list')
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    assert response.data['count'] > 0
+    assert response.data['results'][-1]['operation'] == 'update'
+    assert response.data['results'][-1]['changes'] == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
+
+
+def test_activitystream_user_last_login_not_tracked(user_api_client, user):
+    """
+    Ensure that a User's last_login is not stored in activity stream.
+    """
+    last_login = user.last_login
+    user_api_client.login(username=user.username, password='password')
+    user.refresh_from_db()
+    assert user.last_login != last_login
+    last_entry = user.activity_stream_entries.last()
+    assert last_entry.operation == 'create'  # not 'update', no entry was created for the login

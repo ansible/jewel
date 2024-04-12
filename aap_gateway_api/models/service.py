@@ -1,3 +1,4 @@
+from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -9,7 +10,7 @@ from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_
 API_PREFIX = "/api/"
 
 
-class HTTPPort(UniqueNamedCommonModel):
+class HTTPPort(UniqueNamedCommonModel, AuditableModel):
     """
     Represents a port that Envoy will listen for HTTP traffic on.
     """
@@ -81,7 +82,7 @@ class HTTPPort(UniqueNamedCommonModel):
         return f"port-{self.number}"
 
 
-class ServiceCluster(UniqueNamedCommonModel):
+class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     """
     Represents an Ansible service which can be comprised of multiple load balanced nodes.
     """
@@ -116,7 +117,7 @@ class ServiceCluster(UniqueNamedCommonModel):
         return self.get_service_type_display()
 
 
-class ServiceNode(UniqueNamedCommonModel):
+class ServiceNode(UniqueNamedCommonModel, AuditableModel):
     """
     Individual node in a service cluster.
     """
@@ -132,7 +133,7 @@ class ServiceNode(UniqueNamedCommonModel):
     address = models.CharField(max_length=255, help_text=_("Network address to route traffic for this service to."))
 
 
-class Route(UniqueNamedCommonModel):
+class Route(UniqueNamedCommonModel, AuditableModel):
     """
     Represents one route to a specific Ansible service cluster. Each route must be
     configured to listen on a pre configured HTTP port, and multiple routes can
@@ -244,7 +245,7 @@ class Route(UniqueNamedCommonModel):
         return cfg
 
 
-class ServiceAPIRoute(Route):
+class ServiceAPIRoute(Route, AuditableModel):
     """
     This is a special instance of a route that is intended to be served from /api/ on the
     API port. It has a few requirements that normal Routes don't have.
@@ -277,7 +278,7 @@ class ServiceAPIRoute(Route):
         return super().save(*args, **kwargs)
 
 
-class AdditionalRoute(Route):
+class AdditionalRoute(Route, AuditableModel):
     """
     Use this for configuring additional routes outside of the routes that are served from API_PREFIX.
 
