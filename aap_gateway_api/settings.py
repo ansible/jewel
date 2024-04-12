@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'rest_framework',
     'aap_gateway_api',
+    'ansible_base.activitystream',
     'ansible_base.authentication',
     'ansible_base.rest_filters',
     'ansible_base.api_documentation',

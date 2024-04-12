@@ -1,3 +1,4 @@
+from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models import AbstractTeam
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.db import models
@@ -6,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from aap_gateway_api.models import User
 
 
-class Team(AbstractTeam):
+class Team(AbstractTeam, AuditableModel):
     class Meta(AbstractTeam.Meta):
         app_label = 'aap_gateway_api'
 

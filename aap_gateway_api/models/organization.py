@@ -1,3 +1,4 @@
+from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.organization import AbstractOrganization
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.conf import settings
@@ -5,7 +6,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 
-class Organization(AbstractOrganization):
+class Organization(AbstractOrganization, AuditableModel):
     class Meta:
         app_label = 'aap_gateway_api'
 
