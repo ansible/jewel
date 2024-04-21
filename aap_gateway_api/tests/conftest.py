@@ -6,24 +6,13 @@ from collections import namedtuple
 from unittest.mock import patch
 
 import pytest
-from ansible_base.lib.testing.fixtures import (  # noqa: F401
-    admin_api_client,
-    expected_log,
-    ldap_authenticator,
-    ldap_configuration,
-    local_authenticator,
-    no_log_messages,
-    randname,
-    rsa_keypair,
-    rsa_keypair_factory,
-    shut_up_logging,
-    unauthenticated_api_client,
-    user,
-    user_api_client,
-)
+
+# If we pull in individual fixtures and then reuse them in the new fixtures they have linting errors
+#  around redefinition. Instead we will just import * here and noqa this one line instead of multiple places
+from ansible_base.lib.testing.fixtures import *  # noqa: F403, F401
 from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
 
-from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode
+from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
@@ -74,7 +63,7 @@ def register_preference(db):
 
 @copy_fixture(copies=3)
 @pytest.fixture
-def team(randname, organization):  # noqa: F811
+def team(randname, organization):
     from aap_gateway_api.models import Team
 
     random_name = randname("Test Team")
@@ -85,7 +74,7 @@ def team(randname, organization):  # noqa: F811
 
 @copy_fixture(copies=3)
 @pytest.fixture
-def organization(randname):  # noqa: F811
+def organization(randname):
     from aap_gateway_api.models import Organization
 
     random_name = randname("Test Organization")
@@ -275,3 +264,10 @@ def simulated_eda_resource_api(patched_resource_client, service_api_route_eda):
     proc = launch_service("eda", service_api_route_eda.service_port, setup_fixture=None)
     yield service_api_route_eda
     proc.kill()
+
+
+@pytest.fixture
+def system_user(db, settings, no_log_messages):
+    with no_log_messages():
+        user_obj, _created = User.objects.get_or_create(username=settings.SYSTEM_USERNAME)
+    yield user_obj

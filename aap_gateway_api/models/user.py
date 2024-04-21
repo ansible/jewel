@@ -20,7 +20,7 @@ def password_is_hashed(password):
 
 class User(AbstractUser, CommonModel, AuditableModel):
     ignore_relations = [
-        'authenticator_user',  # private model
+        'authenticator_users',  # private model
         'groups',  # not using the auth app stuff, see Team model
         'user_permissions',  # not using auth app permissions
         'logentry',  # used for Django admin pages, not the API
@@ -48,3 +48,9 @@ class User(AbstractUser, CommonModel, AuditableModel):
 
     def summary_fields(self):
         return user_summary_fields(self)
+
+    def get_authenticator_ids(self) -> list[int]:
+        return list(self.authenticator_users.values_list('provider__id', flat=True))
+
+    def get_authenticator_uids(self) -> list[str]:
+        return list(self.authenticator_users.values_list('uid', flat=True).distinct())

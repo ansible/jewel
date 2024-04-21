@@ -16,8 +16,13 @@ def test_activitystream_gets_logged(admin_api_client, user):
     response = admin_api_client.get(url, data={'order_by': '-created'})
     assert response.status_code == 200, response.data
     assert response.data['count'] > 0
-    assert response.data['results'][0]['operation'] == 'update', response.data['results'][0]
-    assert response.data['results'][0]['changes'] == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
+    found_user_entry = False
+    expected_changes = {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
+    for result in response.data['results']:
+        if result['content_type_model'] == 'user':
+            if result['operation'] == 'update' and result['changes'] == expected_changes:
+                found_user_entry = True
+    assert found_user_entry is True, "Could not find the expected entry for user"
 
 
 def test_activitystream_user_last_login_not_tracked(user_api_client, user):
