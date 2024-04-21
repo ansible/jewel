@@ -48,6 +48,14 @@ argument_specs:
         #     required: false
         #     type: str
         #     description: Organization this user belongs to.
+        #   authenticators:
+        #     required: false
+        #     type: list
+        #     description: Authenticators this user is associated with
+        #   authenticator_uid:
+        #     required: false
+        #     type: str
+        #     description: The uid associated with the users authenticators
         #   state:
         #     default: "{{ gateway_state | default('present') }}"
         #     required: false

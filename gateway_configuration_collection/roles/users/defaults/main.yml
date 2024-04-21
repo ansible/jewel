@@ -20,6 +20,8 @@ gateway_user_accounts: []
 #  - is_superuser
 #  - is_system_auditor
 #  - password
+#  - authenticators
+#  - authenticator_uid
 #  - state
 
 #gateway_user_default_password: "change_me"

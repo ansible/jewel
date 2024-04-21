@@ -26,3 +26,7 @@ class AAPUser(AAPObject):
             self.new_fields["password"] = password
         if (organizations := self.module.params.get("organizations")) is not None:
             self.new_fields["organizations"] = organizations
+        if (authenticators := self.module.params.get("authenticators")) is not None:
+            self.new_fields["authenticators"] = authenticators
+        if (authenticator_uid := self.module.params.get("authenticator_uid")) is not None:
+            self.new_fields["authenticator_uid"] = authenticator_uid
