@@ -65,6 +65,14 @@ options:
         - C(false) will only set the password if other values change too.
       type: bool
       default: true
+    authenticators:
+      description:
+        - A list of authenticators to associate the user with
+      type: list
+    authenticator_uid:
+      description:
+        - The UID to associate with this users authenticators
+      type: str
 
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
@@ -114,6 +122,8 @@ def main():
         password=dict(no_log=True),
         organizations=dict(type="list"),
         update_secrets=dict(type="bool", default=True, no_log=False),
+        authenticators=dict(type="list"),
+        authenticator_users=dict(),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 

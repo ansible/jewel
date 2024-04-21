@@ -6,8 +6,8 @@ from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
-from django.urls import reverse
 from django.db.utils import IntegrityError
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.fields import empty
@@ -23,7 +23,8 @@ class UserSerializer(CommonModelSerializer):
     # This needs to be explicitly so it's not required
     organizations = serializers.PrimaryKeyRelatedField(many=True, queryset=Organization.objects.all(), required=False)
     authenticators = serializers.MultipleChoiceField(
-        # We will populate the choices in the init, when the DB is starting up this can cause an issue
+        # If we load the authenticators here we end up with a static list of authenticators.
+        # Instead, we will populate the authenticator choices in the __init__ method.
         choices=[],
         write_only=True,
         required=False,
