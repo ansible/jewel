@@ -13,11 +13,11 @@ def test_activitystream_gets_logged(admin_api_client, user):
     assert last_entry.changes == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
 
     url = reverse('activitystream-list')
-    response = admin_api_client.get(url)
-    assert response.status_code == 200
+    response = admin_api_client.get(url, data={'order_by': '-created'})
+    assert response.status_code == 200, response.data
     assert response.data['count'] > 0
-    assert response.data['results'][-1]['operation'] == 'update'
-    assert response.data['results'][-1]['changes'] == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
+    assert response.data['results'][0]['operation'] == 'update', response.data['results'][0]
+    assert response.data['results'][0]['changes'] == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
 
 
 def test_activitystream_user_last_login_not_tracked(user_api_client, user):
