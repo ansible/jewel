@@ -31,6 +31,7 @@ urlpatterns = [
     ),
     path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
     path('api/gateway/v1/me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
+    path('api/gateway/v1/session/', views.SessionView.as_view(), name='session-view'),
     # settings
     re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
     # xDS
