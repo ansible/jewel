@@ -25,44 +25,6 @@ Clone into `aap folder`:
 
 ## Installation
 
-### Before installation
-
-Create `compose.env`:
-- `cd <aap folder>/oci-env`
-- `cp ./compose.env.example ./compose.env`
-- Content of the `compose.env` could look like this:
-
-```yaml
-COMPOSE_PROJECT_NAME='oci_env-standalone'
-COMPOSE_PROFILE=galaxy_ng/base
-#DEV_SOURCE_PATH=pulpcore:pulp_ansible:galaxy_ng
-DEV_SOURCE_PATH=galaxy_ng
-
-COMPOSE_BINARY=docker
-DJANGO_SUPERUSER_USERNAME=admin
-DJANGO_SUPERUSER_PASSWORD=admin
-ENABLE_SIGNING=1
-SETUP_TEST_DATA=1
-UPDATE_UI=0
-
-PULP_GALAXY_REQUIRE_CONTENT_APPROVAL=false
-# /api/galaxy/ by default
-PULP_GALAXY_API_PATH_PREFIX='/api/hub/'
-
-PULP_ANSIBLE_COLLECT_DOWNLOAD_LOG=True
-PULP_ANSIBLE_COLLECT_DOWNLOAD_COUNT=True
-
-#PULP_GALAXY_FEATURE_FLAGS__ai_deny_index=true
-#PULP_GALAXY_ENABLE_LEGACY_ROLES=true
-
-#PULP_CONNECTED_ANSIBLE_CONTROLLERS='["https://controller.example.com"]'
-PULP_GALAXY_METRICS_COLLECTION_AUTOMATION_ANALYTICS_ENABLED=True
-PULP_GALAXY_METRICS_COLLECTION_C_RH_C_UPLOAD_URL="http://automation-analytics-backend_ingress_1:3000/api/ingress/v1/upload"
-PULP_GALAXY_METRICS_COLLECTION_AUTOMATION_ANALYTICS_AUTH_TYPE="x-rh-identity"
-PULP_GALAXY_METRICS_COLLECTION_ORG_ID="0000001"
-
-```
-
 ### Installation steps
 
 - init [virtualenv](#virtual-env)
@@ -71,31 +33,10 @@ PULP_GALAXY_METRICS_COLLECTION_ORG_ID="0000001"
   - `pip install -e client/`
 - `oci_env compose build`
 
-### Virtual Env
-
-```shell
-cd <aap folder>/galaxy_ng
-mkdir -p ../venv
-python -m venv ../venv/galaxy_ng
-source ../venv/galaxy_ng/bin/activate 
-python -m pip install -r dev_requirements.txt 
-python -m pip install -r docs_requirements.txt 
-python -m pip install -r integration_requirements.txt 
-# python -m pip install -e .  # optional 
-```
-
-### Project installation docs
-
-Old one (but still useful):
-- https://github.com/ansible/galaxy_ng/wiki/Development-Setup
- 
-New one:
-- https://ansible.readthedocs.io/projects/galaxy-ng/en/latest/community/devstack/ 
-- https://ansible.readthedocs.io/projects/galaxy-ng/en/latest/dev/docker_environment/ 
-
 ## Run backend
 
-- `oci-env compose up`
+- `cd aap/galaxy_ng`
+- `make oci/dab`
 
 ### Seed data
 
@@ -126,7 +67,7 @@ Specified by `DJANGO_SUPERUSER_USERNAME` and `DJANGO_SUPERUSER_PASSWORD` defined
 
 ### Bash
 
-- `docker exec -it oci_env-standalone_pulp_1 /bin/bash`
+- `docker exec -it oci_env-dab_pulp_1 /bin/bash`
 
 ### Postgres
 
