@@ -14,7 +14,7 @@ class Team(AbstractTeam, AuditableModel):
 
     resource = AnsibleResourceField(primary_key_field="id")
 
-    ignore_relations = ['parents']
+    ignore_relations = ['parents', 'teams']
 
     users = models.ManyToManyField(
         User,
@@ -30,6 +30,7 @@ class Team(AbstractTeam, AuditableModel):
         help_text=_("The list of admins for this team"),
     )
 
+    # If we remove this in the future, you can also remove the ignore_relations
     parents = models.ManyToManyField(
         'self',
         blank=True,
