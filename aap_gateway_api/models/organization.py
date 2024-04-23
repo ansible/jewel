@@ -27,8 +27,6 @@ class Organization(AbstractOrganization, AuditableModel):
         help_text=_("The list of admins for this organization."),
     )
 
-    reverse_foreign_key_fields = ['teams']
-
     def get_summary_fields(self):
         # TODO: We should probably come up with a more codified and standard
         # way to return this kind of info from models.
