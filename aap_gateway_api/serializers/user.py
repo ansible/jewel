@@ -6,6 +6,7 @@ from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.serializers import ValidationError
@@ -111,4 +112,9 @@ class UserSerializer(CommonModelSerializer):
                     'last_login_attempt': authentication.extra_data.get('auth_time', 'Unknown'),
                 }
 
+        return ret
+
+    def _get_related(self, obj) -> dict[str, str]:
+        ret = super()._get_related(obj)
+        ret['authenticators'] = reverse('user-authenticators-list', kwargs={'pk': obj.pk})
         return ret

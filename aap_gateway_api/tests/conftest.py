@@ -9,6 +9,8 @@ import pytest
 from ansible_base.lib.testing.fixtures import (  # noqa: F401
     admin_api_client,
     expected_log,
+    ldap_authenticator,
+    ldap_configuration,
     local_authenticator,
     no_log_messages,
     randname,
