@@ -25,6 +25,9 @@ class User(AbstractUser, CommonModel, AuditableModel):
         'user_permissions',  # not using auth app permissions
         'logentry',  # used for Django admin pages, not the API
         'social_auth',  # Social auth endpoint
+        'organizations_administered',  # We are going to merge [teams|orgs] the user is an admin in with [teams|orgs] the user is a member of
+        'teams_administered',
+        'authenticator_users',  # This is not a model we want on the user endpoint. We actually pull this information up into the user payload
     ]
     activity_stream_excluded_field_names = ['last_login']
 
