@@ -1,4 +1,5 @@
 import pytest
+from ansible_base.authentication.models import AuthenticatorUser
 from django.urls import reverse
 
 
@@ -21,6 +22,7 @@ def test_user_create(admin_api_client, post_format):
     response = admin_api_client.post(url, data=data, format=post_format)
     assert response.status_code == 201
     assert response.data['username'] == data['username']
+    assert 'authenticators' in response.data['related']
 
 
 @pytest.mark.parametrize(
@@ -72,3 +74,37 @@ def test_user_create_with_organizations_empty(admin_api_client, organization, po
     assert response.data['username'] == data['username']
     # TODO: uncomment once we provide m2m relations in responses
     # assert response.data['organizations'] == []
+
+
+@pytest.mark.parametrize(
+    "client_fixture",
+    [
+        "admin_api_client",
+        "unauthenticated_api_client",
+    ],
+)
+def test_user_authenticators(request, client_fixture, local_authenticator, ldap_authenticator, user):
+    """
+    Test that we can list authenticators for a user.
+
+    The action is limited to admins.
+    """
+    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=local_authenticator)
+    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=ldap_authenticator)
+    client = request.getfixturevalue(client_fixture)
+    url = reverse("user-authenticators-list", kwargs={"pk": user.pk})
+    response = client.get(url)
+    if client_fixture == "admin_api_client":
+        assert response.status_code == 200
+        assert len(response.data['results']) == 2
+        names = [authenticator['name'] for authenticator in response.data['results']]
+        assert local_authenticator.name in names
+        assert ldap_authenticator.name in names
+    else:
+        assert response.status_code == 401
+
+
+def test_user_authenticators_bad_pk(admin_api_client):
+    url = reverse("user-authenticators-list", kwargs={"pk": '1337'})
+    response = admin_api_client.get(url)
+    assert response.status_code == 404

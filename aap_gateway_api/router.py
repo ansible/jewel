@@ -1,4 +1,3 @@
-from ansible_base.authentication.views import AuthenticatorViewSet
 from ansible_base.lib.routers import AssociationResourceRouter
 
 from aap_gateway_api import views
@@ -10,7 +9,6 @@ router.register(
     related_views={
         'teams': (views.TeamViewSet, 'teams'),
         'organizations': (views.OrganizationViewSet, 'organizations'),
-        'authenticators': (AuthenticatorViewSet, 'authenticators'),
     },
 )
 router.register(
