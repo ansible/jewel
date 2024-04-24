@@ -1,3 +1,4 @@
+import base64
 import logging
 import time
 import uuid
@@ -93,14 +94,16 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         self.start_time = time.time()
 
         self.request_path = request.attributes.request.http.path
-        self.request_id = 'none'
         user_request_id = request.attributes.request.http.headers.get('x-request-id', None)
+        sanatized_request_id = 'none'
         if user_request_id:
             try:
                 uuid.UUID(str(user_request_id))
-                self.request_id = str(user_request_id)
+                sanatized_request_id = str(user_request_id)
             except ValueError:
-                pass
+                bad_value = base64.b64encode(user_request_id.encode('UTF-8'))
+                logger.exception(f"Got an invalid request_id {bad_value}")
+        self.request_id = sanatized_request_id
 
         logger.info(f"Starting authentication for ({self.request_id}) {self.request_path}.")
 
