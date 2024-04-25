@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 import socket
+import sys
 from pathlib import Path
 
 from ansible_base.lib.utils.validation import to_python_boolean
@@ -240,11 +241,11 @@ try:
         SECRET_KEY = f.read().strip()
     read_key = True
 except FileNotFoundError:
-    print(f"Failed to load file {secret_key_file}, will use default")
+    print(f"Failed to load file {secret_key_file}, will use default", file=sys.stderr)
 except PermissionError:
-    print(f"Unable to read {secret_key_file}, will use default")
+    print(f"Unable to read {secret_key_file}, will use default", file=sys.stderr)
 except Exception as e:
-    print(f"Unhandled exception when reading {secret_key_file}, will use default, ({e.__class__}): {e}")
+    print(f"Unhandled exception when reading {secret_key_file}, will use default, ({e.__class__}): {e}", file=sys.stderr)
 if not read_key:
     SECRET_KEY = 'django-insecure-aa$p$j(w3+l)77o3d4hb^_qoed!#!$d0g*t1%4a$x7gtrezoio'
 
@@ -281,12 +282,12 @@ if using_cache:
         }
     }
 else:
-    print("===================================================================================")
-    print("|                                                                                 |")
-    print("|   WARNING: Redis cache is disabled, defaulting to memory cache.                 |")
-    print("|            Note: this is not a valid configuration for a clustered environment. |")
-    print("|                                                                                 |")
-    print("===================================================================================")
+    print("===================================================================================", file=sys.stderr)
+    print("|                                                                                 |", file=sys.stderr)
+    print("|   WARNING: Redis cache is disabled, defaulting to memory cache.                 |", file=sys.stderr)
+    print("|            Note: this is not a valid configuration for a clustered environment. |", file=sys.stderr)
+    print("|                                                                                 |", file=sys.stderr)
+    print("===================================================================================", file=sys.stderr)
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
