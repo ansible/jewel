@@ -98,8 +98,8 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         sanatized_request_id = 'none'
         if user_request_id:
             try:
-                uuid.UUID(str(user_request_id))
-                sanatized_request_id = str(user_request_id)
+                request_id_uuid = uuid.UUID(str(user_request_id))
+                sanatized_request_id = str(request_id_uuid)
             except ValueError:
                 bad_value = base64.b64encode(user_request_id.encode('UTF-8'))
                 logger.exception(f"Got an invalid request_id {bad_value}")
