@@ -22,14 +22,17 @@ logger = logging.getLogger('aap.gateway.serializer.user')
 class UserSerializer(CommonModelSerializer):
     # This needs to be explicitly so it's not required
     organizations = serializers.PrimaryKeyRelatedField(many=True, queryset=Organization.objects.all(), required=False)
+    password = serializers.CharField(required=False, max_length=128, allow_blank=True)
     authenticators = serializers.MultipleChoiceField(
         # If we load the authenticators here we end up with a static list of authenticators.
         # Instead, we will populate the authenticator choices in the __init__ method.
         choices=[],
         write_only=True,
         required=False,
+        allow_blank=True,
+        allow_null=True,
     )
-    authenticator_uid = serializers.CharField(write_only=True, required=False)
+    authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
         self.fields['authenticators'].choices = list(Authenticator.objects.all().values_list('id', 'name').order_by('name'))
@@ -129,7 +132,7 @@ class UserSerializer(CommonModelSerializer):
             current_authenticators = user_instance.get_authenticator_ids()
 
         # If nothing is changing its fine
-        if set(value) == set(current_authenticators):
+        if value is None or (set(value) == set(current_authenticators)):
             return value
 
         # Only admin is allowed to change the authenticators/authenticator_uid
