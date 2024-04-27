@@ -52,9 +52,9 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
   - name: Automation Hub API
     description: Proxy to the Automation Hub
     http_port: API Port               # -- http port name, where is the proxy listening
-    api_slug: hub                     # -- url slug on gateway (here https://<gateway url>:9080/api/<api_slug>/)
+    api_slug: galaxy                  # -- url slug on gateway (here https://<gateway url>:9080/api/<api_slug>/)
     service_cluster: hub              # -- service cluster name (Automation Hub service)
-    service_path: '/api/hub/'         # -- API path on the Automation Hub
+    service_path: '/api/galaxy/'      # -- API path on the Automation Hub
     service_port: 5001                # -- API port on the Automation Hub
     order: 1
 
