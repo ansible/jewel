@@ -34,11 +34,26 @@ class User(AbstractUser, CommonModel, AuditableModel):
 
     resource = AnsibleResourceField(primary_key_field="id")
 
+    def manage_system_auditor_role(self):
+        from ansible_base.rbac.models import RoleUserAssignment
+
+        from aap_gateway_api.utils.rbac import get_system_auditor_role
+
+        """Connect User.is_system_auditor with RBAC SystemAuditor role"""
+        rd = get_system_auditor_role()
+        assignment = RoleUserAssignment.objects.filter(user=self, role_definition=rd).first()
+        prior_value = bool(assignment)
+        if prior_value != bool(self.is_system_auditor):
+            if assignment:
+                assignment.delete()
+            else:
+                rd.give_global_permission(self)
+
     def save(self, *args, **kwargs):
         if is_password_usable(self.password) and not password_is_hashed(self.password):
             self.password = make_password(self.password)
-
         super().save(*args, **kwargs)
+        self.manage_system_auditor_role()
 
     def logout(self):
         logger.debug(f"Logging out user {self.username} from any active backends")

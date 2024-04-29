@@ -41,7 +41,8 @@ no_api_parameter_ok = {}
 # When this tool was created we were not feature complete. Adding something in here indicates a module
 # that needs to be developed. If the module is found on the file system it will auto-detect that the
 # work is being done and will bypass this check. At some point this module should be removed from this list.
-needs_development = []  # i.e. 'team', 'organization'
+# AAP-23122 for DAB RBAC endpoints
+needs_development = ['role_definition', 'role_user_assignment', 'role_team_assignment']  # i.e. 'team', 'organization'
 needs_param_development = {}
 # -----------------------------------------------------------------------------------------------------------
 

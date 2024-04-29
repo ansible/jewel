@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     'ansible_base.api_documentation',
     'ansible_base.resource_registry',
     'ansible_base.rest_pagination',
+    'ansible_base.rbac',
 ]
 
 # User our own user model
@@ -353,3 +354,14 @@ VERIFY_ENVOY_HTTPS_CERTIFICATES = os.environ.get("VERIFY_ENVOY_HTTPS_CERTIFICATE
 # Load settings from the global settings file if specified in the
 # environment, defaulting to /etc/gateway/settings.py.
 include(optional(os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/gateway/settings.py')), scope=locals())
+
+ANSIBLE_BASE_ROLE_PRECREATE = {}  # managed roles are created in data migrations
+ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
+ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
+ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = False
+
+ANSIBLE_BASE_ALLOW_CUSTOM_ROLES = False
+ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
+ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_system_auditor'}
+
+ANSIBLE_BASE_CUSTOM_VIEW_PARENT = 'aap_gateway_api.views.dab.GatewayDABBase'

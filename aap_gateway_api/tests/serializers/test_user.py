@@ -141,12 +141,11 @@ class TestUserSerializer:
 
         assert response.status_code == 400
 
-    def test_validate_authenticators_not_superuser(self, user_api_client, local_authenticator):
+    def test_authenticators_no_superuser_not_allowed(self, user_api_client, local_authenticator):
         url = reverse('user-list')
         payload = {'username': 'ronda', 'authenticators': [local_authenticator.id], 'authenticator_uid': 'ronda', 'password': 'asdf1234'}
         response = user_api_client.post(url, payload)
-        assert response.status_code == 400, response.json()
-        assert 'authenticators' in response.json() and 'authenticator_uid' in response.json()
+        assert response.status_code == 403, response.json()
 
     def test_authenticator_validation_no_changes(self, admin_api_client, local_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')

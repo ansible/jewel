@@ -4,7 +4,7 @@ import requests
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
-from aap_gateway_api.utils.permissions import IsSuperUser
+from aap_gateway_api.permissions import IsSystemAdminOrAuditor
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
@@ -12,7 +12,7 @@ ping_pages = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/",
 
 
 class StatusView(AnsibleBaseView):
-    permission_classes = [IsSuperUser]
+    permission_classes = [IsSystemAdminOrAuditor]
 
     def get(self, request):
         current_time = datetime.now()

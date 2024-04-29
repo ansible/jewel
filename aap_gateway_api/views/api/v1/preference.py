@@ -5,13 +5,18 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 
 from aap_gateway_api.models import Preference
+from aap_gateway_api.permissions import IsSystemAdminOrAuditor
 from aap_gateway_api.serializers import SettingSectionSerializer, SettingSingletonSerializer
 from aap_gateway_api.utils import get_preference_sections
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView, GatewayModelViewSet
 
 
 class PreferenceSingletonView(AnsibleBaseView):
+    permission_classes = [IsSystemAdminOrAuditor]
+
     def get_serializer(self, *args, **kwargs):
+        if not hasattr(self, 'serializer'):
+            return SettingSingletonSerializer()
         return self.serializer
 
     def options(self, request, category_slug, format=None):

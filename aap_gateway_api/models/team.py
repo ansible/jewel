@@ -10,6 +10,7 @@ from aap_gateway_api.models import User
 class Team(AbstractTeam, AuditableModel):
     class Meta(AbstractTeam.Meta):
         app_label = 'aap_gateway_api'
+        permissions = [('member_team', 'Has all permissions granted to this team')]
 
     resource = AnsibleResourceField(primary_key_field="id")
 

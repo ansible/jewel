@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 class Organization(AbstractOrganization, AuditableModel):
     class Meta:
         app_label = 'aap_gateway_api'
+        permissions = [('member_organization', 'User is a member of this organization')]
 
     resource = AnsibleResourceField(primary_key_field="id")
 
