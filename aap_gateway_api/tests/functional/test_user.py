@@ -45,7 +45,7 @@ def test_user_create_with_organizations(admin_api_client, organization, post_for
         "organizations": [organization.pk],
     }
     response = admin_api_client.post(url, data=data, format=post_format)
-    assert response.status_code == 201
+    assert response.status_code == 201, response.data
     assert response.data['username'] == data['username']
     user = User.objects.get(username=data['username'])
     assert user.organizations.count() == 1
@@ -70,7 +70,7 @@ def test_user_create_with_organizations_empty(admin_api_client, organization, po
         "organizations": [],
     }
     response = admin_api_client.post(url, data=data, format=post_format)
-    assert response.status_code == 201
+    assert response.status_code == 201, response.data
     assert response.data['username'] == data['username']
     # TODO: uncomment once we provide m2m relations in responses
     # assert response.data['organizations'] == []

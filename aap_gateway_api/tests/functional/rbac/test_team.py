@@ -1,0 +1,156 @@
+import pytest
+from django.urls import reverse
+
+from aap_gateway_api.models import User
+from aap_gateway_api.tests.functional.rbac.permissions_helper import api_get_and_assert, default_changeable_teams, default_visible_teams  # noqa: F401
+
+
+def associate_logged_user(teams, organizations, user):
+    """
+    Making memberships:
+     Request user is:
+     - Org 1: Team Member of Team 1 + no membership on Team 2
+     - Org 2: Team Admin of Team 3 + no membership on Team 4
+     - Org 3: Team Member of Team 5 + Team Admin of Team 6
+     - Org 4: Org Member
+     - Org 5: Org Admin
+     - Org 6: No membership
+    """
+    teams[organizations[0]][0].users.add(user)
+    teams[organizations[1]][0].admins.add(user)
+    teams[organizations[2]][0].users.add(user)
+    teams[organizations[2]][1].admins.add(user)
+    organizations[3].users.add(user)
+    organizations[4].admins.add(user)
+
+
+def test_team_list_permissions(user_api_client, user, teams, organizations):  # noqa: F811
+    """
+    Teams in list can see:
+    - Superuser (other tests)
+    - Admin or User of Team
+    - Admin or User of Team's Org
+    """
+    url = reverse("team-list")
+
+    # User sees nothing by default
+    api_get_and_assert(url, user_api_client, [])
+
+    associate_logged_user(teams, organizations, user)
+    expected_teams = default_visible_teams(teams, organizations)
+
+    api_get_and_assert(url, user_api_client, expected_teams, order_by="id")
+
+
+def test_team_detail_permissions(user_api_client, user, teams, organizations):  # noqa: F811
+    """
+    Detail of team can read:
+    - Superuser (other tests)
+    - Admin or User of Team
+    - Admin or User of Team's Org
+    """
+    visible_teams = default_visible_teams(teams, organizations)
+
+    for status in ['disassociated', 'associated']:
+        for org, org_teams in teams.items():
+            for org_team in org_teams:
+                url = reverse("team-detail", kwargs={'pk': org_team.pk})
+
+                response = user_api_client.get(url)
+                if status == 'associated' and org_team in visible_teams:
+                    assert response.status_code == 200, f"Team {org_team.name} should be accessible"
+                else:
+                    assert response.status_code == 404, f"Team {org_team.name} should not be accessible"
+
+        associate_logged_user(teams, organizations, user)
+
+
+def test_team_create_permissions(user_api_client, user, organization, org_admin_rd, org_member_rd):
+    url = reverse('team-list')
+    create_data = {'name': 'new-team', 'organization': organization.pk}
+
+    # Can not see organization
+    response = user_api_client.post(url, data=create_data)
+    assert not user.has_obj_perm(organization, 'view')  # sanity
+    assert response.status_code == 400, response.data
+
+    # Does not have permission to create teams in organization
+    org_member_rd.give_permission(user, organization)
+    assert user.has_obj_perm(organization, 'view')  # sanity
+    assert not user.has_obj_perm(organization, 'change')  # sanity
+    response = user_api_client.post(url, data=create_data)
+    assert response.status_code == 403, response.data
+
+    # With org admin permission, the team can be created
+    org_admin_rd.give_permission(user, organization)
+    response = user_api_client.post(url, data=create_data)
+    assert response.status_code == 201
+
+
+def test_team_detail_modify_members(user_api_client, user, organization, team, admin_rd, member_rd, org_member_rd):
+    rando = User.objects.create(username='rando')
+    admin_rd.give_permission(user, team)
+    url = reverse('team-detail', kwargs={'pk': team.pk})
+
+    # data to add rando as a member
+    patch_data = {'users': [rando.id]}
+
+    # user can not add rando as a member due to not being able to view that user
+    response = user_api_client.patch(url, data=patch_data)
+    assert response.status_code == 400
+
+    for u in (user, rando):
+        org_member_rd.give_permission(u, organization)
+
+    # user now see rando (and is admin of the team) so criteria for adding member is met
+    response = user_api_client.patch(url, data=patch_data)
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("method", ["put", "patch"])
+def test_team_update_permissions(user_api_client, user, teams, organizations, method, org_member_rd):  # noqa: F811
+    """
+    Team can be updated by:
+    - Superuser (other tests)
+    - Admin or Team
+    - Admin of Team's Organization
+    Team's Organization can be updated by:
+    - Superuser (other tests)
+    - Admin of (source Team or source Team's Organization) AND (Admin of destination Team and Admin of destination Team's Organization)
+    Team can be deleted by:
+    - Superuser (other tests)
+    - Admin of Team
+    - Admin of Team's Organization
+
+    """
+    user_api_call = getattr(user_api_client, method)
+
+    visible_teams = default_visible_teams(teams, organizations)
+    changeable_teams = default_changeable_teams(teams, organizations)
+
+    # Change non-FK fields
+    for status in ['disassociated', 'associated']:
+        for org, org_teams in teams.items():
+            # user needs to have view permission to organization in order to PUT
+            for org_team in org_teams:
+                url = reverse("team-detail", kwargs={"pk": org_team.pk})
+
+                changed_data = {"name": f"{org_team.name}-Changed", "description": "This is a testing team"}
+
+                response = user_api_call(url, data=changed_data)
+
+                if status == 'disassociated':
+                    assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+                else:
+                    if org_team in changeable_teams:
+                        assert response.status_code == 200, f"Team {org_team.name} should be updatable, data:\n{response.data}"
+                        assert response.data["name"] == changed_data["name"]
+                        assert response.data["description"] == changed_data["description"]
+                    elif org_team in visible_teams:  # and not in changeable_teams
+                        assert response.status_code == 403, f"Update of Team {org_team.name} should be forbidden"
+                    else:
+                        assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+
+        associate_logged_user(teams, organizations, user)
+
+    # Change FK (organization)

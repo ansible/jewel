@@ -1,4 +1,5 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.rbac.policies import visible_users
 
 from aap_gateway_api.models import Organization
 
@@ -11,3 +12,11 @@ class OrganizationSerializer(NamedCommonModelSerializer):
             'users',
             'admins',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request:
+            for related_name in ('users', 'admins'):
+                self.fields['users'].queryset = visible_users(request.user)
+                self.fields['users'].child_relation.queryset = visible_users(request.user)

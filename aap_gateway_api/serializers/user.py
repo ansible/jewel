@@ -10,6 +10,7 @@ from django.db.utils import IntegrityError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.fields import empty
 from rest_framework.serializers import ValidationError
 
@@ -60,6 +61,12 @@ class UserSerializer(CommonModelSerializer):
         if request and hasattr(request, 'user') and request.user.is_superuser:
             return True
         return False
+
+    def validate_is_superuser(self, value):
+        if value is True:
+            if not self.is_superuser_making_request():
+                raise PermissionDenied
+        return value
 
     def validate_password(self, value: str) -> str:
         errors = []

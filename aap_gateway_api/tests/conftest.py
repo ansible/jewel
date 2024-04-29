@@ -61,6 +61,24 @@ def register_preference(db):
     Preference.objects.filter(section=kwargs_cache["section"], name=kwargs_cache["preference_name"]).delete()
 
 
+@pytest.fixture
+def user_factory():
+    users = []
+
+    def _user(username, password='password', is_superuser=False, first_name='', last_name='', email=''):
+        nonlocal users
+        from aap_gateway_api.models import User
+
+        new_user = User.objects.create(username=username, password=password, is_superuser=is_superuser, first_name=first_name, last_name=last_name, email=email)
+        users.append(new_user)
+        return new_user
+
+    yield _user
+
+    for usr in users:
+        usr.delete()
+
+
 @copy_fixture(copies=3)
 @pytest.fixture
 def team(randname, organization):
@@ -72,6 +90,24 @@ def team(randname, organization):
     team.delete()
 
 
+@pytest.fixture
+def team_factory():
+    teams = []
+
+    def _team(name, organization, description=''):
+        nonlocal teams
+        from aap_gateway_api.models import Team
+
+        new_team = Team.objects.create(name=name, organization=organization, description=description)
+        teams.append(new_team)
+        return new_team
+
+    yield _team
+
+    for t in teams:
+        t.delete()
+
+
 @copy_fixture(copies=3)
 @pytest.fixture
 def organization(randname):
@@ -81,6 +117,24 @@ def organization(randname):
     organization = Organization.objects.create(name=random_name)
     yield organization
     organization.delete()
+
+
+@pytest.fixture
+def organization_factory():
+    orgs = []
+
+    def _organization(name, description=''):
+        nonlocal orgs
+        from aap_gateway_api.models import Organization
+
+        organization = Organization.objects.create(name=name, description=description)
+        orgs.append(organization)
+        return organization
+
+    yield _organization
+
+    for org in orgs:
+        org.delete()
 
 
 @pytest.fixture
@@ -195,7 +249,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
             worker_num = re.sub("[^0-9]", "", pytest_worker).rjust(4, "0")
             port = int(str(port_prefix) + worker_num)
         else:
-            port = int(str(port_prefix) + str(random.randint(0, 1000)).rjust(4, "0"))
+            port = int(str(port_prefix) + str(random.randint(0, 1000).rjust(4, "0")))
 
         route = ServiceAPIRoute.objects.create(
             name=randname("Test API route"),
