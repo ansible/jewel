@@ -121,7 +121,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
     ],
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_PERMISSION_CLASSES': ['aap_gateway_api.permissions.IsSystemAdminOrAuditor'],
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
 }
 
