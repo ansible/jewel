@@ -46,7 +46,6 @@ router.register(
     related_views={
         'users': (DeprecatedUserViewSet, 'users'),
         'admins': (DeprecatedUserViewSet, 'admins'),
-        'parents': (DeprecatedTeamViewSet, 'parents'),
     },
 )
 router.register(

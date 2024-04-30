@@ -14,6 +14,8 @@ class Team(AbstractTeam, AuditableModel):
 
     resource = AnsibleResourceField(primary_key_field="id")
 
+    ignore_relations = ['parents']
+
     users = models.ManyToManyField(
         User,
         related_name='teams',

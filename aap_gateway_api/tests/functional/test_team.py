@@ -4,11 +4,7 @@ from django.urls import reverse
 
 @pytest.mark.parametrize(
     "key, route",
-    [
-        ("users", "team-users-list"),
-        ("admins", "team-admins-list"),
-        ("parents", "team-parents-list"),
-    ],
+    [("users", "team-users-list"), ("admins", "team-admins-list")],
 )
 def test_teams_related_fields(admin_api_client, team, key, route):
     url = reverse("team-detail", kwargs={"pk": team.id})
@@ -46,25 +42,6 @@ def test_teams_create_description_is_optional(admin_api_client, randname, organi
         assert results[0]["description"] == description
     else:
         assert results[0]["description"] == ""
-
-
-def test_teams_parents_works(admin_api_client, randname, organization, team):
-    url = reverse("team-list")
-    random_name = randname("Test Team")
-    data = {"name": random_name, "organization": organization.id, "parents": [team.id]}
-    response = admin_api_client.post(url, data=data)
-    assert response.status_code == 201
-    assert response.data["name"] == random_name
-
-    response = admin_api_client.get(url)
-    assert response.status_code == 200
-    results = response.data["results"]
-    assert len(results) == 2
-    assert set(result["name"] for result in results) == {random_name, team.name}
-    parents_by_name = {}
-    for result in results:
-        parents_by_name[result["name"]] = result["parents"]
-    assert parents_by_name == {random_name: [team.id], team.name: []}
 
 
 def test_teams_users_association(admin_api_client, team, user):

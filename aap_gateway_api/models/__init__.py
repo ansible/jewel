@@ -13,6 +13,7 @@ permission_registry.register(Organization, parent_field_name=None)
 
 permission_registry.track_relationship(Team, 'users', 'Team Member')
 permission_registry.track_relationship(Team, 'admins', 'Team Admin')
+# TODO: Remove this relationship with removing parents M2M relation
 permission_registry.track_relationship(Team, 'parents', 'Team Member')
 
 permission_registry.track_relationship(Organization, 'users', 'Organization Member')
