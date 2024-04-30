@@ -15,7 +15,6 @@ class TeamSerializer(RelatedAccessMixin, NamedCommonModelSerializer):
             'organization',
             'users',
             'admins',
-            'parents',
             'description',
         ]
         lookup_field = 'users'

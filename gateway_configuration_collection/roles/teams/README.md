@@ -33,7 +33,6 @@ Options for the `gateway_teams` variable:
 | `new_organization` |      N/A      |    no    | str  | The name or ID referencing newly associated organization                          |
 | `users`            |      N/A      |    no    | list | List of [user IDs](../users/README.md) associated with the team                   |
 | `admins`           |      N/A      |    no    | list | List of [user IDs](../users/README.md) associated with the team as administrators |
-| `parents`          |      N/A      |    no    | list | List of Team IDs that are parents of this team                                    |
 | `state`            |   `present`   |    no    | str  | Desired state of the resource.                                                    |
 
 ** Unique value: **
@@ -44,7 +43,7 @@ Options for the `gateway_teams` variable:
 
 ### Json Example
 
-- Create 2 Teams, one with associated users, admins and parent Teams
+- Create 2 Teams, one with associated users, admins
 
 ```json
 {
@@ -63,10 +62,6 @@ Options for the `gateway_teams` variable:
       ],
       "admins": [
         "3"
-      ],
-      "parents": [
-        "10",
-        "20"
       ]
     }
   ]
@@ -93,8 +88,6 @@ gateway_teams:
   - 2
   admins:
   - 3
-  parents:
-  - 1
 - name: "Team X"
   new_name: "Secret Team"
   organization: "Org X"

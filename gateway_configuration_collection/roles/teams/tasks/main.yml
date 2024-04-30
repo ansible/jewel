@@ -8,7 +8,6 @@
     new_organization:         "{{ __gateway_teams_item.new_organization | default(omit) }}"
     users:                    "{{ __gateway_teams_item.users | default(omit) }}"
     admins:                   "{{ __gateway_teams_item.admins | default(omit) }}"
-    parents:                  "{{ __gateway_teams_item.parents | default(omit) }}"
     state:                    "{{ __gateway_teams_item.state | default(gateway_state | default(omit, true)) }}"
 
     # Role Standard Options

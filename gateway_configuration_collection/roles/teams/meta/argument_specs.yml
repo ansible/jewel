@@ -32,9 +32,6 @@ argument_specs:
           admins:
             type: list
             description: List of user IDs associated with the team as administrators
-          parents:
-            type: list
-            description: List of team IDs that are parents of this team
           state:
               default: "{{ gateway_state | default('present') }}"
               required: false

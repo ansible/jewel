@@ -64,9 +64,6 @@ class AAPTeam(AAPObject):
         if (admins := self.params.get('admins')) is not None:
             self.new_fields['admins'] = admins
 
-        if (parents := self.params.get('parents')) is not None:
-            self.new_fields['parents'] = parents
-
     def _set_organization_field(self):
         if self.organization:
             organization_id = None

@@ -108,11 +108,6 @@
         organization: "{{ _organizations[0].id }}"
         users:  # Change members
         - "{{ _users[0].id }}"
-      - name: "{{ name_prefix }}-Team-With-Parents"
-        organization: "{{ _organizations[1].id }}"
-        parents:
-        - "{{ _teams[0].id }}"
-        - "{{ _teams[1].id }}"
       - name: "{{ name_prefix }}-Team-3"  # Check existence
         organization: "{{ _organizations[1].name }}"
         state: exists
@@ -128,10 +123,9 @@
       that:
         - __gateway_teams_job_async_result.results[0] is changed
         - __gateway_teams_job_async_result.results[1] is changed
-        - __gateway_teams_job_async_result.results[2] is changed
+        - __gateway_teams_job_async_result.results[2] is not changed
         - __gateway_teams_job_async_result.results[3] is not changed
         - __gateway_teams_job_async_result.results[4] is not changed
-        - __gateway_teams_job_async_result.results[5] is not changed
 
   - name: Change Unique Key
     include_role:
@@ -194,8 +188,6 @@
       - name: "{{ name_prefix }}-Team-2"
         organization: "{{ name_prefix }}-Organization-2"
       - name: "{{ name_prefix }}-Team-3"
-        organization: "{{ name_prefix }}-Organization-2"
-      - name: "{{ name_prefix }}-Team-With-Parents"
         organization: "{{ name_prefix }}-Organization-2"
 
   - name: Delete Users

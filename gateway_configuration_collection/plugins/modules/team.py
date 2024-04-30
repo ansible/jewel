@@ -45,9 +45,6 @@ options:
     admins:
       type: list
       description: List of user IDs associated with the team as administrators
-    parents:
-      type: list
-      description: List of team IDs that are parents of this team
 
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
@@ -90,7 +87,6 @@ def main():
         new_organization=dict(type="str"),
         users=dict(type="list"),
         admins=dict(type="list"),
-        parents=dict(type="list"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 
