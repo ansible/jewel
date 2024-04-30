@@ -160,10 +160,7 @@ def http_port_factory():
 
 @pytest.fixture
 def http_api_port_factory():
-    api_port = None
-
     def _http_api_port():
-        nonlocal api_port
         from aap_gateway_api.models import HTTPPort
 
         # There can only be one API port
@@ -179,8 +176,7 @@ def http_api_port_factory():
             api_port.save()
         return api_port
 
-    yield _http_api_port
-    api_port.delete()
+    return _http_api_port
 
 
 ServiceHierarchy = namedtuple("ServiceHierarchy", ["service_cluster", "service_node", "route"])
@@ -249,7 +245,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
             worker_num = re.sub("[^0-9]", "", pytest_worker).rjust(4, "0")
             port = int(str(port_prefix) + worker_num)
         else:
-            port = int(str(port_prefix) + str(random.randint(0, 1000).rjust(4, "0")))
+            port = int(str(port_prefix) + str(str(random.randint(0, 1000)).rjust(4, "0")))
 
         route = ServiceAPIRoute.objects.create(
             name=randname("Test API route"),
