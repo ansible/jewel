@@ -1,6 +1,8 @@
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
+from aap_gateway_api.models import User
 from aap_gateway_api.tests.functional.rbac.permissions_helper import api_get_and_assert
 
 
@@ -205,3 +207,26 @@ def test_organization_association_permissions(user_api_client, user, user_factor
         org_member_rd.give_permission(user, organization)  # add as member, for 403 and not 404
         response = user_api_client.post(url, data={"instances": [user2.pk]})
         assert response.status_code == 403
+
+
+@override_settings(ORG_ADMINS_CAN_SEE_ALL_USERS=False)
+@pytest.mark.django_db
+def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization):
+    other_user = User.objects.create(username='another-user')
+
+    org_admin_rd.give_permission(user, organization)
+    url = reverse('organization-admins-associate', kwargs={'pk': organization.pk})
+    r = user_api_client.post(url, data={'instances': [other_user.id]})
+    assert r.status_code == 400
+    assert 'does not exist' in str(r.data)
+
+    url = reverse('organization-detail', kwargs={'pk': organization.pk})
+    r = user_api_client.patch(url, data={'admins': [other_user.id]})
+    assert r.status_code == 400
+    assert 'does not exist' in str(r.data)
+
+    # If user can see other_user, then action can complete successfully
+    org_member_rd.give_permission(other_user, organization)
+    r = user_api_client.patch(url, data={'admins': [other_user.id]})
+    assert r.status_code == 200
+    assert other_user.has_obj_perm(organization, 'change')
