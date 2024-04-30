@@ -18,5 +18,5 @@ class OrganizationSerializer(NamedCommonModelSerializer):
         request = self.context.get('request')
         if request:
             for related_name in ('users', 'admins'):
-                self.fields['users'].queryset = visible_users(request.user)
-                self.fields['users'].child_relation.queryset = visible_users(request.user)
+                self.fields[related_name].queryset = visible_users(request.user)
+                self.fields[related_name].child_relation.queryset = visible_users(request.user)
