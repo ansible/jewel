@@ -204,6 +204,105 @@ class TestRelatedUserListView:
         assert response.data['count'] == 2
 
 
+@pytest.mark.django_db
+class TestUserOptions:
+    def test_users_list_options_user(self, user_api_client):
+        url = reverse("user-list")
+        response = user_api_client.options(url)
+        assert response.status_code == 200, "Options for list users should be available for standard user"
+        assert response.data.get('actions', {}).get('POST', None) is None, "POST action for users should be forbidden for standard user"
+
+    def test_users_list_options_system_auditor(self, user_api_client, user):
+        user.is_system_auditor = True
+        user.save()
+
+        url = reverse("user-list")
+        response = user_api_client.options(url)
+        assert response.status_code == 200, "Options for list users should be available for auditor"
+        assert response.data.get('actions', {}).get('POST', None) is None, "POST action for user shouldn't be available for auditor"
+
+    def test_users_list_options_superuser(self, admin_api_client):
+        url = reverse("user-list")
+        response = admin_api_client.options(url)
+        assert response.status_code == 200, "Options for list users should be available for superuser"
+        assert response.data.get('actions', {}).get('POST', None) is not None, "POST action for users should be available for superuser"
+
+    def test_users_detail_options_user(self, user_api_client, user, organization, team, org_admin_rd, org_member_rd, admin_rd, member_rd):
+        url = reverse("user-detail", kwargs={"pk": user.pk})
+        response = user_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is not None, "user should be able to change self"
+
+        user2 = User.objects.create(username='another user')
+        url = reverse("user-detail", kwargs={"pk": user2.pk})
+
+        # Two unrelated users
+        response = user_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for non-visible user"
+
+        # Team Members
+        member_rd.give_permission(user, team)
+        member_rd.give_permission(user2, team)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for non-visible user"
+
+        # Team Admin + Team Member
+        member_rd.remove_permission(user, team)
+        admin_rd.give_permission(user, team)
+
+        response = user_api_client.options(url)
+        assert response.status_code == 200, "Team Admin should see OPTIONS of Team Member"
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for Team Admin"
+
+        # Org Members
+        for u in [user, user2]:
+            member_rd.remove_permission(u, team)
+            admin_rd.remove_permission(u, team)
+            org_member_rd.give_permission(u, organization)
+
+        response = user_api_client.options(url)
+        assert response.status_code == 200, "Org Member should see OPTIONS of another Org Member"
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for Org Member"
+
+        # Org Admin + Org Member
+        org_member_rd.remove_permission(user, organization)
+        org_admin_rd.give_permission(user, organization)
+
+        assert response.status_code == 200, "Org Admin should see OPTIONS of Org Member"
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for Org Admin"
+
+        # Org Admin + Team Member
+        org_member_rd.remove_permission(user2, organization)
+        member_rd.give_permission(user2, team)
+
+        assert response.status_code == 200, "Org Admin should see OPTIONS of Team Member"
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for Org Admin on Team Member"
+
+    def test_users_detail_options_system_auditor(self, user_api_client, user):
+        user.is_system_auditor = True
+        user.save()
+
+        url1 = reverse("user-detail", kwargs={"pk": user.pk})
+        response = user_api_client.options(url1)
+        assert response.status_code == 200, "System Auditor should see OPTIONS for self"
+        assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for auditor"
+
+        user2 = User.objects.create(username='another user')
+        url2 = reverse("user-detail", kwargs={"pk": user2.pk})
+        response = user_api_client.options(url2)
+        assert response.status_code == 200, "System Auditor should see OPTIONS for 'another user'"
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for auditor"
+
+    def test_users_detail_options_superuser(self, admin_api_client):
+        user2 = User.objects.create(username='another user')
+        url = reverse("user-detail", kwargs={"pk": user2.pk})
+
+        response = admin_api_client.options(url)
+        assert response.status_code == 200, "Options for 'another user' should be available for superuser"
+        assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action for should be available for superuser"
+
+
 def _get_visible_users_by_name(response_data):
     visible_users = [user["username"] for user in response_data]
     return visible_users

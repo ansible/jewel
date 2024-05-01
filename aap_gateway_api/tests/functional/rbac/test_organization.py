@@ -3,7 +3,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from aap_gateway_api.models import User
-from aap_gateway_api.tests.functional.rbac.permissions_helper import api_get_and_assert
+from aap_gateway_api.tests.functional.rbac.conftest import api_get_and_assert
 
 
 def test_organization_list_permissions(user_api_client, user, user_factory, organization_factory):
@@ -122,33 +122,21 @@ def test_organization_association_permissions(user_api_client, user, user_factor
         admins=reverse("organization-admins-associate", kwargs={"pk": organization.pk}),
     )
 
-    urls_disassoc = dict(
-        users=reverse("organization-users-disassociate", kwargs={"pk": organization.pk}),
-        admins=reverse("organization-admins-disassociate", kwargs={"pk": organization.pk}),
-    )
-
-    org_member_rd.give_permission(user, organization)
-
     for assoc_type in ['users', 'admins']:
-        #
-        #   Associations
-        #
         url = urls_assoc[assoc_type]
 
-        assert organization.users.count() == 1  # the user themselves
-        assert organization.admins.count() == 0
-
-        # No membership, no permissions
+        assert organization.users.count() == 0, assoc_type  # the user themselves
+        assert organization.admins.count() == 0, assoc_type
+        #
+        # No membership
+        #  => can't see organization, can't associate
         response = user_api_client.post(url, data={"instances": [user.pk]})
-        assert (
-            response.status_code == 403
-        ), f"Adding self to '{assoc_type}' shouldn't be allowed"  # TODO: Should be 404 -> This way user can check that parent org exists
+        assert response.status_code == 404, f"Adding self to '{assoc_type}' shouldn't be allowed"
         response = user_api_client.post(url, data={"instances": [user2.pk]})
-        assert (
-            response.status_code == 403
-        ), f"Adding user2 to '{assoc_type}' shouldn't be allowed"  # TODO: Should be 404 -> This way user can check that parent org exists
-
-        # User membership, no permissions
+        assert response.status_code == 404, f"Adding user2 to '{assoc_type}' shouldn't be allowed"
+        #
+        # User is Org Member
+        # => can't associate
         organization.users.add(user)
         response = user_api_client.post(url, data={"instances": [user2.pk]})
         assert response.status_code == 403
@@ -158,12 +146,13 @@ def test_organization_association_permissions(user_api_client, user, user_factor
         else:
             assert organization.admins.count() == 0
 
-        # Admin membership, association allowed
+        # User is Org Admin
+        # => Can associate
         organization.users.remove(user)
         organization.admins.add(user)
 
-        assert organization.users.count() == 0
-        assert organization.admins.count() == 1
+        assert organization.users.count() == 0, assoc_type
+        assert organization.admins.count() == 1, assoc_type
         response = user_api_client.post(url, data={"instances": [user.pk, user2.pk, user3.pk]})
         assert response.status_code == 204
         if assoc_type == 'users':
@@ -173,40 +162,144 @@ def test_organization_association_permissions(user_api_client, user, user_factor
             assert organization.users.count() == 0
             assert organization.admins.count() == 3
 
-        #
-        #   Disassociations
-        #
+        # Cleanup
+        for u in [user, user2, user3]:
+            organization.users.remove(u)
+            organization.admins.remove(u)
+
+
+def test_organization_disassociation_permissions(user_api_client, user, user_factory, organization, org_member_rd):
+    user2 = user_factory("Test User 2")
+    user3 = user_factory("Test User 3")
+
+    urls_disassoc = dict(
+        users=reverse("organization-users-disassociate", kwargs={"pk": organization.pk}),
+        admins=reverse("organization-admins-disassociate", kwargs={"pk": organization.pk}),
+    )
+    for assoc_type in ['users', 'admins']:
         url = urls_disassoc[assoc_type]
 
-        # No permissions, forbidden action
-        organization.admins.remove(user)
-        response = user_api_client.post(url, data={"instances": [user.pk, user2.pk, user3.pk]})
-        assert response.status_code in (403, 404)  # TODO: Should be 404 -> This way user can check that parent org exists
+        organization.users.add(user2)
+        organization.admins.add(user3)
 
-        # Admin can remove others
-        organization.admins.add(user)
+        # No permissions, can't see action
+        response = user_api_client.post(url, data={"instances": [user.pk, user2.pk, user3.pk]})
+        assert response.status_code == 404
+
+        # Org Member, no permissions => forbidden
+        organization.users.add(user)
         response = user_api_client.post(url, data={"instances": [user2.pk, user3.pk]})
+        assert response.status_code == 403
+
+        # Org Member can't remove self => forbidden
+        response = user_api_client.post(url, data={"instances": [user.pk]})
+        assert response.status_code == 403
+
+        # Org Admin can remove others => ok
+        organization.admins.add(user)
+        response = user_api_client.post(url, data={"instances": [user2.pk if assoc_type == 'users' else user3.pk]})
         assert response.status_code == 204
         if assoc_type == 'users':
-            assert organization.users.count() == 1
+            assert organization.users.count() == 1  # user (user2 disassociated)
+            assert organization.admins.count() == 2  # user + user3
         else:
-            assert organization.users.count() == 0
-        assert organization.admins.count() == 1
+            assert organization.users.count() == 2  # user + user2
+            assert organization.admins.count() == 1  # user (user3 disassociated)
 
-        # Admin member can remove self
+        # Removing non-members ends with Bad Request
+        response = user_api_client.post(url, data={"instances": [user3.pk if assoc_type == 'users' else user2.pk]})
+        assert response.status_code == 400
+
+        # Org Admin can remove self
         response = user_api_client.post(url, data={"instances": [user.pk]})
         assert response.status_code == 204, response.data
-        assert organization.users.count() == 0
         if assoc_type == 'users':
-            assert organization.admins.count() == 1
-            organization.admins.remove(user)
+            assert organization.users.count() == 0  # user disassociated
+            assert organization.admins.count() == 2  # user + user3
         else:
-            assert organization.admins.count() == 0
+            assert organization.users.count() == 2  # user + user2
+            assert organization.admins.count() == 0  # user disassociated
 
-        # There are no permissions now
-        org_member_rd.give_permission(user, organization)  # add as member, for 403 and not 404
-        response = user_api_client.post(url, data={"instances": [user2.pk]})
-        assert response.status_code == 403
+        # Cleanup
+        for u in [user, user2, user3]:
+            organization.users.remove(u)
+            organization.admins.remove(u)
+
+
+@pytest.mark.django_db
+class TestOrganizationOptions:
+    # @pytest.mark.xfail(reason="Not implemented yet")
+    def test_organizations_list_options_user(self, user_api_client, user, organization, org_member_rd, org_admin_rd):
+        """Any standard role can't create organization"""
+        url = reverse("organization-list")
+        roles = [None, org_member_rd, org_admin_rd]
+        for role in roles:
+            for r in roles:
+                if role == r and r is not None:
+                    r.give_permission(user, organization)
+                elif role != r and r is not None:
+                    r.remove_permission(user, organization)
+
+            role_name = role.name if role else 'No Org role'
+
+            response = user_api_client.options(url)
+            assert response.status_code == 200
+            assert response.data.get('actions', {}).get('POST', None) is None, f"POST action shouldn't be available for {role_name}"
+
+    # @pytest.mark.xfail(reason="Not implemented yet")
+    def test_organizations_list_options_system_auditor(self, user_api_client, user):
+        url = reverse("organization-list")
+        user.is_system_auditor = True
+        user.save()
+
+        response = user_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('POST', None) is None, "POST action shouldn't be available for system auditor"
+
+    def test_organizations_list_options_superuser(self, admin_api_client, user):
+        url = reverse("organization-list")
+
+        response = admin_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('POST', None) is not None, "POST action should be available for superuser"
+
+    def test_organization_detail_options_user(self, user_api_client, user, organization, org_member_rd, org_admin_rd):
+        """Any standard role can't change organization"""
+        url = reverse("organization-detail", kwargs={"pk": organization.pk})
+        roles = [None, org_member_rd, org_admin_rd]
+        for role in roles:
+            for r in roles:
+                if role == r and r is not None:
+                    r.give_permission(user, organization)
+                elif role != r and r is not None:
+                    r.remove_permission(user, organization)
+
+            role_name = role.name if role else 'No Org role'
+
+            response = user_api_client.options(url)
+            assert response.status_code == 200
+
+            if role == org_admin_rd:
+                assert response.data.get('actions', {}).get('PUT', None) is not None, f"PUT action should be available for {role_name}"
+            else:
+                assert response.data.get('actions', {}).get('PUT', None) is None, f"PUT action shouldn't be available for {role_name}"
+
+    # @pytest.mark.xfail(reason="Not implemented yet")
+    def test_organization_detail_options_system_auditor(self, user_api_client, user, organization):
+        url = reverse("organization-detail", kwargs={"pk": organization.pk})
+        user.is_system_auditor = True
+        user.save()
+
+        response = user_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for system auditor"
+
+    def test_organization_detail_options_superuser(self, admin_api_client, user, organization):
+        url = reverse("organization-detail", kwargs={"pk": organization.pk})
+
+        response = admin_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for superuser"
 
 
 @override_settings(ORG_ADMINS_CAN_SEE_ALL_USERS=False)
