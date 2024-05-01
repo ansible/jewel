@@ -83,3 +83,12 @@ def users(organizations, teams):
         users[None].append(f"User without membership {k}")
 
     return users
+
+
+def api_get_and_assert(url, api_client, expected_objects, order_by="name"):
+    response = api_client.get(url, {"order_by": order_by})
+    assert response.status_code == 200
+    results = response.data["results"]
+    assert len(results) == len(expected_objects)
+    for i in range(len(expected_objects)):
+        assert results[i]["name"] == expected_objects[i].name, f"result: {results[i]['name']}, expected: {expected_objects[i].name}"

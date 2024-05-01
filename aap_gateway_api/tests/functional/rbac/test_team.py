@@ -2,7 +2,7 @@ import pytest
 from django.urls import reverse
 
 from aap_gateway_api.models import User
-from aap_gateway_api.tests.functional.rbac.permissions_helper import api_get_and_assert, default_changeable_teams, default_visible_teams  # noqa: F401
+from aap_gateway_api.tests.functional.rbac.conftest import api_get_and_assert
 
 
 def associate_logged_user(teams, organizations, user):
@@ -24,6 +24,22 @@ def associate_logged_user(teams, organizations, user):
     organizations[4].admins.add(user)
 
 
+def _visible_teams(teams, organizations):
+    """
+    Based on associate_logged_user()
+    Org Admins, Team Members and Team Admins can see team
+    """
+    return [teams[organizations[0]][0], teams[organizations[1]][0], teams[organizations[2]][0], teams[organizations[2]][1]] + teams[organizations[4]]
+
+
+def _editable_teams(teams, organizations):
+    """
+    Base on associate_logged_user()
+    Org Admins and Team Admins can edit team
+    """
+    return [teams[organizations[1]][0], teams[organizations[2]][1]] + teams[organizations[4]]
+
+
 def test_team_list_permissions(user_api_client, user, teams, organizations):  # noqa: F811
     """
     Teams in list can see:
@@ -37,7 +53,7 @@ def test_team_list_permissions(user_api_client, user, teams, organizations):  # 
     api_get_and_assert(url, user_api_client, [])
 
     associate_logged_user(teams, organizations, user)
-    expected_teams = default_visible_teams(teams, organizations)
+    expected_teams = _visible_teams(teams, organizations)
 
     api_get_and_assert(url, user_api_client, expected_teams, order_by="id")
 
@@ -49,7 +65,7 @@ def test_team_detail_permissions(user_api_client, user, teams, organizations):  
     - Admin or User of Team
     - Admin or User of Team's Org
     """
-    visible_teams = default_visible_teams(teams, organizations)
+    visible_teams = _visible_teams(teams, organizations)
 
     for status in ['disassociated', 'associated']:
         for org, org_teams in teams.items():
@@ -125,8 +141,8 @@ def test_team_update_permissions(user_api_client, user, teams, organizations, me
     """
     user_api_call = getattr(user_api_client, method)
 
-    visible_teams = default_visible_teams(teams, organizations)
-    changeable_teams = default_changeable_teams(teams, organizations)
+    visible_teams = _visible_teams(teams, organizations)
+    changeable_teams = _editable_teams(teams, organizations)
 
     # Change non-FK fields
     for status in ['disassociated', 'associated']:
@@ -153,4 +169,86 @@ def test_team_update_permissions(user_api_client, user, teams, organizations, me
 
         associate_logged_user(teams, organizations, user)
 
-    # Change FK (organization)
+
+@pytest.mark.django_db
+class TestTeamOptions:
+    @staticmethod
+    def _assoc_role(role, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd):
+        team_roles = [member_rd, admin_rd]
+        org_roles = [org_member_rd, org_admin_rd]
+        for team_role in team_roles:
+            if role == team_role:
+                team_role.give_permission(user, team)
+            else:
+                team_role.remove_permission(user, team)
+        for org_role in org_roles:
+            if role == org_role:
+                org_role.give_permission(user, organization)
+            else:
+                org_role.remove_permission(user, organization)
+
+    def test_teams_list_options_user(self, user_api_client, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd):
+        """Only Org Admin role can create team"""
+        url = reverse("team-list")
+        roles = [None, member_rd, admin_rd, org_member_rd, org_admin_rd]
+        for role in roles:
+            self._assoc_role(role, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd)
+            role_name = role.name if role else 'No Team/Org role'
+
+            response = user_api_client.options(url)
+            assert response.status_code == 200
+            post_action = response.data.get('actions', {}).get('POST', None)
+            if role == org_admin_rd:
+                assert post_action is not None, f"POST action should be available for {role_name}"
+            else:
+                assert post_action is None, f"POST action shouldn't be available for {role_name}"
+
+    def test_teams_list_options_system_auditor(self, user_api_client, user):
+        url = reverse("team-list")
+        user.is_system_auditor = True
+        user.save()
+
+        response = user_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('POST', None) is None, "POST action shouldn't be available for system auditor"
+
+    def test_teams_list_options_superuser(self, admin_api_client, user):
+        url = reverse("team-list")
+
+        response = admin_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('POST', None) is not None, "POST action should be available for superuser"
+
+    def test_team_detail_options_user(self, user_api_client, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd):
+        """Only Team/Org Admin can change team"""
+        url = reverse("team-detail", kwargs={"pk": team.pk})
+        roles = [None, member_rd, admin_rd, org_member_rd, org_admin_rd]
+        for role in roles:
+            self._assoc_role(role, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd)
+            role_name = role.name if role else 'No Team/Org role'
+
+            response = user_api_client.options(url)
+            assert response.status_code == 200
+
+            put_action = response.data.get('actions', {}).get('PUT', None)
+
+            if role in [admin_rd, org_admin_rd]:
+                assert put_action is not None, f"PUT action should be available for {role_name}"
+            else:
+                assert put_action is None, f"PUT action shouldn't be available for {role_name}"
+
+    def test_team_detail_options_system_auditor(self, user_api_client, user, team):
+        url = reverse("team-detail", kwargs={"pk": team.pk})
+        user.is_system_auditor = True
+        user.save()
+
+        response = user_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for system auditor"
+
+    def test_team_detail_options_superuser(self, admin_api_client, user, team):
+        url = reverse("team-detail", kwargs={"pk": team.pk})
+
+        response = admin_api_client.options(url)
+        assert response.status_code == 200
+        assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for superuser"
