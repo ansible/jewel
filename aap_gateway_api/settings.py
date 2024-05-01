@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 
 from ansible_base.lib.utils.validation import to_python_boolean
+from redis.backoff import ConstantBackoff
+from redis.retry import Retry
 from split_settings.tools import include, optional
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -253,52 +255,33 @@ GATEWAY_CERT_FILE = os.environ.get('GATEWAY_CERT_FILE', '/etc/gateway/gateway.cr
 GATEWAY_KEY_FILE = os.environ.get('GATEWAY_KEY_FILE', '/etc/gateway/gateway.key')
 GATEWAY_PATH_REWRITE_SCRIPT_FILE = os.environ.get('GATEWAY_PATH_REWRITE_SCRIPT_FILE', '/etc/envoy/envoy-path-rewrite.lua')
 
-using_cache = os.environ.get('REDIS_URL', False)
 
-if using_cache:
-    from redis.backoff import ConstantBackoff
-    from redis.retry import Retry
-
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            # Note, the location is not really used but we parse it in the client to get settings like host/port/username/etc.
-            "LOCATION": f"{os.environ.get('REDIS_URL')}",
-            "KEY_PREFIX": f"{os.environ.get('CACHE_KEY_PREFIX', 'gateway')}",
-            "OPTIONS": {
-                "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
-                "CLIENT_CLASS_KWARGS": {
-                    "clustered": to_python_boolean(os.environ.get('REDIS_IS_CLUSTERED', False)),
-                    'clustered_hosts': f"{os.environ.get('REDIS_CLUSTERED_HOSTS', '')}",
-                    'ssl': to_python_boolean(os.environ.get('REDIS_TLS', True)),
-                    'ssl_keyfile': f"{os.environ.get('REDIS_KEY_FILE', '/etc/gateway/redis.key')}",
-                    'ssl_certfile': f"{os.environ.get('REDIS_CERT_FILE', '/etc/gateway/redis.cert')}",
-                    'ssl_cert_reqs': 'required',
-                    'ssl_ca_certs': f"{os.environ.get('REDIS_CA_CERT_FILE', '/etc/gateway/redis_ca.cert')}",
-                    'ssl_check_hostname': False,
-                    'retry': Retry(backoff=ConstantBackoff(3), retries=20),
-                },
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        # Note, the location is not really used but we parse it in the client to get settings like host/port/username/etc.
+        "LOCATION": f"{os.environ.get('REDIS_URL')}",
+        "KEY_PREFIX": f"{os.environ.get('CACHE_KEY_PREFIX', 'gateway')}",
+        "OPTIONS": {
+            "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
+            "CLIENT_CLASS_KWARGS": {
+                "clustered": to_python_boolean(os.environ.get('REDIS_IS_CLUSTERED', False)),
+                'clustered_hosts': f"{os.environ.get('REDIS_CLUSTERED_HOSTS', '')}",
+                'ssl': to_python_boolean(os.environ.get('REDIS_TLS', True)),
+                'ssl_keyfile': f"{os.environ.get('REDIS_KEY_FILE', '/etc/gateway/redis.key')}",
+                'ssl_certfile': f"{os.environ.get('REDIS_CERT_FILE', '/etc/gateway/redis.cert')}",
+                'ssl_cert_reqs': 'required',
+                'ssl_ca_certs': f"{os.environ.get('REDIS_CA_CERT_FILE', '/etc/gateway/redis_ca.cert')}",
+                'ssl_check_hostname': False,
+                'retry': Retry(backoff=ConstantBackoff(3), retries=20),
             },
-        }
+        },
     }
-else:
-    print("===================================================================================", file=sys.stderr)
-    print("|                                                                                 |", file=sys.stderr)
-    print("|   WARNING: Redis cache is disabled, defaulting to memory cache.                 |", file=sys.stderr)
-    print("|            Note: this is not a valid configuration for a clustered environment. |", file=sys.stderr)
-    print("|                                                                                 |", file=sys.stderr)
-    print("===================================================================================", file=sys.stderr)
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "not-optimal",
-        }
-    }
-
+}
 
 DYNAMIC_PREFERENCES = {
     'REGISTRY_MODULE': 'registered_preferences',
-    'ENABLE_CACHE': using_cache,
+    'ENABLE_CACHE': True,
     'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
 }
 
