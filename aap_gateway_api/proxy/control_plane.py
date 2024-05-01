@@ -4,6 +4,7 @@ import time
 import uuid
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
+from ansible_base.lib.utils.encryption import SharedSecretNotFound, generate_hmac_sha256_shared_secret
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError, connections
@@ -65,7 +66,8 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             headers_to_remove.append('Authorization')
 
         response = external_auth_pb2.OkHttpResponse(
-            headers=[
+            headers=self.headers
+            + [
                 HeaderValueOption(header=HeaderValue(key=get_preference_value('proxy', 'gateway_token_name'), value=jwt)),
             ],
             headers_to_remove=headers_to_remove,
@@ -78,7 +80,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         # This endpoint did not require authentication so no logs required
         logger.debug(f"No authentication required for {self.request_id}")
         self._log_process_time()
-        return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse())
+        return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
     def _return_not_authenticated(self):
         logger.info(f"No valid credentials found for user when requesting {self.request_id}.")
@@ -88,10 +90,19 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         # that doesn't require authentication. The final decision on whether or
         # not to accept the request is up to the service.
         self._log_process_time()
-        return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse())
+        return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
     def Check(self, request, context):
         self.start_time = time.time()
+        self.headers = []
+        try:
+            self.headers.append(
+                HeaderValueOption(header=HeaderValue(key='x-trusted-proxy', value=generate_hmac_sha256_shared_secret())),
+            )
+        except SharedSecretNotFound:
+            logger.warning("Unable to set trusted proxy header because shared secret was not set")
+        except Exception:
+            logger.exception("Failed to generate x-trusted-proxy")
 
         self.request_path = request.attributes.request.http.path
         user_request_id = request.attributes.request.http.headers.get('x-request-id', None)
