@@ -31,4 +31,4 @@ for logger in LOGGING["loggers"]:  # noqa: F405
 #   1. we don't have anything that will clear the cache on a per-test basis
 #   2. even if we did, we have tests running in parallel so we would need each thread to have its own cache
 # Neither are insurmountable but we haven't solved it
-DYNAMIC_PREFERENCES['ENABLED_CACHE'] = False  # noqa: F405
+DYNAMIC_PREFERENCES['ENABLE_CACHE'] = False  # noqa: F405

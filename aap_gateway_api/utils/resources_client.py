@@ -41,7 +41,7 @@ class GWResourceAPIClient(DABResourceAPIClient):
         self.header_name = get_preference_value('proxy', 'gateway_token_name')
         self.service = service
         self.raise_if_bad_request = raise_if_bad_request
-        self.verify_https = to_python_boolean(settings.VERIFY_ENVOY_HTTPS_CERTIFICATES)
+        self.verify_https = to_python_boolean(settings.ENVOY_VERIFY_HTTPS_CERTIFICATES)
 
     def refresh_jwt(self):
         # Add a 10 second buffer to the token timeout to account for slower requests.

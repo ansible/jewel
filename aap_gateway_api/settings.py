@@ -10,26 +10,133 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
-import os
 import socket
 import sys
+from os import getenv, path
 from pathlib import Path
 
+from ansible_base.lib import dynamic_config  # noqa: E402
 from ansible_base.lib.utils.validation import to_python_boolean
 from redis.backoff import ConstantBackoff
 from redis.retry import Retry
 from split_settings.tools import include, optional
 
+ALLOWED_HOSTS = ["*"]
+
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
+
+# User our own user model
+AUTH_USER_MODEL = 'aap_gateway_api.User'
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        # Note, the location is not really used but we parse it in the client to get settings like host/port/username/etc.
+        "LOCATION": '',
+        "KEY_PREFIX": 'gateway',
+        "OPTIONS": {
+            "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
+            "CLIENT_CLASS_KWARGS": {
+                "clustered": False,
+                'clustered_hosts': '',
+                'ssl': True,
+                'ssl_keyfile': '/etc/gateway/redis.key',
+                'ssl_certfile': '/etc/gateway/redis.cert',
+                'ssl_cert_reqs': 'required',
+                'ssl_ca_certs': '/etc/gateway/redis_ca.cert',
+                'ssl_check_hostname': False,
+                'retry': Retry(backoff=ConstantBackoff(3), retries=20),
+            },
+        },
+    }
+}
+
+CLUSTER_HOST_ID = socket.gethostname()
+
+# Disallow sending csrf cookies over insecure connections
+CSRF_COOKIE_SECURE = True
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "DATABASE_NAME",
+        "USER": "DATABASE_USER",
+        "PASSWORD": "DATABASE_PASSWORD",
+        "HOST": "DATABASE_HOST",
+        "PORT": 5432,
+    }
+}
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+DYNAMIC_PREFERENCES = {
+    'REGISTRY_MODULE': 'registered_preferences',
+    'ENABLE_CACHE': True,
+    'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
+}
+
+# This is the hostname where the AAP Gateway API can make requests to envoy.
+# This is used to make API HTTP requests from the Gateway to the services that
+# are configured to run behind it for operations like syncing and migration.
+ENVOY_HOSTNAME = "localhost"
+ENVOY_VERIFY_HTTPS_CERTIFICATES = True
+
+# Time in seconds that the gateway access tokens are valid for, can be overridden
+GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
+GATEWAY_CERT_FILE = '/etc/gateway/gateway.crt'
+GATEWAY_KEY_FILE = '/etc/gateway/gateway.key'
+GATEWAY_PATH_REWRITE_SCRIPT_FILE = '/etc/envoy/envoy-path-rewrite.lua'
+
+GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"
+GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10
+GRPC_SERVER_PORT = "50051"
+GRPC_SERVER_PROCESSES = 5
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'dynamic_preferences',
+    'django_extensions',
+    'rest_framework',
+    'aap_gateway_api',
+    'ansible_base.activitystream',
+    'ansible_base.authentication',
+    'ansible_base.rest_filters',
+    'ansible_base.api_documentation',
+    'ansible_base.resource_registry',
+    'ansible_base.rest_pagination',
+    'ansible_base.rbac',
+]
+
+# Internationalization
+LANGUAGE_CODE = 'en-us'
+
+LOG_ROOT = '/var/log/gateway/'
 
 # Logging
 LOGGING = {
@@ -81,33 +188,7 @@ LOGGING = {
     },
 }
 
-
-# Application definition
-
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'dynamic_preferences',
-    'django_extensions',
-    'rest_framework',
-    'aap_gateway_api',
-    'ansible_base.activitystream',
-    'ansible_base.authentication',
-    'ansible_base.rest_filters',
-    'ansible_base.api_documentation',
-    'ansible_base.resource_registry',
-    'ansible_base.rest_pagination',
-    'ansible_base.rbac',
-]
-
-# User our own user model
-AUTH_USER_MODEL = 'aap_gateway_api.User'
-# Set our own Team model
-ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
+LOGIN_URL = '/api/login/'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -120,6 +201,15 @@ MIDDLEWARE = [
     'crum.CurrentRequestUserMiddleware',
 ]
 
+# NEVER remove anything from this list.
+PASSWORD_HASHERS = [
+    "aap_gateway_api.authentication.hashers.OwaspRecommendedArgon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+]
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
@@ -130,11 +220,39 @@ REST_FRAMEWORK = {
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
 
+# Disallow sending session cookies over insecure connections
+SESSION_COOKIE_SECURE = True
+# Seconds before sessions expire.
+# Note: This setting may be overridden by database settings.
+SESSION_COOKIE_AGE = 1800
+SESSION_COOKIE_NAME = 'gateway_sessionid'
+SESSION_ENGINE = "ansible_base.lib.sessions.stores.cached_dynamic_timeout"
+SESSION_COOKIE_HTTPONLY = True
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'AAP gateway API',
+    'DESCRIPTION': 'AAP gateway API',
+    'VERSION': 'v1',
+    'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
+}
+
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = 'static/'
+STATIC_ROOT = '/opt/aap_gateway/static/'
+
+# This is a gateway system account that gets created. If you change this after
+# the account is created, you will need to manually update the username of the
+# account to match.
+#
+# We use an underscore prefix to make it less likely to conflict with a real
+# user.
+SYSTEM_USERNAME = '_system'
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            os.path.join(BASE_DIR, 'aap_gateway_api', 'templates'),
+            path.join(BASE_DIR, 'aap_gateway_api', 'templates'),
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -149,94 +267,95 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'aap_gateway_api.wsgi.application'
-
-# This is a gateway system account that gets created. If you change this after
-# the account is created, you will need to manually update the username of the
-# account to match.
-#
-# We use an underscore prefix to make it less likely to conflict with a real
-# user.
-SYSTEM_USERNAME = '_system'
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DATABASE_NAME"),
-        "USER": os.environ.get("DATABASE_USER"),
-        "PASSWORD": os.environ.get("DATABASE_PASSWORD"),
-        "HOST": os.environ.get("DATABASE_HOST"),
-        "PORT": os.getenv("DATABASE_PORT", 5432),
-    }
-}
-
-
-# Password validation
-# https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
-
-
-# Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
-
-LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
 USE_TZ = True
 
+WSGI_APPLICATION = 'aap_gateway_api.wsgi.application'
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-STATIC_URL = 'static/'
-STATIC_ROOT = os.environ.get('GATEWAY_STATIC_ROOT', '/opt/aap_gateway/static/')
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+# Import the default ANSIBLE_BASE settings, this wants settings like REST_FRAMEWORK to be created
+settings_file = path.join(path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
+include(settings_file)
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# Override the ANSIBLE_BASE settings we want to
+ANSIBLE_BASE_ALLOW_CUSTOM_ROLES = False
+ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = False
+ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
+ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
+ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
+ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_system_auditor'}
+ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
+ANSIBLE_BASE_PRODUCT_NAME = 'AAP gateway'
+ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
+ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
+ANSIBLE_BASE_ROLE_PRECREATE = {}  # managed roles are created in data migrations
+ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
+ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
+ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
+ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
 
-LOGIN_URL = '/api/login/'
+# Pull in dev settings
+include(optional('settings_dev.py'), scope=locals())
 
-LOG_ROOT = '/var/log/gateway/'
+# Next load settings to allow overrides at deployment time !!!!
+# Load settings from the global settings file if specified in the
+# environment, defaulting to /etc/gateway/settings.py.
+include(optional(getenv('GATEWAY_SETTINGS_FILE', '/etc/gateway/settings.py')), scope=locals())
 
-# Disallow sending session cookies over insecure connections
-SESSION_COOKIE_SECURE = True
-# Seconds before sessions expire.
-# Note: This setting may be overridden by database settings.
-SESSION_COOKIE_AGE = 1800
-SESSION_COOKIE_NAME = 'gateway_sessionid'
-SESSION_ENGINE = "ansible_base.lib.sessions.stores.cached_dynamic_timeout"
-SESSION_COOKIE_HTTPONLY = True
 
-# Time in seconds that the gateway access tokens are valid for.
-GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
+# Finally, environment variables always override last
+if getenv("DATABASE_NAME", None) is not None:
+    DATABASES["default"]["NAME"] = getenv("DATABASE_NAME")
+if getenv("DATABASE_USER", None) is not None:
+    DATABASES["default"]["USER"] = getenv("DATABASE_USER")
+if getenv("DATABASE_PASSWORD", None) is not None:
+    DATABASES["default"]["PASSWORD"] = getenv("DATABASE_PASSWORD")
+if getenv("DATABASE_HOST", None) is not None:
+    DATABASES["default"]["HOST"] = getenv("DATABASE_HOST")
+if getenv("DATABASE_PORT", None) is not None:
+    DATABASES["default"]["PORT"] = getenv("DATABASE_PORT")
 
-# Disallow sending csrf cookies over insecure connections
-CSRF_COOKIE_SECURE = True
+if getenv("ENVOY_HOSTNAME", None) is not None:
+    ENVOY_HOSTNAME = getenv("ENVOY_HOSTNAME")
+if getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES", None) is not None:
+    ENVOY_VERIFY_HTTPS_CERTIFICATES = getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES")
 
-CLUSTER_HOST_ID = socket.gethostname()
+if getenv('GATEWAY_STATIC_ROOT', None) is not None:
+    STATIC_ROOT = getenv('GATEWAY_STATIC_ROOT')
+if getenv('GATEWAY_SECRET_KEY_FILE', None) is not None:
+    secret_key_file = getenv('GATEWAY_SECRET_KEY_FILE')
+else:
+    secret_key_file = '/etc/gateway/SECRET_KEY'
+
+if getenv('GATEWAY_CERT_FILE', None) is not None:
+    GATEWAY_CERT_FILE = getenv('GATEWAY_CERT_FILE')
+if getenv('GATEWAY_KEY_FILE', None) is not None:
+    GATEWAY_KEY_FILE = getenv('GATEWAY_KEY_FILE')
+if getenv('GATEWAY_PATH_REWRITE_SCRIPT_FILE', None) is not None:
+    GATEWAY_PATH_REWRITE_SCRIPT_FILE = getenv('GATEWAY_PATH_REWRITE_SCRIPT_FILE')
+
+if getenv('REDIS_URL', None) is not None:
+    CACHES["default"]['LOCATION'] = getenv('REDIS_URL')
+if getenv('CACHE_KEY_PREFIX', None) is not None:
+    CACHES["default"]['KEY_PREFIX'] = getenv('CACHE_KEY_PREFIX')
+if getenv('REDIS_TLS', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl'] = to_python_boolean(getenv('REDIS_TLS'))
+if getenv('REDIS_IS_CLUSTERED', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['clustered'] = to_python_boolean(getenv('REDIS_IS_CLUSTERED'))
+if getenv('REDIS_CLUSTERED_HOST', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['clustered_host'] = getenv('REDIS_CLUSTERED_HOST')
+if getenv('REDIS_KEY_FILE', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_keyfile'] = getenv('REDIS_KEY_FILE')
+if getenv('REDIS_CERT_FILE', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_certfile'] = getenv('REDIS_CERT_FILE')
+if getenv('REDIS_CA_CERT_FILE', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_ca_certs'] = getenv('REDIS_CA_CERT_FILE')
+
 
 # Make this unique, and don't share it with anybody.
-secret_key_file = os.environ.get('GATEWAY_SECRET_KEY_FILE', '/etc/gateway/SECRET_KEY')
 read_key = False
 try:
     with open(secret_key_file, 'rb') as f:
@@ -250,100 +369,3 @@ except Exception as e:
     print(f"Unhandled exception when reading {secret_key_file}, will use default, ({e.__class__}): {e}", file=sys.stderr)
 if not read_key:
     SECRET_KEY = 'django-insecure-aa$p$j(w3+l)77o3d4hb^_qoed!#!$d0g*t1%4a$x7gtrezoio'
-
-GATEWAY_CERT_FILE = os.environ.get('GATEWAY_CERT_FILE', '/etc/gateway/gateway.crt')
-GATEWAY_KEY_FILE = os.environ.get('GATEWAY_KEY_FILE', '/etc/gateway/gateway.key')
-GATEWAY_PATH_REWRITE_SCRIPT_FILE = os.environ.get('GATEWAY_PATH_REWRITE_SCRIPT_FILE', '/etc/envoy/envoy-path-rewrite.lua')
-
-
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        # Note, the location is not really used but we parse it in the client to get settings like host/port/username/etc.
-        "LOCATION": f"{os.environ.get('REDIS_URL')}",
-        "KEY_PREFIX": f"{os.environ.get('CACHE_KEY_PREFIX', 'gateway')}",
-        "OPTIONS": {
-            "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
-            "CLIENT_CLASS_KWARGS": {
-                "clustered": to_python_boolean(os.environ.get('REDIS_IS_CLUSTERED', False)),
-                'clustered_hosts': f"{os.environ.get('REDIS_CLUSTERED_HOSTS', '')}",
-                'ssl': to_python_boolean(os.environ.get('REDIS_TLS', True)),
-                'ssl_keyfile': f"{os.environ.get('REDIS_KEY_FILE', '/etc/gateway/redis.key')}",
-                'ssl_certfile': f"{os.environ.get('REDIS_CERT_FILE', '/etc/gateway/redis.cert')}",
-                'ssl_cert_reqs': 'required',
-                'ssl_ca_certs': f"{os.environ.get('REDIS_CA_CERT_FILE', '/etc/gateway/redis_ca.cert')}",
-                'ssl_check_hostname': False,
-                'retry': Retry(backoff=ConstantBackoff(3), retries=20),
-            },
-        },
-    }
-}
-
-DYNAMIC_PREFERENCES = {
-    'REGISTRY_MODULE': 'registered_preferences',
-    'ENABLE_CACHE': True,
-    'ENABLE_GLOBAL_MODEL_AUTO_REGISTRATION': False,
-}
-
-include(optional('settings_dev.py'), scope=locals())
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'AAP gateway API',
-    'DESCRIPTION': 'AAP gateway API',
-    'VERSION': 'v1',
-    'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
-}
-
-ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
-
-ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
-
-ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
-
-ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
-ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
-
-ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
-ANSIBLE_BASE_PRODUCT_NAME = 'AAP gateway'
-ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
-
-from ansible_base.lib import dynamic_config  # noqa: E402
-
-settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
-include(settings_file)
-
-
-# NEVER remove anything from this list.
-# https://docs.djangoproject.com/en/5.0/topics/auth/passwords/#password-upgrading
-PASSWORD_HASHERS = [
-    "aap_gateway_api.authentication.hashers.OwaspRecommendedArgon2PasswordHasher",
-    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
-    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
-    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
-    "django.contrib.auth.hashers.ScryptPasswordHasher",
-]
-
-GRPC_SERVER_PROCESSES = 5
-GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10
-GRPC_SERVER_PORT = "50051"
-GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"
-
-# This is the hostname where the AAP Gateway API can make requests to envoy.
-# This is used to make API HTTP requests from the Gateway to the services that
-# are configured to run behind it for operations like syncing and migration.
-ENVOY_HOSTNAME = os.environ.get("ENVOY_HOSTNAME", "localhost")
-VERIFY_ENVOY_HTTPS_CERTIFICATES = os.environ.get("VERIFY_ENVOY_HTTPS_CERTIFICATES", True)
-
-# DO THIS LAST!!! To allow overrides at deployment time !!!!
-# Load settings from the global settings file if specified in the
-# environment, defaulting to /etc/gateway/settings.py.
-include(optional(os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/gateway/settings.py')), scope=locals())
-
-ANSIBLE_BASE_ROLE_PRECREATE = {}  # managed roles are created in data migrations
-ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
-ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
-ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = False
-
-ANSIBLE_BASE_ALLOW_CUSTOM_ROLES = False
-ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
-ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_system_auditor'}
