@@ -33,7 +33,7 @@ services:
       - REDIS_TLS={{ redis_uses_tls }}
       - CACHE_KEY_PREFIX={{ cache_key_prefix }}
       - ENVOY_HOSTNAME=proxy
-      - VERIFY_ENVOY_HTTPS_CERTIFICATES=false
+      - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
     links:
       - db
 {% for i in range(redis_node_count|int) %}
