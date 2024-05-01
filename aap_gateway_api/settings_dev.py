@@ -40,3 +40,4 @@ except ImportError as e:
 
 
 LOGGING['loggers']['aap']['level'] = "DEBUG"
+ANSIBLE_BASE_SHARED_SECRET = 'dev_shared_secret'
