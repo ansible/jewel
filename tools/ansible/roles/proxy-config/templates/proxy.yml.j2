@@ -96,3 +96,23 @@ gateway_routes:
     is_service_https: false
     service_path: '/v2/'
     service_port: 5001
+
+  - name: Hub Static Files
+    http_port: API Port
+    service_cluster: hub
+    service_port: 5001
+    is_service_https: false
+    service_path: '/static/galaxy_ng/'
+    gateway_path: '/static/galaxy_ng/'
+    description: ''
+    enable_gateway_auth: true
+
+  - name: Hub UI
+    http_port: API Port
+    service_cluster: 3
+    service_port: 5001
+    is_service_https: false
+    service_path: '/ui/'
+    gateway_path: '/ui/'
+    description: ''
+    enable_gateway_auth: true

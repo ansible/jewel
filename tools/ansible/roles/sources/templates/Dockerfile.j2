@@ -102,13 +102,6 @@ ENV PYTHONPATH=/opt/aap_gateway/src
 {% if not headless | bool %}
 # Pull in the platform-ui, this can change frequently so it should be one of the last things we try and do
 COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
-# Get the standalone hub-ui bits
-RUN curl -L -o /tmp/automation-hub-ui-gateway-dist.tar.gz \
-        https://github.com/ansible/ansible-hub-ui/releases/download/dev-gateway/automation-hub-ui-gateway-dist.tar.gz; \
-        tar tzvf /tmp/automation-hub-ui-gateway-dist.tar.gz; \
-        mkdir -p /opt/aap_gateway/platform_ui/hub; \
-        cd /opt/aap_gateway/platform_ui/hub; \
-        tar xzvf /tmp/automation-hub-ui-gateway-dist.tar.gz
 {% endif %}
 
 USER 1000
