@@ -50,16 +50,16 @@ services:
     volumes:
       - $PWD:/opt/aap_gateway/src:z
       - $PWD/django-ansible-base:/opt/aap_gateway/django-ansible-base:z
-      - $PWD/tools/configs/nginx.conf:/etc/gateway/nginx.conf:z
-      - $PWD/tools/configs/nginx-gateway.conf:/etc/gateway/nginx-gateway.conf:z
-      - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
-      - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
-      - $PWD/tools/configs/uwsgi.ini:/etc/gateway/uwsgi.ini:z
-      - $PWD/tools/configs/settings.py:/etc/gateway/settings.py:z
+      - $PWD/tools/configs/nginx.conf:/etc/ansible-automation-platform/gateway/nginx.conf:z
+      - $PWD/tools/configs/nginx-gateway.conf:/etc/ansible-automation-platform/gateway/nginx-gateway.conf:z
+      - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+      - $PWD/tools/configs/uwsgi.ini:/etc/ansible-automation-platform/gateway/uwsgi.ini:z
+      - $PWD/tools/configs/settings.py:/etc/ansible-automation-platform/gateway/settings.py:z
       - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf:z
-      - $PWD/tools/generated/redis_cluster/redis.cert:/etc/gateway/redis.cert:z
-      - $PWD/tools/generated/redis_cluster/redis.key:/etc/gateway/redis.key:z
-      - $PWD/tools/generated/redis_cluster/ca.cert:/etc/gateway/redis_ca.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/etc/ansible-automation-platform/gateway/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/etc/ansible-automation-platform/gateway/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/etc/ansible-automation-platform/gateway/redis_ca.cert:z
     ulimits:
       nofile:
         soft: 4096
@@ -123,8 +123,8 @@ services:
     volumes:
       - $PWD/tools/generated/envoy.yml:/etc/envoy/envoy.yaml:z
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
-      - $PWD/tools/generated/gateway.crt:/etc/gateway/gateway.crt:z
-      - $PWD/tools/generated/gateway.key:/etc/gateway/gateway.key:z
+      - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
     extra_hosts:
       host-gateway: "host-gateway"
     networks:

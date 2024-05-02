@@ -57,10 +57,10 @@ CACHES = {
                 "clustered": False,
                 'clustered_hosts': '',
                 'ssl': True,
-                'ssl_keyfile': '/etc/gateway/redis.key',
-                'ssl_certfile': '/etc/gateway/redis.cert',
+                'ssl_keyfile': '/etc/ansible-automation-platform/gateway/redis.key',
+                'ssl_certfile': '/etc/ansible-automation-platform/gateway/redis.cert',
                 'ssl_cert_reqs': 'required',
-                'ssl_ca_certs': '/etc/gateway/redis_ca.cert',
+                'ssl_ca_certs': '/etc/ansible-automation-platform/gateway/redis_ca.cert',
                 'ssl_check_hostname': False,
                 'retry': Retry(backoff=ConstantBackoff(3), retries=20),
             },
@@ -104,8 +104,8 @@ ENVOY_VERIFY_HTTPS_CERTIFICATES = True
 
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
-GATEWAY_CERT_FILE = '/etc/gateway/gateway.crt'
-GATEWAY_KEY_FILE = '/etc/gateway/gateway.key'
+GATEWAY_CERT_FILE = '/etc/ansible-automation-platform/gateway/gateway.crt'
+GATEWAY_KEY_FILE = '/etc/ansible-automation-platform/gateway/gateway.key'
 GATEWAY_PATH_REWRITE_SCRIPT_FILE = '/etc/envoy/envoy-path-rewrite.lua'
 
 GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"
@@ -302,8 +302,8 @@ include(optional('settings_dev.py'), scope=locals())
 
 # Next load settings to allow overrides at deployment time !!!!
 # Load settings from the global settings file if specified in the
-# environment, defaulting to /etc/gateway/settings.py.
-include(optional(getenv('GATEWAY_SETTINGS_FILE', '/etc/gateway/settings.py')), scope=locals())
+# environment, defaulting to /etc/ansible-automation-platform/gateway/settings.py.
+include(optional(getenv('GATEWAY_SETTINGS_FILE', '/etc/ansible-automation-platform/gateway/settings.py')), scope=locals())
 
 
 # Finally, environment variables always override last
@@ -328,7 +328,7 @@ if getenv('GATEWAY_STATIC_ROOT', None) is not None:
 if getenv('GATEWAY_SECRET_KEY_FILE', None) is not None:
     secret_key_file = getenv('GATEWAY_SECRET_KEY_FILE')
 else:
-    secret_key_file = '/etc/gateway/SECRET_KEY'
+    secret_key_file = '/etc/ansible-automation-platform/gateway/SECRET_KEY'
 
 if getenv('GATEWAY_CERT_FILE', None) is not None:
     GATEWAY_CERT_FILE = getenv('GATEWAY_CERT_FILE')
