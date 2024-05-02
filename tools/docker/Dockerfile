@@ -60,11 +60,11 @@ COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
 COPY tools/scripts/aap-gateway-manage /usr/bin/aap-gateway-manage
 ADD aap_gateway_api /opt/aap_gateway/aap_gateway/aap_gateway_api/
-COPY tools/configs/nginx.conf /etc/gateway/nginx.conf
-COPY tools/configs/nginx-gateway.conf /etc/gateway/nginx-gateway.conf
-COPY tools/configs/uwsgi.ini /etc/gateway/uwsgi.ini
+COPY tools/configs/nginx.conf /etc/ansible-automation-platform/gateway/nginx.conf
+COPY tools/configs/nginx-gateway.conf /etc/ansible-automation-platform/gateway/nginx-gateway.conf
+COPY tools/configs/uwsgi.ini /etc/ansible-automation-platform/gateway/uwsgi.ini
 COPY tools/configs/supervisord.conf /etc/supervisord.conf
-COPY tools/configs/settings.py /etc/gateway/settings.py
+COPY tools/configs/settings.py /etc/ansible-automation-platform/gateway/settings.py
 
 
 RUN for dir in \
