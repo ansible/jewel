@@ -151,39 +151,38 @@ LOGGING = {
             'level': 'DEBUG',
             'formatter': 'simple',
         },
+        'file': {'class': 'logging.NullHandler', 'formatter': 'simple'},
     },
     'loggers': {
-        'django': {'handlers': ['console']},
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
         'django.request': {
-            'handlers': [
-                'console',
-            ],
+            'handlers': ['console', 'file'],
             'level': 'WARNING',
         },
         "django_auth_ldap": {
-            'handlers': [
-                'console',
-            ],
-            'level': 'INFO',
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
             'propagate': True,
         },
         'rest_framework.request': {
-            'handlers': [
-                'console',
-            ],
+            'handlers': ['console', 'file'],
             'level': 'WARNING',
             'propagate': False,
         },
-        'py.warnings': {'handlers': ['console']},
+        'py.warnings': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
         'aap': {
-            'handlers': [
-                'console',
-            ],
+            'handlers': ['console', 'file'],
             'level': 'WARNING',
         },
         'ansible_base': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
         },
     },
 }
