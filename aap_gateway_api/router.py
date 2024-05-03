@@ -16,10 +16,7 @@ router = AssociationResourceRouter()
 router.register(
     r'users',
     views.UserViewSet,
-    related_views={
-        'teams': (views.TeamViewSet, 'teams'),
-        'organizations': (views.OrganizationViewSet, 'organizations'),
-    },
+    related_views={},
 )
 router.register(
     r'organizations',

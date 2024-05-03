@@ -259,4 +259,6 @@ class UserSerializer(CommonModelSerializer):
     def _get_related(self, obj) -> dict[str, str]:
         ret = super()._get_related(obj)
         ret['authenticators'] = reverse('user-authenticators-list', kwargs={'pk': obj.pk})
+        ret['teams'] = reverse('user-teams-list', kwargs={'pk': obj.pk})
+        ret['organizations'] = reverse('user-organizations-list', kwargs={'pk': obj.pk})
         return ret
