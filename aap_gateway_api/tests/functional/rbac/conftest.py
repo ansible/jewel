@@ -50,6 +50,26 @@ def mk_user(username, password='password', is_superuser=False, first_name='', la
 
 
 @pytest.fixture
+def authenticator_local(randname):
+    return Authenticator.objects.create(
+        name=randname("Local Authenticator"), type='ansible_base.authentication.authenticator_plugins.local', enabled=True, configuration={}
+    )
+
+
+@pytest.fixture
+def authenticator_map(authenticator_local, randname):
+    return AuthenticatorMap.objects.create(
+        name=randname("Authenticator Map for Organization"),
+        authenticator=authenticator_local,
+        revoke=False,
+        map_type='organization',
+        organization=randname("Organization"),
+        triggers=dict(always={}, never={}),
+        order=1,
+    )
+
+
+@pytest.fixture
 def organizations():
     """There are 6 organizations"""
     orgs = []
@@ -93,29 +113,47 @@ def users(organizations, teams):
 
     users[None] = []
     for k in range(2):
-        users[None].append(f"User without membership {k}")
+        users[None].append(mk_user(f"User without membership {k}"))
 
     return users
 
 
-@pytest.fixture
-def authenticator_local(randname):
-    return Authenticator.objects.create(
-        name=randname("Local Authenticator"), type='ansible_base.authentication.authenticator_plugins.local', enabled=True, configuration={}
-    )
+def associate_users(users, teams, organizations):
+    """Making memberships:
+    Each Team has:
+    - 1 Team Member
+    - 1 Team Admin
+    - 1 Team Member+Admin
+    Each Org has:
+    - 1 Org Member
+    - 1 Org Admin
+    - 1 Org Member+Admin
+    """
+    for org in organizations:
+        for org_team in teams[org]:
+            for i, team_user in enumerate(users[org_team], 1):
+                if i == 1:
+                    # Add Team Member
+                    org_team.users.add(team_user)
+                elif i == 2:
+                    # Add Team Admin
+                    org_team.admins.add(team_user)
+                elif i == 3:
+                    # Add Team Member+Admin
+                    org_team.users.add(team_user)
+                    org_team.admins.add(team_user)
 
-
-@pytest.fixture
-def authenticator_map(authenticator_local, randname):
-    return AuthenticatorMap.objects.create(
-        name=randname("Authenticator Map for Organization"),
-        authenticator=authenticator_local,
-        revoke=False,
-        map_type='organization',
-        organization=randname("Organization"),
-        triggers=dict(always={}, never={}),
-        order=1,
-    )
+        for i, org_user in enumerate(users[org], 1):
+            if i == 1:
+                # Add Org Member
+                org.users.add(org_user)
+            elif i == 2:
+                # Add Org Admin
+                org.admins.add(org_user)
+            elif i == 3:
+                # Add Org Member+Admin
+                org.users.add(org_user)
+                org.admins.add(org_user)
 
 
 def api_get_and_assert(url, api_client, expected_objects, order_by="name"):
