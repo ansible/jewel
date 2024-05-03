@@ -1,7 +1,20 @@
 import pytest
+from ansible_base.authentication.models import Authenticator, AuthenticatorMap
 from ansible_base.rbac.models import RoleDefinition
 
 from aap_gateway_api.models import Organization, Team, User
+
+
+@pytest.mark.parametrize('user_type', ['unauthenticated', 'user', 'system_auditor', 'superuser'])
+class TestPermissionsBase:
+    @pytest.fixture(scope="function", autouse=True)
+    def init_api_client(self, user_type, unauthenticated_api_client, user_api_client, user):
+        if user_type in ['system_auditor', 'superuser']:
+            user.is_system_auditor = user_type == 'system_auditor'
+            user.is_superuser = user_type == 'superuser'
+            user.save()
+
+        self.api_client = unauthenticated_api_client if user_type == 'unauthenticated' else user_api_client
 
 
 @pytest.fixture
@@ -83,6 +96,26 @@ def users(organizations, teams):
         users[None].append(f"User without membership {k}")
 
     return users
+
+
+@pytest.fixture
+def authenticator_local(randname):
+    return Authenticator.objects.create(
+        name=randname("Local Authenticator"), type='ansible_base.authentication.authenticator_plugins.local', enabled=True, configuration={}
+    )
+
+
+@pytest.fixture
+def authenticator_map(authenticator_local, randname):
+    return AuthenticatorMap.objects.create(
+        name=randname("Authenticator Map for Organization"),
+        authenticator=authenticator_local,
+        revoke=False,
+        map_type='organization',
+        organization=randname("Organization"),
+        triggers=dict(always={}, never={}),
+        order=1,
+    )
 
 
 def api_get_and_assert(url, api_client, expected_objects, order_by="name"):
