@@ -24,6 +24,8 @@ urlpatterns = [
     path('api/gateway/v1/jwt_key/', views.JWTKeyView.as_view(), name='jwt-key-view'),
     path('api/gateway/v1/ping/', views.PingView.as_view(), name='ping-view'),
     path('api/gateway/v1/status/', views.StatusView.as_view(), name='status-view'),
+    re_path('api/gateway/v1/users/(?P<pk>[0-9]+)/teams/', views.UserTeamViewSet.as_view({'get': 'list'}), name='user-teams-list'),
+    re_path('api/gateway/v1/users/(?P<pk>[0-9]+)/organizations/', views.UserOrganizationViewSet.as_view({'get': 'list'}), name='user-organizations-list'),
     path(
         'api/gateway/v1/login/',
         views.LoggedLoginView.as_view(template_name='rest_framework/login.html', extra_context={'inside_login_context': True}),
