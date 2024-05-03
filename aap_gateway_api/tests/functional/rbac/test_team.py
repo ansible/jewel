@@ -123,8 +123,21 @@ def test_team_detail_modify_members(user_api_client, user, organization, team, a
     assert response.status_code == 200
 
 
+def test_team_update_no_roles_permissions(user_api_client, user, teams, organizations, org_member_rd):  # noqa: F811
+    """Basic user can't update any team"""
+    for org, org_teams in teams.items():
+        # user needs to have view permission to organization in order to PUT
+        for org_team in org_teams:
+            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            changed_data = {"name": f"{org_team.name}-Changed", "description": "This is a testing team"}
+
+            response = user_api_client.put(url, data=changed_data)
+
+            assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+
+
 @pytest.mark.parametrize("method", ["put", "patch"])
-def test_team_update_permissions(user_api_client, user, teams, organizations, method, org_member_rd):  # noqa: F811
+def test_team_update_with_roles_permissions(user_api_client, user, teams, organizations, method, org_member_rd):  # noqa: F811
     """
     Team can be updated by:
     - Superuser (other tests)
@@ -139,35 +152,59 @@ def test_team_update_permissions(user_api_client, user, teams, organizations, me
     - Admin of Team's Organization
 
     """
-    user_api_call = getattr(user_api_client, method)
-
+    associate_logged_user(teams, organizations, user)
     visible_teams = _visible_teams(teams, organizations)
     changeable_teams = _editable_teams(teams, organizations)
 
-    # Change non-FK fields
-    for status in ['disassociated', 'associated']:
-        for org, org_teams in teams.items():
-            # user needs to have view permission to organization in order to PUT
-            for org_team in org_teams:
-                url = reverse("team-detail", kwargs={"pk": org_team.pk})
+    user_api_call = getattr(user_api_client, method)
 
-                changed_data = {"name": f"{org_team.name}-Changed", "description": "This is a testing team"}
+    for org, org_teams in teams.items():
+        # user needs to have view permission to organization in order to PUT
+        for org_team in org_teams:
+            url = reverse("team-detail", kwargs={"pk": org_team.pk})
 
-                response = user_api_call(url, data=changed_data)
+            changed_data = {"name": f"{org_team.name}-Changed", "description": "This is a testing team"}
 
-                if status == 'disassociated':
-                    assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
-                else:
-                    if org_team in changeable_teams:
-                        assert response.status_code == 200, f"Team {org_team.name} should be updatable, data:\n{response.data}"
-                        assert response.data["name"] == changed_data["name"]
-                        assert response.data["description"] == changed_data["description"]
-                    elif org_team in visible_teams:  # and not in changeable_teams
-                        assert response.status_code == 403, f"Update of Team {org_team.name} should be forbidden"
-                    else:
-                        assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+            response = user_api_call(url, data=changed_data)
 
-        associate_logged_user(teams, organizations, user)
+            if org_team in changeable_teams:
+                assert response.status_code == 200, f"Team {org_team.name} should be updatable, data:\n{response.data}"
+                assert response.data["name"] == changed_data["name"]
+                assert response.data["description"] == changed_data["description"]
+            elif org_team in visible_teams:  # and not in changeable_teams
+                assert response.status_code == 403, f"Update of Team {org_team.name} should be forbidden"
+            else:
+                assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+
+
+def test_team_delete_no_roles_permissions(user_api_client, user, teams, organizations):
+    """Basic user can't delete any team"""
+    for org, org_teams in teams.items():
+        for org_team in org_teams:
+            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            response = user_api_client.delete(url)
+
+            assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+
+
+@pytest.mark.django_db
+def test_team_delete_with_roles_permissions(user_api_client, user, teams, organizations):
+    """Deleting teams has the same rules as updating"""
+    associate_logged_user(teams, organizations, user)
+    visible_teams = _visible_teams(teams, organizations)
+    deletable_teams = _editable_teams(teams, organizations)
+
+    for org, org_teams in teams.items():
+        for org_team in org_teams:
+            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            response = user_api_client.delete(url)
+
+            if org_team in deletable_teams:
+                assert response.status_code == 204, f"Team {org_team.name} should be deletable"
+            elif org_team in visible_teams:
+                assert response.status_code == 403, f"Team {org_team.name} shouldn't be deletable"
+            else:
+                assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
 
 
 @pytest.mark.django_db

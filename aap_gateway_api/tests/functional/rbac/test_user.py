@@ -1,159 +1,591 @@
+import contextlib
+from abc import abstractmethod
+
 import pytest
 from django.urls import reverse
 
 from aap_gateway_api.models.user import User
+from aap_gateway_api.tests.functional.rbac.conftest import associate_users
 
 
-def _test_user_no_membership_permissions(user_api_client, user, users, teams, organizations):
-    url = reverse("user-list")
-    response = user_api_client.get(url)
-    assert response.status_code == 200
-    assert response.data['count'] == 1
-    assert response.data['results'][0]['id'] == user.id
+class TestUserPermissionsBase:
+    ROLE_NAME = "---"
 
+    @pytest.fixture(scope="function", autouse=True)
+    def init_db(self, users, teams, organizations):
+        associate_users(users, teams, organizations)
 
-def _test_user_team_member_permissions(user_api_client, user, users, teams, organizations):
-    """User is Team Member of # Team 1 (Org 1), # Team 3 (Org 2)"""
-    teams[organizations[0]][0].users.add(user)  # Team 1 (Org 1)
-    teams[organizations[1]][0].users.add(user)  # Team 3 (Org 2)
+    def _test_permissions(self, user_api_client, user, users, teams, organizations):
+        self._test_list(user_api_client, user, users, teams, organizations)
+        self._test_detail(user_api_client, user, users, teams, organizations)
+        self._test_create(user_api_client, user, users, teams, organizations)
+        self._test_update(user_api_client, user, users, teams, organizations)
+        self._test_delete(user_api_client, user, users, teams, organizations)
 
-    url = reverse("user-list")
-    response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
-    assert response.status_code == 200
+    @abstractmethod
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        pass
 
-    visible_users = _get_visible_users_by_name(response.data['results'])
-    #
-    # User doesn't see other team members
-    #
-    expected_users = _get_expected_users_by_name(user, [])
-    assert set(visible_users) == set(expected_users)
+    @abstractmethod
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        pass
 
-    teams[organizations[0]][0].users.remove(user)  # Team 1 (Org 1)
-    teams[organizations[1]][0].users.remove(user)  # Team 3 (Org 2)
+    @abstractmethod
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        pass
 
+    @abstractmethod
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        pass
 
-def _test_user_team_admin_permissions(user_api_client, user, users, teams, organizations):
-    """
-    User is Team Admin of Team 1 (Org 1), Team 3 (Org 2)
-    User is Team Member of Team 4 (Org 2), Team 5 (Org 3) (should have no effect)
-    """
-    teams[organizations[0]][0].admins.add(user)  # Team 1 (Org 1)
-    teams[organizations[1]][0].admins.add(user)  # Team 3 (Org 2)
-    teams[organizations[1]][1].users.add(user)  # Team 4 (Org 2)
-    teams[organizations[2]][0].users.add(user)  # Team 5 (Org 3)
+    @abstractmethod
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        pass
 
-    url = reverse("user-list")
-    response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
-    assert response.status_code == 200
+    def _test_detail_see_all(self, user_api_client, users, teams, organizations):
+        # Some random users
+        accessed_users = users[organizations[0]] + [users[organizations[1]][0]] + [users[teams[organizations[0]][0]][0]]
+        for accessed_user in accessed_users:
+            url = reverse("user-detail", kwargs={"pk": accessed_user.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 200, f"{self.ROLE_NAME} should see {accessed_user}"
 
-    visible_usernames = _get_visible_users_by_name(response.data['results'])
-    #
-    # User doesn't see other team members
-    #
-    expected_usernames = _get_expected_users_by_name(user, [])
-    assert set(visible_usernames) == set(expected_usernames)
+    def _test_create_one(self, user_api_client, status_code, superuser=False):
+        url = reverse("user-list")
+        data = {
+            "username": "new-testing-user",
+            "password": "password",
+            "email": "testmail@localhost",
+            "first_name": "",
+            "last_name": "",
+            "is_superuser": superuser,
+        }
+        response = user_api_client.post(url, data)
+        assert response.status_code == status_code, f"{self.ROLE_NAME} should POST with status code {status_code}"
 
-    teams[organizations[0]][0].admins.remove(user)  # Team 1 (Org 1)
-    teams[organizations[1]][0].admins.remove(user)  # Team 3 (Org 2)
-    teams[organizations[1]][1].users.remove(user)  # Team 4 (Org 2)
-    teams[organizations[2]][0].users.remove(user)  # Team 5 (Org 3)
+        if status_code == 201:
+            user = User.objects.get(username=data["username"])
+            user.delete()
 
+    def _test_update_one(self, user_api_client, target_user, status_code):
+        url = reverse("user-detail", kwargs={"pk": target_user.pk})
+        data = {"password": "new_password"}
 
-def _test_user_org_member_permissions(user_api_client, user, users, teams, organizations):
-    organizations[0].users.add(user)  # Org 1
-    organizations[1].users.add(user)  # Org 2
+        response = user_api_client.patch(url, data)
+        assert response.status_code == status_code, f"{self.ROLE_NAME} should PATCH with status code {status_code} | {response.data}"
 
-    url = reverse("user-list")
-    response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
-    assert response.status_code == 200
+    def _test_delete_one(self, user_api_client, target_user, status_code):
+        url = reverse("user-detail", kwargs={"pk": target_user.pk})
 
-    visible_usernames = _get_visible_users_by_name(response.data['results'])
-    #
-    # Org Member sees other Org Members in the same org
-    #
-    expected_orgs = [organizations[0], organizations[1]]
-    expected_users = []
-    for org in expected_orgs:
-        expected_users.extend(users[org])
-
-    expected_usernames = _get_expected_users_by_name(user, expected_users)
-    assert set(visible_usernames) == set(expected_usernames)
-
-    organizations[0].users.remove(user)  # Org 1
-    organizations[1].users.remove(user)  # Org 2
-
-
-def _test_user_org_admin_permissions(user_api_client, user, users, teams, organizations):
-    """
-    User is Org Admin of Org 1
-    """
-    organizations[0].admins.add(user)  # Org 1
-
-    url = reverse("user-list")
-    response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
-    assert response.status_code == 200
-    #
-    # Org Admin sees all users
-    #
-    cnt = User.objects.count()
-    assert response.data['count'] == cnt
-
-    organizations[0].admins.remove(user)  # Org 1
-
-
-def _test_user_system_auditor_permissions(user_api_client, user, users, teams, organizations):
-    user.is_system_auditor = True
-    user.save()
-
-    url = reverse("user-list")
-    response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
-    assert response.status_code == 200
-
-    #
-    # System Auditor sees all users
-    #
-    cnt = User.objects.count()
-    assert response.data['count'] == cnt
-
-    user.is_system_auditor = False
-    user.save()
-
-
-def _test_user_superuser_permissions(user_api_client, user, users, teams, organizations):
-    user.is_superuser = True
-    user.save()
-
-    url = reverse("user-list")
-    response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
-    assert response.status_code == 200
-
-    #
-    # Superuser sees all users
-    #
-    cnt = User.objects.count()
-    assert response.data['count'] == cnt
-
-    user.is_superuser = False
-    user.save()
+        response = user_api_client.delete(url)
+        assert response.status_code == status_code, f"{self.ROLE_NAME} should DELETE with status code {status_code}"
 
 
 @pytest.mark.django_db
-def test_user_list_permissions(user_api_client, user, users, teams, organizations):  # noqa: F811
-    _test_user_no_membership_permissions(user_api_client, user, users, teams, organizations)
+class TestUserUnauthenticatedPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Unauthenticated"
 
-    # Because django db doesn't support fixtures with scope='module'
-    # It's better to do everything in 1 test
+    def test_permissions(self, unauthenticated_api_client, user, users, teams, organizations):
+        self._test_permissions(unauthenticated_api_client, user, users, teams, organizations)
 
-    associate_users(users, teams, organizations)
+    def _test_list(self, unauthenticated_api_client, user, users, teams, organizations):
+        """Unauthenticated user can't list"""
+        url = reverse("user-list")
+        response = unauthenticated_api_client.get(url)
+        assert response.status_code == 401
 
-    _test_user_team_member_permissions(user_api_client, user, users, teams, organizations)
-    _test_user_team_admin_permissions(user_api_client, user, users, teams, organizations)
-    _test_user_org_member_permissions(user_api_client, user, users, teams, organizations)
-    _test_user_org_admin_permissions(user_api_client, user, users, teams, organizations)
-    _test_user_system_auditor_permissions(user_api_client, user, users, teams, organizations)
-    _test_user_superuser_permissions(user_api_client, user, users, teams, organizations)
+    def _test_detail(self, unauthenticated_api_client, user, users, teams, organizations):
+        """Unauthenticated can't see user detail"""
+        url = reverse("user-detail", kwargs={"pk": user.pk})
+        response = unauthenticated_api_client.get(url)
+        assert response.status_code == 401
+
+    def _test_create(self, unauthenticated_api_client, user, users, teams, organizations):
+        """Unauthenticated user can't create user"""
+        self._test_create_one(unauthenticated_api_client, status_code=401)
+
+    def _test_update(self, unauthenticated_api_client, user, users, teams, organizations):
+        """Unauthenticated user can't update any user"""
+        org = organizations[0]
+        self._test_update_one(unauthenticated_api_client, users[org][0], status_code=401)
+
+    def _test_delete(self, unauthenticated_api_client, user, users, teams, organizations):
+        """Unauthenticated user can't delete any user"""
+        org = organizations[0]
+        self._test_delete_one(unauthenticated_api_client, users[org][0], status_code=401)
 
 
+@pytest.mark.django_db
+class TestUserNoRolePermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Basic user"
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """Basic user sees self and superusers"""
+        url = reverse("user-list")
+        response = user_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data['count'] == 1
+        assert response.data['results'][0]['id'] == user.id
+
+        another_user = users[None][0]
+        another_user.is_superuser = True
+        another_user.save()
+        response = user_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data['count'] == 2
+        another_user.is_superuser = False
+        another_user.save()
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        """Basic user sees self and superusers"""
+        url = reverse("user-detail", kwargs={"pk": user.pk})
+        response = user_api_client.get(url)
+        assert response.status_code == 200
+
+        another_user = users[None][1]
+        url = reverse("user-detail", kwargs={"pk": another_user.pk})
+        response = user_api_client.get(url)
+        assert response.status_code == 404
+
+        another_user.is_superuser = True
+        another_user.save()
+        response = user_api_client.get(url)
+        assert response.status_code == 200
+        another_user.is_superuser = False
+        another_user.save()
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        """Basic user can't create user"""
+        self._test_create_one(user_api_client, status_code=403)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """Basic user can't update any other user, but can update self"""
+        org = organizations[0]
+        for org_member in users[org]:
+            self._test_update_one(user_api_client, org_member, status_code=404)
+
+        self._test_update_one(user_api_client, user, status_code=200)
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """Basic user can't delete any user"""
+        org = organizations[0]
+        for org_member in users[org]:
+            self._test_delete_one(user_api_client, org_member, status_code=401)
+
+        self._test_delete_one(user_api_client, user, status_code=401)
+
+
+@pytest.mark.django_db
+class TestUserTeamMemberPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Team Member"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def team_member_scope(organizations, teams, user):
+        """User is Team Member of Team 1 (Org 1), Team 3 (Org 2)"""
+        try:
+            teams[organizations[0]][0].users.add(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].users.add(user)  # Team 3 (Org 2)
+            yield
+        finally:
+            teams[organizations[0]][0].users.remove(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].users.remove(user)  # Team 3 (Org 2)
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        with self.team_member_scope(organizations, teams, user):
+            self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """Team Member doesn't see other team members"""
+        url = reverse("user-list")
+        response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+        assert response.status_code == 200
+
+        visible_users = _get_visible_users_by_name(response.data['results'])
+        expected_users = _get_expected_users_by_name(user, [])
+        assert set(visible_users) == set(expected_users)
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        """Team Member doesn't see other users from the same team"""
+        same_team = teams[organizations[0]][0]
+        for team_member in users[same_team]:
+            url = reverse("user-detail", kwargs={"pk": team_member.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 404
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        """Team Member can't create user"""
+        self._test_create_one(user_api_client, status_code=403)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """Team Member can't update any other user"""
+        same_team = teams[organizations[0]][0]
+        for team_member in users[same_team]:
+            self._test_update_one(user_api_client, team_member, status_code=404)
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """Team Member can't delete any other user"""
+        same_team = teams[organizations[0]][0]
+        for team_member in users[same_team]:
+            self._test_delete_one(user_api_client, team_member, status_code=404)
+
+
+@pytest.mark.django_db
+class TestUserTeamAdminPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Team Admin"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def team_admin_scope(organizations, teams, user):
+        """
+        User is Team Admin of Team 1 (Org 1), Team 3 (Org 2)
+        User is Team Member of Team 4 (Org 2), Team 5 (Org 3) (should have no effect)
+        """
+        try:
+            teams[organizations[0]][0].admins.add(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].admins.add(user)  # Team 3 (Org 2)
+            teams[organizations[1]][1].users.add(user)  # Team 4 (Org 2)
+            teams[organizations[2]][0].users.add(user)  # Team 5 (Org 3)
+            yield
+        finally:
+            teams[organizations[0]][0].admins.remove(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].admins.remove(user)  # Team 3 (Org 2)
+            teams[organizations[1]][1].users.remove(user)  # Team 4 (Org 2)
+            teams[organizations[2]][0].users.remove(user)  # Team 5 (Org 3)
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        with self.team_admin_scope(organizations, teams, user):
+            self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """Team Admin doesn't see other users"""
+        url = reverse("user-list")
+        response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+        assert response.status_code == 200
+
+        visible_usernames = _get_visible_users_by_name(response.data['results'])
+        expected_usernames = _get_expected_users_by_name(user, [])
+        assert set(visible_usernames) == set(expected_usernames)
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        """Team Admin doesn't see other users from the same team"""
+        same_team = teams[organizations[0]][0]
+        for team_member in users[same_team]:
+            url = reverse("user-detail", kwargs={"pk": team_member.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 404
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        """Team Admin can't create user"""
+        self._test_create_one(user_api_client, status_code=403)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """Team Admin can't update any other user"""
+        same_team = teams[organizations[0]][0]
+        for team_member in users[same_team]:
+            self._test_update_one(user_api_client, team_member, status_code=404)
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """Team Admin can't delete any other user"""
+        same_team = teams[organizations[0]][0]
+        for team_member in users[same_team]:
+            self._test_delete_one(user_api_client, team_member, status_code=404)
+
+
+@pytest.mark.django_db
+class TestUserOrgMemberPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Org Member"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def org_member_scope(organizations, user):
+        """User is Org Member of Org 1, Org 2"""
+        try:
+            organizations[0].users.add(user)  # Org 1
+            organizations[1].users.add(user)  # Org 2
+            yield
+        finally:
+            organizations[0].users.remove(user)  # Org 1
+            organizations[1].users.remove(user)  # Org 2
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        with self.org_member_scope(organizations, user):
+            self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """Org Member sees other Org Members in the same org"""
+        url = reverse("user-list")
+        response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+        assert response.status_code == 200
+
+        visible_usernames = _get_visible_users_by_name(response.data['results'])
+
+        expected_orgs = [organizations[0], organizations[1]]
+        expected_users = []
+        for org in expected_orgs:
+            expected_users.extend(users[org])
+
+        expected_usernames = _get_expected_users_by_name(user, expected_users)
+        assert set(visible_usernames) == set(expected_usernames)
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        """Org Member does see other users from the same org"""
+        same_org, different_org = organizations[0], organizations[5]
+
+        for same_org_member in users[same_org]:
+            url = reverse("user-detail", kwargs={"pk": same_org_member.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 200, same_org_member
+
+        for different_org_member in users[different_org]:
+            url = reverse("user-detail", kwargs={"pk": different_org_member.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 404, different_org_member
+
+        # Team members of the same organization, who ARE NOT Org Members are not visible
+        org_team_member = users[teams[organizations[0]][0]][0]
+        url = reverse("user-detail", kwargs={"pk": org_team_member.pk})
+        response = user_api_client.get(url)
+        assert response.status_code == 404, org_team_member
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        self._test_create_one(user_api_client, status_code=403)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """Org Member can't update any other user"""
+        same_org, different_org = organizations[0], organizations[5]
+
+        # Org Member see member of the same org, but can't update
+        self._test_update_one(user_api_client, users[same_org][0], status_code=403)
+        # Org Member doesn't see member of different org, thus 404
+        self._test_update_one(user_api_client, users[different_org][0], status_code=404)
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """Org Member can't delete any other user"""
+        same_org, different_org = organizations[0], organizations[5]
+
+        # Org Member see member of the same org, but can't delete
+        self._test_delete_one(user_api_client, users[same_org][0], status_code=403)
+        # Org Member doesn't see member of different org, thus 404
+        self._test_delete_one(user_api_client, users[different_org][0], status_code=404)
+
+
+@pytest.mark.django_db
+class TestUserOrgAdminPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Org Admin"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def org_admin_scope(organizations, user):
+        """User is Org Admin of Org 1"""
+        try:
+            organizations[0].admins.add(user)  # Org 1
+            yield
+        finally:
+            organizations[0].admins.remove(user)  # Org 1
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        with self.org_admin_scope(organizations, user):
+            self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """Org Admin sees all users"""
+        url = reverse("user-list")
+        response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+        assert response.status_code == 200
+
+        cnt = User.objects.count()
+        assert response.data['count'] == cnt
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        """Org Admin sees all users"""
+        self._test_detail_see_all(user_api_client, users, teams, organizations)
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        """Org Admin can create user"""
+        self._test_create_one(user_api_client, status_code=201)
+
+        # Org Admin can't create superuser
+        self._test_create_one(user_api_client, superuser=True, status_code=403)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """Org Admin can update users from the same org (if they are not superusers)"""
+        same_org, different_org = organizations[0], organizations[5]
+        team_in_same_org = teams[same_org][0]
+
+        # Org Admin can update Org Member of the same org
+        self._test_update_one(user_api_client, users[same_org][0], status_code=200)
+
+        # Org Admin can update Org Admin of the same org
+        self._test_update_one(user_api_client, users[same_org][1], status_code=200)
+
+        # Org Admin can't update Team Members of org's team, if they are not Org Members in the same time
+        self._test_update_one(user_api_client, users[team_in_same_org][0], status_code=403)
+
+        # Org Admin can't update Org Member of different org
+        self._test_update_one(user_api_client, users[different_org][0], status_code=403)
+
+        # When Org Member became also Org Member of different org, Org Admin can't update
+        different_org.users.add(users[same_org][0])
+        self._test_update_one(user_api_client, users[same_org][0], status_code=403)
+        different_org.users.remove(users[same_org][0])
+
+        # Org Admin can't update superuser even if it's member of the same org
+        users[same_org][1].is_superuser = True
+        users[same_org][1].save()
+        self._test_update_one(user_api_client, users[same_org][1], status_code=403)
+        users[same_org][1].is_superuser = False
+        users[same_org][1].save()
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """Org Admin can delete users from the same org (if they are not superusers)"""
+        same_org, different_org = organizations[0], organizations[5]
+        team_in_same_org = teams[same_org][0]
+
+        # Org Admin can delete Org Member of the same org
+        self._test_delete_one(user_api_client, users[same_org][0], status_code=204)
+
+        # Org Admin can delete Org Admin of the same org
+        self._test_delete_one(user_api_client, users[same_org][1], status_code=204)
+
+        # Org Admin can't delete Team Members of org's team, if they are not Org Members in the same time
+        self._test_delete_one(user_api_client, users[team_in_same_org][0], status_code=403)
+
+        # Org Admin can't delete Org Member of different org
+        self._test_delete_one(user_api_client, users[different_org][0], status_code=403)
+
+        # When Org Member became also Org Member of different org, Org Admin can't delete
+        different_org.users.add(users[same_org][2])
+        self._test_delete_one(user_api_client, users[same_org][2], status_code=403)
+        different_org.users.remove(users[same_org][2])
+
+        # Org Admin can't delete superuser even if it's member of the same org
+        users[same_org][2].is_superuser = True
+        users[same_org][2].save()
+        self._test_delete_one(user_api_client, users[same_org][2], status_code=403)
+        users[same_org][2].is_superuser = False
+        users[same_org][2].save()
+
+
+@pytest.mark.django_db
+class TestUserSystemAuditorPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "System Auditor"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def system_auditor_scope(user):
+        try:
+            user.is_system_auditor = True
+            user.save()
+            yield
+        finally:
+            user.is_system_auditor = False
+            user.save()
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        with self.system_auditor_scope(user):
+            self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """System Auditor sees all users"""
+        url = reverse("user-list")
+        response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+        assert response.status_code == 200
+
+        cnt = User.objects.count()
+        assert response.data['count'] == cnt
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        """System Auditor sees all users"""
+        self._test_detail_see_all(user_api_client, users, teams, organizations)
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        """System Auditor can't create user"""
+        self._test_create_one(user_api_client, status_code=403)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """System Auditor can't update any other user"""
+        tested_users = [users[organizations[0]][0], users[teams[organizations[1]][1]][1]]
+
+        for tested_user in tested_users:
+            self._test_update_one(user_api_client, tested_user, status_code=403)
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """System Auditor can't delete any other user"""
+        tested_users = [users[organizations[3]][0], users[teams[organizations[4]][1]][1]]
+
+        for tested_user in tested_users:
+            self._test_delete_one(user_api_client, tested_user, status_code=403)
+
+
+@pytest.mark.django_db
+class TestUserSuperuserPermissions(TestUserPermissionsBase):
+    ROLE_NAME = "Superuser"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def superuser_scope(user):
+        try:
+            user.is_superuser = True
+            user.save()
+            yield
+        finally:
+            user.is_superuser = False
+            user.save()
+
+    def test_permissions(self, user_api_client, user, users, teams, organizations):
+        with self.superuser_scope(user):
+            self._test_permissions(user_api_client, user, users, teams, organizations)
+
+    def _test_list(self, user_api_client, user, users, teams, organizations):
+        """Superuser sees all users"""
+        url = reverse("user-list")
+        response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+        assert response.status_code == 200
+
+        cnt = User.objects.count()
+        assert response.data['count'] == cnt
+
+    def _test_detail(self, user_api_client, user, users, teams, organizations):
+        self._test_detail_see_all(user_api_client, users, teams, organizations)
+
+    def _test_create(self, user_api_client, user, users, teams, organizations):
+        self._test_create_one(user_api_client, status_code=201)
+        self._test_create_one(user_api_client, superuser=True, status_code=201)
+
+    def _test_update(self, user_api_client, user, users, teams, organizations):
+        """Superuser can update any other user even with no memberships"""
+        tested_users = [users[organizations[0]][0], users[teams[organizations[1]][1]][1], users[None][0]]
+
+        for tested_user in tested_users:
+            self._test_update_one(user_api_client, tested_user, status_code=200)
+
+        # Superuser can update other superuser
+        users[None][0].is_superuser = True
+        users[None][0].save()
+        self._test_update_one(user_api_client, users[None][0], status_code=200)
+        users[None][0].is_superuser = False
+        users[None][0].save()
+
+    def _test_delete(self, user_api_client, user, users, teams, organizations):
+        """Superuser can delete any other user even with no memberships"""
+        tested_users = [users[organizations[3]][0], users[teams[organizations[4]][1]][1], users[None][0]]
+
+        for tested_user in tested_users:
+            self._test_delete_one(user_api_client, tested_user, status_code=204)
+
+        # Superuser can delete other superuser
+        users[None][0].is_superuser = True
+        users[None][0].save()
+        self._test_delete_one(user_api_client, users[None][0], status_code=204)
+        users[None][0].is_superuser = False
+        users[None][0].save()
+
+
+@pytest.mark.django_db
 class TestRelatedUserListView:
     def _initial_check(self, url, user_api_client, count=0):
         response = user_api_client.get(url)
@@ -313,41 +745,3 @@ def _get_expected_users_by_name(request_user, data):
     expected_users.append(request_user.username)
 
     return expected_users
-
-
-def associate_users(users, teams, organizations):
-    """Making memberships:
-    Each Team has:
-    - 1 Team Member
-    - 1 Team Admin
-    - 1 Team Member+Admin
-    Each Org has:
-    - 1 Org Member
-    - 1 Org Admin
-    - 1 Org Member+Admin
-    """
-    for org in organizations:
-        for org_team in teams[org]:
-            for i, team_user in enumerate(users[org_team], 1):
-                if i == 1:
-                    # Add Team Member
-                    org_team.users.add(team_user)
-                elif i == 2:
-                    # Add Team Admin
-                    org_team.admins.add(team_user)
-                elif i == 3:
-                    # Add Team Member+Admin
-                    org_team.users.add(team_user)
-                    org_team.admins.add(team_user)
-
-        for i, org_user in enumerate(users[org], 1):
-            if i == 1:
-                # Add Org Member
-                org.users.add(org_user)
-            elif i == 2:
-                # Add Org Admin
-                org.admins.add(org_user)
-            elif i == 3:
-                # Add Org Member+Admin
-                org.users.add(org_user)
-                org.admins.add(org_user)
