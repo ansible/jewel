@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 
@@ -22,9 +23,10 @@ class LoggedLoginView(views.LoginView):
         try:
             DefaultContentNegotiation().select_renderer(request, [StaticHTMLRenderer], 'html')
         except NotAcceptable:
-            resp = Response(status=status.HTTP_406_NOT_ACCEPTABLE)
+            resp = Response(data=json.dumps({"details": "Unacceptable content type"}), status=status.HTTP_406_NOT_ACCEPTABLE)
             resp.accepted_renderer = StaticHTMLRenderer()
             resp.accepted_media_type = 'text/plain'
+            resp.content_type = 'application/json'
             resp.renderer_context = {}
             return resp
         return super(LoggedLoginView, self).get(request, *args, **kwargs)
