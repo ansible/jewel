@@ -35,6 +35,7 @@ class Command(BaseCommand):
         for name in services:
             cfg = services[name]
             service_type = cfg["type"]
+            enable_gateway_auth = cfg.get("enable_gateway_auth", True)
 
             if service_type not in SERVICES:
                 raise CommandError(f"{service_type} is not allowed.")
@@ -51,6 +52,7 @@ class Command(BaseCommand):
                     "is_service_https": cfg["use_tls"],
                     "api_slug": name,
                     "order": cfg.get("order", 50),
+                    "enable_gateway_auth": enable_gateway_auth,
                 },
             )
 
@@ -59,18 +61,32 @@ class Command(BaseCommand):
             for instance in cfg["nodes"]:
                 ServiceNode.objects.create(name=f"Node {name} - {instance['address']}", service_cluster=service, **instance)
 
-            if service_type == "hub":
-                self.stdout.write(f'Creating /v2/ route for {service_type}')
+            if not cfg.get('additional_routes'):
+                continue
+
+            for additional_route in cfg['additional_routes']:
+                # a gateway_path MUST be specified
+                gateway_path = additional_route["gateway_path"]
+                # default to the gateway_path if service_path not given
+                service_path = additional_route.get('service_path', gateway_path)
+                # the route can have it's own api port that is different from the service's
+                # but we will default to the service api port if not given
+                additional_route_api_port = additional_route.get('api_port', cfg["api_port"])
+                # the route can specifiy gateway auth, but will default to the setting for the service
+                additional_route_enable_gateway_auth = additional_route.get("enable_gateway_auth", enable_gateway_auth)
+
+                self.stdout.write(f'Creating {gateway_path} route for {service_type}')
+
                 AdditionalRoute.objects.update_or_create(
                     http_port=api_port,
-                    gateway_path="/v2/",
-                    name=f"{name}-container-registry",
+                    gateway_path=gateway_path,
+                    name=additional_route["name"],
                     defaults={
-                        "service_port": cfg["api_port"],
-                        "service_path": "/v2/",
+                        "service_port": additional_route_api_port,
+                        "service_path": service_path,
                         "is_service_https": cfg["use_tls"],
-                        "description": "Hub Container Registry.",
+                        "description": additional_route.get("description", ""),
                         "service_cluster": service,
-                        "enable_gateway_auth": True,
+                        "enable_gateway_auth": additional_route_enable_gateway_auth,
                     },
                 )
