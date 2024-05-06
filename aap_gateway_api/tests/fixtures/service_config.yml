@@ -23,6 +23,17 @@ services:
     nodes:
       - address: "localhost"
 
+    additional_routes:
+      - name: "hub container registry"
+        description: "Hub Container Registry."
+        gateway_path: "/v2/"
+      - name: "hub ui"
+        description: "Hub UI"
+        gateway_path: "/ui/"
+      - name: "hub ui static files"
+        description: "Hub UI Static Files"
+        gateway_path: "/static/galaxy_ng/"
+
   controller:
     use_tls: true
     service_root: /api/
