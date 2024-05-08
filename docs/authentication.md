@@ -172,3 +172,54 @@ An example authenticator payload ...
     }
 }
 ```
+
+## RADIUS
+
+https://en.wikipedia.org/wiki/RADIUS
+
+### Authenticator plugin
+
+An example authenticator payload ...
+
+```
+{
+    "name": "radius",
+    "type": "ansible_base.authentication.authenticator_plugins.radius",
+    "enabled": True,
+    "order": 1,
+    "configuration": {
+        "SERVER: "radius.example.com",
+        "PORT": "1812"
+        "SECRET": "REDACTED",
+    }
+}
+```
+
+### Development environment
+
+Gateway development environment comes with a RADIUS sidecar container, 
+that is disabled by default. To enable it uncomment `radius_enabled: True` line in
+your `container-startup.yml` file. This will start and configure
+the [freeradius](https://freeradius.org/) container and configure the RADIUS authenticator plugin
+in the gateway.
+
+The freeradius server is preconfigured with following list of users:
+
+| Username | Password   |
+|----------|------------|
+| picard   | picard123  |
+| kirk     | kirk123    |
+| chekov   | chekov123  |
+| sulu     | sulu123    |
+| scotty   | scotty123  |
+| stamets  | stamets123 |
+| tucker   | tucker123  |
+
+You may override it if necessary by setting `radius_users` variable in `container-startup.yml`:
+
+```yaml
+radius_users:
+  - username: john
+    password: supersecret
+    groups: ['users', 'managers']
+```

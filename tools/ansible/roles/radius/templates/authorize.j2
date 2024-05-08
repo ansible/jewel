@@ -1,0 +1,8 @@
+{% for user in radius_users %}
+{{ user.username }} Cleartext-Password := "{{ user.password }}"
+{% for group in user.groups %}
+    Class = "group={{ group }}"{% if not loop.last %},{% endif %}
+
+{% endfor %}
+
+{% endfor %}

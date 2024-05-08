@@ -16,3 +16,4 @@ redis_tls_enabled: True
 # keycloak_enabled: True
 # ldap_enabled: True
 # tacacs_enabled: True
+# radius_enabled: True

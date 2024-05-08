@@ -1,0 +1,38 @@
+---
+radius_config_dir: '{{ sources_dest }}/radius'
+radius_authenticator_name: "Dev RADIUS Server"
+radius_secret: "aapgatewayradiussecret"
+
+radius_configuration:
+  type: "ansible_base.authentication.authenticator_plugins.radius"
+  name: "{{ radius_authenticator_name }}"
+  enabled: True
+  create_objects: True
+  remove_users: True
+  configuration:
+    SERVER: "radius"
+    PORT: "1812"
+    SECRET: "{{ radius_secret }}"
+
+radius_users:
+  - username: picard
+    password: picard123
+    groups: ['captains']
+  - username: kirk
+    password: kirk123
+    groups: ['captains']
+  - username: chekov
+    password: chekov123
+    groups: ['crew', 'pilots']
+  - username: sulu
+    password: sulu123
+    groups: ['crew', 'pilots']
+  - username: scotty
+    password: scotty123
+    groups: ['crew', 'engineering']
+  - username: stamets
+    password: stamets123
+    groups: ['crew', 'engineering']
+  - username: tucker
+    password: tucker123
+    groups: ['crew', 'engineering']

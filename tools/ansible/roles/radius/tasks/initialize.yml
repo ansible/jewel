@@ -1,0 +1,13 @@
+---
+- name: Create RADIUS config directory
+  file:
+    path: "{{ radius_config_dir }}"
+    state: directory
+
+- name: Copy config files
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ radius_config_dir }}/{{ item }}"
+  loop:
+    - "clients.conf"
+    - "authorize"

@@ -182,13 +182,26 @@ services:
       - service-mesh
 {% endif %}
 
-{% if enabled_containers['tacacs']|bool %}
+{% if enabled_containers['tacacs'] | bool %}
   tacacs:
     image: dchidell/docker-tacacs:{{ tacacs_container_version }}
     container_name: aap_gw_tacacs_1
     hostname: tacacs
     ports:
       - "{{ tacacs_exposed_tacacs_port }}:49"
+    networks:
+      - dbnet
+{% endif %}
+
+{% if enabled_containers['radius'] | bool %}
+  radius:
+    image: {{ radius_image }}:{{ radius_image_version }}
+    container_name: aap_gw_radius_1
+    hostname: radius
+    command: ['-f', '-x', '-l', 'stdout']
+    volumes:
+      - '$PWD/tools/generated/radius/clients.conf:/etc/freeradius/clients.conf'
+      - '$PWD/tools/generated/radius/authorize:/etc/freeradius/mods-config/files/authorize'
     networks:
       - dbnet
 {% endif %}
