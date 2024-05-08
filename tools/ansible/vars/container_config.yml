@@ -15,6 +15,7 @@ enabled_containers:
   keycloak: "{{ keycloak_enabled | default(False) }}"
   ldap: "{{ ldap_enabled | default(False) }}"
   tacacs: "{{ tacacs_enabled | default(False) }}"
+  radius: "{{ radius_enabled | default(False) }}"
 
 # Redis settings
 redis_is_clustered: "{{ redis_cluster_enabled | default(False) }}"
@@ -44,6 +45,10 @@ ldap_private_key_file_name: 'ldap.key'
 # Tacacs plus
 tacacs_container_version: latest
 tacacs_exposed_tacacs_port: 49
+
+# RADIUS
+radius_image: "freeradius/freeradius-server"
+radius_image_version: latest
 
 # Redis
 redis_container_version: latest
