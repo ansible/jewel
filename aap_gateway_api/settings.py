@@ -189,6 +189,8 @@ LOGGING = {
 
 LOGIN_URL = '/api/login/'
 
+LOGOUT_ALLOWED_HOSTS = []
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -357,6 +359,8 @@ if getenv('REDIS_CERT_FILE', None) is not None:
 if getenv('REDIS_CA_CERT_FILE', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_ca_certs'] = getenv('REDIS_CA_CERT_FILE')
 
+if getenv('LOGOUT_ALLOWED_HOSTS', None) is not None:
+    LOGOUT_ALLOWED_HOSTS = getenv('LOGOUT_ALLOWED_HOSTS').split(",")
 
 # Make this unique, and don't share it with anybody.
 read_key = False
