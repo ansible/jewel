@@ -3,6 +3,7 @@ import logging
 import re
 
 from ansible_base.lib.utils.requests import get_remote_host
+from django.conf import settings
 from django.contrib.auth import views
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
@@ -52,6 +53,9 @@ class LoggedLoginView(views.LoginView):
 
 @method_decorator(require_http_methods(["POST"]), name="dispatch")
 class LoggedLogoutView(views.LogoutView):
+
+    success_url_allowed_hosts = settings.LOGOUT_ALLOWED_HOSTS
+
     def dispatch(self, request, *args, **kwargs):
         original_user = getattr(request, 'user', None)
         ret = super().dispatch(request, *args, **kwargs)
