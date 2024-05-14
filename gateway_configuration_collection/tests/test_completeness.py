@@ -36,7 +36,10 @@ ignore_api_parameters = []
 
 # Some modules take additional parameters that do not appear in the API
 # Add the module name as the key with the value being the list of params to ignore
-no_api_parameter_ok = {}
+no_api_parameter_ok = {
+    # Existing_token and id are for working with an existing tokens
+    'token': ['existing_token', 'existing_token_id'],
+}
 
 # When this tool was created we were not feature complete. Adding something in here indicates a module
 # that needs to be developed. If the module is found on the file system it will auto-detect that the

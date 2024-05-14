@@ -33,7 +33,7 @@ def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, ad
 # We can't use the 'settings' fixture here. Because even though DRF gets notified of the change,
 # the view already has the old settings as local variables. So we have to patch the view to fix that.
 @mock.patch("rest_framework.views.APIView.authentication_classes", [LoggedBasicAuthentication])
-def test_logged_basic_auth_invalid(unauthenticated_api_client, organization):
+def test_logged_basic_auth_invalid(unauthenticated_api_client):
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
     url = reverse("organization-list")
@@ -42,11 +42,10 @@ def test_logged_basic_auth_invalid(unauthenticated_api_client, organization):
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [LoggedBasicAuthentication])
-def test_logged_basic_auth_invalid_disabled(unauthenticated_api_client, organization, set_preference):
+def test_logged_basic_auth_invalid_disabled(unauthenticated_api_client, set_preference):
     set_preference("proxy", "gateway_basic_auth_enabled", False)
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
     url = reverse("organization-list")
     response = client.get(url)
-    # TODO: Why do we return 403 here from authenticate_header? Is this intentional?
-    assert response.status_code == 403
+    assert response.status_code == 401

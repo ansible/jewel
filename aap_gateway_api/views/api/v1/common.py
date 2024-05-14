@@ -3,6 +3,7 @@ from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
+from django.urls import reverse
 from rest_framework import viewsets
 
 from aap_gateway_api.permissions import IsSystemAdminOrAuditor
@@ -68,3 +69,35 @@ class ResourceAPIUpdateMixin:
                 resource_data=resource_serializer(instance).data,
             )
         )
+
+    def get_authenticate_header(self, request):
+        # HTTP Basic auth is insecure by default, because the basic auth
+        # backend does not provide CSRF protection.
+        #
+        # If you visit `/api/gateway/v1/<something>/` and we return
+        # `WWW-Authenticate: Basic ...`, your browser will prompt you for an
+        # HTTP basic auth username+password and will store it _in the browser_
+        # for subsequent requests.  Because basic auth does not require CSRF
+        # validation (because it's commonly used with non-browser clients),
+        # browsers that save basic auth in this way are
+        # vulnerable to cross-site request forgery:
+        #
+        # 1. Visit `/api/v2/<something>/` and specify a user+pass for basic auth.
+        # 2. Visit a nefarious website and submit a
+        #    `<form action='POST' method='https://gateway.example.org/api/gateway/v1/<whatever>/'>`
+        # 3. The browser will use your persisted user+pass and your login
+        #    session is effectively hijacked.
+        #
+        # To prevent this, we will _no longer_ send `WWW-Authenticate: Basic ...`
+        # headers in responses; this means that unauthenticated /api/gateway/v1/... requests
+        # will now return HTTP 401 in-browser, rather than popping up an auth dialog.
+        #
+        # This means that people who wish to use the interactive API browser
+        # must _first_ login in via `/api/login/` to establish a session (which
+        # _does_ enforce CSRF).
+        #
+        # CLI users can _still_ specify basic auth credentials explicitly via
+        # a header or in the URL e.g.,
+        # `curl https://user:pass@gateway.example.org/api/gateway/v1/something/`
+        authorize_url = reverse('authorize')
+        return f'Bearer realm=api authorization_url={authorize_url}'

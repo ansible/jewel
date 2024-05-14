@@ -171,7 +171,7 @@ class AAPModule(AnsibleModule):
             self.fail_json(msg="Authentication error: {error}".format(error=e))
         if self.oauth_token:
             try:
-                header = {"Authorization": "Token {0}".format(self.oauth_token)}
+                header = {"Authorization": "Bearer {0}".format(self.oauth_token)}
                 self.make_request("GET", url)
                 self.session.headers.update(header)
                 self.authenticated = True

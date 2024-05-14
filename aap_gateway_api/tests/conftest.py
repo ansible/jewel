@@ -11,6 +11,7 @@ import pytest
 #  around redefinition. Instead we will just import * here and noqa this one line instead of multiple places
 from ansible_base.lib.testing.fixtures import *  # noqa: F403, F401
 from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
+from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service

@@ -205,3 +205,15 @@ register(
     help_text=_("The maximum number of items allowed on a list page"),
     encrypted=False,
 )
+
+register(
+    section="oauth2_provider",
+    preference_name="ALLOW_OAUTH2_FOR_EXTERNAL_USERS",
+    default=False,
+    required=False,
+    preference_type="bool",
+    help_text="For security reasons, users from external auth providers (LDAP, SAML, SSO, Radius, and others) "
+    "are not allowed to create OAuth2 tokens. To change this behavior, enable this setting. "
+    "Existing tokens will not be deleted when this setting is toggled off.",
+    encrypted=False,
+)

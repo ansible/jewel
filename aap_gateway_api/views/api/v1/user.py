@@ -1,5 +1,6 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
+from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.policies import visible_users
 from rest_framework.decorators import action
@@ -10,7 +11,7 @@ from aap_gateway_api.serializers import UserSerializer
 from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPIUpdateMixin
 
 
-class UserViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
+class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayModelViewSet):
     """
     API endpoint that allows users to be viewed or edited.
     """

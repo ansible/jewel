@@ -101,6 +101,7 @@ services:
       - POSTGRESQL_USER=gateway
       - POSTGRESQL_PASSWORD=gateway
     image: quay.io/sclorg/postgresql-15-c9s
+    hostname: db
     networks:
       - dbnet
       - service-mesh
