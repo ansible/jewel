@@ -117,3 +117,13 @@ gateway_routes:
     gateway_path: '/ui/'
     description: ''
     enable_gateway_auth: true
+
+  - name: Pulp Content
+    http_port: API Port
+    service_cluster: 3
+    service_port: 5001
+    is_service_https: false
+    service_path: '/pulp'
+    gateway_path: '/pulp'
+    description: 'pulp content'
+    enable_gateway_auth: true
