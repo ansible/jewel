@@ -2,6 +2,7 @@
 requires_ansible: ">=2.14.0"
 action_groups:
   gateway:
+  - application
   - authenticator
   - authenticator_map
   - http_port
