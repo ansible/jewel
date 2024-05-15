@@ -2,6 +2,7 @@ from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
+from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.policies import visible_users
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -41,7 +42,7 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
         return Response(data)
 
 
-class OrganizationUserViewSet(UserViewSet):
+class DeprecatedRelatedUserViewSet(UserViewSet):
     """
     Shows all users for sublists like /api/v1/organizations/5/users/
     the related view still checks organization view permission
@@ -51,3 +52,27 @@ class OrganizationUserViewSet(UserViewSet):
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer
     permission_classes = [AnsibleBaseUserPermissions]
+
+    # Methods for compatibility with the old users and admins endpoints
+    def get_association_role_definition(self):
+        parent_model_name = self.parent_viewset.serializer_class.Meta.model._meta.model_name.title()
+        if self.association_fk == 'users':
+            role_name = f'{parent_model_name} Member'
+        elif self.association_fk == 'admins':
+            role_name = f'{parent_model_name} Admin'
+        return RoleDefinition.objects.get(name=role_name)
+
+    def get_sublist_queryset(self, parent_instance):
+        rd = self.get_association_role_definition()
+        object_roles = rd.object_roles.filter(object_id=parent_instance.pk)
+        return self.queryset.filter(has_roles__in=object_roles)
+
+    def perform_associate(self, parent_instance, related_instances):
+        rd = self.get_association_role_definition()
+        for user in related_instances:
+            rd.give_permission(user, parent_instance)
+
+    def perform_disassociate(self, parent_instance, related_instances):
+        rd = self.get_association_role_definition()
+        for user in related_instances:
+            rd.remove_permission(user, parent_instance)
