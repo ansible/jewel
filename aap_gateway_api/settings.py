@@ -72,6 +72,7 @@ CLUSTER_HOST_ID = socket.gethostname()
 
 # Disallow sending csrf cookies over insecure connections
 CSRF_COOKIE_SECURE = True
+CSRF_TRUSTED_ORIGINS = []
 
 DATABASES = {
     "default": {
@@ -359,6 +360,9 @@ if getenv('REDIS_CERT_FILE', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_certfile'] = getenv('REDIS_CERT_FILE')
 if getenv('REDIS_CA_CERT_FILE', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_ca_certs'] = getenv('REDIS_CA_CERT_FILE')
+
+if getenv('CSRF_TRUSTED_ORIGINS', None) is not None:
+    CSRF_TRUSTED_ORIGINS = getenv('CSRF_TRUSTED_ORIGINS')
 
 if getenv('LOGOUT_ALLOWED_HOSTS', None) is not None:
     LOGOUT_ALLOWED_HOSTS = getenv('LOGOUT_ALLOWED_HOSTS').split(",")
