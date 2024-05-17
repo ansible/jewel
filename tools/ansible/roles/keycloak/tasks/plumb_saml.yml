@@ -8,42 +8,35 @@
     public_key_content: "{{ lookup('file', public_key_file) | regex_replace('\n', '\\n') }}"
     private_key_content: "{{ lookup('file', private_key_file) | regex_replace('\n', '\\n') }}"
 
-- debug:
-    msg: "{{ saml_configuration }}"
+- name: SAML authenticator
+  ansible.gateway_configuration.authenticator:
+    name: "{{ saml_adapter_name }}"
+    slug: "{{ saml_adapter_name | replace(' ', '') | lower }}"
+    enabled: True
+    create_objects: True
+    remove_users: True
+    configuration: "{{ saml_configuration }}"
+    type: "ansible_base.authentication.authenticator_plugins.saml"    
 
-- name: See if our authenticator exists
-  set_fact:
-    keycloak_saml_authenticator_number: "{{ item.id }}/"
-    title: "Updating existing authenticator"
-    method: PUT
-    statuses:
-     - 200
-  loop: "{{ existing_authenticators.json.results | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: item.name == saml_configuration.name
+- name: SAML authenticator attribute maps
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ saml_auth_map_name }} - {{ item }}"
+    authenticator: "{{ saml_adapter_name }}"
+    map_type: "{{ item }}"
+    order: 0
+    triggers: "{\"attributes\":{\"{{ item }}\": {}, \"join_condition\": \"or\"}}"
+  loop: ["is_superuser", "is_system_auditor"]
 
-- name: Set default variables
-  set_fact:
-    keycloak_saml_authenticator_number: ''
-    title: "Configure a new authenticator"
-    method: POST
-    statuses:
-     - 201
-  when: keycloak_saml_authenticator_number is not defined
-
-- debug:
-    msg: "{{ saml_configuration }}"
-
-- name: "{{ title }}"
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ keycloak_saml_authenticator_number }}"
-    method: "{{ method }}"
-    body: "{{ saml_configuration }}"
-    body_format: json
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-    status_code: "{{ statuses }}"
-  changed_when: True
+- name: SAML authenticator org map
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ saml_auth_map_name }} - org"
+    gateway_hostname: "{{ gateway_host }}"
+    gateway_username: "{{ gateway_admin_username }}"
+    gateway_password: "{{ gateway_admin_password }}"
+    gateway_validate_certs: False
+    authenticator: "{{ saml_adapter_name }}"
+    map_type: "organization"
+    organization: "Default"
+    order: 0
+    triggers:
+      always: {}

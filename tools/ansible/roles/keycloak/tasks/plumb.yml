@@ -3,15 +3,6 @@
   set_fact:
     oidc_public_key: "{{ lookup('file', public_key_cert) | regex_replace('\n', '') | regex_replace('-----[^-]*-----', '') }}"
 
-- name: Load the existing authenticators
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/"
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-  register: existing_authenticators
-
 - name: Install OIDC adapter
   include_tasks: plumb_oidc.yml
 

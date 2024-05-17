@@ -6,8 +6,10 @@
 
 - name: Copy config files
   template:
-    src: "{{ item }}.j2"
-    dest: "{{ radius_config_dir }}/{{ item }}"
+    src: "{{ radius_file }}.j2"
+    dest: "{{ radius_config_dir }}/{{ radius_file }}"
+  loop_control:
+    loop_var: radius_file
   loop:
     - "clients.conf"
     - "authorize"

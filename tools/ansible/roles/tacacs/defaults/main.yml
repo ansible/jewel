@@ -1,17 +1,11 @@
 ---
 tacacs_container_name: "Dev TACACS Container"
+tacacs_auth_map_name: "Dev TACACS Authenticator Map"
 
 tacacs_configuration:
-  name: "{{ tacacs_container_name }}"
-  enabled: True
-  create_objects: True
-  remove_users: True
-  configuration:
-    PORT: "{{ tacacs_exposed_tacacs_port }}"
-    HOST: "tacacs"
-    AUTH_PROTOCOL: "ascii"
-    REM_ADDR: "true"
-    SECRET: "ciscotacacskey"
-    SESSION_TIMEOUT: "5"
-  type: "ansible_base.authentication.authenticator_plugins.tacacs"
-
+  PORT: "{{ tacacs_exposed_tacacs_port }}"
+  HOST: "tacacs"
+  AUTH_PROTOCOL: "ascii"
+  REM_ADDR: "true"
+  SECRET: "ciscotacacskey"
+  SESSION_TIMEOUT: "5"
