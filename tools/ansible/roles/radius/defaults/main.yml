@@ -1,18 +1,13 @@
 ---
 radius_config_dir: '{{ sources_dest }}/radius'
 radius_authenticator_name: "Dev RADIUS Server"
+radius_auth_map_name: "Dev RADIUS Authenticator Map"
 radius_secret: "aapgatewayradiussecret"
 
 radius_configuration:
-  type: "ansible_base.authentication.authenticator_plugins.radius"
-  name: "{{ radius_authenticator_name }}"
-  enabled: True
-  create_objects: True
-  remove_users: True
-  configuration:
-    SERVER: "radius"
-    PORT: "1812"
-    SECRET: "{{ radius_secret }}"
+  SERVER: "radius"
+  PORT: "1812"
+  SECRET: "{{ radius_secret }}"
 
 radius_users:
   - username: picard

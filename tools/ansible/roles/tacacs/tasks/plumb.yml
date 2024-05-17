@@ -1,43 +1,20 @@
 ---
-- name: Load the existing authenticators
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/?name={{ tacacs_container_name | urlencode }}"
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-  register: existing_authenticators
+- name: TACACS authenticator
+  ansible.gateway_configuration.authenticator:
+    name: "{{ tacacs_container_name }}"
+    slug: "{{ tacacs_container_name | replace(' ', '') | lower }}"
+    enabled: True
+    create_objects: True
+    remove_users: True
+    configuration: "{{ tacacs_configuration }}"
+    type: "ansible_base.authentication.authenticator_plugins.tacacs"    
 
-- name: See if our authenticator exists
-  set_fact:
-    authenticator_number: "{{ item.id }}/"
-    title: "Updating existing authenticator"
-    method: PUT
-    statuses:
-     - 200
-  loop: "{{ existing_authenticators.json.results | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: item.name == tacacs_configuration.name
-
-- name: Set default variables
-  set_fact:
-    authenticator_number: ''
-    title: "Configure a new authenticator"
-    method: POST
-    statuses:
-     - 201
-  when: authenticator_number is not defined
-
-- name: "{{ title }}"
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ authenticator_number }}"
-    method: "{{ method }}"
-    body: "{{ tacacs_configuration }}"
-    body_format: json
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-    status_code: "{{ statuses }}"
-  changed_when: True
+- name: TACACS authenticator org map
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ tacacs_auth_map_name }} - org"
+    authenticator: "{{ tacacs_container_name }}"
+    map_type: "organization"
+    organization: "Default"
+    order: 0
+    triggers:
+      always: {}

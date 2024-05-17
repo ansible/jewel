@@ -1,37 +1,29 @@
 ---
-- name: See if our authenticator exists
-  set_fact:
-    keycloak_oidc_authenticator_number: "{{ item.id }}/"
-    title: "Updating existing authenticator"
-    method: PUT
-    statuses:
-     - 200
-  loop: "{{ existing_authenticators.json.results | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: item.name == oidc_configuration.name
+- name: OIDC authenticator
+  ansible.gateway_configuration.authenticator:
+    name: "{{ oidc_adapter_name }}"
+    slug: "{{ oidc_adapter_name | replace(' ', '') | lower }}"
+    enabled: True
+    create_objects: True
+    remove_users: True
+    configuration: "{{ oidc_configuration }}"
+    type: "ansible_base.authentication.authenticator_plugins.keycloak"
 
-- name: Set default variables
-  set_fact:
-    keycloak_oidc_authenticator_number: ''
-    title: "Configure a new authenticator"
-    method: POST
-    statuses:
-     - 201
-  when: keycloak_oidc_authenticator_number is not defined
+- name: OIDC authenticator attribute maps
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ oidc_auth_map_name }} - {{ item }}"
+    authenticator: "{{ oidc_adapter_name }}"
+    map_type: "{{ item }}"
+    order: 0
+    triggers: "{\"attributes\":{\"{{ item }}\": {}, \"join_condition\": \"or\"}}"
+  loop: ["is_superuser", "is_system_auditor"]
 
-- debug:
-    msg: "{{ oidc_configuration }}"
-
-- name: "{{ title }}"
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ keycloak_oidc_authenticator_number }}"
-    method: "{{ method }}"
-    body: "{{ oidc_configuration }}"
-    body_format: json
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-    status_code: "{{ statuses }}"
-  changed_when: True
+- name: OIDC authenticator org map
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ oidc_auth_map_name }} - org"
+    authenticator: "{{ oidc_adapter_name }}"
+    map_type: "organization"
+    organization: "Default"
+    order: 0
+    triggers:
+      always: {}

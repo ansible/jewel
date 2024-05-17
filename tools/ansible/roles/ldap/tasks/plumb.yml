@@ -1,43 +1,45 @@
 ---
-- name: Load the existing authenticators
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/?name={{ ldap_container_name | urlencode }}"
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-  register: existing_authenticators
+- name: LDAP authenticator
+  ansible.gateway_configuration.authenticator:
+    name: "{{ ldap_container_name }}"
+    slug: "{{ ldap_container_name | replace(' ', '') | lower }}"
+    enabled: True
+    create_objects: True
+    remove_users: True
+    configuration: "{{ ldap_configuration }}"
+    type: "ansible_base.authentication.authenticator_plugins.ldap"
 
-- name: See if our authenticator exists
-  set_fact:
-    authenticator_number: "{{ item.id }}/"
-    title: "Updating existing authenticator"
-    method: PUT
-    statuses:
-     - 200
-  loop: "{{ existing_authenticators.json.results | default([]) }}"
+- name: "LDAP authenticator group mappings"
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ ldap_auth_map_name }}-{{ item.ldap_group }}"
+    authenticator: "{{ ldap_container_name }}"
+    map_type: "{{ item.map_type }}"
+    order: 0
+    triggers: "{\"groups\":{\"{{ item.trigger_type }}\":[\"cn={{ item.ldap_group }},ou=groups,dc=example,dc=org\"]}}"
   loop_control:
-    label: "{{ item.name }}"
-  when: item.name == ldap_configuration.name
+    label: "{{ item.ldap_group }}"
+  loop: "{{ ldap_group_mappings }}"
 
-- name: Set default variables
-  set_fact:
-    authenticator_number: ''
-    title: "Configure a new authenticator"
-    method: POST
-    statuses:
-     - 201
-  when: authenticator_number is not defined
+- name: LDAP authenticator map - org admins
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ ldap_auth_map_name }}"
+    authenticator: "{{ ldap_container_name }}"
+    map_type: "team"
+    organization: "LDAP Organization"
+    team: "Organization Admins"
+    order: 0
+    triggers:
+      "groups":
+        "has_or":
+          - "cn=org_admins,ou=groups,dc=example,dc=org"
 
-- name: "{{ title }}"
-  uri:
-    url: "{{ gateway_host }}/api/gateway/v1/authenticators/{{ authenticator_number }}"
-    method: "{{ method }}"
-    body: "{{ ldap_configuration }}"
-    body_format: json
-    validate_certs: False
-    url_username: "{{ gateway_admin_username }}"
-    url_password: "{{ gateway_admin_password }}"
-    force_basic_auth: True
-    status_code: "{{ statuses }}"
-  changed_when: True
+- name: LDAP authenticator map - all users
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ ldap_auth_map_name }}"
+    authenticator: "{{ ldap_container_name }}"
+    map_type: "team"
+    organization: "LDAP Organization"
+    team: "Organization Users"
+    order: 0
+    triggers:
+      "always": {}

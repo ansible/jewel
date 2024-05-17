@@ -1,7 +1,15 @@
 ---
+    
+
 - name: Plumb gateway for enabled side containers
   hosts: localhost
   gather_facts: False
+  module_defaults:
+    group/ansible.gateway_configuration.gateway:
+      gateway_hostname: "{{ gateway_host }}"
+      gateway_username: "{{ gateway_admin_username }}"
+      gateway_password: "{{ gateway_admin_password }}"
+      gateway_validate_certs: False
   pre_tasks:
   - name: Check if API is available and returning status 200
     uri:
@@ -13,7 +21,9 @@
     delay: 5
   tasks:
     - include_role:
-        name: "{{ item.key }}"
+        name: "{{ outer_item.key }}"
         tasks_from: plumb
+      loop_control:
+        loop_var: outer_item
       loop: "{{ enabled_containers | dict2items }}"
-      when: enabled_containers[item.key] | bool
+      when: enabled_containers[outer_item.key] | bool
