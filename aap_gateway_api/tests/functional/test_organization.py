@@ -177,3 +177,24 @@ def test_organizations_resource_summary_fields(admin_api_client, organization):
     assert response.status_code == 200
     assert response.data["summary_fields"]["resource"]["ansible_id"] == organization.resource.ansible_id
     assert response.data["summary_fields"]["resource"]["resource_type"] == organization.resource.resource_type
+
+
+def test_managed_organization_field_API(admin_api_client, organization):
+    """Test to ensure organization managed cannot be set to true via the API."""
+    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    response = admin_api_client.get(url)
+    assert organization.managed is False
+    response = admin_api_client.patch(url, data={"managed": True})
+    assert response.status_code == 200
+    assert response.data["managed"] is False
+
+
+def test_managed_organization_field_manual(admin_api_client):
+    """Test to ensure that it can be set to true via command line"""
+    organization = Organization.objects.create(name="testing", managed=True)
+    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    response = admin_api_client.get(url)
+    assert organization.managed is True
+    response = admin_api_client.patch(url, data={"managed": False})
+    assert response.status_code == 200
+    assert response.data["managed"] is True
