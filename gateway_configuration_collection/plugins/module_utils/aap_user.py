@@ -1,5 +1,7 @@
 from ..module_utils.aap_object import AAPObject  # noqa
 
+__metaclass__ = type
+
 
 class AAPUser(AAPObject):
     API_ENDPOINT_NAME = "users"

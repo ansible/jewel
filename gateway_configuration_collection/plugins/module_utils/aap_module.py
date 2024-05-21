@@ -200,9 +200,9 @@ class AAPModule(AnsibleModule):
 
         # Try to parse the hostname as a url
         try:
-            parsed_validated_url = urlparse(validated_url)
+            urlparse(validated_url)
         except Exception as e:
-            self.fail_json(msg="Unable to parse host as a URL ({1}): {0}".format(parsed_validated_url, e))
+            self.fail_json(msg="Unable to parse host as a URL ({1}): {0}".format(validated_url, e))
         return validated_url
 
     def fail_json(self, **kwargs):
