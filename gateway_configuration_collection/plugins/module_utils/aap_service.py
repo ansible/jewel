@@ -1,5 +1,7 @@
 from ..module_utils.aap_object import AAPObject
 
+__metaclass__ = type
+
 API_PREFIX = "/api/"
 
 

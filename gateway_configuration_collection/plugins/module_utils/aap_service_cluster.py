@@ -1,5 +1,7 @@
 from ..module_utils.aap_object import AAPObject
 
+__metaclass__ = type
+
 
 class AAPServiceCluster(AAPObject):
     API_ENDPOINT_NAME = "service_clusters"

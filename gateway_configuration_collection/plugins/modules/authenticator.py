@@ -8,15 +8,10 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
 DOCUMENTATION = """
 ---
 module: authenticator
-author: Red Hat
+author: Red Hat (@RedHatOfficial)
 short_description: Configure a gateway authenticator.
 description:
     - Configure an automation platform gateway authenticators.
@@ -72,6 +67,7 @@ extends_documentation_fragment:
 
 EXAMPLES = """
 """
+
 
 from ..module_utils.aap_authenticator import AAPAuthenticator  # noqa
 from ..module_utils.aap_module import AAPModule  # noqa

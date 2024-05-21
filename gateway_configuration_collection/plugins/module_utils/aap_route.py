@@ -1,5 +1,7 @@
 from ..module_utils.aap_service import AAPService
 
+__metaclass__ = type
+
 
 class AAPRoute(AAPService):
     API_ENDPOINT_NAME = "routes"
