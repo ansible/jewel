@@ -11,6 +11,7 @@ class OrganizationSerializer(NamedCommonModelSerializer):
             'description',
             'users',
             'admins',
+            'managed',
         ]
 
     def __init__(self, *args, **kwargs):
