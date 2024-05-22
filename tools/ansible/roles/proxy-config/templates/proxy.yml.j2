@@ -137,3 +137,13 @@ gateway_routes:
     gateway_path: '/token'
     description: 'pulp container tokens'
     enable_gateway_auth: true
+
+  - name: Pulp Container Extensions
+    http_port: API Port
+    service_cluster: hub
+    service_port: 5001
+    is_service_https: false
+    service_path: '/extensions'
+    gateway_path: '/extensions'
+    description: 'pulp container extensions'
+    enable_gateway_auth: true
