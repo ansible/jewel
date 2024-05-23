@@ -2,7 +2,7 @@ import logging
 
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.authentication.utils.user import can_user_change_password
-from ansible_base.lib.serializers.common import CommonModelSerializer
+from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
 from django.contrib.auth.hashers import is_password_usable
@@ -10,7 +10,6 @@ from django.db.utils import IntegrityError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.fields import empty
 from rest_framework.serializers import ValidationError
 
@@ -20,7 +19,7 @@ from aap_gateway_api.utils import get_preference_value
 logger = logging.getLogger('aap.gateway.serializer.user')
 
 
-class UserSerializer(CommonModelSerializer):
+class UserSerializer(CommonUserSerializer):
     password = serializers.CharField(required=False, max_length=128, allow_blank=True)
     authenticators = serializers.MultipleChoiceField(
         # If we load the authenticators here we end up with a static list of authenticators.
@@ -43,9 +42,9 @@ class UserSerializer(CommonModelSerializer):
             self.fields['organizations'].child_relation.queryset = Organization.access_qs(request.user)
             self.fields['organizations'].required = False
 
-    class Meta(CommonModelSerializer.Meta):
+    class Meta(CommonUserSerializer.Meta):
         model = User
-        fields = CommonModelSerializer.Meta.fields + [
+        fields = CommonUserSerializer.Meta.fields + [
             'username',
             'email',
             'first_name',
@@ -65,12 +64,6 @@ class UserSerializer(CommonModelSerializer):
         if request and hasattr(request, 'user') and request.user.is_superuser:
             return True
         return False
-
-    def validate_is_superuser(self, value):
-        if value is True:
-            if not self.is_superuser_making_request():
-                raise PermissionDenied
-        return value
 
     def validate_password(self, value: str) -> str:
         errors = []
