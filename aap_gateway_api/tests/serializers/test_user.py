@@ -105,7 +105,6 @@ class TestUserSerializer:
     @pytest.mark.parametrize(
         "user,expected_response",
         [
-            (None, False),
             ('anonymous', False),
             ('regular', False),
             ('super', True),

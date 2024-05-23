@@ -21,8 +21,6 @@ logger = logging.getLogger('aap.gateway.serializer.user')
 
 
 class UserSerializer(CommonModelSerializer):
-    # This needs to be explicitly so it's not required
-    organizations = serializers.PrimaryKeyRelatedField(many=True, queryset=Organization.objects.all(), required=False)
     password = serializers.CharField(required=False, max_length=128, allow_blank=True)
     authenticators = serializers.MultipleChoiceField(
         # If we load the authenticators here we end up with a static list of authenticators.
@@ -36,8 +34,14 @@ class UserSerializer(CommonModelSerializer):
     authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
-        self.fields['authenticators'].choices = list(Authenticator.objects.all().values_list('id', 'name').order_by('name'))
         super().__init__(instance, data, **kwargs)
+
+        self.fields['authenticators'].choices = list(Authenticator.objects.all().values_list('id', 'name').order_by('name'))
+        request = self.context.get('request')
+        if request:
+            self.fields['organizations'].queryset = Organization.access_qs(request.user)
+            self.fields['organizations'].child_relation.queryset = Organization.access_qs(request.user)
+            self.fields['organizations'].required = False
 
     class Meta(CommonModelSerializer.Meta):
         model = User
