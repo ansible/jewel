@@ -28,7 +28,7 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     @action(detail=True, methods=["get"], url_name="authenticators-list")
     def authenticators(self, request, pk=None):
         try:
-            user = User.objects.get(pk=pk)
+            user = visible_users(self.request.user).get(pk=pk)
         except User.DoesNotExist:
             return Response(status=404)
         queryset = Authenticator.objects.filter(authenticator_providers__user=user)
