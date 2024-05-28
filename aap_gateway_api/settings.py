@@ -216,6 +216,7 @@ PASSWORD_HASHERS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
+        'aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': ['aap_gateway_api.permissions.IsSystemAdminOrAuditor'],
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
@@ -300,6 +301,9 @@ ANSIBLE_BASE_SHARED_SECRET = ''
 ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
+
+# Set the maximum number of secrets that can be active for a service cluster at any given time.
+MAX_ACTIVE_KEYS_PER_SERVICE = 2
 
 # Pull in dev settings
 include(optional('settings_dev.py'), scope=locals())

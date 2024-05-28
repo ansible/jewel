@@ -18,8 +18,6 @@ logger = logging.getLogger('aap_gateway_api.utils.resource_api_client')
 
 
 class GWResourceAPIClient(DABResourceAPIClient):
-    _jwt_timeout = None
-    _jwt = None
 
     service_paths = {
         ServiceCluster.ServiceType.HUB: "/service-index/",
@@ -47,20 +45,6 @@ class GWResourceAPIClient(DABResourceAPIClient):
         # Add a 10 second buffer to the token timeout to account for slower requests.
         self._jwt_timeout = time.time() + get_preference_value("proxy", "gateway_access_token_expiration") - 10
         self._jwt = create_signed_jwt(user=self.user)
-
-    @property
-    def jwt(self):
-        if self._jwt is None or self._jwt_timeout is None:
-            self.refresh_jwt()
-
-        if time.time() >= self._jwt_timeout:
-            self.refresh_jwt()
-
-        return self._jwt
-
-    @property
-    def requests_auth_kwargs(self):
-        return {"headers": {self.header_name: self.jwt}}
 
 
 class AllServicesClient(GWResourceAPIClient):

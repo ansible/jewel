@@ -17,6 +17,7 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
         model = ServiceCluster
         fields = NamedCommonModelSerializer.Meta.fields + [
             'service_type',
+            'service_id',
         ]
 
 

@@ -45,7 +45,8 @@ no_api_parameter_ok = {
 # that needs to be developed. If the module is found on the file system it will auto-detect that the
 # work is being done and will bypass this check. At some point this module should be removed from this list.
 # AAP-23122 for DAB RBAC endpoints
-needs_development = ['role_definition', 'role_user_assignment', 'role_team_assignment']  # i.e. 'team', 'organization'
+# AAP-24613 for service_key
+needs_development = ['role_definition', 'role_user_assignment', 'role_team_assignment', 'service_key']  # i.e. 'team', 'organization'
 needs_param_development = {}
 # -----------------------------------------------------------------------------------------------------------
 

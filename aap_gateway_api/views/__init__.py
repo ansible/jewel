@@ -30,6 +30,7 @@ from aap_gateway_api.views.api.v1.service import (  # noqa: F401
     ServiceClusterViewSet,
     ServiceNodeViewSet,
 )
+from aap_gateway_api.views.api.v1.service_auth import ServiceKeyViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.session import SessionView  # noqa: F401
 from aap_gateway_api.views.api.v1.status import StatusView  # noqa: F401
 from aap_gateway_api.views.api.v1.team import TeamViewSet  # noqa: F401
