@@ -6,6 +6,7 @@ from ansible_base.rbac import permission_registry
 from aap_gateway_api.models.organization import Organization  # noqa: 401
 from aap_gateway_api.models.preference import Preference  # noqa: 401
 from aap_gateway_api.models.service import AdditionalRoute, HTTPPort, Route, ServiceAPIRoute, ServiceCluster, ServiceNode  # noqa: 401
+from aap_gateway_api.models.service_auth import ServiceKey  # noqa: 401
 from aap_gateway_api.models.team import Team  # noqa: 401
 
 permission_registry.register(Team, parent_field_name='organization')

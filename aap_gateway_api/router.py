@@ -18,6 +18,14 @@ router.register(
     views.UserViewSet,
     related_views={},
 )
+
+
+router.register(
+    r'service_keys',
+    views.ServiceKeyViewSet,
+    basename='service_key',
+)
+
 router.register(
     r'organizations',
     views.OrganizationViewSet,
@@ -65,6 +73,7 @@ router.register(
     related_views={
         'routes': (views.AdditionalRouteViewSet, 'routes'),
         'nodes': (views.ServiceNodeViewSet, 'nodes'),
+        'service_keys': (views.ServiceKeyViewSet, 'service_keys'),
     },
 )
 router.register(

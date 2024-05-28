@@ -1,5 +1,6 @@
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
+from ansible_base.resource_registry.models import service_id
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -115,6 +116,34 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
 
     def __str__(self):
         return self.get_service_type_display()
+
+    def save(self, *args, **kwargs):
+        # Set the service id for the Gateway.
+        if self.service_type == ServiceCluster.ServiceType.GATEWAY and not self.service_id:
+            self.service_id = service_id()
+        return super().save(*args, **kwargs)
+
+    def generate_key(self, algorithm="HS256", secret_length=64, mark_previous_inactive=True):
+        from aap_gateway_api.models import ServiceKey
+
+        if mark_previous_inactive:
+            for key in self.service_keys.filter(is_active=True):
+                key.is_active = False
+                key.save()
+
+        new_key = ServiceKey.objects.create(
+            algorithm=algorithm,
+            service_cluster=self,
+            secret_length=secret_length,
+        )
+
+        # Refresh the obj from the DB so that the secret gets decrypted.
+        new_key.refresh_from_db()
+
+        return new_key
+
+    def delete_inactive_keys(self):
+        self.service_keys.filter(is_active=False).delete()
 
 
 class ServiceNode(UniqueNamedCommonModel, AuditableModel):
