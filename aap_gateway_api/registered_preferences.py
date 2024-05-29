@@ -25,6 +25,16 @@ register(
 
 register(
     section="proxy",
+    preference_name="jwt_expiration_buffer_in_seconds",
+    default=2,
+    required=True,
+    preference_type="int",
+    help_text=_("The number of seconds the access token cache should expire before the token expires"),
+    encrypted=False,
+)
+
+register(
+    section="proxy",
     preference_name="gateway_basic_auth_enabled",
     default=True,
     required=True,

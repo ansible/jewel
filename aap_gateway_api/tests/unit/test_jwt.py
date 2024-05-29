@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 
+from aap_gateway_api.utils.jwt_cache import JWTSessionCache
 from aap_gateway_api.utils.jwt_token import create_signed_jwt, decode_signed_jwt, get_jwt_rsa_key, update_jwt_public_key
 
 
@@ -46,3 +47,18 @@ def test_jwt_token_get_jwt_rsa_key_public_not_set(rsa_keypair, set_preference):
     set_preference("proxy", "jwt_private_key", rsa_keypair.private)
     set_preference("proxy", "jwt_public_key", '')
     assert get_jwt_rsa_key(public=True) == rsa_keypair.public
+
+
+def test_jwt_token_cache_expiration_delta(set_preference):
+    """
+    Make sure the cache timeout is computed properly from preferences.
+    """
+    set_preference("proxy", "jwt_expiration_buffer_in_seconds", 5)
+    set_preference("proxy", "gateway_access_token_expiration", 15)
+
+    with mock.patch('aap_gateway_api.utils.jwt_cache.cache') as mocked_cache:
+        JWTSessionCache.set("abcd", "supersecretkey")
+
+    mocked_call = mocked_cache.mock_calls[0]
+    assert mocked_call.args == ("jwt-session-abcd", "supersecretkey")
+    assert mocked_call.kwargs["timeout"] == 10
