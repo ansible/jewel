@@ -37,7 +37,13 @@ jobs:
           python-version: ${{ matrix.tests.python-version }}
 
       - name: Install tox
-        run: pip${{ matrix.tests.python-version }} install tox
+        run: pip${{ matrix.tests.python-version }} install tox requests
+
+      - name: Checkout DAB branch if needed
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/scripts/get_dab_for_pr.py
 
       - name: Run tox
         run: tox -e ${{ matrix.tests.env }}
