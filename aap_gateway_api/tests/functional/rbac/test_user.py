@@ -2,10 +2,75 @@ import contextlib
 from abc import abstractmethod
 
 import pytest
+from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from django.urls import reverse
 
 from aap_gateway_api.models.user import User
 from aap_gateway_api.tests.functional.rbac.conftest import associate_users
+from aap_gateway_api.utils.rbac import get_system_auditor_role
+
+
+@pytest.mark.django_db
+class TestSystemAuditorSync:
+    def test_role_to_flag(self):
+        alice = User.objects.create(username='alice')
+        rd = get_system_auditor_role()
+        rd.give_global_permission(alice)
+        assert alice.role_assignments.filter(role_definition=rd).exists()  # sanity
+
+        alice.refresh_from_db()
+        assert alice.is_system_auditor is True
+
+    def test_flag_to_role(self):
+        alice = User.objects.create(username='alice')
+        alice.is_system_auditor = True
+        alice.save()
+
+        rd = get_system_auditor_role()
+        assert alice.role_assignments.filter(role_definition=rd).exists()
+
+    def test_create_system_auditor1(self):
+        alice = User(username='alice', is_system_auditor=True)
+        assert not alice.pk
+        assert alice._is_system_auditor
+        alice.save()
+        rd = get_system_auditor_role()
+        assert alice.role_assignments.filter(role_definition=rd).exists()
+
+    def test_del_cached_value(self):
+        alice = User.objects.create(username='alice', is_system_auditor=True)
+        assert alice._is_system_auditor
+
+        rd = get_system_auditor_role()
+        alice.role_assignments.filter(role_definition=rd).delete()
+
+        del alice.is_system_auditor
+        assert alice.is_system_auditor is False
+
+    def test_create_system_auditor2(self):
+        alice = User.objects.create(username='alice', is_system_auditor=True)
+        rd = get_system_auditor_role()
+        assert alice.role_assignments.filter(role_definition=rd).exists()
+
+    def system_auditor_qs(self, user_id):
+        return RoleUserAssignment.objects.filter(object_id=None, user_id=user_id, role_definition__name='System Auditor')
+
+    def test_system_auditor_api_change(self, admin_api_client, user):
+        assert RoleDefinition.objects.filter(name='System Auditor').exists()
+
+        assert not self.system_auditor_qs(user.id).exists()
+
+        for flag_enabled in [True, False]:
+            user.is_system_auditor = flag_enabled
+            user.save()
+            assert self.system_auditor_qs(user.id).exists() is flag_enabled
+
+        url = reverse('user-detail', kwargs={'pk': user.id})
+        for flag_enabled in [True, False]:
+            response = admin_api_client.patch(url, {'is_system_auditor': flag_enabled})
+            assert response.status_code == 200
+
+            assert self.system_auditor_qs(user.id).exists() is flag_enabled
 
 
 class TestUserPermissionsBase:

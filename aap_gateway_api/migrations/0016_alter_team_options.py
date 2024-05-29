@@ -4,7 +4,6 @@ from django.db import migrations
 from django.apps import apps as global_apps
 
 from ansible_base.rbac.management import create_dab_permissions
-from aap_gateway_api.models import User
 
 def create_permissions_as_operation(apps, schema_editor):
     create_dab_permissions(global_apps.get_app_config("aap_gateway_api"), apps=apps)
@@ -13,7 +12,9 @@ def create_permissions_as_operation(apps, schema_editor):
 def create_managed_roles(apps, schema_editor):
     RoleDefinition = apps.get_model('dab_rbac', 'RoleDefinition')
     DABPermission = apps.get_model('dab_rbac', 'DABPermission')
+    RoleUserAssignment = apps.get_model('dab_rbac', 'RoleUserAssignment')
     ContentType = apps.get_model('contenttypes', 'ContentType')
+    User = apps.get_model('aap_gateway_api.User')
 
     MANAGED_ROLE_DATA = [
         ('team', 'Team Member', ['member_team', 'view_team']),
@@ -31,19 +32,18 @@ def create_managed_roles(apps, schema_editor):
         rd.permissions.add(*permissions)
 
     # Create the System Auditor role
+    from aap_gateway_api.utils.rbac import SYSTEM_AUDITOR_ROLE_NAME, SYSTEM_AUDITOR_ROLE_DEFAULTS
+
     system_auditor, _created = RoleDefinition.objects.get_or_create(
-        name='System Auditor',
-        defaults={
-            'description': 'Migrated singleton role giving read permission to everything',
-            'managed': True,
-        },
+        name=SYSTEM_AUDITOR_ROLE_NAME,
+        defaults=SYSTEM_AUDITOR_ROLE_DEFAULTS,
     )
     # Add All view permissions
     system_auditor.permissions.add(*list(DABPermission.objects.filter(codename__startswith='view')))
 
     # Assign System Auditor Role to all existing system auditors
     for user in User.objects.filter(is_system_auditor=True).all():
-        user.manage_system_auditor_role(user, True)
+        RoleUserAssignment.objects.create(role_definition=system_auditor, user=user)
 
 
 class Migration(migrations.Migration):
