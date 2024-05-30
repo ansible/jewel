@@ -104,6 +104,25 @@ def test_user_authenticators(request, client_fixture, local_authenticator, ldap_
         assert response.status_code == 401
 
 
+@pytest.mark.parametrize(
+    "client_fixture",
+    [
+        "admin_api_client",
+        "unauthenticated_api_client",
+    ],
+)
+def test_forbidden_user_filters(request, client_fixture):
+    fields = ["password"]
+    client = request.getfixturevalue(client_fixture)
+    for field in fields:
+        url = reverse("user-list") + f"?{field}__startswith=argon2$argon2id$v=19$m=102400,t=1,p=1$"
+        response = client.get(url)
+        if client_fixture == "admin_api_client":
+            assert response.status_code == 403
+        else:
+            assert response.status_code == 401
+
+
 def test_user_authenticators_bad_pk(admin_api_client):
     url = reverse("user-authenticators-list", kwargs={"pk": '1337'})
     response = admin_api_client.get(url)

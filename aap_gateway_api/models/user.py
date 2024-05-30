@@ -31,6 +31,7 @@ class User(AbstractUser, CommonModel, AuditableModel):
     activity_stream_excluded_field_names = ['last_login']
 
     encrypted_fields = ()  # handed as special case by UserSerializer
+    PASSWORD_FIELDS = ["password"]  # Mark password fields so ansible_base.lib.rest_filters can properly block attempts to filter over password
 
     resource = AnsibleResourceField(primary_key_field="id")
 
