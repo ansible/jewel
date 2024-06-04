@@ -27,8 +27,6 @@ class Organization(AbstractOrganization, AuditableModel):
         help_text=_("The list of admins for this organization."),
     )
 
-    reverse_foreign_key_fields = ['teams']
-
     managed = models.BooleanField(
         editable=False,
         blank=False,
