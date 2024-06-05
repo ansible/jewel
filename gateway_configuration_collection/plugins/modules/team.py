@@ -39,12 +39,6 @@ options:
     new_organization:
       type: str
       description: Setting this option will change the existing organization (looked up via the organization field)
-    users:
-      type: list
-      description: List of user IDs associated with the team
-    admins:
-      type: list
-      description: List of user IDs associated with the team as administrators
 
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
@@ -63,9 +57,6 @@ EXAMPLES = """
   - name: Gateway Developers
     organization: "1"
     new_organization: "Red Hat Ansible"
-    admins:
-    - "5"
-    - "7"
 
 - name: Delete Team
   ansible.gateway_configuration.team:
@@ -85,8 +76,6 @@ def main():
         description=dict(type="str"),
         organization=dict(type="str", required=True),
         new_organization=dict(type="str"),
-        users=dict(type="list"),
-        admins=dict(type="list"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 

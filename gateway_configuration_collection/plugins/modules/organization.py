@@ -32,12 +32,6 @@ options:
     description:
       description: The description of the Organization
       type: str
-    users:
-      type: list
-      description: List of user IDs associated with the organization
-    admins:
-      type: list
-      description: List of user IDs associated with the organization as administrators
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
 - ansible.gateway_configuration.auth
@@ -48,15 +42,10 @@ EXAMPLES = """
   ansible.gateway_configuration.organization:
   - name: Ansible Product Development
     description: Organization for ansible developers
-    users:
-    - 1
-    - 2
 
 - name: Update Organization
   ansible.gateway_configuration.organization:
   - name: Ansible Product Development
-    admins:
-    - 5
 
 - name: Delete Organization
   ansible.gateway_configuration.organization:
@@ -73,8 +62,6 @@ def main():
         name=dict(type="str", required=True),
         new_name=dict(type="str"),
         description=dict(type="str"),
-        users=dict(type="list"),
-        admins=dict(type="list"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 

@@ -21,6 +21,7 @@ gateway_configuration_dispatcher_roles:
   - {role: service_nodes, var: gateway_service_nodes, tags: service_nodes}
   - {role: services, var: gateway_services, tags: services}
   - {role: routes, var: gateway_routes, tags: routes}
+  - {role: role_user_assignments, var: gateway_role_user_assignments, tags: role_user_assignments}
 ```
 
 Note that each item has three elements:

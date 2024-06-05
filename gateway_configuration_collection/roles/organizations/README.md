@@ -29,8 +29,6 @@ Options for the `gateway_organizations` variable:
 | `name`        |      N/A      |   yes    | str  | The name of the resource                                                         |
 | `new_name`    |      N/A      |    no    | str  | Setting this option will change the existing name (looked up via the name field) |
 | `description` |      N/A      |    no    | str  | Description of the organization                                                  |
-| `users`       |      N/A      |    no    | list | List of user IDs associated with the organization                                |
-| `admins`      |      N/A      |    no    | list | List of user IDs associated with the organization as administrators              |
 | `state`       |   `present`   |    no    | str  | Desired state of the resource.                                                   |
 
 ** Unique value: **
@@ -41,7 +39,7 @@ Options for the `gateway_organizations` variable:
 
 ### Json Example
 
-- Create 3 Organizations, one with associated users and admins
+- Create 2 Organizations
 
 ```json
 {
@@ -51,12 +49,7 @@ Options for the `gateway_organizations` variable:
       "description": "First Organization"
     },
     {
-      "name": "Org 2",
-      "users": [1, 2, 3],
-      "admins": [1, 2]
-    },
-    {
-      "name": "Org 3"
+      "name": "Org 2"
     }
   ]
 }
@@ -66,7 +59,7 @@ Options for the `gateway_organizations` variable:
 
 - Check that "Deprecated Org" doesn't exist
 - Check that Org 1 exists
-- Change users of Org 2 (admins are unchanged)
+- Get or create Org 2
 - Rename Org 3
 
 File name: `data/gateway_organizations.yml`
@@ -79,9 +72,6 @@ gateway_organizations:
 - name: Org 1
   state: exists
 - name: Org 2
-  users:
-  - 1
-  - 3
 - name: Org 3
   new_name: Organization 3
 ```

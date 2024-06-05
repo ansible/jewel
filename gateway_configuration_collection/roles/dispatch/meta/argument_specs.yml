@@ -32,6 +32,9 @@ argument_specs:
           - role: services
             var: gateway_services
             tags: services
+          - role: role_user_assignments
+            var: gateway_role_user_assignments
+            tags: role_user_assignments
           - role: routes
             var: gateway_routes
             tags: routes
