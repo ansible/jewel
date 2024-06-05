@@ -26,12 +26,6 @@ argument_specs:
           new_organization:
             type: str
             description: Setting this option will change the existing organization (looked up via the organization field)
-          users:
-            type: list
-            description: List of user IDs associated with the team
-          admins:
-            type: list
-            description: List of user IDs associated with the team as administrators
           state:
               default: "{{ gateway_state | default('present') }}"
               required: false

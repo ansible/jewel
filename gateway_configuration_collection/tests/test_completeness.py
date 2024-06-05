@@ -32,7 +32,10 @@ extra_endpoints = {}
 
 # Global module parameters we can ignore
 ignore_module_parameters = ['state', 'new_name', 'new_organization', 'new_authenticator', 'update_secrets', 'copy_from']
-ignore_api_parameters = []
+ignore_api_parameters = {
+    'team': ['users', 'admins'],  # TODO: remove when removed from API
+    'organization': ['users', 'admins'],  # TODO: remove when removed from API
+}
 
 # Some modules take additional parameters that do not appear in the API
 # Add the module name as the key with the value being the list of params to ignore
@@ -46,7 +49,7 @@ no_api_parameter_ok = {
 # work is being done and will bypass this check. At some point this module should be removed from this list.
 # https://issues.redhat.com/browse/AAP-23122 for DAB RBAC endpoints
 # https://issues.redhat.com/browse/AAP-24613 for service_key
-needs_development = ['role_definition', 'role_user_assignment', 'role_team_assignment', 'service_key']  # i.e. 'team', 'organization'
+needs_development = ['role_definition', 'role_team_assignment', 'service_key']  # i.e. 'team', 'organization'
 needs_param_development = {}
 # -----------------------------------------------------------------------------------------------------------
 
@@ -148,8 +151,8 @@ def determine_state(module_id, endpoint, module, parameter, api_option, module_o
         return "OK, globally ignored module parameter"
 
     # Second, if the parameter is in the ignore_api_parameters list are ok to ignore
-    if parameter in ignore_api_parameters:
-        return "OK, globally ignored api parameter"
+    if parameter in ignore_api_parameters.get(module, []):
+        return "OK, ignored api parameter"
 
     # Third, if this is a read only parameter we are ok to ignore
     if api_option and api_option['read_only']:

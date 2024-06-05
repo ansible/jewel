@@ -1,24 +1,39 @@
 ---
 argument_specs:
   main:
-    short_description: An Ansible Role to create organizations on automation platform gateway.
+    short_description: An Ansible Role to create role user assignment on automation platform gateway.
     options:
-      gateway_organizations:
-        description: Data structure describing your organizations
+      gateway_role_user_assignments:
+        description: Data structure describing your role user assignment
         type: list
         required: True
         elements: dict
         options:
-          name:
-            required: true
-            type: str
-            description: Name of the resource
-          new_name:
-            type: str
-            description: Setting this option will change the existing name (looked up via the name field)
-          description:
-            type: str
-            description: Description of the organization
+          role_definition:
+              description:
+                  - The name or id of the role definition to assign to the user.
+              required: True
+              type: str
+          object_id:
+              description:
+                  - Primary key of the object this assignment applies to.
+              required: True
+              type: int
+          user:
+              description:
+                  - The name or id of the user to assign to the object.
+              required: False
+              type: str
+          object_ansible_id:
+              description:
+                  - Resource id of the object this role applies to. Alternative to the object_id field.
+              required: False
+              type: str
+          user_ansible_id:
+              description:
+                  - Resource id of the user who will receive permissions from this assignment. Alternative to user field.
+              required: False
+              type: str
           state:
               default: "{{ gateway_state | default('present') }}"
               required: false
@@ -27,7 +42,7 @@ argument_specs:
 
 
       # Async variables
-      gateway_configuration_organizations_async_retries:
+      gateway_configuration_role_user_assignments_async_retries:
         default: "{{ gateway_configuration_async_retries | default(30) }}"
         required: false
         description: This variable sets the number of retries to attempt for the role.
@@ -35,7 +50,7 @@ argument_specs:
         default: 30
         required: false
         description: This variable sets number of retries across all roles as a default.
-      gateway_configuration_organizations_async_delay:
+      gateway_configuration_role_user_assignments_async_delay:
         default: "{{ gateway_configuration_async_delay | default(1) }}"
         required: false
         description: This variable sets delay between retries for the role.
@@ -50,7 +65,7 @@ argument_specs:
 
 
       # No_log variables
-      gateway_configuration_organizations_secure_logging:
+      gateway_configuration_role_user_assignments_secure_logging:
         default: "{{ gateway_configuration_secure_logging | default(false) }}"
         required: false
         type: bool

@@ -31,8 +31,6 @@ Options for the `gateway_teams` variable:
 | `description`      |      N/A      |    no    | str  | Description of the organization                                                   |
 | `organization`     |      N/A      |   yes    | str  | The name or ID referencing the [Organization](../organizations/README.md)         |
 | `new_organization` |      N/A      |    no    | str  | The name or ID referencing newly associated organization                          |
-| `users`            |      N/A      |    no    | list | List of [user IDs](../users/README.md) associated with the team                   |
-| `admins`           |      N/A      |    no    | list | List of [user IDs](../users/README.md) associated with the team as administrators |
 | `state`            |   `present`   |    no    | str  | Desired state of the resource.                                                    |
 
 ** Unique value: **
@@ -43,7 +41,7 @@ Options for the `gateway_teams` variable:
 
 ### Json Example
 
-- Create 2 Teams, one with associated users, admins
+- Create 2 Teams
 
 ```json
 {
@@ -55,14 +53,7 @@ Options for the `gateway_teams` variable:
     },
     {
       "name": "Team 2",
-      "organization": "1",
-      "users": [
-        "1",
-        "2"
-      ],
-      "admins": [
-        "3"
-      ]
+      "organization": "1"
     }
   ]
 }
@@ -71,7 +62,7 @@ Options for the `gateway_teams` variable:
 ### Yaml Example
 
 - Check that Happy Team in Productive Organization exists
-- Set members and admins of Team "Managers" and associate it under the team with ID 1
+- Check that Managers Team doesn't exist, or delete it
 - Rename Team X and Reassign it to another organization
 
 File name: `data/gateway_teams.yml`
@@ -83,11 +74,8 @@ gateway_teams:
   organization: "Productive Organization"
   state: exists
 - name: "Managers"
-  users:
-  - 1
-  - 2
-  admins:
-  - 3
+  organization: "Org X"
+  state: absent
 - name: "Team X"
   new_name: "Secret Team"
   organization: "Org X"

@@ -1,0 +1,116 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_organizations_secure_logging: false
+    gateway_configuration_users_secure_logging: false
+    gateway_configuration_role_user_assignments_secure_logging: false
+    gateway_user_default_password: "change-me"
+    name_prefix: "GW-Collection-Test-RoleUserAssignments"
+- block:
+  # <Users> -----------------------------------
+  - name: Create Users
+    include_role:
+      name: ansible.gateway_configuration.users
+    vars:
+      gateway_users:
+      - username: "{{ name_prefix }}-User-1"
+      - username: "{{ name_prefix }}-User-2"
+  - debug:
+      var: __gateway_user_accounts_job_async_result
+  - name: Set Users var
+    set_fact:
+      _users: "{{ __gateway_user_accounts_job_async_result.results }}"
+
+  - name: Assert Users
+    assert:
+      that:
+      - _users[0] is changed
+      - _users[1] is changed
+  # </Users> ----------------------------------
+  # <Organizations> ---------------------------
+  - name: Create Organizations
+    include_role:
+      name: ansible.gateway_configuration.organizations
+    vars:
+      gateway_organizations:
+      - name: "{{ name_prefix }}-Org-1"
+      - name: "{{ name_prefix }}-Org-2"
+        description: "{{ name_prefix }}-Org-2-Description"
+  - debug:
+      var: __gateway_organizations_job_async_result
+  - name: Set Organizations var
+    set_fact:
+      _organizations: "{{ __gateway_organizations_job_async_result.results }}"
+
+  - name: Assert Create Organizations passed
+    assert:
+      that:
+      - _organizations[0] is changed
+      - _organizations[1] is changed
+  # </Organizations> --------------------------
+  # <Role User Assignments> -------------------
+  - name: Assign Admins by Role User Assignments
+    include_role:
+      name: ansible.gateway_configuration.role_user_assignments
+    vars:
+      gateway_role_user_assignments:
+      - role_definition: Organization Member
+        user: "{{ _users[0].id }}"
+        object_id: "{{ _organizations[0].id }}"
+      - role_definition: Organization Admin
+        user: "{{ _users[1].id }}"
+        object_id: "{{ _organizations[0].id }}"
+
+  - name: Check Existence of Role User Assignments
+    include_role:
+      name: ansible.gateway_configuration.role_user_assignments
+    vars:
+      gateway_role_user_assignments:
+      - role_definition: Organization Member
+        user: "{{ _users[0].id }}"
+        object_id: "{{ _organizations[0].id }}"
+        state: exists
+
+  - name: Check absence of Role User Assignments
+    include_role:
+      name: ansible.gateway_configuration.role_user_assignments
+    vars:
+      gateway_role_user_assignments:
+      - role_definition: Organization Member
+        user: "{{ _users[0].id }}"
+        object_id: "{{ _organizations[0].id }}"
+        state: absent
+      - role_definition: Organization Admin
+        user: "{{ _users[0].id }}"
+        object_id: "{{ _organizations[0].id }}"
+        state: absent
+  - debug:
+      var: __gateway_role_user_assignments_job_async_result
+  - name: Set Role User Assignments var
+    set_fact:
+      _role_user_assignments: "{{ __gateway_role_user_assignments_job_async_result.results }}"
+  - name: Check Role User Assignments
+    assert:
+      that:
+      - _role_user_assignments[0] is changed
+      - _role_user_assignments[1] is not changed
+  # </Role User Assignments> ------------------
+
+  # <Cleanup>
+  always:
+  - name: Delete Organizations
+    include_role:
+      name: ansible.gateway_configuration.organizations
+    vars:
+      gateway_state: absent
+      gateway_organizations:
+      - name: "{{ name_prefix }}-Org-1"
+      - name: "{{ name_prefix }}-Org-2"
+  - name: Delete Users
+    include_role:
+      name: ansible.gateway_configuration.users
+    vars:
+      gateway_state: absent
+      gateway_users:
+      - username: "{{ name_prefix }}-User-1"
+      - username: "{{ name_prefix }}-User-2"

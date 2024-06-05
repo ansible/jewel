@@ -7,30 +7,6 @@
     name_prefix: "GW-Collection-Test-Organization"
 
 - block:
-  # <Users> ---------------------------
-  - name: Create users
-    include_role:
-      name: ansible.gateway_configuration.users
-    vars:
-      gateway_users:
-        - username: "{{ name_prefix }}-User-1"
-        - username: "{{ name_prefix }}-User-2"
-        - username: "{{ name_prefix }}-Admin-1"
-          is_superuser: True
-  - debug:
-      var: __gateway_user_accounts_job_async_result
-  - name: Set Users var
-    set_fact:
-      _users: "{{ __gateway_user_accounts_job_async_result.results }}"
-
-  - name: Assert Create Users passed
-    assert:
-      that:
-      - _users[0] is changed
-      - _users[1] is changed
-      - _users[2] is changed
-  # </Users> --------------------------
-
   # <Organizations> -------------------
   - name: Create Organizations
     include_role:
@@ -38,16 +14,10 @@
     vars:
       gateway_organizations:
       - name: "{{ name_prefix }}-Org-1"
-        admins:
-          - "{{ _users[1].id }}"
-          - "{{ _users[2].id }}"
       - name: "{{ name_prefix }}-Org-2"
         description: "Organization 2"
       - name: "{{ name_prefix }}-Org-3"
       - name: "{{ name_prefix }}-Org-4"
-        users:
-          - "{{ _users[0].id }}"
-          - "{{ _users[1].id }}"
   - debug:
       var: __gateway_organizations_job_async_result
   - name: Set Organizations var
@@ -74,7 +44,7 @@
         - name: "{{ _organizations[2].id }}"
           new_name: "{{ name_prefix}}-Renamed-Organization"
         - name: "{{ name_prefix }}-Org-4"
-          users: []
+          state: absent
         - name: "{{ name_prefix }}-Non-Existing-Organization"
           state: absent
 
@@ -91,15 +61,11 @@
         - _organizations[3] is changed
         - _organizations[4] is not changed
 
-  - name: 2nd Check
+  - name: Check renamed organization
     include_role:
       name: ansible.gateway_configuration.organizations
     vars:
       gateway_organizations:
-        - name: "{{ name_prefix }}-Org-1"
-          admins:
-          - "{{ _users[1].id }}"
-          - "{{ _users[2].id }}"
         - name: "{{ name_prefix }}-Org-3"
           state: absent
         - name: "{{ name_prefix}}-Renamed-Organization"
@@ -109,12 +75,11 @@
     set_fact:
       _organizations: "{{ __gateway_organizations_job_async_result.results }}"
 
-  - name: Assert Create Organizations passed
+  - name: Assert Check renamed organization passed
     assert:
       that:
         - _organizations[0] is not changed
         - _organizations[1] is not changed
-        - _organizations[2] is not changed
 
   # </Organizations> ------------------
 
@@ -132,12 +97,3 @@
         - name: "{{ name_prefix }}-Org-4"
         - name: "{{ name_prefix}}-Renamed-Organization"
         - name: "{{ name_prefix }}-Non-Existing-Organization"
-  - name: Delete Users
-    include_role:
-      name: ansible.gateway_configuration.users
-    vars:
-      gateway_state: absent
-      gateway_users:
-        - username: "{{ name_prefix }}-User-1"
-        - username: "{{ name_prefix }}-User-2"
-        - username: "{{ name_prefix }}-Admin-1"

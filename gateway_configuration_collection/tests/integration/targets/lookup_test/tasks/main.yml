@@ -36,9 +36,6 @@
       vars:
         gateway_organizations:
         - name: "{{ name_prefix }}-Org-1"
-          admins:
-            - "{{ _users[1].id }}"
-            - "{{ _users[2].id }}"
         - name: "{{ name_prefix }}-Org-2"
           description: "{{ name_prefix }}-Org-2-Description"
     - debug:
@@ -53,6 +50,17 @@
           - _organizations[0] is changed
           - _organizations[1] is changed
 
+    - name: Assign Admins by Role User Assignments
+      include_role:
+        name: ansible.gateway_configuration.role_user_assignments
+      vars:
+        gateway_role_user_assignments:
+        - role_definition: Organization Admin
+          user: "{{ _users[1].id }}"
+          object_id: "{{ _organizations[0].id }}"
+        - role_definition: Organization Admin
+          user: "{{ _users[2].id }}"
+          object_id: "{{ _organizations[0].id }}"
   - block:
     - name: Do queries
       set_fact:

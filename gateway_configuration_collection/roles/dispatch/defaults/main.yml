@@ -27,6 +27,8 @@ gateway_configuration_dispatcher_roles:
   - role: services
     var: ansible.gateway_configuration.gateway_services
     tags: services
+  - role: role_user_assignments
+    vars: ansible.gateway_configuration.gateway_role_user_assignments
   - role: routes
     vars: ansible.gateway_configuration.gateway_routes
     tags: routes
