@@ -24,19 +24,20 @@ Variables specific for this role are following:
 
 Options for the `gateway_authenticator_maps` variable:
 
-| Variable Name       |  Default Value  | Required | Type | Description                                                                                                                                              |
-|:--------------------|:---------------:|:--------:|:----:|:---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `name`              |       N/A       |   yes    | str  | The name of the resource                                                                                                                                 |
-| `new_name`          |       N/A       |    no    | str  | Setting this option will change the existing name (looked up via the name field)                                                                         |
-| `authenticator`     |       N/A       |   yes    | str  | The name or ID referencing the [Authenticator](../authenticators/README.md)                                                                              |
-| `new_authenticator` |       N/A       |    no    | str  | The name or ID referencing newly associated authenticator                                                                                                |
-| `revoke`            |     `false`     |    no    | bool | If a user does not meet this rule should we revoke the permission                                                                                        |
-| `map_type`          |     `team`      |    no    | str  | What does the map work on, a team, a user flag or is this an allow rule. choices: ["team", "is_superuser", "is_system_auditor", "allow", "organization"] |
-| `team`              |       N/A       |    no    | str  | A team name this rule works on                                                                                                                           |
-| `organization`      |       N/A       |    no    | str  | An organization name this rule works on                                                                                                                  |
-| `triggers`          |      `{}`       |    no    | dict | Trigger information for this rule                                                                                                                        |
-| `order`             | N/A(`0` by API) |    no    | int  | The order in which this rule should be processed, smaller numbers are of higher precedence                                                               |
-| `state`             |    `present`    |    no    | str  | Desired state of the resource.                                                                                                                           |
+| Variable Name       |  Default Value  | Required | Type | Description                                                                                                                                 |
+|:--------------------|:---------------:|:--------:|:----:|:--------------------------------------------------------------------------------------------------------------------------------------------|
+| `name`              |       N/A       |   yes    | str  | The name of the resource                                                                                                                    |
+| `new_name`          |       N/A       |    no    | str  | Setting this option will change the existing name (looked up via the name field)                                                            |
+| `authenticator`     |       N/A       |   yes    | str  | The name or ID referencing the [Authenticator](../authenticators/README.md)                                                                 |
+| `new_authenticator` |       N/A       |    no    | str  | The name or ID referencing newly associated authenticator                                                                                   |
+| `revoke`            |     `false`     |    no    | bool | If a user does not meet this rule should we revoke the permission                                                                           |
+| `map_type`          |     `team`      |    no    | str  | What does the map work on, a team, a user flag or is this an allow rule. choices: ["allow", "is_superuser", "team", "organization", "role"] |
+| `role`              |       N/A       |    no    | str  | The name of RBAC Role Definition  to be used for this map                                                                                   | 
+| `team`              |       N/A       |    no    | str  | A team name this rule works on                                                                                                              |
+| `organization`      |       N/A       |    no    | str  | An organization name this rule works on                                                                                                     |
+| `triggers`          |      `{}`       |    no    | dict | Trigger information for this rule                                                                                                           |
+| `order`             | N/A(`0` by API) |    no    | int  | The order in which this rule should be processed, smaller numbers are of higher precedence                                                  |
+| `state`             |    `present`    |    no    | str  | Desired state of the resource.                                                                                                              |
 
 ** Unique value: **
 
@@ -56,7 +57,7 @@ Options for the `gateway_authenticator_maps` variable:
       "name": "AMap-1",
       "authenticator": "Authenticator-1",
       "revoke": false,
-      "map_type": "organization",  
+      "map_type": "organization",
       "organization": "Organization 1",
       "triggers": {
         "always": {},
@@ -70,10 +71,11 @@ Options for the `gateway_authenticator_maps` variable:
       "map_type": "team",
       "team": "Team 1",
       "organization": "Organization 1",
+      "role": "Team Member",
       "triggers": {
         "never": {}
       }
-    }    
+    }
   ]
 }
 ```
@@ -91,12 +93,12 @@ gateway_authenticator_maps:
 - name: AuthMap 1
   authenticator: Auth 1
   revoke: true
-  map_type: allow
-  team: "Team 1"
+  map_type: organization
   organization: Organization 1
+  role: Organization Admin
   triggers:
-    always: {}
-    never: {}
+    always: { }
+    never: { }
     groups:
       has_or:
       - has_or_11

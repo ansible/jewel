@@ -9,6 +9,7 @@
     map_type:                 "{{ __gateway_authenticator_maps_item.map_type | default(omit) }}"
     team:                     "{{ __gateway_authenticator_maps_item.team | default(omit) }}"
     organization:             "{{ __gateway_authenticator_maps_item.organization | default(omit) }}"
+    role:                     "{{ __gateway_authenticator_maps_item.role | default(omit) }}"
     triggers:                 "{{ __gateway_authenticator_maps_item.triggers | default(omit) }}"
     order:                    "{{ __gateway_authenticator_maps_item.order | default(omit) }}"
     state:                    "{{ __gateway_authenticator_maps_item.state | default(gateway_state | default(omit, true)) }}"
