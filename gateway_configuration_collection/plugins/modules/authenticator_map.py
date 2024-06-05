@@ -44,17 +44,23 @@ options:
       default: "team"
       description:
       - What does the map work on, a team, a user flag or is this an allow rule
-      choices: ["team", "is_superuser", "is_system_auditor", "allow", "organization"]
+      choices: ["allow", "is_superuser", "team", "organization", "role"]
     team:
       type: str
       description:
       - A team name this rule works on
-      - required if map_type == "team"
+      - required if map_type is a 'team'
+      - required if role's content type is a 'team'
     organization:
       type: str
       description:
       - An organization name this rule works on
-      - required if map_type == "team" or map_type == "organization"
+      - required if map_type is either 'organization' or 'team'
+      - required if role's content type is either 'organization' or 'team'
+    role:
+      type: str
+      description:
+      - The name of the RBAC Role Definition to be used for this map
     triggers:
       type: dict
       description:
@@ -86,8 +92,9 @@ def main():
         authenticator=dict(type="str", required=True),
         new_authenticator=dict(type="str"),
         revoke=dict(type="bool"),
-        map_type=dict(type="str", choices=["team", "is_superuser", "is_system_auditor", "allow", "organization"]),
+        map_type=dict(type="str", choices=["allow", "is_superuser", "team", "organization", "role"]),
         team=dict(type="str"),
+        role=dict(type="str"),
         organization=dict(type="str"),
         triggers=dict(type="dict"),
         order=dict(type="int"),

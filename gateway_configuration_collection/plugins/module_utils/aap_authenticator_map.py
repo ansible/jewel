@@ -71,6 +71,9 @@ class AAPAuthenticatorMap(AAPObject):
         if (organization := self.params.get('organization')) is not None:
             self.new_fields['organization'] = organization
 
+        if (role := self.params.get('role')) is not None:
+            self.new_fields['role'] = role
+
         if (triggers := self.params.get('triggers')) is not None:
             self.new_fields['triggers'] = triggers
 

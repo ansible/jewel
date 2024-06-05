@@ -42,6 +42,7 @@
         authenticator: "{{ name_prefix }}-Authenticator-1"
         revoke: false
         map_type: organization
+        role: Organization Member
         organization: "Organization 1"
         triggers:
           always: {}
@@ -51,6 +52,7 @@
         authenticator: "{{ _authenticators[0].id }}"
         revoke: true
         map_type: team
+        role: Team Admin
         team: "Team 2"
         organization: "Organization 1"
         triggers:
