@@ -6,6 +6,8 @@ from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.contrib.auth.hashers import get_hashers_by_algorithm, is_password_usable, make_password
 from django.contrib.auth.models import AbstractUser
+from django.db.models import BooleanField
+from django.utils.translation import gettext as _
 
 logger = logging.getLogger('aap.gateway.models.user')
 
@@ -34,6 +36,13 @@ class User(AbstractUser, CommonModel, AuditableModel):
     PASSWORD_FIELDS = ["password"]  # Mark password fields so ansible_base.lib.rest_filters can properly block attempts to filter over password
 
     resource = AnsibleResourceField(primary_key_field="id")
+
+    managed = BooleanField(
+        editable=False,
+        blank=False,
+        default=False,
+        help_text=_("Indicates if this user is managed by the system. It cannot be modified once created."),
+    )
 
     def __init__(self, *args, is_system_auditor=False, **kwargs):
         super().__init__(*args, **kwargs)
