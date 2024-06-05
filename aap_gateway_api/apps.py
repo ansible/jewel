@@ -3,6 +3,12 @@ from django.db.models import signals
 from dynamic_preferences.signals import preference_updated
 
 
+def _initialize_data(sender, **kwargs):
+    from aap_gateway_api.signals.preloaded_data import create_preload_data
+
+    create_preload_data(**kwargs)
+
+
 def _initialize_preferences(sender, **kwargs):
     from aap_gateway_api.utils.preferences import initialize_preferences
 
@@ -36,6 +42,7 @@ class MyAppConfig(AppConfig):
     def ready(self):
         signals.post_migrate.connect(_initialize_preferences, sender=self, weak=False)
         signals.post_migrate.connect(_initialize_permissions, sender=self, weak=False)
+        signals.post_migrate.connect(_initialize_data, sender=self, weak=False)
         preference_updated.connect(_notify_on_preference_update)
 
         # Load the signals

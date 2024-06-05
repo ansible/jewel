@@ -5,6 +5,7 @@ from aap_gateway_api.models import Organization
 
 
 def test_organizations_list(admin_api_client, organization):
+    Organization.objects.filter(name='Default').delete()
     url = reverse("organization-list")
     response = admin_api_client.get(url)
     assert response.status_code == 200
@@ -37,6 +38,7 @@ def test_organizations_list_unauthenticated(unauthenticated_api_client):
 
 
 def test_organizations_create(admin_api_client, randname):
+    Organization.objects.all().delete()
     url = reverse("organization-list")
     random_name = randname("Test Organization")
     response = admin_api_client.post(url, data={"name": random_name})
@@ -59,6 +61,7 @@ def test_organizations_create(admin_api_client, randname):
     ],
 )
 def test_organizations_create_description_is_optional(admin_api_client, randname, description):
+    Organization.objects.all().delete()
     url = reverse("organization-list")
     random_name = randname("Test Organization")
     data = {"name": random_name}
