@@ -57,6 +57,7 @@ class UserSerializer(CommonUserSerializer):
             'organizations',
             'authenticators',
             'authenticator_uid',
+            'managed',
         ]
         read_only_fields = ["last_login"]
 

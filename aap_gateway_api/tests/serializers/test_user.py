@@ -251,3 +251,26 @@ class TestUserSerializer:
         response = admin_api_client.patch(url, payload)
         assert response.status_code == 200
         assert response.json()['authenticators'] == [1]
+
+    def test_managed_field_unsetable_through_api(self, admin_api_client, random_user):
+        """Test to ensure user.managed cannot be set to true via the API."""
+        assert random_user.managed is False
+        url = reverse("user-detail", kwargs={"pk": random_user.pk})
+        response = admin_api_client.get(url)
+        assert response.data['managed'] is False
+        response = admin_api_client.patch(url, data={"managed": True})
+        assert response.status_code == 200
+        assert response.data["managed"] is False
+
+    @pytest.mark.django_db
+    def test_managed_field_cant_be_changed_to_false(self, admin_api_client):
+        """Test to ensure that user.managed can be set to true via command line but not changed"""
+        user = User.objects.create(username="testing", managed=True)
+        user.refresh_from_db()
+        assert user.managed is True
+        url = reverse("user-detail", kwargs={"pk": user.pk})
+        response = admin_api_client.get(url)
+        assert response.data['managed'] is True
+        response = admin_api_client.patch(url, data={"managed": False})
+        assert response.status_code == 200
+        assert response.data["managed"] is True
