@@ -14,6 +14,8 @@
         command: /usr/bin/psql -U {{ db_username }} --command "SELECT 1 FROM pg_database WHERE datname = 'keycloak';"
         container: aap_gw_db_pgsql_1
       changed_when: False
+      retries: 3
+      delay: 3
       register: db_check
 
     - name: Create the keycloak database

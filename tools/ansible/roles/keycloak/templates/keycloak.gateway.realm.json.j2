@@ -103,7 +103,26 @@
       "gateway_oidc_client": []
     }
   },
-  "groups": [],
+  "groups": [
+    {
+      "id": "c4caf5c4-8f51-4657-ac80-def283ecd4e5",
+      "name": "admins",
+      "path": "/admins",
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {},
+      "subGroups": []
+    },
+    {
+      "id": "ad448e0f-687e-48f8-baf0-8103b8b4dfe4",
+      "name": "auditors",
+      "path": "/auditors",
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {},
+      "subGroups": []
+    }
+  ],
   "defaultRole": {
     "id": "b7f7a161-2a18-4b95-b58b-99448b2fc50e",
     "name": "default-roles-gateway realm",
@@ -386,6 +405,21 @@
           }
         },
         {
+          "id": "d5b73a94-e886-45b7-875c-d7472674bb47",
+          "name": "is_superuser mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "is_superuser",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "is_superuser",
+            "jsonType.label": "String"
+          }
+        },
+        {
           "id": "a8f4a0a8-ece4-4a9d-9e7b-830f23ba0067",
           "name": "Gateway OIDC Group Membership",
           "protocol": "openid-connect",
@@ -397,6 +431,21 @@
             "access.token.claim": "true",
             "claim.name": "Group",
             "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "id": "76ddafb4-663f-436c-a92b-ebded6bbcc0c",
+          "name": "is_system_auditor mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "is_system_auditor",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "is_system_auditor",
+            "jsonType.label": "String"
           }
         }
       ],
@@ -1863,7 +1912,7 @@
     "requiredActions" : [ ],
     "realmRoles" : [ "default-roles-gateway realm" ],
     "notBefore" : 0,
-    "groups" : [ ]
+    "groups" : [ "admins" ]
   }, {
     "id" : "cbe48149-3bc5-49a1-a616-c8a5c8a3a88f",
     "createdTimestamp" : 1638394708362,
@@ -1875,7 +1924,7 @@
     "lastName" : "Auditor",
     "email" : "know.one@nowhere.com",
     "attributes" : {
-      "is_system_auditor" : [ "Yup" ]
+      "is_system_auditor" : [ "true" ]
     },
     "credentials" : [ {
       "id" : "f94e759e-ddcf-41b4-b088-8f00d481eae4",
@@ -1888,6 +1937,6 @@
     "requiredActions" : [ ],
     "realmRoles" : [ "default-roles-gateway realm" ],
     "notBefore" : 0,
-    "groups" : [ ]
+    "groups" : [ "auditors" ]
   } ]
 }
