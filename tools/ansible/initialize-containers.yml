@@ -4,9 +4,10 @@
   gather_facts: false
   tasks:
     - include_role:
-        name: "{{ item.key }}"
+        name: "{{ outer_item.key }}"
         tasks_from: initialize
       loop: "{{ enabled_containers | dict2items }}"
-      when: enabled_containers[item.key] | bool
+      when: enabled_containers[outer_item.key] | bool
       loop_control:
-        label: "{{ item.key }}"
+        loop_var: outer_item
+        label: "{{ outer_item.key }}"
