@@ -1,5 +1,6 @@
 import logging
 
+from ansible_base.lib.utils.models import get_system_user
 from django.apps import apps as global_apps
 
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
@@ -31,7 +32,7 @@ def create_preload_data(**kwargs) -> None:
     if verbosity > 0:
         logger.info("Building preloaded data")
 
-    for function in [create_default_organization]:
+    for function in [create_default_organization, set_system_user_managed_flag]:
         name = function.__name__
         try:
             if verbosity > 1:
@@ -52,3 +53,9 @@ def create_default_organization() -> bool:
         name='Default', defaults={'managed': True, 'description': 'The default organization for Ansible Automation Platform'}
     )
     return created
+
+
+def set_system_user_managed_flag() -> None:
+    system_user = get_system_user()
+    system_user.managed = True
+    system_user.save()
