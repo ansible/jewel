@@ -38,6 +38,7 @@ class TestCreatePreloadedData:
             create_preload_data(verbosity=verbosity, plan=[('0000', False), ('0001', True)])
         assert Organization.objects.count() == 0
 
+    @pytest.mark.django_db
     @pytest.mark.parametrize(
         "verbosity,log_level",
         [
