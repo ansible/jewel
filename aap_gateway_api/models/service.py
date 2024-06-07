@@ -6,6 +6,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext as _
 
+from aap_gateway_api.utils.resources_client import ServiceTypeChoices
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
 
 API_PREFIX = "/api/"
@@ -90,11 +91,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
 
     router_basename = 'service_cluster'
 
-    class ServiceType(models.TextChoices):
-        HUB = "hub", "hub"
-        CONTROLLER = "controller", "controller"
-        EDA = "eda", "eda"
-        GATEWAY = "gateway", "gateway"
+    ServiceType = ServiceTypeChoices
 
     service_type = models.CharField(
         # We can remove this if/when we add support for multiple services of each type.
