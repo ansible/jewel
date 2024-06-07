@@ -297,7 +297,6 @@ ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version
 ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
 ANSIBLE_BASE_ROLE_PRECREATE = {}  # managed roles are created in data migrations
 ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
-ANSIBLE_BASE_SHARED_SECRET = ''
 ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
@@ -315,9 +314,6 @@ include(optional(getenv('GATEWAY_SETTINGS_FILE', '/etc/ansible-automation-platfo
 
 
 # Finally, environment variables always override last
-if getenv("ANSIBLE_BASE_SHARED_SECRET", None) is not None:
-    ANSIBLE_BASE_SHARED_SECRET = getenv("ANSIBLE_BASE_SHARED_SECRET")
-
 if getenv("DATABASE_NAME", None) is not None:
     DATABASES["default"]["NAME"] = getenv("DATABASE_NAME")
 if getenv("DATABASE_USER", None) is not None:

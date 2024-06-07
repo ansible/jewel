@@ -4,7 +4,7 @@ import time
 import uuid
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
-from ansible_base.lib.utils.encryption import SharedSecretNotFound, generate_hmac_sha256_shared_secret
+from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError, connections
@@ -16,7 +16,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
-from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_preference_value
+from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
 
 MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware]
 
@@ -97,10 +97,8 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         self.headers = []
         try:
             self.headers.append(
-                HeaderValueOption(header=HeaderValue(key='x-trusted-proxy', value=generate_hmac_sha256_shared_secret())),
+                HeaderValueOption(header=HeaderValue(key='x-trusted-proxy', value=generate_x_trusted_proxy_header(get_jwt_rsa_key()))),
             )
-        except SharedSecretNotFound:
-            logger.warning("Unable to set trusted proxy header because shared secret was not set")
         except Exception:
             logger.exception("Failed to generate x-trusted-proxy")
 
