@@ -300,6 +300,13 @@ ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentic
 ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
+ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
+    'sys_auditor': {'name': 'Platform Auditor'},
+    'team_member': {},
+    'team_admin': {},
+    'org_admin': {},
+    'org_member': {},
+}
 
 # Set the maximum number of secrets that can be active for a service cluster at any given time.
 MAX_ACTIVE_KEYS_PER_SERVICE = 2

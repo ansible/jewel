@@ -1,6 +1,7 @@
 import logging
 
 from ansible_base.lib.utils.models import get_system_user
+from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
 
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
@@ -32,7 +33,7 @@ def create_preload_data(**kwargs) -> None:
     if verbosity > 0:
         logger.info("Building preloaded data")
 
-    for function in [create_default_organization, set_system_user_managed_flag]:
+    for function in [create_default_organization, set_system_user_managed_flag, create_managed_roles]:
         name = function.__name__
         try:
             if verbosity > 1:
@@ -59,3 +60,7 @@ def set_system_user_managed_flag() -> None:
     system_user = get_system_user()
     system_user.managed = True
     system_user.save()
+
+
+def create_managed_roles() -> None:
+    permission_registry.create_managed_roles(global_apps)

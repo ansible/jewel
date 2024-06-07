@@ -9,43 +9,6 @@ def create_permissions_as_operation(apps, schema_editor):
     create_dab_permissions(global_apps.get_app_config("aap_gateway_api"), apps=apps)
 
 
-def create_managed_roles(apps, schema_editor):
-    RoleDefinition = apps.get_model('dab_rbac', 'RoleDefinition')
-    DABPermission = apps.get_model('dab_rbac', 'DABPermission')
-    RoleUserAssignment = apps.get_model('dab_rbac', 'RoleUserAssignment')
-    ContentType = apps.get_model('contenttypes', 'ContentType')
-    User = apps.get_model('aap_gateway_api.User')
-
-    MANAGED_ROLE_DATA = [
-        ('team', 'Team Member', ['member_team', 'view_team']),
-        ('team', 'Team Admin', ['change_team', 'delete_team', 'member_team', 'view_team']),
-        ('organization', 'Organization Member', ['member_organization', 'view_organization']),
-        ('organization', 'Organization Admin', [
-            'change_organization', 'delete_organization', 'member_organization', 'view_organization',
-            'change_team', 'member_team', 'add_team', 'delete_team', 'view_team'
-        ]),
-    ]
-    for model_name, role_name, perm_codenames in MANAGED_ROLE_DATA:
-        ct = ContentType.objects.get(model=model_name)
-        rd = RoleDefinition.objects.create(name=role_name, content_type=ct, managed=True)
-        permissions = [DABPermission.objects.get(codename=codename) for codename in perm_codenames]
-        rd.permissions.add(*permissions)
-
-    # Create the System Auditor role
-    from aap_gateway_api.utils.rbac import SYSTEM_AUDITOR_ROLE_NAME, SYSTEM_AUDITOR_ROLE_DEFAULTS
-
-    system_auditor, _created = RoleDefinition.objects.get_or_create(
-        name=SYSTEM_AUDITOR_ROLE_NAME,
-        defaults=SYSTEM_AUDITOR_ROLE_DEFAULTS,
-    )
-    # Add All view permissions
-    system_auditor.permissions.add(*list(DABPermission.objects.filter(codename__startswith='view')))
-
-    # Assign System Auditor Role to all existing system auditors
-    for user in User.objects.filter(is_system_auditor=True).all():
-        RoleUserAssignment.objects.create(role_definition=system_auditor, user=user)
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -63,5 +26,6 @@ class Migration(migrations.Migration):
             options={'permissions': [('member_organization', 'User is a member of this organization')]},
         ),
         migrations.RunPython(create_permissions_as_operation, migrations.RunPython.noop),
-        migrations.RunPython(create_managed_roles),
+        # NOTE: managed roles used to be created here but were moved to post_migrate data creation
+        # we still need DAB RBAC permissions created sometime in the initial migrations
     ]
