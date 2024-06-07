@@ -53,10 +53,10 @@ class TestSystemAuditorSync:
         assert alice.role_assignments.filter(role_definition=rd).exists()
 
     def system_auditor_qs(self, user_id):
-        return RoleUserAssignment.objects.filter(object_id=None, user_id=user_id, role_definition__name='System Auditor')
+        return RoleUserAssignment.objects.filter(object_id=None, user_id=user_id, role_definition__name='Platform Auditor')
 
     def test_system_auditor_api_change(self, admin_api_client, user):
-        assert RoleDefinition.objects.filter(name='System Auditor').exists()
+        assert RoleDefinition.objects.filter(name='Platform Auditor').exists()
 
         assert not self.system_auditor_qs(user.id).exists()
 
@@ -537,7 +537,7 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
 
 @pytest.mark.django_db
 class TestUserSystemAuditorPermissions(TestUserPermissionsBase):
-    ROLE_NAME = "System Auditor"
+    ROLE_NAME = "Platform Auditor"
 
     @staticmethod
     @contextlib.contextmanager
@@ -555,7 +555,7 @@ class TestUserSystemAuditorPermissions(TestUserPermissionsBase):
             self._test_permissions(user_api_client, user, users, teams, organizations)
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
-        """System Auditor sees all users"""
+        """Platform Auditor sees all users"""
         url = reverse("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
@@ -564,22 +564,22 @@ class TestUserSystemAuditorPermissions(TestUserPermissionsBase):
         assert response.data['count'] == cnt
 
     def _test_detail(self, user_api_client, user, users, teams, organizations):
-        """System Auditor sees all users"""
+        """Platform Auditor sees all users"""
         self._test_detail_see_all(user_api_client, users, teams, organizations)
 
     def _test_create(self, user_api_client, user, users, teams, organizations):
-        """System Auditor can't create user"""
+        """Platform Auditor can't create user"""
         self._test_create_one(user_api_client, status_code=403)
 
     def _test_update(self, user_api_client, user, users, teams, organizations):
-        """System Auditor can't update any other user"""
+        """Platform Auditor can't update any other user"""
         tested_users = [users[organizations[0]][0], users[teams[organizations[1]][1]][1]]
 
         for tested_user in tested_users:
             self._test_update_one(user_api_client, tested_user, status_code=403)
 
     def _test_delete(self, user_api_client, user, users, teams, organizations):
-        """System Auditor can't delete any other user"""
+        """Platform Auditor can't delete any other user"""
         tested_users = [users[organizations[3]][0], users[teams[organizations[4]][1]][1]]
 
         for tested_user in tested_users:
@@ -782,13 +782,13 @@ class TestUserOptions:
 
         url1 = reverse("user-detail", kwargs={"pk": user.pk})
         response = user_api_client.options(url1)
-        assert response.status_code == 200, "System Auditor should see OPTIONS for self"
+        assert response.status_code == 200, "Platform Auditor should see OPTIONS for self"
         assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for auditor"
 
         user2 = User.objects.create(username='another user')
         url2 = reverse("user-detail", kwargs={"pk": user2.pk})
         response = user_api_client.options(url2)
-        assert response.status_code == 200, "System Auditor should see OPTIONS for 'another user'"
+        assert response.status_code == 200, "Platform Auditor should see OPTIONS for 'another user'"
         assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for auditor"
 
     def test_users_detail_options_superuser(self, admin_api_client):

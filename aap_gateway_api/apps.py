@@ -15,13 +15,6 @@ def _initialize_preferences(sender, **kwargs):
     initialize_preferences()
 
 
-def _initialize_permissions(sender, **kwargs):
-    from aap_gateway_api.utils.rbac import set_system_auditor_permissions
-
-    # In case we register new model, System Auditor view permissions need to be extended
-    set_system_auditor_permissions()
-
-
 def _notify_on_preference_update(sender, section, name, old_value, new_value, **kwargs):
     '''
     This signal gets called when a preference is updated. We use it to call the on_update
@@ -41,7 +34,6 @@ class MyAppConfig(AppConfig):
 
     def ready(self):
         signals.post_migrate.connect(_initialize_preferences, sender=self, weak=False)
-        signals.post_migrate.connect(_initialize_permissions, sender=self, weak=False)
         signals.post_migrate.connect(_initialize_data, sender=self, weak=False)
         preference_updated.connect(_notify_on_preference_update)
 
