@@ -6,9 +6,9 @@ from ansible_base.lib.utils.validation import to_python_boolean
 from ansible_base.resource_registry.rest_client import ResourceAPIClient as DABResourceAPIClient
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import models
 from requests.models import Response as Response
 
-from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
 from aap_gateway_api.utils.jwt_token import create_signed_jwt
 from aap_gateway_api.utils.preferences import get_preference_value
 
@@ -17,15 +17,22 @@ ResourceRequestBody = namedtuple("ResourceRequestBody", ["ansible_id", "service_
 logger = logging.getLogger('aap_gateway_api.utils.resource_api_client')
 
 
+class ServiceTypeChoices(models.TextChoices):
+    HUB = "hub", "hub"
+    CONTROLLER = "controller", "controller"
+    EDA = "eda", "eda"
+    GATEWAY = "gateway", "gateway"
+
+
 class GWResourceAPIClient(DABResourceAPIClient):
 
     service_paths = {
-        ServiceCluster.ServiceType.HUB: "/service-index/",
-        ServiceCluster.ServiceType.CONTROLLER: "/v2/service-index/",
-        ServiceCluster.ServiceType.EDA: "/v1/service-index/",
+        ServiceTypeChoices.HUB: "/service-index/",
+        ServiceTypeChoices.CONTROLLER: "/v2/service-index/",
+        ServiceTypeChoices.EDA: "/v1/service-index/",
     }
 
-    def __init__(self, service: ServiceAPIRoute, user=None, raise_if_bad_request: bool = False):
+    def __init__(self, service: models.Model, user=None, raise_if_bad_request: bool = False):
         http_port = service.http_port
         protocol = "https" if http_port.use_https else "http"
         port = http_port.number
@@ -59,7 +66,9 @@ class AllServicesClient(GWResourceAPIClient):
         self.clients = []
         raise_if_bad_request = False
 
-        for service in ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceCluster.ServiceType.GATEWAY):
+        from aap_gateway_api.models import ServiceAPIRoute
+
+        for service in ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceTypeChoices.GATEWAY):
             self.clients.append(GWResourceAPIClient(service, user=user, raise_if_bad_request=raise_if_bad_request))
 
     # TODO: Make this async
