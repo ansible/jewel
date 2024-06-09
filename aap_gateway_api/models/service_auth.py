@@ -1,6 +1,6 @@
 import secrets
 
-from ansible_base.lib.abstract_models.common import CommonModel
+from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from ansible_base.lib.utils.models import prevent_search
 from django.conf import settings
 from django.db import models
@@ -18,9 +18,17 @@ class ServiceKeyManager(models.Manager):
         return super().create(**obj_data)
 
 
-class ServiceKey(CommonModel):
+class ServiceKey(UniqueNamedCommonModel):
     objects = ServiceKeyManager()
     encrypted_fields = ["secret"]
+    # We are pulling in name here to allow null=True. These are typically created by a function in Service
+    # Allowing for null=True here allows the service to provide a default name if one does not exist
+    name = models.CharField(
+        max_length=512,
+        unique=True,
+        null=True,
+        help_text=_("The name of this resource"),
+    )
 
     def save(self, *args, **kwargs):
         max_active = settings.MAX_ACTIVE_KEYS_PER_SERVICE

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from ansible_base.resource_registry.models import service_id
@@ -120,8 +122,11 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
             self.service_id = service_id()
         return super().save(*args, **kwargs)
 
-    def generate_key(self, algorithm="HS256", secret_length=64, mark_previous_inactive=True):
+    def generate_key(self, name="", algorithm="HS256", secret_length=64, mark_previous_inactive=True):
         from aap_gateway_api.models import ServiceKey
+
+        if not name:
+            name = f"{self.name} - {datetime.now()}"
 
         if mark_previous_inactive:
             for key in self.service_keys.filter(is_active=True):
@@ -129,6 +134,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
                 key.save()
 
         new_key = ServiceKey.objects.create(
+            name=name,
             algorithm=algorithm,
             service_cluster=self,
             secret_length=secret_length,
