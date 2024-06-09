@@ -1,10 +1,10 @@
-from ansible_base.lib.serializers.common import CommonModelSerializer
+from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from rest_framework import serializers
 
 from aap_gateway_api.models import ServiceKey
 
 
-class ServiceKeySerializer(CommonModelSerializer):
+class ServiceKeySerializer(NamedCommonModelSerializer):
     secret_length = serializers.IntegerField(min_value=64, max_value=512, default=64, write_only=True)
     mark_previous_inactive = serializers.BooleanField(write_only=True, required=True)
     algorithm = serializers.ChoiceField(
@@ -14,7 +14,7 @@ class ServiceKeySerializer(CommonModelSerializer):
 
     class Meta:
         model = ServiceKey
-        fields = CommonModelSerializer.Meta.fields + [
+        fields = NamedCommonModelSerializer.Meta.fields + [
             "service_cluster",
             "is_active",
             "algorithm",
@@ -27,6 +27,7 @@ class ServiceKeySerializer(CommonModelSerializer):
         service_cluster = validated_data["service_cluster"]
 
         obj = service_cluster.generate_key(
+            name=validated_data.get("name"),
             algorithm=validated_data.get("algorithm"),
             secret_length=validated_data["secret_length"],
             mark_previous_inactive=validated_data["mark_previous_inactive"],
