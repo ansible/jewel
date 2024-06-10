@@ -50,6 +50,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
                 "list",
                 "retrieve",
                 "service-metadata",
+                "manifest",  # resource type manifest like /v1/service-index/resource-types/shared.user/manifest/
                 "create",
                 "update",
                 "delete",
