@@ -18,14 +18,22 @@
     configuration: "{{ saml_configuration }}"
     type: "ansible_base.authentication.authenticator_plugins.saml"    
 
-- name: SAML authenticator attribute maps
+- name: SAML authenticator superuser attribute map
   ansible.gateway_configuration.authenticator_map:
-    name: "{{ saml_auth_map_name }} - {{ item }}"
+    name: "{{ saml_auth_map_name }} - superuser"
     authenticator: "{{ saml_adapter_name }}"
-    map_type: "{{ item }}"
+    map_type: "is_superuser"
     order: 0
-    triggers: "{\"attributes\":{\"{{ item }}\": {}, \"join_condition\": \"or\"}}"
-  loop: ["is_superuser", "is_system_auditor"]
+    triggers: "{\"attributes\":{\"is_superuser\": {}, \"join_condition\": \"or\"}}"
+
+- name: SAML authenticator auditor attribute map
+  ansible.gateway_configuration.authenticator_map:
+    name: "{{ saml_auth_map_name }} - auditor"
+    authenticator: "{{ saml_adapter_name }}"
+    map_type: "role"
+    role: "Platform Auditor"
+    order: 0
+    triggers: "{\"attributes\":{\"is_system_auditor\": {}, \"join_condition\": \"or\"}}"
 
 - name: SAML authenticator org map
   ansible.gateway_configuration.authenticator_map:
@@ -36,6 +44,7 @@
     gateway_validate_certs: False
     authenticator: "{{ saml_adapter_name }}"
     map_type: "organization"
+    role: "Organization Member"
     organization: "Default"
     order: 0
     triggers:

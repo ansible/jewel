@@ -15,6 +15,7 @@
     authenticator: "{{ tacacs_container_name }}"
     map_type: "organization"
     organization: "Default"
+    role: "Organization Member"
     order: 0
     triggers:
       always: {}

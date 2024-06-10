@@ -9,7 +9,7 @@ ldap_auth_map_name: "Dev LDAP Container Map"
 
 ldap_group_mappings:
   - {ldap_group: 'admins', map_type: 'is_superuser', trigger_type: 'has_or'}
-  - {ldap_group: 'auditors', map_type: 'is_system_auditor', trigger_type: 'has_or'}
+  - {ldap_group: 'auditors', map_type: 'role', role: 'Platform Auditor', trigger_type: 'has_or'}
   - {ldap_group: 'users', map_type: 'allow', trigger_type: 'has_and'}
 
 ldap_configuration:

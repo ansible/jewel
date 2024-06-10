@@ -14,6 +14,7 @@
     name: "{{ ldap_auth_map_name }}-{{ item.ldap_group }}"
     authenticator: "{{ ldap_container_name }}"
     map_type: "{{ item.map_type }}"
+    role: "{{ item.role | default('') }}"
     order: 0
     triggers: "{\"groups\":{\"{{ item.trigger_type }}\":[\"cn={{ item.ldap_group }},ou=groups,dc=example,dc=org\"]}}"
   loop_control:
@@ -25,6 +26,7 @@
     name: "{{ ldap_auth_map_name }}"
     authenticator: "{{ ldap_container_name }}"
     map_type: "team"
+    role: "Team Member"
     organization: "LDAP Organization"
     team: "Organization Admins"
     order: 0
@@ -38,6 +40,7 @@
     name: "{{ ldap_auth_map_name }}"
     authenticator: "{{ ldap_container_name }}"
     map_type: "team"
+    role: "Team Member"
     organization: "LDAP Organization"
     team: "Organization Users"
     order: 0
