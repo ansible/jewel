@@ -11,6 +11,7 @@ action_groups:
   - route
   - service
   - service_cluster
+  - service_key
   - service_node
   - settings
   - team

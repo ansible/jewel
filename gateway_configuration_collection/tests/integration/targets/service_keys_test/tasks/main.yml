@@ -1,0 +1,142 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_service_keys_secure_logging: false
+    gateway_configuration_service_clusters_secure_logging: false
+    name_prefix: "GW-Collection-Test-ServiceKeys"
+
+- block:
+  # <Service Clusters> ----------------------------
+  - name: Create Service Clusters
+    include_role:
+      name: ansible.gateway_configuration.service_clusters
+    vars:
+      gateway_service_clusters:
+        - name: Automation Controller
+          service_type: "controller"
+        - name: Automation Hub
+          service_type: "hub"
+        - name: Event Driven Automation
+          service_type: "eda"
+  - debug:
+      var: __gateway_service_clusters_job_async_result
+  - name: Set Service Cluster var
+    set_fact:
+      _service_clusters: "{{ __gateway_service_clusters_job_async_result.results }}"
+
+  - name: Assert Create Service Clusters tests passed
+    assert:
+      that:
+        - _service_clusters[0] is changed
+        - _service_clusters[1] is changed
+        - _service_clusters[2] is changed
+  # </Service Clusters> ----------------------------
+
+  # <Service Keys> ----------------------------
+  - name: Create Service Keys
+    include_role:
+      name: ansible.gateway_configuration.service_keys
+    vars:
+      gateway_service_keys:
+      - name: "{{ name_prefix }}-Key 1"
+        is_active: true
+        service_cluster: Automation Controller
+        algorithm: HS384
+        secret: "gateway-secret"
+        mark_previous_inactive: False
+      - name: "{{ name_prefix }}-Key 2"
+        service_cluster: Automation Hub
+        secret: "gateway-secret"
+        mark_previous_inactive: True
+      - name: "{{ name_prefix }}-Key 3"
+        is_active: false
+        service_cluster: "{{ _service_clusters[0].id }}"  # Controller
+        mark_previous_inactive: False
+      - name: "{{ name_prefix }}-Key 4"
+        service_cluster: "{{ _service_clusters[2].id }}"  # EDA
+        mark_previous_inactive: False
+      - name: "{{ name_prefix }}-Key 5"
+        service_cluster: "{{ _service_clusters[0].id }}"  # Controller, have to set others as inactive
+        mark_previous_inactive: True
+  - debug:
+      var: __gateway_service_keys_job_async_result
+  - name: Assert Create Service Keys had expected statuses
+    assert:
+      that:
+        - __gateway_service_keys_job_async_result.results[0] is changed
+        - __gateway_service_keys_job_async_result.results[1] is changed
+        - __gateway_service_keys_job_async_result.results[2] is changed
+
+  - name: Check/Change Service Keys
+    include_role:
+      name: ansible.gateway_configuration.service_keys
+    vars:
+      gateway_service_keys:
+        - name: "{{ name_prefix }}-Key 1"
+          service_cluster: "{{ _service_clusters[0].name }}"
+          state: present
+        - name: "{{ name_prefix }}-Key 2"
+          is_active: false
+        - name: "{{ name_prefix }}-Key 3"
+          state: exists
+        - name: "{{ name_prefix }}-Key 4"
+          new_name: "{{ name_prefix }}-Key 4-New"
+        - name: "{{ name_prefix }}-Key 5" # exists
+          state: absent
+        - name: "{{ name_prefix }}-Key 6" # does not exist
+          state: absent
+  - debug:
+      var: __gateway_service_keys_job_async_result
+
+  - name: Assert Check/Change Service Key passed
+    assert:
+      that:
+        - __gateway_service_keys_job_async_result.results[0] is not changed
+        - __gateway_service_keys_job_async_result.results[1] is changed
+        - __gateway_service_keys_job_async_result.results[2] is not changed
+        - __gateway_service_keys_job_async_result.results[3] is changed
+        - __gateway_service_keys_job_async_result.results[4] is changed
+        - __gateway_service_keys_job_async_result.results[5] is not changed
+
+  - name: Check Unique Key changes
+    include_role:
+      name: ansible.gateway_configuration.service_keys
+    vars:
+      gateway_service_keys:
+        - name: "{{ name_prefix }}-Key 4"
+          state: absent
+        - name: "{{ name_prefix }}-Key 4-New"
+          state: exists
+
+  - name: Assert Unique Key changes passed
+    assert:
+      that:
+        - __gateway_service_keys_job_async_result.results[0] is not changed
+        - __gateway_service_keys_job_async_result.results[1] is not changed
+
+  always:
+    # Always Cleanup
+  - name: Delete Service Keys
+    include_role:
+      name: ansible.gateway_configuration.service_keys
+    vars:
+      gateway_state: absent
+      gateway_service_keys:
+        - name: "{{ name_prefix }}-Key 1"
+        - name: "{{ name_prefix }}-Key 2"
+        - name: "{{ name_prefix }}-Key 3"
+        - name: "{{ name_prefix }}-Key 4"
+        - name: "{{ name_prefix }}-Key 4-New"
+        - name: "{{ name_prefix }}-Key 5"
+        - name: "{{ name_prefix }}-Key 6"
+    ignore_errors: True
+
+  - name: Delete Service Clusters
+    include_role:
+      name: ansible.gateway_configuration.service_clusters
+    vars:
+      gateway_state: absent
+      gateway_service_clusters:
+        - name: Automation Controller
+        - name: Automation Hub
+        - name: Event Driven Automation
