@@ -28,7 +28,6 @@
           # Create an auditor
           - username: "{{ username }}_auditor"
             first_name: Joe
-            is_system_auditor: true
             password: "{{ 65535 | random | to_uuid }}"
           # Create a superuser
           - username: "{{ username }}_admin"

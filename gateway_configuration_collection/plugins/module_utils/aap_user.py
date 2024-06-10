@@ -22,8 +22,6 @@ class AAPUser(AAPObject):
             self.new_fields["email"] = email
         if (is_superuser := self.module.params.get("is_superuser")) is not None:
             self.new_fields["is_superuser"] = is_superuser
-        if (is_system_auditor := self.module.params.get("is_system_auditor")) is not None:
-            self.new_fields["is_system_auditor"] = is_system_auditor
         if (password := self.module.params.get("password")) is not None:
             self.new_fields["password"] = password
         if (organizations := self.module.params.get("organizations")) is not None:

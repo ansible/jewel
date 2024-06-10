@@ -31,7 +31,6 @@ class UserSerializer(CommonUserSerializer):
         allow_null=True,
     )
     authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    is_system_auditor = serializers.BooleanField(required=False)
 
     def __init__(self, instance=None, data=empty, **kwargs):
         super().__init__(instance, data, **kwargs)
@@ -53,7 +52,6 @@ class UserSerializer(CommonUserSerializer):
             'last_login',
             'password',
             'is_superuser',
-            'is_system_auditor',
             'organizations',
             'authenticators',
             'authenticator_uid',
