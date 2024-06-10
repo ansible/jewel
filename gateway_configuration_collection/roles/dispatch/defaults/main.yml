@@ -21,6 +21,9 @@ gateway_configuration_dispatcher_roles:
   - role: service_clusters
     var: ansible.gateway_configuration.gateway_service_clusters
     tags: service_clusters
+  - role: service_keys
+    var: ansible.gateway_configuration.gateway_service_keys
+    tags: service_keys
   - role: service_nodes
     var: ansible.gateway_configuration.gateway_service_nodes
     tags: service_nodes

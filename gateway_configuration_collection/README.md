@@ -14,6 +14,7 @@ Roles manage gateway data through gateway API.
 |      http_ports       |      `gateway_http_ports`       |      [link](roles/http_ports/README.md)       |
 |     organizations     |     `gateway_organizations`     |     [link](roles/organizations/README.md)     |
 |   service_clusters    |   `gateway_service_clusters`    |   [link](roles/service_clusters/README.md)    |
+|    service_keys    |    `gateway_service_keys`    |    [link](roles/service_keys/README.md)    |
 |     service_nodes     |     `gateway_service_nodes`     |     [link](roles/service_nodes/README.md)     |
 | role_user_assignments | `gateway_role_user_assignments` | [link](roles/role_user_assignments/README.md) |
 |        routes         |        `gateway_routes`         |        [link](roles/routes/README.md)         | 
@@ -44,6 +45,7 @@ Roles manage gateway data through gateway API.
   - { role: ansible.gateway_configuration.authenticator_maps, when: gateway_authenticator_maps is defined }
   - { role: ansible.gateway_configuration.http_ports, when: gateway_http_ports is defined }
   - { role: ansible.gateway_configuration.service_clusters, when: gateway_service_clusters is defined }
+  - { role: ansible.gateway_configuration.service_keys, when: gateway_service_keys is defined }
   - { role: ansible.gateway_configuration.service_nodes, when: gateway_service_nodes is defined }
   - { role: ansible.gateway_configuration.services, when: gateway_services is defined }
   - { role: ansible.gateway_configuration.routes, when: gateway_routes is defined }

@@ -26,6 +26,9 @@ argument_specs:
           - role: service_clusters
             var: gateway_service_clusters
             tags: service_clusters
+          - role: service_keys
+            var: gateway_service_keys
+            tags: service_keys
           - role: service_nodes
             var: gateway_service_nodes
             tags: service_nodes

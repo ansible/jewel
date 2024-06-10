@@ -49,7 +49,7 @@ no_api_parameter_ok = {
 # work is being done and will bypass this check. At some point this module should be removed from this list.
 # https://issues.redhat.com/browse/AAP-23122 for DAB RBAC endpoints
 # https://issues.redhat.com/browse/AAP-24613 for service_key
-needs_development = ['role_definition', 'role_team_assignment', 'service_key']  # i.e. 'team', 'organization'
+needs_development = ['role_definition', 'role_team_assignment']  # i.e. 'team', 'organization'
 needs_param_development = {}
 # -----------------------------------------------------------------------------------------------------------
 
