@@ -14,6 +14,7 @@
     name: "{{ radius_auth_map_name }} - org"
     authenticator: "{{ radius_authenticator_name }}"
     map_type: "organization"
+    role: "Organization Member"
     organization: "Default"
     order: 0
     triggers:
