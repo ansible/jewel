@@ -23,8 +23,7 @@ def create_signed_jwt(user):
         "last_name": user.last_name,
         "email": user.email,
         "is_superuser": user.is_superuser,
-        # FIXME: what's the flag for system auditor?
-        "is_system_auditor": user.is_superuser,
+        "is_system_auditor": user.is_system_auditor,  # NOTE: this only maps to the Platform Auditor role
         "claims": {"organizations": {}, "teams": teams},
     }
     if hasattr(user, 'claim'):

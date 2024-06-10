@@ -18,7 +18,6 @@ gateway_user_accounts: []
 #  - last_name
 #  - email
 #  - is_superuser
-#  - is_system_auditor
 #  - password
 #  - authenticators
 #  - authenticator_uid

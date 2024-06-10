@@ -31,7 +31,6 @@ Options for the `gateway_users` variable:
 | `first_name`        |                  ""                   |    no    | str  | The first name of the user                                                                                                                                            |
 | `last_name`         |                  ""                   |    no    | str  | The last name of the user                                                                                                                                             |
 | `is_superuser`      |                `false`                |    no    | bool | Whether the user is a superuser                                                                                                                                       |
-| `is_system_auditor` |                `false`                |    no    | bool | Whether the user is an auditor                                                                                                                                        |
 | `authenticators`    |                 N/A                   |    no    | list | List of authenticators this user is associated with                                                                                                                   |
 | `authenticator_uid` |                 N/A                   |    no    | bool | UID coming from the authenticators the user is associated with                                                                                                        |
 | `state`             |               `present`               |    no    | str  | Desired state of the resource.                                                                                                                                        |
@@ -59,7 +58,6 @@ Options for the `gateway_users` variable:
     },
     {
       "username": "jdoe",
-      "is_system_auditor": true,
       "email": "jdoe@example.com"
     }
   ]

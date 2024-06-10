@@ -46,11 +46,6 @@ options:
         - Designates that this user has all permissions without explicitly assigning them.
       type: bool
       aliases: ['superuser']
-    is_system_auditor:
-      description:
-        - User is a system wide auditor.
-      type: bool
-      aliases: ['auditor']
     password:
       description:
         - Write-only field used to change the password.
@@ -118,7 +113,6 @@ def main():
         last_name=dict(),
         email=dict(),
         is_superuser=dict(type="bool", aliases=["superuser"]),
-        is_system_auditor=dict(type="bool", aliases=["auditor"]),
         password=dict(no_log=True),
         organizations=dict(type="list"),
         update_secrets=dict(type="bool", default=True, no_log=False),
