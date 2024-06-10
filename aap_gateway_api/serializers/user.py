@@ -31,6 +31,7 @@ class UserSerializer(CommonUserSerializer):
         allow_null=True,
     )
     authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    is_system_auditor = serializers.BooleanField(read_only=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
         super().__init__(instance, data, **kwargs)
@@ -52,12 +53,13 @@ class UserSerializer(CommonUserSerializer):
             'last_login',
             'password',
             'is_superuser',
+            'is_system_auditor',
             'organizations',
             'authenticators',
             'authenticator_uid',
             'managed',
         ]
-        read_only_fields = ["last_login"]
+        read_only_fields = ["last_login", "is_system_auditor"]
 
     def is_superuser_making_request(self) -> bool:
         request = self.context.get('request', None)

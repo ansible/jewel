@@ -2,6 +2,7 @@ import contextlib
 from abc import abstractmethod
 
 import pytest
+from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from django.urls import reverse
 
 from aap_gateway_api.models.user import User
@@ -50,6 +51,32 @@ class TestSystemAuditorSync:
         alice = User.objects.create(username='alice', is_system_auditor=True)
         rd = get_system_auditor_role()
         assert alice.role_assignments.filter(role_definition=rd).exists()
+
+    def system_auditor_qs(self, user_id):
+        return RoleUserAssignment.objects.filter(object_id=None, user_id=user_id, role_definition__name='Platform Auditor')
+
+    def test_system_auditor_api_flag(self, admin_api_client, user):
+        assert RoleDefinition.objects.filter(name='Platform Auditor').exists()
+
+        assert not self.system_auditor_qs(user.id).exists()
+
+        url = reverse('user-detail', kwargs={'pk': user.id})
+        for flag_enabled in [True, False]:
+            user.is_system_auditor = flag_enabled
+            user.save()
+            assert self.system_auditor_qs(user.id).exists() is flag_enabled
+
+            response = admin_api_client.get(url)
+            assert response.data['is_system_auditor'] is flag_enabled
+
+            new_flag_value = bool(not flag_enabled)
+            assert new_flag_value != flag_enabled  # really basic sanity
+
+            response = admin_api_client.patch(url, {'is_system_auditor': new_flag_value})
+            assert response.status_code == 200
+
+            # value should not be new_flag_value, PATCH should not change the read-only field
+            assert self.system_auditor_qs(user.id).exists() is flag_enabled
 
 
 class TestUserPermissionsBase:
