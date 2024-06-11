@@ -16,12 +16,12 @@ def associate_logged_user(teams, organizations, user):
      - Org 5: Org Admin
      - Org 6: No membership
     """
-    teams[organizations[0]][0].users.add(user)
-    teams[organizations[1]][0].admins.add(user)
-    teams[organizations[2]][0].users.add(user)
-    teams[organizations[2]][1].admins.add(user)
-    organizations[3].users.add(user)
-    organizations[4].admins.add(user)
+    teams[organizations[0]][0].add_member(user)
+    teams[organizations[1]][0].add_admin(user)
+    teams[organizations[2]][0].add_member(user)
+    teams[organizations[2]][1].add_admin(user)
+    organizations[3].add_member(user)
+    organizations[4].add_admin(user)
 
 
 def _visible_teams(teams, organizations):
@@ -103,24 +103,35 @@ def test_team_create_permissions(user_api_client, user, organization, org_admin_
     assert response.status_code == 201
 
 
-def test_team_detail_modify_members(user_api_client, user, organization, team, admin_rd, member_rd, org_member_rd):
+@pytest.mark.parametrize("api_type", ["old", "new"])
+def test_team_detail_modify_members(user_api_client, user, organization, team, admin_rd, member_rd, org_member_rd, api_type):
     rando = User.objects.create(username='rando')
     admin_rd.give_permission(user, team)
-    url = reverse('team-detail', kwargs={'pk': team.pk})
 
-    # data to add rando as a member
-    patch_data = {'users': [rando.id]}
-
-    # user can not add rando as a member due to not being able to view that user
-    response = user_api_client.patch(url, data=patch_data)
-    assert response.status_code == 400
+    if api_type == "old":
+        url = reverse('team-users-associate', kwargs={'pk': team.pk})
+        # data to add rando as a member
+        patch_data = {'instances': [rando.id]}
+        # user can not add rando as a member due to not being able to view that user
+        response = user_api_client.post(url, data=patch_data)
+        assert response.status_code == 400, response.data
+    else:
+        url = reverse('roleuserassignment-list')
+        data = {'object_id': team.pk, 'user': rando.id, 'role_definition': member_rd.id}
+        response = user_api_client.post(url, data=data)
+        assert response.status_code == 400, response.data
 
     for u in (user, rando):
         org_member_rd.give_permission(u, organization)
 
     # user now see rando (and is admin of the team) so criteria for adding member is met
-    response = user_api_client.patch(url, data=patch_data)
-    assert response.status_code == 200
+    if api_type == 'old':
+        # user can not add rando as a member due to not being able to view that user
+        response = user_api_client.post(url, data=patch_data)
+        assert response.status_code == 204
+    else:
+        response = user_api_client.post(url, data=data)
+        assert response.status_code == 201, response.data
 
 
 def test_team_update_no_roles_permissions(user_api_client, user, teams, organizations, org_member_rd):  # noqa: F811

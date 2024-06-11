@@ -22,17 +22,17 @@ def test_organization_list_permissions(user_api_client, user, user_factory, orga
     api_get_and_assert(url, user_api_client, [])
 
     # User sees org as either user or admin
-    organizations[0].admins.add(user)
-    organizations[1].users.add(user)
-    organizations[2].users.add(user2)
+    organizations[0].add_admin(user)
+    organizations[1].add_member(user)
+    organizations[2].add_member(user2)
     api_get_and_assert(url, user_api_client, [organizations[0], organizations[1]])
 
     # User can be in both users and admins with no change
     # Another user doesn't influence result
-    organizations[0].users.add(user)
-    organizations[0].users.add(user2)
-    organizations[1].users.remove(user)
-    organizations[1].admins.add(user2)
+    organizations[0].add_member(user)
+    organizations[0].add_member(user2)
+    organizations[1].remove_member(user)
+    organizations[1].add_admin(user2)
     api_get_and_assert(url, user_api_client, [organizations[0]])
 
 
@@ -44,14 +44,14 @@ def test_organization_detail_permissions(user_api_client, user, organization_fac
     response = user_api_client.get(urls[0])
     assert response.status_code == 404
 
-    organizations[0].users.add(user)
+    organizations[0].add_member(user)
     response = user_api_client.get(urls[0])
     assert response.status_code == 200
 
     response = user_api_client.get(urls[1])
     assert response.status_code == 404
 
-    organizations[1].admins.add(user)
+    organizations[1].add_admin(user)
     response = user_api_client.get(urls[1])
     assert response.status_code == 200
 
@@ -76,12 +76,12 @@ def test_organization_update_permissions(user_api_client, user, organization_fac
     assert response.status_code == 404
 
     # Can view, can't change => 403
-    organizations[0].users.add(user)
+    organizations[0].add_member(user)
     response = user_api_call(urls[0], data={"name": new_name})
     assert response.status_code == 403
 
     # Can change => 200
-    organizations[0].admins.add(user)
+    organizations[0].add_admin(user)
     response = user_api_call(urls[0], data={"name": new_name})
     assert response.status_code == 200
     assert response.data["name"] == new_name
@@ -99,12 +99,12 @@ def test_organization_delete_permissions(admin_api_client, user_api_client, user
     assert response.status_code == 404
 
     # User can see only => 403
-    organization.users.add(user)
+    organization.add_member(user)
     response = user_api_client.delete(url)
     assert response.status_code == 403
 
     # User can change => success 204
-    organization.admins.add(user)
+    organization.add_admin(user)
     response = user_api_client.delete(url)
     assert response.status_code == 204
 
@@ -137,7 +137,7 @@ def test_organization_association_permissions(user_api_client, user, user_factor
         #
         # User is Org Member
         # => can't associate
-        organization.users.add(user)
+        organization.add_member(user)
         response = user_api_client.post(url, data={"instances": [user2.pk]})
         assert response.status_code == 403
         if assoc_type == 'users':
@@ -148,8 +148,8 @@ def test_organization_association_permissions(user_api_client, user, user_factor
 
         # User is Org Admin
         # => Can associate
-        organization.users.remove(user)
-        organization.admins.add(user)
+        organization.remove_member(user)
+        organization.add_admin(user)
 
         assert organization.users.count() == 0, assoc_type
         assert organization.admins.count() == 1, assoc_type
@@ -164,8 +164,8 @@ def test_organization_association_permissions(user_api_client, user, user_factor
 
         # Cleanup
         for u in [user, user2, user3]:
-            organization.users.remove(u)
-            organization.admins.remove(u)
+            organization.remove_member(u)
+            organization.remove_admin(u)
 
 
 def test_organization_disassociation_permissions(user_api_client, user, user_factory, organization, org_member_rd):
@@ -179,15 +179,15 @@ def test_organization_disassociation_permissions(user_api_client, user, user_fac
     for assoc_type in ['users', 'admins']:
         url = urls_disassoc[assoc_type]
 
-        organization.users.add(user2)
-        organization.admins.add(user3)
+        organization.add_member(user2)
+        organization.add_admin(user3)
 
         # No permissions, can't see action
         response = user_api_client.post(url, data={"instances": [user.pk, user2.pk, user3.pk]})
         assert response.status_code == 404
 
         # Org Member, no permissions => forbidden
-        organization.users.add(user)
+        organization.add_member(user)
         response = user_api_client.post(url, data={"instances": [user2.pk, user3.pk]})
         assert response.status_code == 403
 
@@ -196,7 +196,7 @@ def test_organization_disassociation_permissions(user_api_client, user, user_fac
         assert response.status_code == 403
 
         # Org Admin can remove others => ok
-        organization.admins.add(user)
+        organization.add_admin(user)
         response = user_api_client.post(url, data={"instances": [user2.pk if assoc_type == 'users' else user3.pk]})
         assert response.status_code == 204
         if assoc_type == 'users':
@@ -222,8 +222,8 @@ def test_organization_disassociation_permissions(user_api_client, user, user_fac
 
         # Cleanup
         for u in [user, user2, user3]:
-            organization.users.remove(u)
-            organization.admins.remove(u)
+            organization.remove_member(u)
+            organization.remove_admin(u)
 
 
 @pytest.mark.django_db
@@ -304,22 +304,35 @@ class TestOrganizationOptions:
 
 @override_settings(ORG_ADMINS_CAN_SEE_ALL_USERS=False)
 @pytest.mark.django_db
-def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization):
+@pytest.mark.parametrize("api_type", ["old", "new"])
+def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization, api_type):
     other_user = User.objects.create(username='another-user')
-
     org_admin_rd.give_permission(user, organization)
-    url = reverse('organization-admins-associate', kwargs={'pk': organization.pk})
-    r = user_api_client.post(url, data={'instances': [other_user.id]})
-    assert r.status_code == 400
-    assert 'does not exist' in str(r.data)
 
-    url = reverse('organization-detail', kwargs={'pk': organization.pk})
-    r = user_api_client.patch(url, data={'admins': [other_user.id]})
-    assert r.status_code == 400
-    assert 'does not exist' in str(r.data)
+    if api_type == 'old':
+        # Method 1 for adding user as admin of organization - use deprecated association endpoint
+        # denied because user can not see other_user
+        url = reverse('organization-admins-associate', kwargs={'pk': organization.pk})
+        r = user_api_client.post(url, data={'instances': [other_user.id]})
+        assert r.status_code == 400
+        assert 'does not exist' in str(r.data)
+    else:
+        # Method 2 for adding user as admin of organization - use DAB RBAC API
+        # denied because user can not see other_user
+        url = reverse('roleuserassignment-list')
+        r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_member_rd.id})
+        assert r.status_code == 400
+        assert 'does not exist' in str(r.data)
 
     # If user can see other_user, then action can complete successfully
     org_member_rd.give_permission(other_user, organization)
-    r = user_api_client.patch(url, data={'admins': [other_user.id]})
-    assert r.status_code == 200
+
+    if api_type == 'old':
+        url = reverse('organization-admins-associate', kwargs={'pk': organization.pk})
+        r = user_api_client.post(url, data={'instances': [other_user.id]})
+        assert r.status_code == 204
+    else:
+        url = reverse('roleuserassignment-list')
+        r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_admin_rd.id})
+        assert r.status_code == 201
     assert other_user.has_obj_perm(organization, 'change')
