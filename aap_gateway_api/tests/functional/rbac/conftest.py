@@ -134,26 +134,26 @@ def associate_users(users, teams, organizations):
             for i, team_user in enumerate(users[org_team], 1):
                 if i == 1:
                     # Add Team Member
-                    org_team.users.add(team_user)
+                    org_team.add_member(team_user)
                 elif i == 2:
                     # Add Team Admin
-                    org_team.admins.add(team_user)
+                    org_team.add_admin(team_user)
                 elif i == 3:
                     # Add Team Member+Admin
-                    org_team.users.add(team_user)
-                    org_team.admins.add(team_user)
+                    org_team.add_member(team_user)
+                    org_team.add_admin(team_user)
 
         for i, org_user in enumerate(users[org], 1):
             if i == 1:
                 # Add Org Member
-                org.users.add(org_user)
+                org.add_member(org_user)
             elif i == 2:
                 # Add Org Admin
-                org.admins.add(org_user)
+                org.add_admin(org_user)
             elif i == 3:
                 # Add Org Member+Admin
-                org.users.add(org_user)
-                org.admins.add(org_user)
+                org.add_member(org_user)
+                org.add_admin(org_user)
 
 
 def api_get_and_assert(url, api_client, expected_objects, order_by="name"):

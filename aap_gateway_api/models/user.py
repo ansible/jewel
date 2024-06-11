@@ -116,3 +116,9 @@ class User(AbstractUser, CommonModel, AuditableModel):
             del self._is_system_auditor
 
     is_system_auditor = property(get_is_system_auditor, set_is_system_auditor, del_is_system_auditor)
+
+    @property
+    def organizations(self):
+        from aap_gateway_api.models import Organization
+
+        return Organization.access_qs(self, 'member')

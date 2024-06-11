@@ -28,7 +28,9 @@ def test_organizations_related_fields(admin_api_client, organization, key, route
     assert response.status_code == 200
     organization = response.data
     assert key in organization["related"]
-    assert organization["related"][key] == reverse(route, kwargs={"pk": organization["id"]})
+    # assure link is a valid URL
+    response = admin_api_client.get(organization["related"][key])
+    assert response.status_code == 200, response.data
 
 
 def test_organizations_list_unauthenticated(unauthenticated_api_client):
@@ -148,7 +150,7 @@ def test_organizations_summary_fields_counts(admin_api_client, organization, org
     assert response.data["summary_fields"]["related_field_counts"]["users"] == 0
     assert response.data["summary_fields"]["related_field_counts"]["teams"] == 0
 
-    organization_1.users.add(user)
+    organization_1.add_member(user)
     organization_1.teams.add(team, team_1)
     response = admin_api_client.get(url)
     assert response.status_code == 200

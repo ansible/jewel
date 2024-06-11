@@ -258,12 +258,12 @@ class TestUserTeamMemberPermissions(TestUserPermissionsBase):
     def team_member_scope(organizations, teams, user):
         """User is Team Member of Team 1 (Org 1), Team 3 (Org 2)"""
         try:
-            teams[organizations[0]][0].users.add(user)  # Team 1 (Org 1)
-            teams[organizations[1]][0].users.add(user)  # Team 3 (Org 2)
+            teams[organizations[0]][0].add_member(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].add_member(user)  # Team 3 (Org 2)
             yield
         finally:
-            teams[organizations[0]][0].users.remove(user)  # Team 1 (Org 1)
-            teams[organizations[1]][0].users.remove(user)  # Team 3 (Org 2)
+            teams[organizations[0]][0].remove_member(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].remove_member(user)  # Team 3 (Org 2)
 
     def test_permissions(self, user_api_client, user, users, teams, organizations):
         with self.team_member_scope(organizations, teams, user):
@@ -316,16 +316,16 @@ class TestUserTeamAdminPermissions(TestUserPermissionsBase):
         User is Team Member of Team 4 (Org 2), Team 5 (Org 3) (should have no effect)
         """
         try:
-            teams[organizations[0]][0].admins.add(user)  # Team 1 (Org 1)
-            teams[organizations[1]][0].admins.add(user)  # Team 3 (Org 2)
-            teams[organizations[1]][1].users.add(user)  # Team 4 (Org 2)
-            teams[organizations[2]][0].users.add(user)  # Team 5 (Org 3)
+            teams[organizations[0]][0].add_admin(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].add_admin(user)  # Team 3 (Org 2)
+            teams[organizations[1]][1].add_member(user)  # Team 4 (Org 2)
+            teams[organizations[2]][0].add_member(user)  # Team 5 (Org 3)
             yield
         finally:
-            teams[organizations[0]][0].admins.remove(user)  # Team 1 (Org 1)
-            teams[organizations[1]][0].admins.remove(user)  # Team 3 (Org 2)
-            teams[organizations[1]][1].users.remove(user)  # Team 4 (Org 2)
-            teams[organizations[2]][0].users.remove(user)  # Team 5 (Org 3)
+            teams[organizations[0]][0].remove_admin(user)  # Team 1 (Org 1)
+            teams[organizations[1]][0].remove_admin(user)  # Team 3 (Org 2)
+            teams[organizations[1]][1].remove_member(user)  # Team 4 (Org 2)
+            teams[organizations[2]][0].remove_member(user)  # Team 5 (Org 3)
 
     def test_permissions(self, user_api_client, user, users, teams, organizations):
         with self.team_admin_scope(organizations, teams, user):
@@ -375,12 +375,12 @@ class TestUserOrgMemberPermissions(TestUserPermissionsBase):
     def org_member_scope(organizations, user):
         """User is Org Member of Org 1, Org 2"""
         try:
-            organizations[0].users.add(user)  # Org 1
-            organizations[1].users.add(user)  # Org 2
+            organizations[0].add_member(user)  # Org 1
+            organizations[1].add_member(user)  # Org 2
             yield
         finally:
-            organizations[0].users.remove(user)  # Org 1
-            organizations[1].users.remove(user)  # Org 2
+            organizations[0].remove_member(user)  # Org 1
+            organizations[1].remove_member(user)  # Org 2
 
     def test_permissions(self, user_api_client, user, users, teams, organizations):
         with self.org_member_scope(organizations, user):
@@ -453,10 +453,10 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
     def org_admin_scope(organizations, user):
         """User is Org Admin of Org 1"""
         try:
-            organizations[0].admins.add(user)  # Org 1
+            organizations[0].add_admin(user)  # Org 1
             yield
         finally:
-            organizations[0].admins.remove(user)  # Org 1
+            organizations[0].remove_admin(user)  # Org 1
 
     def test_permissions(self, user_api_client, user, users, teams, organizations):
         with self.org_admin_scope(organizations, user):
@@ -500,9 +500,9 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
         self._test_update_one(user_api_client, users[different_org][0], status_code=403)
 
         # When Org Member became also Org Member of different org, Org Admin can't update
-        different_org.users.add(users[same_org][0])
+        different_org.add_member(users[same_org][0])
         self._test_update_one(user_api_client, users[same_org][0], status_code=403)
-        different_org.users.remove(users[same_org][0])
+        different_org.remove_member(users[same_org][0])
 
         # Org Admin can't update superuser even if it's member of the same org
         users[same_org][1].is_superuser = True
@@ -529,9 +529,9 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
         self._test_delete_one(user_api_client, users[different_org][0], status_code=403)
 
         # When Org Member became also Org Member of different org, Org Admin can't delete
-        different_org.users.add(users[same_org][2])
+        different_org.add_member(users[same_org][2])
         self._test_delete_one(user_api_client, users[same_org][2], status_code=403)
-        different_org.users.remove(users[same_org][2])
+        different_org.remove_member(users[same_org][2])
 
         # Org Admin can't delete superuser even if it's member of the same org
         users[same_org][2].is_superuser = True

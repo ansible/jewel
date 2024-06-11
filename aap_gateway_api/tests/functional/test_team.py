@@ -12,7 +12,9 @@ def test_teams_related_fields(admin_api_client, team, key, route):
     assert response.status_code == 200
     team = response.data
     assert key in team["related"]
-    assert team["related"][key] == reverse(route, kwargs={"pk": team["id"]})
+    # assure link is a valid URL
+    response = admin_api_client.get(team["related"][key])
+    assert response.status_code == 200, response.data
 
 
 @pytest.mark.parametrize(

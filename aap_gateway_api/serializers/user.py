@@ -13,7 +13,7 @@ from rest_framework import serializers
 from rest_framework.fields import empty
 from rest_framework.serializers import ValidationError
 
-from aap_gateway_api.models import Organization, User
+from aap_gateway_api.models import User
 from aap_gateway_api.utils import get_preference_value
 
 logger = logging.getLogger('aap.gateway.serializer.user')
@@ -37,11 +37,6 @@ class UserSerializer(CommonUserSerializer):
         super().__init__(instance, data, **kwargs)
 
         self.fields['authenticators'].choices = list(Authenticator.objects.all().values_list('id', 'name').order_by('name'))
-        request = self.context.get('request')
-        if request:
-            self.fields['organizations'].queryset = Organization.access_qs(request.user)
-            self.fields['organizations'].child_relation.queryset = Organization.access_qs(request.user)
-            self.fields['organizations'].required = False
 
     class Meta(CommonUserSerializer.Meta):
         model = User
@@ -54,7 +49,6 @@ class UserSerializer(CommonUserSerializer):
             'password',
             'is_superuser',
             'is_system_auditor',
-            'organizations',
             'authenticators',
             'authenticator_uid',
             'managed',
@@ -258,6 +252,4 @@ class UserSerializer(CommonUserSerializer):
     def _get_related(self, obj) -> dict[str, str]:
         ret = super()._get_related(obj)
         ret['authenticators'] = reverse('user-authenticators-list', kwargs={'pk': obj.pk})
-        ret['teams'] = reverse('user-teams-list', kwargs={'pk': obj.pk})
-        ret['organizations'] = reverse('user-organizations-list', kwargs={'pk': obj.pk})
         return ret
