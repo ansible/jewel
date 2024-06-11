@@ -51,15 +51,17 @@ options:
       type: str
       required: False
     organization:
-      description:
-        - Name, ID, or named URL of organization for application.
+      description: The name or ID referencing the Organization
       type: str
       required: True
+    new_organization:
+      type: str
+      description: Setting this option will change the existing organization (looked up via the organization field)
     post_logout_redirect_uris:
       description:
         - Allowed Post Logout URIs list, space separated
-      type: str
-      required: False
+      type: list
+      elements: str
     redirect_uris:
       description:
         - Allowed urls list, space separated. Required when authorization-grant-type=authorization-code
@@ -77,7 +79,7 @@ options:
       type: bool
     user:
       description:
-        - "The user who owns this application"
+        - "The name or ID of the user who owns this application"
       type: str
       required: False
 
@@ -107,6 +109,7 @@ EXAMPLES = '''
       - http://example.com/api/gateway/v1/
 '''
 
+from ..module_utils.aap_application import AAPApplication
 from ..module_utils.aap_module import AAPModule
 
 
@@ -115,73 +118,22 @@ def main():
     argument_spec = dict(
         name=dict(required=True),
         new_name=dict(),
+        organization=dict(required=True),
+        new_organization=dict(type="str"),
         description=dict(),
         authorization_grant_type=dict(choices=["password", "authorization-code"]),
         client_type=dict(choices=['public', 'confidential']),
-        organization=dict(required=True),
         redirect_uris=dict(type="list", elements='str'),
-        state=dict(choices=['present', 'absent', 'exists'], default='present'),
         skip_authorization=dict(type='bool'),
         algorithm=dict(choices=["", "RSA256", "HS256"]),
-        post_logout_redirect_uris=dict(),
-        user=dict(),
+        post_logout_redirect_uris=dict(type="list", elements="str"),
+        user=dict(type="str"),
+        state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 
     # Create a module for ourselves
     module = AAPModule(argument_spec=argument_spec)
-
-    # Extract our parameters
-    name = module.params.get('name')
-    new_name = module.params.get("new_name")
-    description = module.params.get('description')
-    authorization_grant_type = module.params.get('authorization_grant_type')
-    client_type = module.params.get('client_type')
-    organization = module.params.get('organization')
-    redirect_uris = module.params.get('redirect_uris')
-    state = module.params.get('state')
-    algorithm = module.params.get('algorithm')
-    post_logout_redirect_uris = module.parmas.get('post_logout_redirect_uris')
-    user = module.params.get('user')
-
-    # Attempt to look up the related items the user specified (these will fail the module if not found)
-    org_id = module.resolve_name_to_id('organizations', organization)
-
-    if user:
-        user_id = module.resolve_name_to_id('user', user)
-
-    # Attempt to look up application based on the provided name and org ID
-    application = module.get_one('applications', name_or_id=name, check_exists=(state == 'exists'), **{'data': {'organization': org_id}})
-
-    if state == 'absent':
-        # If the state was absent we can let the module delete it if needed, the module will handle exiting from this
-        module.delete_if_needed(application)
-
-    # Create the data that gets sent for create and update
-    application_fields = {
-        'name': new_name if new_name else (module.get_item_name(application) if application else name),
-        'organization': org_id,
-    }
-    if authorization_grant_type is not None:
-        application_fields['authorization_grant_type'] = authorization_grant_type
-    if client_type is not None:
-        application_fields['client_type'] = client_type
-    if description is not None:
-        application_fields['description'] = description
-    if redirect_uris is not None:
-        application_fields['redirect_uris'] = ' '.join(redirect_uris)
-    if algorithm is not None:
-        application_fields['algorithm'] = algorithm
-    if post_logout_redirect_uris is not None:
-        application_fields['post_logout_redirect_uris'] = post_logout_redirect_uris
-    if user_id:
-        application_fields['user'] = user_id
-
-    response = module.create_or_update_if_needed(application, application_fields, endpoint='applications', item_type='application', auto_exit=False)
-    if 'client_id' in response:
-        module.json_output['client_id'] = response['client_id']
-    if 'client_secret' in response:
-        module.json_output['client_secret'] = response['client_secret']
-    module.exit_json(**module.json_output)
+    AAPApplication(module).manage(json_output_fields=['client_id', 'client_secret'])
 
 
 if __name__ == '__main__':

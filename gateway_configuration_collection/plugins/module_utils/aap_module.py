@@ -82,6 +82,7 @@ class AAPModule(AnsibleModule):
         "oauth_token": "gateway_token",
     }
     IDENTITY_FIELDS = {
+        "applications": ["name", "organization"],
         "authenticators": "name",
         "authenticator_maps": ["name", "authenticator"],
         "http_ports": "name",
@@ -460,6 +461,7 @@ class AAPModule(AnsibleModule):
                 for key in ("name", "username", "identifier", "hostname"):
                     if key in response["json"]:
                         self.json_output["name"] = response["json"][key]
+                        self.json_output[key] = response["json"][key]
                 if item_type != "token":
                     self.json_output["id"] = response["json"]["id"]
                 self.json_output["changed"] = True
