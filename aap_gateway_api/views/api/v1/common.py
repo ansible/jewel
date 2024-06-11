@@ -1,17 +1,17 @@
 from ansible_base.lib.utils.hashing import hash_serializer_data
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
+from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
 from django.urls import reverse
 from rest_framework import viewsets
 
-from aap_gateway_api.permissions import IsSystemAdminOrAuditor
 from aap_gateway_api.utils.resources_client import AllServicesClient, ResourceRequestBody
 
 
 class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
-    permission_classes = [IsSystemAdminOrAuditor]
+    permission_classes = [IsSuperuserOrAuditor]
 
 
 class RoleModelViewSet(GatewayModelViewSet):

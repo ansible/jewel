@@ -1,8 +1,8 @@
+from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from rest_framework import status
 from rest_framework.response import Response
 
 from aap_gateway_api.models import ServiceKey
-from aap_gateway_api.permissions import IsSystemAdminOrAuditor
 from aap_gateway_api.serializers import ServiceKeySerializer
 from aap_gateway_api.views.api.v1.common import GatewayModelViewSet
 
@@ -12,7 +12,7 @@ class ServiceKeyViewSet(GatewayModelViewSet):
     API endpoint that allows configuring service authentication keys.
     """
 
-    permission_classes = (IsSystemAdminOrAuditor,)
+    permission_classes = (IsSuperuserOrAuditor,)
     queryset = ServiceKey.objects.all()
     serializer_class = ServiceKeySerializer
 

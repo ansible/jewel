@@ -218,7 +218,7 @@ REST_FRAMEWORK = {
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
         'aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication',
     ],
-    'DEFAULT_PERMISSION_CLASSES': ['aap_gateway_api.permissions.IsSystemAdminOrAuditor'],
+    'DEFAULT_PERMISSION_CLASSES': ['ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor'],
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
 }
 
