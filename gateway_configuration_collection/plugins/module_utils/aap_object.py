@@ -64,8 +64,14 @@ class AAPObject:
             self.set_new_fields()
 
             self.data = self.module.create_or_update_if_needed(
-                self.data, self.new_fields, endpoint=self.api_endpoint, item_type=self.ITEM_TYPE, auto_exit=auto_exit
+                self.data, self.new_fields, endpoint=self.api_endpoint, item_type=self.ITEM_TYPE, auto_exit=False
             )
+            for output_field in kwargs.get('json_output_fields', []):
+                if output_field in self.data:
+                    self.module.json_output[output_field] = self.data[output_field]
+
+            if auto_exit:
+                self.module.exit_json(**self.module.json_output)
 
     def get_existing_item(self):
         if self.data is None:

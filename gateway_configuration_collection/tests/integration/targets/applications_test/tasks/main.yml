@@ -1,0 +1,216 @@
+---
+- name: Preset vars
+  set_fact:
+    gateway_configuration_applications_secure_logging: false
+    gateway_configuration_organizations_secure_logging: false
+    gateway_configuration_users_secure_logging: false
+    gateway_user_default_password: "change-me"
+    name_prefix: "GW-Collection-Test-Applications"
+
+- block:
+  # <Organizations> -----------------------------
+  - name: Create Organizations
+    include_role:
+      name: ansible.gateway_configuration.organizations
+    vars:
+      gateway_organizations:
+      - name: "{{ name_prefix }}-Organization-1"
+      - name: "{{ name_prefix }}-Organization-2"
+  - debug:
+      var: __gateway_organizations_job_async_result
+
+  - name: Set Organization var
+    set_fact:
+      _organizations: "{{ __gateway_organizations_job_async_result.results }}"
+
+  - name: Assert Create Organizations passed
+    assert:
+      that:
+      - _organizations[0] is changed
+      - _organizations[1] is changed
+  # </Organizations> ----------------------------
+
+  # <Users> ---------------------------
+  - name: Create users
+    include_role:
+      name: ansible.gateway_configuration.users
+    vars:
+      gateway_users:
+      - username: "{{ name_prefix }}-User-1"
+      - username: "{{ name_prefix }}-User-2"
+  - debug:
+      var: __gateway_user_accounts_job_async_result
+  - name: Set Users var
+    set_fact:
+      _users: "{{ __gateway_user_accounts_job_async_result.results }}"
+  - name: Assert Create Users passed
+    assert:
+      that:
+      - _users[0] is changed
+      - _users[1] is changed
+  # </Users> --------------------------
+
+  # </Applications> --------------------------
+  - name: Create Applications
+    include_role:
+      name: ansible.gateway_configuration.applications
+    vars:
+      gateway_applications:
+      - name: "{{ name_prefix }}-app1"
+        organization: "{{ name_prefix }}-Organization-1"
+        authorization_grant_type: password
+        client_type: public
+      - name: "{{ name_prefix }}-app2"
+        organization: "{{ _organizations[0].id }}"
+        authorization_grant_type: authorization-code
+        client_type: confidential
+        description: Another application
+        redirect_uris:
+          - "https://tower.com/api/v2/"
+          - "https://tower.com/api/v2/teams"
+      - name: "{{ name_prefix }}-app3"
+        organization: "{{ _organizations[0].id }}"
+        authorization_grant_type: password
+        client_type: public
+        user: "{{ _users[0].id }}"
+      - name: "{{ name_prefix }}-app4"
+        organization: "{{ _organizations[0].name }}"
+        authorization_grant_type: password
+        client_type: confidential
+        skip_authorization: true
+        user: "{{ _users[0].username }}"
+      - name: "{{ name_prefix }}-app5"
+        organization: "{{ _organizations[0].id }}"
+        authorization_grant_type: password
+        client_type: confidential
+
+  - debug:
+      var: __gateway_applications_job_async_result
+  - name: Set Applications var
+    set_fact:
+      _applications: "{{ __gateway_applications_job_async_result.results }}"
+
+  - name: Assert Create Applications passed
+    assert:
+      that:
+      - _applications[0] is changed
+      - _applications[1] is changed
+      - _applications[2] is changed
+      - _applications[3] is changed
+      - _applications[4] is changed
+
+  - name: Check/Change Applications
+    include_role:
+      name: ansible.gateway_configuration.applications
+    vars:
+      gateway_applications:
+      - name: "{{ name_prefix }}-app1"
+        organization: "{{ _organizations[0].id }}"
+        state: exists
+      # no change
+      - name: "{{ _applications[0].id }}"  # no change
+        organization: "{{ _organizations[0].id }}"  # no change
+        authorization_grant_type: password
+      # changing param
+      - name: "{{ _applications[1].name }}"
+        organization: "{{ _organizations[0].id }}"
+        redirect_uris:  # changed
+          - "https://tower.com/api/v3/"
+          - "https://tower.com/api/v3/teams"
+      # changing user
+      - name: "{{ _applications[2].id }}"
+        organization: "{{ _organizations[0].id }}"
+        user: "{{ _users[1].id }}"
+      # changing name
+      - name: "{{ name_prefix }}-app4"
+        new_name: "{{ name_prefix }}-app4-new"
+        organization: "{{ _organizations[0].id }}"
+      # changing organization
+      - name: "{{ name_prefix }}-app5"
+        organization: "{{ _organizations[0].id }}"
+        new_organization: "{{ _organizations[1].name }}"
+      # non-existing
+      - name: "{{ name_prefix }}-app6"  # Does not exist
+        organization: "{{ _organizations[0].id }}"
+        state: absent
+  - debug:
+      var: __gateway_applications_job_async_result
+
+  - name: Assert Check/Change Applications passed
+    assert:
+      that:
+        - __gateway_applications_job_async_result.results[0] is not changed
+        - __gateway_applications_job_async_result.results[1] is not changed
+        - __gateway_applications_job_async_result.results[2] is changed
+        - __gateway_applications_job_async_result.results[3] is changed
+        - __gateway_applications_job_async_result.results[4] is changed
+        - __gateway_applications_job_async_result.results[5] is changed
+        - __gateway_applications_job_async_result.results[6] is not changed
+
+  - name: Check Renaming/Changing Organization
+    include_role:
+      name: ansible.gateway_configuration.applications
+    vars:
+      gateway_applications:
+        - name: "{{ name_prefix }}-app4"
+          organization: "{{ name_prefix }}-Organization-1"
+          state: absent
+        - name: "{{ name_prefix }}-app4-new"
+          organization: "{{ name_prefix }}-Organization-1"
+          state: exists
+        - name: "{{ name_prefix }}-app5"
+          organization: "{{ name_prefix }}-Organization-1"
+          state: absent
+        - name: "{{ name_prefix }}-app5"
+          organization: "{{ name_prefix }}-Organization-2"
+          state: exists
+
+  - name: Assert Check Renaming passed
+    assert:
+      that:
+        - __gateway_applications_job_async_result.results[0] is not changed
+        - __gateway_applications_job_async_result.results[1] is not changed
+        - __gateway_applications_job_async_result.results[2] is not changed
+        - __gateway_applications_job_async_result.results[3] is not changed
+
+  always:
+  - name: Delete Applications
+    include_role:
+      name: ansible.gateway_configuration.applications
+    vars:
+      gateway_state: absent
+      gateway_applications:
+      - name: "{{ name_prefix }}-app1"
+        organization: "{{ _organizations[0].id }}"
+      - name: "{{ name_prefix }}-app2"
+        organization: "{{ _organizations[0].id }}"
+      - name: "{{ name_prefix }}-app3"
+        organization: "{{ _organizations[0].id }}"
+      - name: "{{ name_prefix }}-app4"
+        organization: "{{ _organizations[0].id }}"
+      - name: "{{ name_prefix }}-app4-new"
+        organization: "{{ _organizations[0].id }}"
+      - name: "{{ name_prefix }}-app5"
+        organization: "{{ _organizations[0].id }}"
+      - name: "{{ name_prefix }}-app5"
+        organization: "{{ _organizations[1].id }}"
+      - name: "{{ name_prefix }}-app6"
+        organization: "{{ _organizations[0].id }}"
+
+  - name: Delete Organizations
+    include_role:
+      name: ansible.gateway_configuration.organizations
+    vars:
+      gateway_state: absent
+      gateway_organizations:
+      - name: "{{ name_prefix }}-Organization-1"
+      - name: "{{ name_prefix }}-Organization-2"
+
+  - name: Delete Users
+    include_role:
+      name: ansible.gateway_configuration.users
+    vars:
+      gateway_state: absent
+      gateway_users:
+        - username: "{{ name_prefix }}-User-1"
+        - username: "{{ name_prefix }}-User-2"

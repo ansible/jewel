@@ -27,6 +27,7 @@
     - include_tasks: integration/targets/teams_test/tasks/main.yml
     - include_tasks: integration/targets/authenticators_test/tasks/main.yml
     - include_tasks: integration/targets/authenticator_maps_test/tasks/main.yml
+    - include_tasks: integration/targets/applications_test/tasks/main.yml
     - include_tasks: integration/targets/service_clusters_test/tasks/main.yml
     - include_tasks: integration/targets/service_nodes_test/tasks/main.yml
     - include_tasks: integration/targets/service_keys_test/tasks/main.yml
