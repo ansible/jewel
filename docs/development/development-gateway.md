@@ -24,6 +24,20 @@ All repositories are cloned to the `<your-path>/aap` folder, hereinafter referre
 Login to quay.io for download docker image https://quay.io/ansible/platform-ui  
 - Requires `quay.io` invitation to “aapgateway” group to see `ansible` organization
 
+Alternatively you can clone https://github.com/ansible/aap-ui.git locally,
+and run the image build steps, then set the tag locally.
+
+```bash
+npm ci
+cd platform
+npm run build
+cd ..
+docker build --file platform/Dockerfile --target platform-ui --tag platform-ui .
+docker image tag platform-ui:latest quay.io/ansible/platform-ui:latest
+```
+
+These steps will be subject to change later.
+
 ### Main installation
 
 - Follow the [Readme](#project-installation-docs)
