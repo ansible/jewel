@@ -64,6 +64,26 @@ def register_preference(db):
 
 
 @pytest.fixture
+def authenticator_map_factory():
+    maps = []
+
+    def _authenticator_map(authenticator=None, map_type='allow', revoke=False, team=None, organization=None, triggers={}, order=0):
+        nonlocal maps
+        from ansible_base.authentication.models import AuthenticatorMap
+
+        new_map = AuthenticatorMap.objects.create(
+            authenticator=authenticator, map_type=map_type, revoke=revoke, team=team, organization=organization, triggers=triggers, order=order
+        )
+        maps.append(new_map)
+        return new_map
+
+    yield _authenticator_map
+
+    for map in maps:
+        map.delete()
+
+
+@pytest.fixture
 def user_factory():
     users = []
 
