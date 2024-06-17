@@ -7,76 +7,76 @@ from django.urls import reverse
 
 from aap_gateway_api.models.user import User
 from aap_gateway_api.tests.functional.rbac.conftest import associate_users
-from aap_gateway_api.utils.rbac import get_system_auditor_role
+from aap_gateway_api.utils.rbac import get_platform_auditor_role
 
 
 @pytest.mark.django_db
-class TestSystemAuditorSync:
+class TestPlatformAuditorSync:
     def test_role_to_flag(self):
         alice = User.objects.create(username='alice')
-        rd = get_system_auditor_role()
+        rd = get_platform_auditor_role()
         rd.give_global_permission(alice)
         assert alice.role_assignments.filter(role_definition=rd).exists()  # sanity
 
         alice.refresh_from_db()
-        assert alice.is_system_auditor is True
+        assert alice.is_platform_auditor is True
 
     def test_flag_to_role(self):
         alice = User.objects.create(username='alice')
-        alice.is_system_auditor = True
+        alice.is_platform_auditor = True
         alice.save()
 
-        rd = get_system_auditor_role()
+        rd = get_platform_auditor_role()
         assert alice.role_assignments.filter(role_definition=rd).exists()
 
-    def test_create_system_auditor1(self):
-        alice = User(username='alice', is_system_auditor=True)
+    def test_create_platform_auditor1(self):
+        alice = User(username='alice', is_platform_auditor=True)
         assert not alice.pk
-        assert alice._is_system_auditor
+        assert alice._is_platform_auditor
         alice.save()
-        rd = get_system_auditor_role()
+        rd = get_platform_auditor_role()
         assert alice.role_assignments.filter(role_definition=rd).exists()
 
     def test_del_cached_value(self):
-        alice = User.objects.create(username='alice', is_system_auditor=True)
-        assert alice._is_system_auditor
+        alice = User.objects.create(username='alice', is_platform_auditor=True)
+        assert alice._is_platform_auditor
 
-        rd = get_system_auditor_role()
+        rd = get_platform_auditor_role()
         alice.role_assignments.filter(role_definition=rd).delete()
 
-        del alice.is_system_auditor
-        assert alice.is_system_auditor is False
+        del alice.is_platform_auditor
+        assert alice.is_platform_auditor is False
 
-    def test_create_system_auditor2(self):
-        alice = User.objects.create(username='alice', is_system_auditor=True)
-        rd = get_system_auditor_role()
+    def test_create_platform_auditor2(self):
+        alice = User.objects.create(username='alice', is_platform_auditor=True)
+        rd = get_platform_auditor_role()
         assert alice.role_assignments.filter(role_definition=rd).exists()
 
-    def system_auditor_qs(self, user_id):
+    def platform_auditor_qs(self, user_id):
         return RoleUserAssignment.objects.filter(object_id=None, user_id=user_id, role_definition__name='Platform Auditor')
 
-    def test_system_auditor_api_flag(self, admin_api_client, user):
+    def test_platform_auditor_api_flag(self, admin_api_client, user):
         assert RoleDefinition.objects.filter(name='Platform Auditor').exists()
 
-        assert not self.system_auditor_qs(user.id).exists()
+        assert not self.platform_auditor_qs(user.id).exists()
 
         url = reverse('user-detail', kwargs={'pk': user.id})
         for flag_enabled in [True, False]:
-            user.is_system_auditor = flag_enabled
+            user.is_platform_auditor = flag_enabled
             user.save()
-            assert self.system_auditor_qs(user.id).exists() is flag_enabled
+            assert self.platform_auditor_qs(user.id).exists() is flag_enabled
 
             response = admin_api_client.get(url)
-            assert response.data['is_system_auditor'] is flag_enabled
+            assert response.data['is_platform_auditor'] is flag_enabled
 
             new_flag_value = bool(not flag_enabled)
             assert new_flag_value != flag_enabled  # really basic sanity
 
-            response = admin_api_client.patch(url, {'is_system_auditor': new_flag_value})
+            response = admin_api_client.patch(url, {'is_platform_auditor': new_flag_value})
             assert response.status_code == 200
 
             # value should not be new_flag_value, PATCH should not change the read-only field
-            assert self.system_auditor_qs(user.id).exists() is flag_enabled
+            assert self.platform_auditor_qs(user.id).exists() is flag_enabled
 
 
 class TestUserPermissionsBase:
@@ -542,22 +542,22 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
 
 
 @pytest.mark.django_db
-class TestUserSystemAuditorPermissions(TestUserPermissionsBase):
+class TestUserPlatformAuditorPermissions(TestUserPermissionsBase):
     ROLE_NAME = "Platform Auditor"
 
     @staticmethod
     @contextlib.contextmanager
-    def system_auditor_scope(user):
+    def platform_auditor_scope(user):
         try:
-            user.is_system_auditor = True
+            user.is_platform_auditor = True
             user.save()
             yield
         finally:
-            user.is_system_auditor = False
+            user.is_platform_auditor = False
             user.save()
 
     def test_permissions(self, user_api_client, user, users, teams, organizations):
-        with self.system_auditor_scope(user):
+        with self.platform_auditor_scope(user):
             self._test_permissions(user_api_client, user, users, teams, organizations)
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
@@ -715,8 +715,8 @@ class TestUserOptions:
         assert response.status_code == 200, "Options for list users should be available for standard user"
         assert response.data.get('actions', {}).get('POST', None) is None, "POST action for users should be forbidden for standard user"
 
-    def test_users_list_options_system_auditor(self, user_api_client, user):
-        user.is_system_auditor = True
+    def test_users_list_options_platform_auditor(self, user_api_client, user):
+        user.is_platform_auditor = True
         user.save()
 
         url = reverse("user-list")
@@ -782,8 +782,8 @@ class TestUserOptions:
         assert response.status_code == 200, "Org Admin should see OPTIONS of Team Member"
         assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for Org Admin on Team Member"
 
-    def test_users_detail_options_system_auditor(self, user_api_client, user):
-        user.is_system_auditor = True
+    def test_users_detail_options_platform_auditor(self, user_api_client, user):
+        user.is_platform_auditor = True
         user.save()
 
         url1 = reverse("user-detail", kwargs={"pk": user.pk})

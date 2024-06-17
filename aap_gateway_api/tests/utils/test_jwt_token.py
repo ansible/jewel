@@ -20,7 +20,7 @@ def test_jwt_token_org_ends_up_in_jwt_if_only_team_associated(admin_user, team, 
 
 def test_jwt_token_encode_decode(admin_user, set_preference, rsa_keypair, organization, team):
     # Give admin is_systemadmin
-    admin_user.apply_system_auditor_membership(True)
+    admin_user.apply_platform_auditor_membership(True)
     # Give admin a member object permission
     RoleDefinition.objects.managed.org_member.give_permission(admin_user, organization)
     # Give admin an admin object permission
@@ -91,7 +91,7 @@ class TestUserObjectRoles:
         return ContentType.objects.get_for_model(Team)
 
     def test_platform_auditor(self, user):
-        RoleDefinition.objects.managed.sys_auditor.give_global_permission(user)
+        RoleDefinition.objects.managed.platform_auditor.give_global_permission(user)
         assert get_user_object_roles(user) == []  # platform auditor is not an object role
 
     def test_org_admin(self, user, organization):

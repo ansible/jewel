@@ -251,9 +251,9 @@ class TestTeamOptions:
             else:
                 assert post_action is None, f"POST action shouldn't be available for {role_name}"
 
-    def test_teams_list_options_system_auditor(self, user_api_client, user):
+    def test_teams_list_options_platform_auditor(self, user_api_client, user):
         url = reverse("team-list")
-        user.is_system_auditor = True
+        user.is_platform_auditor = True
         user.save()
 
         response = user_api_client.options(url)
@@ -285,9 +285,9 @@ class TestTeamOptions:
             else:
                 assert put_action is None, f"PUT action shouldn't be available for {role_name}"
 
-    def test_team_detail_options_system_auditor(self, user_api_client, user, team):
+    def test_team_detail_options_platform_auditor(self, user_api_client, user, team):
         url = reverse("team-detail", kwargs={"pk": team.pk})
-        user.is_system_auditor = True
+        user.is_platform_auditor = True
         user.save()
 
         response = user_api_client.options(url)

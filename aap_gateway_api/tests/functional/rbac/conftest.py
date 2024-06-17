@@ -5,12 +5,12 @@ from ansible_base.rbac.models import RoleDefinition
 from aap_gateway_api.models import Organization, Team, User
 
 
-@pytest.mark.parametrize('user_type', ['unauthenticated', 'user', 'system_auditor', 'superuser'])
+@pytest.mark.parametrize('user_type', ['unauthenticated', 'user', 'platform_auditor', 'superuser'])
 class TestPermissionsBase:
     @pytest.fixture(scope="function", autouse=True)
     def init_api_client(self, user_type, unauthenticated_api_client, user_api_client, user):
-        if user_type in ['system_auditor', 'superuser']:
-            user.is_system_auditor = user_type == 'system_auditor'
+        if user_type in ['platform_auditor', 'superuser']:
+            user.is_platform_auditor = user_type == 'platform_auditor'
             user.is_superuser = user_type == 'superuser'
             user.save()
 
