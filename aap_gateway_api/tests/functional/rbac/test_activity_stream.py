@@ -46,7 +46,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 405
@@ -65,7 +65,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 405
@@ -78,7 +78,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 405

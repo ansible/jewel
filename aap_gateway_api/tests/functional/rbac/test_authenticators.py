@@ -62,7 +62,7 @@ class TestAuthenticatorPermissions(TestPermissionsBase):
             assert response.status_code == 401
         elif user_type == 'user':
             assert response.status_code == 403
-        elif user_type == 'system_auditor':
+        elif user_type == 'platform_auditor':
             assert response.status_code == 200
             assert response.data.get('actions', {}).get('POST', None) is None, "POST not allowed for system auditor"
         elif user_type == 'superuser':
@@ -89,7 +89,7 @@ class TestAuthenticatorPermissions(TestPermissionsBase):
             assert response.status_code == 401
         elif user_type == 'user':
             assert response.status_code == 403
-        elif user_type == 'system_auditor':
+        elif user_type == 'platform_auditor':
             assert response.status_code == 200
             assert response.data.get('actions', {}).get('PUT', None) is None, "read only for system auditor"
         elif user_type == 'superuser':
@@ -104,7 +104,7 @@ class TestAuthenticatorPermissions(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 200
@@ -117,7 +117,7 @@ class TestAuthenticatorPermissions(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 204
@@ -145,7 +145,7 @@ class TestAuthenticatorMapPermission(TestPermissionsBase):
             assert response.status_code == 401
         elif user_type == 'user':
             assert response.status_code == 403
-        elif user_type == 'system_auditor':
+        elif user_type == 'platform_auditor':
             assert response.status_code == 200
             assert response.data.get('actions', {}).get('POST', None) is None, "POST not allowed for system auditor"
         elif user_type == 'superuser':
@@ -172,7 +172,7 @@ class TestAuthenticatorMapPermission(TestPermissionsBase):
             assert response.status_code == 401
         elif user_type == 'user':
             assert response.status_code == 403
-        elif user_type == 'system_auditor':
+        elif user_type == 'platform_auditor':
             assert response.status_code == 200
             assert response.data.get('actions', {}).get('PUT', None) is None, "read only for system auditor"
         elif user_type == 'superuser':
@@ -187,7 +187,7 @@ class TestAuthenticatorMapPermission(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 200
@@ -200,7 +200,7 @@ class TestAuthenticatorMapPermission(TestPermissionsBase):
 
         if user_type == 'unauthenticated':
             assert response.status_code == 401
-        elif user_type in ['user', 'system_auditor']:
+        elif user_type in ['user', 'platform_auditor']:
             assert response.status_code == 403
         else:
             assert response.status_code == 204

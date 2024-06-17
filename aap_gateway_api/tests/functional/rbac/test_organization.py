@@ -247,9 +247,9 @@ class TestOrganizationOptions:
             assert response.data.get('actions', {}).get('POST', None) is None, f"POST action shouldn't be available for {role_name}"
 
     # @pytest.mark.xfail(reason="Not implemented yet")
-    def test_organizations_list_options_system_auditor(self, user_api_client, user):
+    def test_organizations_list_options_platform_auditor(self, user_api_client, user):
         url = reverse("organization-list")
-        user.is_system_auditor = True
+        user.is_platform_auditor = True
         user.save()
 
         response = user_api_client.options(url)
@@ -285,9 +285,9 @@ class TestOrganizationOptions:
                 assert response.data.get('actions', {}).get('PUT', None) is None, f"PUT action shouldn't be available for {role_name}"
 
     # @pytest.mark.xfail(reason="Not implemented yet")
-    def test_organization_detail_options_system_auditor(self, user_api_client, user, organization):
+    def test_organization_detail_options_platform_auditor(self, user_api_client, user, organization):
         url = reverse("organization-detail", kwargs={"pk": organization.pk})
-        user.is_system_auditor = True
+        user.is_platform_auditor = True
         user.save()
 
         response = user_api_client.options(url)

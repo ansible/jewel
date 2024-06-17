@@ -31,7 +31,7 @@ class UserSerializer(CommonUserSerializer):
         allow_null=True,
     )
     authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    is_system_auditor = serializers.BooleanField(read_only=True)
+    is_platform_auditor = serializers.BooleanField(read_only=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
         super().__init__(instance, data, **kwargs)
@@ -48,12 +48,12 @@ class UserSerializer(CommonUserSerializer):
             'last_login',
             'password',
             'is_superuser',
-            'is_system_auditor',
+            'is_platform_auditor',
             'authenticators',
             'authenticator_uid',
             'managed',
         ]
-        read_only_fields = ["last_login", "is_system_auditor"]
+        read_only_fields = ["last_login", "is_platform_auditor"]
 
     def is_superuser_making_request(self) -> bool:
         request = self.context.get('request', None)
@@ -233,7 +233,7 @@ class UserSerializer(CommonUserSerializer):
 
         # Add last login results but only for yourself unless you are a superuser or auditor
         request = self.context.get('request', None)
-        if request and request.user and (request.user.is_superuser or request.user.is_system_auditor or request.user.username == obj.username):
+        if request and request.user and (request.user.is_superuser or request.user.is_platform_auditor or request.user.username == obj.username):
             ret['last_login_results'] = {}
             for authentication in authentications:
                 ret['last_login_results'][authentication.provider.id] = {
@@ -243,7 +243,7 @@ class UserSerializer(CommonUserSerializer):
                 }
 
         # Show which authenticators the user is related to for the admin/auditor
-        if request and request.user and (request.user.is_superuser or request.user.is_system_auditor or request.user.username == obj.username):
+        if request and request.user and (request.user.is_superuser or request.user.is_platform_auditor or request.user.username == obj.username):
             ret['authenticators'] = obj.get_authenticator_ids()
             ret['authenticator_uid'] = ', '.join(obj.get_authenticator_uids())
 

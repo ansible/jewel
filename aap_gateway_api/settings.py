@@ -290,7 +290,7 @@ ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = False
 ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
 ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
 ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
-ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_system_auditor'}
+ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_platform_auditor'}
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
 ANSIBLE_BASE_PRODUCT_NAME = 'AAP gateway'
 ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
@@ -301,7 +301,7 @@ ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
-    'sys_auditor': {'name': 'Platform Auditor'},
+    'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'},
     'team_member': {},
     'team_admin': {},
     'org_admin': {},

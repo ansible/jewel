@@ -73,8 +73,8 @@ class TestServicesOptions:
             response = user_api_client.options(url)
             assert response.status_code == 403, f"POST action for {basename} should be forbidden for standard user"
 
-    def test_services_list_options_system_auditor(self, user_api_client, user, service_objects):
-        user.is_system_auditor = True
+    def test_services_list_options_platform_auditor(self, user_api_client, user, service_objects):
+        user.is_platform_auditor = True
         user.save()
 
         for basename, svc_object in service_objects.items():
@@ -96,8 +96,8 @@ class TestServicesOptions:
             response = user_api_client.options(url)
             assert response.status_code == 403, f"PUT action for {basename} is not available for regular user"
 
-    def test_services_detail_options_system_auditor(self, user_api_client, user, service_objects):
-        user.is_system_auditor = True
+    def test_services_detail_options_platform_auditor(self, user_api_client, user, service_objects):
+        user.is_platform_auditor = True
         user.save()
 
         for basename, svc_object in service_objects.items():

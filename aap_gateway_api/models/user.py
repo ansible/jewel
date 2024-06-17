@@ -44,31 +44,31 @@ class User(AbstractUser, CommonModel, AuditableModel):
         help_text=_("Indicates if this user is managed by the system. It cannot be modified once created."),
     )
 
-    def __init__(self, *args, is_system_auditor=False, **kwargs):
+    def __init__(self, *args, is_platform_auditor=False, **kwargs):
         super().__init__(*args, **kwargs)
-        if is_system_auditor:
-            self._is_system_auditor = True
+        if is_platform_auditor:
+            self._is_platform_auditor = True
 
-    def fetch_system_auditor_membership(self):
+    def fetch_platform_auditor_membership(self):
         "Get from the database True or False, this user is a system auditor"
-        from aap_gateway_api.utils.rbac import get_system_auditor_role
+        from aap_gateway_api.utils.rbac import get_platform_auditor_role
 
-        rd = get_system_auditor_role()
+        rd = get_platform_auditor_role()
         return self.role_assignments.filter(role_definition=rd).exists()
 
-    def apply_system_auditor_membership(self, value):
-        from aap_gateway_api.utils.rbac import get_system_auditor_role
+    def apply_platform_auditor_membership(self, value):
+        from aap_gateway_api.utils.rbac import get_platform_auditor_role
 
         """Change RBAC SystemAuditor role to reflect given value"""
-        rd = get_system_auditor_role()
-        prior_value = self.fetch_system_auditor_membership()
+        rd = get_platform_auditor_role()
+        prior_value = self.fetch_platform_auditor_membership()
         if bool(prior_value) != bool(value):
             if prior_value:
                 self.role_assignments.filter(role_definition=rd).delete()
             else:
                 rd.give_global_permission(self)
 
-        self._is_system_auditor = value
+        self._is_platform_auditor = value
 
     def save(self, *args, **kwargs):
         is_new_user = bool(not self.pk)
@@ -78,8 +78,8 @@ class User(AbstractUser, CommonModel, AuditableModel):
         super().save(*args, **kwargs)
 
         # If the system auditor role was set on unsaved object, apply it now that it is saved
-        if is_new_user and hasattr(self, '_is_system_auditor'):
-            self.apply_system_auditor_membership(self._is_system_auditor)
+        if is_new_user and hasattr(self, '_is_platform_auditor'):
+            self.apply_platform_auditor_membership(self._is_platform_auditor)
 
     def logout(self):
         logger.debug(f"Logging out user {self.username} from any active backends")
@@ -96,29 +96,34 @@ class User(AbstractUser, CommonModel, AuditableModel):
     def get_authenticator_uids(self) -> list[str]:
         return list(self.authenticator_users.values_list('uid', flat=True).distinct())
 
-    def get_is_system_auditor(self):
-        if not hasattr(self, '_is_system_auditor'):
+    def get_is_platform_auditor(self):
+        if not hasattr(self, '_is_platform_auditor'):
             # For performance purposes, catch the value from the database
-            self._is_system_auditor = self.fetch_system_auditor_membership()
-        return self._is_system_auditor
+            self._is_platform_auditor = self.fetch_platform_auditor_membership()
+        return self._is_platform_auditor
 
-    def set_is_system_auditor(self, value):
+    def set_is_platform_auditor(self, value):
         if not self.pk:
             # For unsaved objects, delay application of membership, used in save method
-            self._is_system_auditor = value
+            self._is_platform_auditor = value
             return
 
-        if (not hasattr(self, '_is_system_auditor')) or bool(self._is_system_auditor) != bool(value):
-            self.apply_system_auditor_membership(value)
+        if (not hasattr(self, '_is_platform_auditor')) or bool(self._is_platform_auditor) != bool(value):
+            self.apply_platform_auditor_membership(value)
 
-    def del_is_system_auditor(self):
-        if hasattr(self, '_is_system_auditor'):
-            del self._is_system_auditor
+    def del_is_platform_auditor(self):
+        if hasattr(self, '_is_platform_auditor'):
+            del self._is_platform_auditor
 
-    is_system_auditor = property(get_is_system_auditor, set_is_system_auditor, del_is_system_auditor)
+    is_platform_auditor = property(get_is_platform_auditor, set_is_platform_auditor, del_is_platform_auditor)
 
     @property
     def organizations(self):
         from aap_gateway_api.models import Organization
 
         return Organization.access_qs(self, 'member')
+
+    @property
+    def is_system_auditor(self):
+        """Temporary shim to satisify ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor"""
+        return self.is_platform_auditor
