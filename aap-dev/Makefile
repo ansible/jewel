@@ -8,6 +8,7 @@ ADMIN_PASSWORD := admin
 SERVICE_DIR := ../services
 GW_DIR := ..
 AAP_DEV_DIR := .
+TASK_CMD := $(if command -v go-task,go-task,task)
 
 $(SERVICE_DIR)/awx/.git/HEAD: ;
 	cd $(SERVICE_DIR) && git clone https://github.com/ansible/awx.git
@@ -21,15 +22,12 @@ awx-up: $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml
 awx-down: $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml
 	-docker-compose -f $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml down
 
-$(GW_DIR)/tools/generated/proxy.yml:
-	cd $(GW_DIR) && make tools/generated/proxy.yml
-
 .awx-settings-hack:
 	$(AAP_DEV_DIR)/awx-up-check.sh
 	docker cp $(AAP_DEV_DIR)/controller_settings.py tools_awx_1:/etc/tower/conf.d/controller_settings.py
 	docker exec tools_awx_1 /bin/bash -c "supervisorctl restart tower-processes:awx-uwsgi"
 
-gateway-up: $(GW_DIR)/tools/generated/proxy.yml
+gateway-up:
 	cd $(GW_DIR) && make docker-compose COMPOSE_UP_OPTS=--detach ADMIN_PASSWORD=$(ADMIN_PASSWORD)
 
 gateway-down:
@@ -49,8 +47,9 @@ $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py:
 	cp $(AAP_DEV_DIR)/eda_server_settings.py $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py
 
 eda-server-up: $(SERVICE_DIR)/eda-server/.git/HEAD $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py
-	cd $(SERVICE_DIR)/eda-server && task docker:build
-	cd $(SERVICE_DIR)/eda-server && EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.eda_server_settings task docker:up
+	echo "Using $(TASK_CMD)"
+	cd $(SERVICE_DIR)/eda-server && $(TASK_CMD) docker:build
+	cd $(SERVICE_DIR)/eda-server && EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.eda_server_settings $(TASK_CMD) docker:up
 
 eda-server-down: $(SERVICE_DIR)/eda-server/.git/HEAD
 	cd $(SERVICE_DIR)/eda-server && task docker:down

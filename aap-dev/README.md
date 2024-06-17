@@ -1,3 +1,10 @@
+### Requirements
+
+#### Fedora
+
+* docker, running on default context (not rootless) (see "How to check if rootless docker")
+* dnf install go-task
+
 ### Quick Start
 From the `aap-dev` directory.
 
@@ -8,6 +15,25 @@ https://localhost/api/controller/v2/me/  <-- After logging in via the gateway th
 https://localhost:8043/ <-- awx
 
 `make dev-down` to bring it all down
+
+### How to check if rootless docker
+
+Right now the only well worn path is NOT rootless docker!
+
+You can check if you are running rootless with the following command:
+```
+$ docker context ls
+
+NAME            DESCRIPTION                               DOCKER ENDPOINT                                   ERROR
+default *       Current DOCKER_HOST based configuration   unix:///var/run/docker.sock                       
+rootless        Rootless mode                             unix:///run/user/1000/docker.sock  
+```
+
+Switch to default context with
+
+```
+docker context use default
+```
 
 ### Implementation Notes
 
