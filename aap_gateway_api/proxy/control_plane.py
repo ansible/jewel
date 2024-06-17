@@ -22,10 +22,6 @@ MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationM
 
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
-# TODO: Someday we should look through the services and find gateway services
-#       and get its `/api/gateway` endpoint and stuff it into these instead of hardcoding it.
-no_authentication_required = ['/api/gateway/v1/ui_auth/', '/api/gateway/v1/jwt_key/']
-
 
 def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest) -> DRFRequest:
     d_request = HttpRequest()
@@ -58,19 +54,13 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
     def _return_authenticated(self, jwt, username):
         logger.info(f"User {username} successfully authenticated for {self.request_id}")
 
-        # Gateway will not accept JWT tokens from itself so we have to allow the auth header to remain if we are going to talk with a gateway endpoint
-        # TODO: If we changed gateway to accept its own JWT tokens we could remove this section and just always remove Authorization
-        headers_to_remove = []
-        if not self.request_path.startswith('/api/gateway/'):
-            logger.debug(f"Removing authorization header for {self.request_id}")
-            headers_to_remove.append('Authorization')
-
+        # We are going to send the JWT downstream so we should remove the Authorization header so the service does not see it
         response = external_auth_pb2.OkHttpResponse(
             headers=self.headers
             + [
                 HeaderValueOption(header=HeaderValue(key=get_preference_value('proxy', 'gateway_token_name'), value=jwt)),
             ],
-            headers_to_remove=headers_to_remove,
+            headers_to_remove=['Authorization'],
         )
 
         self._log_process_time()
@@ -78,8 +68,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
     def _return_no_authentication_required(self):
         # This endpoint did not require authentication so no logs required
-        logger.debug(f"No authentication required for {self.request_id}")
-        self._log_process_time()
+        logger.debug(f"No JWT authentication required for {self.request_id} {self.request_path}")
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
     def _return_not_authenticated(self):
@@ -114,11 +103,11 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
                 logger.exception(f"Got an invalid request_id {bad_value}")
         self.request_id = sanatized_request_id
 
-        logger.info(f"Starting authentication for ({self.request_id}) {self.request_path}.")
-
-        if self.request_path in no_authentication_required or self.request_path.startswith('/static/'):
+        # /static endpoints and any requests to the gateway api do not require any JWT authentication
+        if self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
             return self._return_no_authentication_required()
 
+        logger.info(f"Starting authentication for ({self.request_id}) {self.request_path}.")
         try:
             drf_request = get_drf_request(request.attributes.request.http)
             try:
