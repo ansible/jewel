@@ -32,6 +32,8 @@ Please have the following prerequisites already installed on your development ma
   * docker
   * make
   * openssl
+  * gcc
+  * ansible-core
 
 #### Fedora dnf packages
 Dependencies can be provided by the following packages:

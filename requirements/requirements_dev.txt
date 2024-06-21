@@ -1,4 +1,3 @@
-ansible  # Used in build process to generate some configs
 build
 ipython # Used in shell_plus
 remote-pdb # The debugger setup with Python's breakpoint()
@@ -9,3 +8,4 @@ psycopg[binary]
 requests
 setuptools # Needed for the plumbing of the side cars
 docker     # Needed for the plumbing of the side cars via Ansible
+PyYAML     # Collection tests
