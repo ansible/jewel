@@ -1,5 +1,6 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
+from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.models import RoleDefinition
@@ -28,6 +29,10 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
 
     @action(detail=True, methods=["get"], url_name="authenticators-list")
     def authenticators(self, request, pk=None):
+        # first, check if the current user has permission to view authenticators
+        permission_class = IsSuperuserOrAuditor()
+        if not permission_class.has_permission(request, None):
+            return Response(status=403)
         try:
             user = visible_users(self.request.user).get(pk=pk)
         except User.DoesNotExist:
