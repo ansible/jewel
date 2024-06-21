@@ -29,13 +29,14 @@ def test_user_create(admin_api_client, post_format):
     "client_fixture",
     [
         "admin_api_client",
+        "platform_auditor_api_client",
+        "user_api_client",
         "unauthenticated_api_client",
     ],
 )
 def test_user_authenticators(request, client_fixture, local_authenticator, ldap_authenticator, user):
     """
     Test that we can list authenticators for a user.
-
     The action is limited to admins.
     """
     AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=local_authenticator)
@@ -43,12 +44,15 @@ def test_user_authenticators(request, client_fixture, local_authenticator, ldap_
     client = request.getfixturevalue(client_fixture)
     url = reverse("user-authenticators-list", kwargs={"pk": user.pk})
     response = client.get(url)
-    if client_fixture == "admin_api_client":
+
+    if client_fixture == "admin_api_client" or client_fixture == "platform_auditor_api_client":
         assert response.status_code == 200
         assert len(response.data['results']) == 2
         names = [authenticator['name'] for authenticator in response.data['results']]
         assert local_authenticator.name in names
         assert ldap_authenticator.name in names
+    elif client_fixture == "user_api_client":
+        assert response.status_code == 403
     else:
         assert response.status_code == 401
 

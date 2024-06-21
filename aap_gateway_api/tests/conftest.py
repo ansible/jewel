@@ -12,6 +12,7 @@ import pytest
 from ansible_base.lib.testing.fixtures import *  # noqa: F403, F401
 from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
+from rest_framework.test import APIClient
 
 from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
@@ -322,3 +323,23 @@ def system_user(db, settings, no_log_messages):
     with no_log_messages():
         user_obj, _created = User.objects.get_or_create(username=settings.SYSTEM_USERNAME)
     yield user_obj
+
+
+@pytest.fixture
+def platform_auditor_user(db, django_user_model, local_authenticator):
+    user = django_user_model.objects.create_user(username="platform_auditor", password="password")
+    user.set_is_platform_auditor(True)
+    user.save()
+    return user
+
+
+@pytest.fixture
+def platform_auditor_api_client(db, platform_auditor_user, local_authenticator):
+    client = APIClient()
+    client.login(username="platform_auditor", password="password")
+    yield client
+    try:
+        client.logout()
+    except AttributeError:
+        # The test might have logged the user out already (e.g. to test the logout signal)
+        pass
