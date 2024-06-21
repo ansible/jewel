@@ -189,7 +189,7 @@ LOGGING = {
     },
 }
 
-LOGIN_URL = '/api/login/'
+LOGIN_URL = '/'
 
 LOGOUT_ALLOWED_HOSTS = []
 
