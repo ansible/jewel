@@ -1,5 +1,5 @@
 from ansible_base.activitystream.models import AuditableModel
-from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
+from ansible_base.lib.utils.encryption import ansible_encryption
 from dynamic_preferences import models
 
 
@@ -24,6 +24,6 @@ class Preference(models.BasePreferenceModel, AuditableModel):
         instance = super().from_db(db, field_names, values)
         # We don't want to check the instance.preference.encrypted here because we could have a Fallback
         # A fall back happens when there is a value in DB but not a corresponding register
-        if type(instance.value) is str and instance.value.startswith(ENCRYPTED_STRING):
+        if type(instance.value) is str:
             instance.value = ansible_encryption.decrypt_string(instance.value)
         return instance
