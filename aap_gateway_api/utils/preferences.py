@@ -43,9 +43,10 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
     if gateway_preference_registry.get(name, section).encrypted:
         if encrypted:
             return ENCRYPTED_STRING
-        # If we retrieve from cache instead of the DB it could be encrypted so we do a double check for encrypted values here
-        if value.startswith(ENCRYPTED_STRING):
-            value = ansible_encryption.decrypt_string(value)
+        # Note: values can be retrieved from cache instead of the DB.
+        # However, decrypt_string() can identify encrypted values and decrypt them,
+        # returning the non encrypted values unchanged.
+        value = ansible_encryption.decrypt_string(value)
 
     return value
 
