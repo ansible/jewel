@@ -13,6 +13,8 @@ COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
 ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
 GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ANSIBLE_CONFIG ?= tools/ansible/ansible.cfg
+export ANSIBLE_CONFIG
 
 .PHONY: PYTHON_VERSION clean \
 	check lint check_black check_flake8 check_isort \
@@ -141,6 +143,7 @@ container-startup.yml: tools/configs/container-startup.yml
 
 ## Generate all files from generate-source playbook
 tools/generated/sources: tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 container-startup.yml
+	ansible-galaxy install -r requirements/requirements.yml
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
@@ -217,14 +220,14 @@ plumb:
 
 ## Install the collection locally on your machine
 collection-install:
-	cd gateway_configuration_collection && ansible-galaxy collection install . --force
+	ansible-galaxy collection install gateway_configuration_collection --force
 
 ## Run the collection tests
 collection-test: collection-install
 	$(eval ADMIN_PW=$(shell awk '/gateway_admin_password/{print $$2}' container-startup.yml | xargs echo))
 	echo 'gateway_password: $(ADMIN_PW)' > \
-	  ~/.ansible/collections/ansible_collections/ansible/gateway_configuration/tests/integration/integration_config.yml
-	cd ~/.ansible/collections/ansible_collections/ansible/gateway_configuration && \
+	  /tmp/collections/ansible_collections/ansible/gateway_configuration/tests/integration/integration_config.yml
+	cd /tmp/collections/ansible_collections/ansible/gateway_configuration && \
 	  ansible-test integration --venv --requirements --coverage
 
 ## Run the collections test-completness check
