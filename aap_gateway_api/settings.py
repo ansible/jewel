@@ -213,6 +213,7 @@ LOGGING = {
 }
 
 LOGIN_URL = '/'
+LOGIN_REDIRECT_URL = '/api/gateway/v1/'
 
 # Set to desired external URL (load balancer, proxy, etc.)
 # Used to construct fully qualified URLs to gateway

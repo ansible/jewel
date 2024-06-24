@@ -19,6 +19,9 @@ logger = logging.getLogger('aap.gateway.views.local_login')
 
 
 class LoggedLoginView(views.LoginView):
+    # If the user is already logged in redirect them immediately
+    redirect_authenticated_user = True
+
     def get(self, request, *args, **kwargs):
         # The django.auth.contrib login form doesn't perform the content
         # negotiation we've come to expect from DRF; add in code to catch
@@ -62,7 +65,6 @@ class LoggedLoginView(views.LoginView):
 
 @method_decorator(require_http_methods(["POST", "GET"]), name="dispatch")
 class LoggedLogoutView(views.LogoutView):
-
     success_url_allowed_hosts = settings.LOGOUT_ALLOWED_HOSTS
 
     def dispatch(self, request, *args, **kwargs):
