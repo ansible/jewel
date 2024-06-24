@@ -109,4 +109,4 @@ ansible-playbook manage_data.yml -e @data/gateway_routes.yml
 
 ## License
 
-[Apache-2.0](https://github.com/ansible/aap-gateway/blob/devel/LICENSE.md)
+[GPLv3](https://github.com/ansible/aap-gateway/gateway_configuration_collection/COPYING)

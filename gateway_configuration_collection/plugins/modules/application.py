@@ -1,7 +1,9 @@
 #!/usr/bin/python
 # coding: utf-8 -*-
 
-# Apache-2.0
+# Copyright: (c) 2024, John Westcott <john-westcott-iv>
+# Copyright: (c) 2020,Geoffrey Bachelot <bachelotg@gmail.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
 
