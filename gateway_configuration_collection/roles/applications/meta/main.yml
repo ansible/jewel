@@ -8,7 +8,7 @@ galaxy_info:
   # If the issue tracker for your role is not on github, uncomment the
   # next line and provide a value
   # issue_tracker_url: http://example.com/issue/tracker
-  license: "Apache-2.0"
+  license: "GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)"
 
   min_ansible_version: "2.14"
 

@@ -84,4 +84,4 @@ ansible-playbook manage_data.yml -e @data/gateway_applications.yml
 
 ## License
 
-[Apache-2.0](https://github.com/ansible/jewel/blob/devel/LICENSE)
+[GPLv3](https://github.com/ansible/jewel)
