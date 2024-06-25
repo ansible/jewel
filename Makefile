@@ -128,7 +128,7 @@ docker-compose-basic: tools/generated/sources docker-compose-build .git/hooks/pr
 docker-compose: docker-compose-detached register-services plumb
 	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
 		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate; \
-  	 fi
+	fi
 
 ## Start the docker container in detached mode, wait for finish
 docker-compose-detached: tools/generated/sources docker-compose-build .git/hooks/pre-commit

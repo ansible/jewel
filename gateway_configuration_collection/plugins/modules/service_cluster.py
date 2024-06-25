@@ -37,6 +37,36 @@ options:
         - Required when creating new Service Cluster
       choices: ["hub", "controller", "eda", "gateway"]
       type: str
+    outlier_detection_enabled:
+      type: bool
+      description: If true, outlier detection will be used to determine if a node is unhealthy and should be ejected from the cluster.
+    outlier_detection_consecutive_5xx:
+      type: int
+      description: Number of consecutive 5xx responses to consider a node unhealthy.
+    outlier_detection_interval_seconds:
+      type: int
+      description: The time interval between ejection analysis sweeps.
+    outlier_detection_base_ejection_time_seconds:
+      type: int
+      description: The base time a node will be ejected for.
+    outlier_detection_max_ejection_percent:
+      type: int
+      description: The maximum percent of nodes that can be ejected from the cluster.
+    health_checks_enabled:
+      type: bool
+      description: If true, health checks will be used to determine if a node is healthy.
+    health_check_timeout_seconds:
+      type: int
+      description: The time to wait for a health check to complete.
+    health_check_interval_seconds:
+      type: int
+      description: The time between health check requests.
+    health_check_unhealthy_threshold:
+      type: int
+      description: The number of consecutive failed health checks before a node is considered unhealthy.
+    health_check_healthy_threshold:
+      type: int
+      description: The number of consecutive successful health checks before a node is considered healthy.
 
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
@@ -74,6 +104,16 @@ def main():
         new_name=dict(type='str'),
         service_type=dict(type="str", choices=["hub", "controller", "eda", "gateway"]),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
+        outlier_detection_enabled=dict(type='bool'),
+        outlier_detection_consecutive_5xx=dict(type='int'),
+        outlier_detection_interval_seconds=dict(type='int'),
+        outlier_detection_base_ejection_time_seconds=dict(type='int'),
+        outlier_detection_max_ejection_percent=dict(type='int'),
+        health_checks_enabled=dict(type='bool'),
+        health_check_timeout_seconds=dict(type='int'),
+        health_check_interval_seconds=dict(type='int'),
+        health_check_unhealthy_threshold=dict(type='int'),
+        health_check_healthy_threshold=dict(type='int'),
     )
 
     # Create a module with spec
