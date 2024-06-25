@@ -1,4 +1,5 @@
 import pytest
+from ansible_base.rbac.models import RoleUserAssignment
 from django.urls import reverse
 
 from aap_gateway_api.models import User
@@ -104,7 +105,7 @@ def test_team_create_permissions(user_api_client, user, organization, org_admin_
 
 
 @pytest.mark.parametrize("api_type", ["old", "new"])
-def test_team_detail_modify_members(user_api_client, user, organization, team, admin_rd, member_rd, org_member_rd, api_type):
+def test_team_detail_associate_members(user_api_client, user, organization, team, admin_rd, member_rd, org_member_rd, api_type):
     rando = User.objects.create(username='rando')
     admin_rd.give_permission(user, team)
 
@@ -114,6 +115,7 @@ def test_team_detail_modify_members(user_api_client, user, organization, team, a
         patch_data = {'instances': [rando.id]}
         # user can not add rando as a member due to not being able to view that user
         response = user_api_client.post(url, data=patch_data)
+        assert not team.users.filter(id=rando.id).exists()
         assert response.status_code == 400, response.data
     else:
         url = reverse('roleuserassignment-list')
@@ -126,12 +128,47 @@ def test_team_detail_modify_members(user_api_client, user, organization, team, a
 
     # user now see rando (and is admin of the team) so criteria for adding member is met
     if api_type == 'old':
-        # user can not add rando as a member due to not being able to view that user
         response = user_api_client.post(url, data=patch_data)
         assert response.status_code == 204
     else:
         response = user_api_client.post(url, data=data)
         assert response.status_code == 201, response.data
+
+
+@pytest.mark.parametrize("api_type", ["old_api", "new_api"])
+@pytest.mark.parametrize("user_type", ["admin", "member", "self-admin", "self-member"])
+def test_team_detail_disassociate_members(user_api_client, user, user_type, organization, team, admin_rd, member_rd, org_member_rd, api_type):
+    """Team Admin can always disassociate team member/team admin (self and other user)"""
+    team.add_admin(user)
+
+    if user_type in ['admin', 'member']:
+        team_user = User.objects.create(username='rando')
+    else:
+        team_user = user
+
+    if user_type in ['admin', 'self-admin']:
+        team.add_admin(team_user)
+        viewname = 'team-admins-disassociate'
+        rd_id = admin_rd.id
+    else:
+        team.add_member(team_user)
+        viewname = 'team-users-disassociate'
+        rd_id = member_rd.id
+
+    if api_type == "old_api":
+        url = reverse(viewname, kwargs={'pk': team.pk})
+        patch_data = {'instances': [team_user.id]}
+        response = user_api_client.post(url, data=patch_data)
+    else:
+        user_role = RoleUserAssignment.objects.get(object_id=team.pk, user_id=team_user.id, role_definition_id=rd_id)
+        url = reverse('roleuserassignment-detail', kwargs={'pk': user_role.id})
+        response = user_api_client.delete(url)
+
+    assert response.status_code == 204
+    if user_type in ['admin', 'self-admin']:
+        assert not team.admins.filter(id=team_user.id).exists()
+    else:
+        assert not team.users.filter(id=team_user.id).exists()
 
 
 def test_team_update_no_roles_permissions(user_api_client, user, teams, organizations, org_member_rd):  # noqa: F811
