@@ -6,10 +6,9 @@ from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
+from aap_gateway_api.models.service import SERVICE_PING_PAGES
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
-
-ping_pages = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/_healthz"}
 
 
 class StatusView(AnsibleBaseView):
@@ -34,7 +33,7 @@ class StatusView(AnsibleBaseView):
                 if node_id in response['services'][service_type]:
                     continue
 
-                url = f"{http_or_s}://{node.address}:{port_number}{ping_pages[service_type]}"
+                url = f"{http_or_s}://{node.address}:{port_number}{SERVICE_PING_PAGES[service_type]}"
                 node_data = {
                     'url': url,
                     'status': 'Fine',

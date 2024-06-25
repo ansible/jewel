@@ -12,10 +12,13 @@
       gateway_service_clusters:
         - name: "Automation Controller"
           service_type: "controller"
+          health_check_interval_seconds: 1162
         - name: "Automation Hub"
           service_type: "hub"
+          health_check_interval_seconds: 1162
         - name: "AAP gateway"
           service_type: "gateway"
+          health_check_interval_seconds: 333
   - debug:
       var: __gateway_service_clusters_job_async_result
 
@@ -44,6 +47,9 @@
         # Rename
       - name: "{{ __gateway_service_clusters_job_async_result.results[2].id }}" # AAP gateway
         new_name: "Event Driven Automation"
+        # Set a health check param
+      - name: "Event Driven Automation"
+        health_check_interval_seconds: 1162
   - debug:
       var: __gateway_service_clusters_job_async_result
 
@@ -72,6 +78,18 @@
       that:
         - __gateway_service_clusters_job_async_result.results[0] is not changed
         - __gateway_service_clusters_job_async_result.results[1] is not changed
+
+  - set_fact:
+      _sc_query: "{{ query('ansible.gateway_configuration.gateway_api', 'service_clusters', host=gateway_hostname, username=gateway_username, password=gateway_password, verify_ssl=gateway_validate_certs) }}"
+
+  - debug:
+      var: _sc_query
+
+  - name: Ensure we have 3 service clusters with health_check_interval_seconds=1162
+    assert:
+      that:
+        - _sc_query | length == 3
+        - _sc_query | map(attribute='health_check_interval_seconds') | list | unique == [1162]
 
   always:
     # Always Cleanup

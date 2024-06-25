@@ -14,6 +14,11 @@ from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_
 
 API_PREFIX = "/api/"
 
+# This is a list of API endpoints across supported services that Envoy will ping to determine if a node is healthy.
+# This is also used by aap_gateway_api.views.api.v1.status
+# TODO: This should move somewhere, but not sure where yet.
+SERVICE_PING_PAGES = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/eda/api/v1/status"}
+
 
 class HTTPPort(UniqueNamedCommonModel, AuditableModel):
     """
@@ -107,6 +112,56 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     )
 
     service_id = models.UUIDField(unique=True, help_text="The unique service ID, provided by the service.", null=True, editable=False)
+
+    outlier_detection_enabled = models.BooleanField(
+        default=True,
+        help_text=_("If true, outlier detection will be used to determine if a node is unhealthy and should be ejected from the cluster."),
+    )
+
+    outlier_detection_consecutive_5xx = models.PositiveIntegerField(
+        default=5,
+        help_text=_("Number of consecutive 5xx responses to consider a node unhealthy."),
+    )
+
+    outlier_detection_interval_seconds = models.PositiveIntegerField(
+        default=10,
+        help_text=_("The time interval between ejection analysis sweeps."),
+    )
+
+    outlier_detection_base_ejection_time_seconds = models.PositiveIntegerField(
+        default=30,
+        help_text=_("The base time a node will be ejected for."),
+    )
+
+    outlier_detection_max_ejection_percent = models.PositiveIntegerField(
+        default=33,
+        help_text=_("The maximum percent of nodes that can be ejected from the cluster."),
+    )
+
+    health_checks_enabled = models.BooleanField(
+        default=True,
+        help_text=_("If true, health checks will be used to determine if a node is healthy."),
+    )
+
+    health_check_timeout_seconds = models.PositiveIntegerField(
+        default=5,
+        help_text=_("The time to wait for a health check to complete."),
+    )
+
+    health_check_interval_seconds = models.PositiveIntegerField(
+        default=10,
+        help_text=_("The time between health check requests."),
+    )
+
+    health_check_unhealthy_threshold = models.PositiveIntegerField(
+        default=3,
+        help_text=_("The number of consecutive failed health checks before a node is considered unhealthy."),
+    )
+
+    health_check_healthy_threshold = models.PositiveIntegerField(
+        default=3,
+        help_text=_("The number of consecutive successful health checks before a node is considered healthy."),
+    )
 
     def summary_fields(self):
         response = {}
@@ -232,7 +287,22 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     def get_xds_cluster_config(self):
         endpoints = []
         for node in self.service_cluster.nodes.all():
-            endpoints.append({"endpoint": {"address": {"socket_address": {"address": node.address, "port_value": self.service_port}}}})
+            endpoint = {
+                "endpoint": {
+                    "address": {
+                        "socket_address": {
+                            "address": node.address,
+                            "port_value": self.service_port,
+                        },
+                    },
+                },
+            }
+            if self.service_cluster.health_checks_enabled:
+                endpoint["endpoint"]["health_check_config"] = {
+                    "hostname": node.address,
+                    "port_value": self.service_port,
+                }
+            endpoints.append(endpoint)
 
         cfg = {
             "name": self.envoy_cluster_name,
@@ -244,6 +314,27 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             "dns_lookup_family": "ALL",
             "load_assignment": {"cluster_name": self.envoy_cluster_name, "endpoints": [{"lb_endpoints": endpoints}]},
         }
+
+        if self.service_cluster.outlier_detection_enabled:
+            cfg["outlier_detection"] = {
+                "consecutive_5xx": self.service_cluster.outlier_detection_consecutive_5xx,
+                "interval": f"{self.service_cluster.outlier_detection_interval_seconds}s",
+                "base_ejection_time": f"{self.service_cluster.outlier_detection_base_ejection_time_seconds}s",
+                "max_ejection_percent": self.service_cluster.outlier_detection_max_ejection_percent,
+            }
+
+        if self.service_cluster.health_checks_enabled:
+            cfg["health_checks"] = [
+                {
+                    "timeout": f"{self.service_cluster.health_check_timeout_seconds}s",
+                    "interval": f"{self.service_cluster.health_check_interval_seconds}s",
+                    "unhealthy_threshold": self.service_cluster.health_check_unhealthy_threshold,
+                    "healthy_threshold": self.service_cluster.health_check_healthy_threshold,
+                    "http_health_check": {
+                        "path": SERVICE_PING_PAGES[self.service_cluster.service_type],
+                    },
+                }
+            ]
 
         if self.is_service_https:
             cfg["transport_socket"] = {
