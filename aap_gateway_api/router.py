@@ -1,7 +1,7 @@
 from ansible_base.lib.routers import AssociationResourceRouter
 
 from aap_gateway_api import views
-from aap_gateway_api.views.api.v1.user import DeprecatedRelatedUserViewSet
+from aap_gateway_api.views.api.v1.user import OrganizationRelatedUserViewSet, TeamRelatedUserViewSet
 
 router = AssociationResourceRouter()
 router.register(
@@ -22,8 +22,8 @@ router.register(
     views.OrganizationViewSet,
     related_views={
         'teams': (views.TeamViewSet, 'teams'),
-        'users': (DeprecatedRelatedUserViewSet, 'users'),
-        'admins': (DeprecatedRelatedUserViewSet, 'admins'),
+        'users': (OrganizationRelatedUserViewSet, 'users'),
+        'admins': (OrganizationRelatedUserViewSet, 'admins'),
     },
 )
 router.register(
@@ -40,8 +40,8 @@ router.register(
     r'teams',
     views.TeamViewSet,
     related_views={
-        'users': (DeprecatedRelatedUserViewSet, 'users'),
-        'admins': (DeprecatedRelatedUserViewSet, 'admins'),
+        'users': (TeamRelatedUserViewSet, 'users'),
+        'admins': (TeamRelatedUserViewSet, 'admins'),
     },
 )
 router.register(
