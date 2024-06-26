@@ -3,7 +3,7 @@
 #### Fedora
 
 * docker, running on default context (not rootless) (see "How to check if rootless docker")
-* dnf install go-task
+* dnf install go-task openssl
 
 ### Quick Start
 From the `aap-dev` directory.
