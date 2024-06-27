@@ -1,3 +1,5 @@
+from django.db import connection
+from django.db.models import F, OuterRef, Subquery
 from envoy.config.cluster.v3.cluster_pb2 import Cluster
 from envoy.config.listener.v3.listener_pb2 import Listener
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryResponse
@@ -27,7 +29,12 @@ class XDSView(APIView):
     permission_classes = []
 
     def get_qs(self, request, ModelClass, name_field):
-        qs = ModelClass.objects.order_by(name_field).distinct(name_field)
+        if connection.vendor == "postgresql":
+            qs = ModelClass.objects.order_by(name_field).distinct(name_field)
+        else:
+            # 'DISTINCT ON' is a PostgreSQL extension, for everything else we have to do it differently.
+            subquery = ModelClass.objects.filter(**{name_field: OuterRef(name_field)}).order_by("id").values("id")[:1]
+            qs = ModelClass.objects.annotate(first_id=Subquery(subquery)).filter(id=F("first_id")).order_by(name_field)
 
         if names := request.POST.get("resource_names"):
             if len(names) == 1 and names[0] == "*":
