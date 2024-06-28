@@ -1,10 +1,11 @@
-import base64
 import logging
 import time
 import uuid
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
+from ansible_base.lib.logging import thread_local as logging_thread_local
+from ansible_base.lib.middleware.logging import LogRequestMiddleware
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError, connections
@@ -18,7 +19,7 @@ from rest_framework.settings import api_settings
 
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
 
-MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware]
+MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware, LogRequestMiddleware]
 
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
@@ -81,8 +82,37 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         self._log_process_time()
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
+    def _handle_db_error(self, e):
+        logger.warning(f"Database error. We think it's a connection error. Resetting the connection so it can be tried again. ({self.request_id})")
+        logger.debug(e, exc_info=True)
+        for conn in connections.all():
+            conn.close_if_unusable_or_obsolete()
+
     def Check(self, request, context):
         self.start_time = time.time()
+
+        # Clear the thread local request. If we log before we get the new one, we'll log the wrong request.
+        logging_thread_local.request = None
+        user_request_id = request.attributes.request.http.headers.get('x-request-id')
+        sanitized_request_id = 'none'
+        if user_request_id:
+            try:
+                request_id_uuid = uuid.UUID(user_request_id)
+                sanitized_request_id = str(request_id_uuid)
+            except ValueError:
+                logger.exception("Got an invalid request_id")
+        self.request_id = sanitized_request_id
+
+        try:
+            # Do this ASAP (as soon as we validate the request_id) so that we can log the request_id in the logs.
+            drf_request = get_drf_request(request.attributes.request.http)
+        except (DatabaseError, OperationalError) as e:
+            self._handle_db_error(e)
+        except Exception as e:
+            # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
+            logger.exception(e)
+            raise
+
         self.headers = []
         try:
             self.headers.append(
@@ -92,16 +122,6 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             logger.exception("Failed to generate x-trusted-proxy")
 
         self.request_path = request.attributes.request.http.path
-        user_request_id = request.attributes.request.http.headers.get('x-request-id', None)
-        sanatized_request_id = 'none'
-        if user_request_id:
-            try:
-                request_id_uuid = uuid.UUID(str(user_request_id))
-                sanatized_request_id = str(request_id_uuid)
-            except ValueError:
-                bad_value = base64.b64encode(user_request_id.encode('UTF-8'))
-                logger.exception(f"Got an invalid request_id {bad_value}")
-        self.request_id = sanatized_request_id
 
         # /static endpoints and any requests to the gateway api do not require any JWT authentication
         if self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
@@ -109,7 +129,6 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
         logger.info(f"Starting authentication for ({self.request_id}) {self.request_path}.")
         try:
-            drf_request = get_drf_request(request.attributes.request.http)
             try:
                 user = drf_request.user
             except AuthenticationFailed:
@@ -132,12 +151,9 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             return self._return_authenticated(jwt, user.username)
 
         except (DatabaseError, OperationalError) as e:
-            logger.warning("Database error. We think it's a connection error. Resetting the connection so it can be tried again. ({self.request_id})")
-            logger.debug(e, exc_info=True)
-            for conn in connections.all():
-                conn.close_if_unusable_or_obsolete()
-        # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
+            self._handle_db_error(e)
         except Exception as e:
+            # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
             logger.exception(e)
             raise
 
