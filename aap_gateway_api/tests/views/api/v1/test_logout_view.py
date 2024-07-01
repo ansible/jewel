@@ -1,26 +1,25 @@
 from unittest import mock
 
-from rest_framework.reverse import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 class TestLogoutView:
-
     allowed_host = 'www.example.com'
 
     def test_implicit_next(self, admin_api_client):
-        url = reverse('logout')
+        url = get_relative_url('logout')
         response = admin_api_client.post(url)
         assert response.status_code == 302
         assert response.url == "/api/"
 
     def test_explicit_next_same_host(self, admin_api_client):
-        url = reverse('logout')
+        url = get_relative_url('logout')
         response = admin_api_client.post(url + "?next=/next_page")
         assert response.status_code == 302
         assert response.url == "/next_page"
 
     def test_explicit_next_different_host_not_allowed(self, admin_api_client):
-        url = reverse('logout')
+        url = get_relative_url('logout')
         response = admin_api_client.post(url + "?next=https://www.example.com/some/path")
         assert response.status_code == 302
         assert response.url == "/api/"
@@ -37,7 +36,7 @@ class TestLogoutView:
     def test_explicit_next_different_host_allowed(self, admin_api_client):
         redirect_url = f'https://{TestLogoutView.allowed_host}/some/path'
 
-        url = reverse('logout')
+        url = get_relative_url('logout')
         response = admin_api_client.post(url + f"?next={redirect_url}")
         assert response.status_code == 302
         assert response.url == redirect_url

@@ -1,10 +1,10 @@
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import AdditionalRoute
 
 
 def test_additional_route_detail(admin_api_client, additional_route_controller):
-    url = reverse('route-detail', kwargs={'pk': additional_route_controller.pk})
+    url = get_relative_url('route-detail', kwargs={'pk': additional_route_controller.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data['id'] == additional_route_controller.pk
@@ -19,7 +19,7 @@ def test_additional_route_detail(admin_api_client, additional_route_controller):
 
 
 def test_additional_route_list(admin_api_client, additional_route_controller, additional_route_eda):
-    url = reverse('route-list')
+    url = get_relative_url('route-list')
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert len(response.data["results"]) == 2
@@ -30,7 +30,7 @@ def test_additional_route_list(admin_api_client, additional_route_controller, ad
 
 def test_additional_route_create(admin_api_client, http_port_factory, service_cluster_hub):
     http_port = http_port_factory()
-    url = reverse('route-list')
+    url = get_relative_url('route-list')
     data = {
         'name': 'test',
         'http_port': http_port.pk,
@@ -55,7 +55,7 @@ def test_additional_route_create(admin_api_client, http_port_factory, service_cl
 
 
 def test_additional_route_update(admin_api_client, additional_route_controller):
-    url = reverse('route-detail', kwargs={'pk': additional_route_controller.pk})
+    url = get_relative_url('route-detail', kwargs={'pk': additional_route_controller.pk})
     data = {
         'name': 'test',
         'http_port': additional_route_controller.http_port.pk,
@@ -80,28 +80,28 @@ def test_additional_route_update(admin_api_client, additional_route_controller):
 
 
 def test_additional_route_delete(admin_api_client, additional_route_controller):
-    url = reverse('route-detail', kwargs={'pk': additional_route_controller.pk})
+    url = get_relative_url('route-detail', kwargs={'pk': additional_route_controller.pk})
     response = admin_api_client.delete(url)
     assert response.status_code == 204
     assert AdditionalRoute.objects.count() == 0
 
 
 def test_additional_route_delete_unauthenticated(unauthenticated_api_client, additional_route_controller):
-    url = reverse('route-detail', kwargs={'pk': additional_route_controller.pk})
+    url = get_relative_url('route-detail', kwargs={'pk': additional_route_controller.pk})
     response = unauthenticated_api_client.delete(url)
     assert response.status_code == 401
     assert AdditionalRoute.objects.count() == 1
 
 
 def test_additional_route_delete_nonexistent(admin_api_client):
-    url = reverse('route-detail', kwargs={'pk': 999})
+    url = get_relative_url('route-detail', kwargs={'pk': 999})
     response = admin_api_client.delete(url)
     assert response.status_code == 404
 
 
 def test_additional_route_api_port_cannot_start_with_api_prefix(admin_api_client, http_api_port_factory, service_cluster_eda):
     http_port = http_api_port_factory()
-    url = reverse('route-list')
+    url = get_relative_url('route-list')
     data = {
         'name': 'test',
         'http_port': http_port.pk,
@@ -119,7 +119,7 @@ def test_additional_route_api_port_cannot_start_with_api_prefix(admin_api_client
 
 
 def test_additional_route_name_must_be_unique(admin_api_client, additional_route_controller):
-    url = reverse('route-list')
+    url = get_relative_url('route-list')
     data = {
         'name': additional_route_controller.name,
         'http_port': additional_route_controller.http_port.pk,

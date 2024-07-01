@@ -1,11 +1,11 @@
 from ansible_base.lib.utils.hashing import hash_serializer_data
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
-from django.urls import reverse
 from rest_framework import viewsets
 
 from aap_gateway_api.utils.resources_client import AllServicesClient, ResourceRequestBody
@@ -100,5 +100,5 @@ class ResourceAPIUpdateMixin:
         # CLI users can _still_ specify basic auth credentials explicitly via
         # a header or in the URL e.g.,
         # `curl https://user:pass@gateway.example.org/api/gateway/v1/something/`
-        authorize_url = reverse('authorize')
+        authorize_url = get_relative_url('authorize')
         return f'Bearer realm=api authorization_url={authorize_url}'

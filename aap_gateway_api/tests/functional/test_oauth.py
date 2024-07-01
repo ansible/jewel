@@ -1,5 +1,5 @@
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 @pytest.mark.parametrize(
@@ -19,7 +19,7 @@ def test_oauth_pat_scope_adherence(
 
     client = unauthenticated_api_client
 
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = client.post(
         url,
         data={"name": "test_oauth_pat_scope_adherence"},
@@ -27,7 +27,7 @@ def test_oauth_pat_scope_adherence(
     )
     assert response.status_code == post_status, response.data
 
-    url = reverse("organization-detail", args=[organization.id])
+    url = get_relative_url("organization-detail", args=[organization.id])
     response = client.patch(
         url,
         data={"name": "another name"},

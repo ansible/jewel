@@ -1,8 +1,8 @@
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 def test_min_max_int_range_options(admin_api_client, register_preference):
-    url = reverse('setting-section-list', kwargs={'category_slug': 'min_max_test'})
+    url = get_relative_url('setting-section-list', kwargs={'category_slug': 'min_max_test'})
 
     register_preference(
         section="min_max_test",

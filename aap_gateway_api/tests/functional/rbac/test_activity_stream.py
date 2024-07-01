@@ -1,5 +1,5 @@
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.tests.functional.rbac.conftest import TestPermissionsBase
 
@@ -7,7 +7,7 @@ from aap_gateway_api.tests.functional.rbac.conftest import TestPermissionsBase
 @pytest.mark.django_db
 class TestActivityStreamPermissions(TestPermissionsBase):
     def test_activity_stream_list(self, user_type, user):
-        url = reverse("activitystream-list")
+        url = get_relative_url("activitystream-list")
         response = self.api_client.get(url)
 
         if user_type == 'unauthenticated':
@@ -21,7 +21,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
     def test_activity_stream_detail(self, user_type, user):
         last_entry = user.activity_stream_entries.last()
 
-        url = reverse("activitystream-detail", kwargs={"pk": last_entry.id})
+        url = get_relative_url("activitystream-detail", kwargs={"pk": last_entry.id})
         response = self.api_client.get(url)
 
         if user_type == 'unauthenticated':
@@ -41,7 +41,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
             "operation": 'delete',
         }
 
-        url = reverse("activitystream-list")
+        url = get_relative_url("activitystream-list")
         response = self.api_client.post(url, data)
 
         if user_type == 'unauthenticated':
@@ -60,7 +60,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
             "operation": 'delete',
         }
 
-        url = reverse("activitystream-detail", kwargs={"pk": last_entry.id})
+        url = get_relative_url("activitystream-detail", kwargs={"pk": last_entry.id})
         response = self.api_client.put(url, data)
 
         if user_type == 'unauthenticated':
@@ -73,7 +73,7 @@ class TestActivityStreamPermissions(TestPermissionsBase):
     def test_activity_stream_delete(self, user_type, user):
         last_entry = user.activity_stream_entries.last()
 
-        url = reverse("activitystream-detail", kwargs={"pk": last_entry.id})
+        url = get_relative_url("activitystream-detail", kwargs={"pk": last_entry.id})
         response = self.api_client.delete(url)
 
         if user_type == 'unauthenticated':

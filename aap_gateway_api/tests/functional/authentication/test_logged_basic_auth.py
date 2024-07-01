@@ -1,7 +1,7 @@
 import base64
 from unittest import mock
 
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.authentication.basic_auth import LoggedBasicAuthentication
 
@@ -11,7 +11,7 @@ from aap_gateway_api.authentication.basic_auth import LoggedBasicAuthentication
 def test_logged_basic_auth(logger, unauthenticated_api_client, organization, admin_user, local_authenticator):
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:password".encode("utf-8")).decode("utf-8"))
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = client.get(url)
     assert response.status_code == 200
     assert logger.info.call_count == 1
@@ -24,7 +24,7 @@ def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, ad
 
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:password".encode("utf-8")).decode("utf-8"))
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = client.get(url)
     assert response.status_code == 401
 
@@ -36,7 +36,7 @@ def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, ad
 def test_logged_basic_auth_invalid(unauthenticated_api_client):
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = client.get(url)
     assert response.status_code == 401
 
@@ -46,6 +46,6 @@ def test_logged_basic_auth_invalid_disabled(unauthenticated_api_client, set_pref
     set_preference("proxy", "gateway_basic_auth_enabled", False)
     client = unauthenticated_api_client
     client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = client.get(url)
     assert response.status_code == 401

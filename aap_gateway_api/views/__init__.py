@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from django.core.exceptions import FieldError
 from django.db import IntegrityError
@@ -10,7 +11,6 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
 from rest_framework.views import exception_handler
 
 from aap_gateway_api.models import ServiceAPIRoute
@@ -55,7 +55,7 @@ class ApiRootView(AnsibleBaseView):
 
     @method_decorator(ensure_csrf_cookie)
     def get(self, request, format=None):
-        gateway = reverse('api_gateway_root_view')
+        gateway = get_relative_url('api_gateway_root_view')
         data = OrderedDict()
         data['description'] = _('AAP gateway REST API')
         data['apis'] = OrderedDict(

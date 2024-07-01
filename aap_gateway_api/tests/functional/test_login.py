@@ -1,6 +1,6 @@
 from unittest import mock
 
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 @mock.patch("aap_gateway_api.views.api.v1.local_login.logger")
@@ -8,8 +8,8 @@ def test_login_post_successful_login(logger, unauthenticated_api_client, admin_u
     """
     Test POSTing to the login view (successful login).
     """
-    url = reverse("login")
-    next_url = reverse("user-list")
+    url = get_relative_url("login")
+    next_url = get_relative_url("user-list")
     data = {"username": "admin", "password": "password", "next": next_url}
     response = unauthenticated_api_client.post(url, data)
     assert response.status_code == 302
@@ -24,8 +24,8 @@ def test_login_post_failed_login(logger, unauthenticated_api_client):
     """
     Test POSTing to the login view (failed login).
     """
-    url = reverse("login")
-    next_url = reverse("user-list")
+    url = get_relative_url("login")
+    next_url = get_relative_url("user-list")
     data = {"username": "admin", "password": "wrongPassw0rd", "next": next_url}
     response = unauthenticated_api_client.post(url, data)
     assert response.status_code == 401
@@ -39,8 +39,8 @@ def test_login_post_failed_login_weird_username(logger, unauthenticated_api_clie
     """
     Test POSTing to the login view (failed login, weird username - logged as base64).
     """
-    url = reverse("login")
-    next_url = reverse("user-list")
+    url = get_relative_url("login")
+    next_url = get_relative_url("user-list")
     data = {"username": "U$3rn#me!", "password": "wrongPassw0rd", "next": next_url}
     response = unauthenticated_api_client.post(url, data)
     assert response.status_code == 401
@@ -54,7 +54,7 @@ def test_login_get_accept_html(unauthenticated_api_client):
     """
     Test GETing the login view.
     """
-    url = reverse("login")
+    url = get_relative_url("login")
     response = unauthenticated_api_client.get(url, HTTP_ACCEPT="text/html")
     assert response.status_code == 200
     assert response.template_name == ["rest_framework/login.html"]
@@ -64,7 +64,7 @@ def test_login_get_accept_unknown(unauthenticated_api_client):
     """
     Test GETing the login view with an unknown Accept header.
     """
-    url = reverse("login")
+    url = get_relative_url("login")
     response = unauthenticated_api_client.get(url, HTTP_ACCEPT="application/foobar")
     assert response.status_code == 406
 
@@ -75,13 +75,13 @@ def test_logout_view_with_post(logger, unauthenticated_api_client, admin_user, l
     Test POSTing the logout view.
     """
     # First we need to login
-    url = reverse("login")
+    url = get_relative_url("login")
     data = {"username": "admin", "password": "password"}
     response = unauthenticated_api_client.post(url, data)
     assert response.status_code == 302
 
     # Now we can logout
-    url = reverse("logout")
+    url = get_relative_url("logout")
     response = unauthenticated_api_client.post(url)
     assert response.status_code == 302
     assert response.wsgi_request.user.is_anonymous
@@ -93,12 +93,12 @@ def test_logout_view_with_get(logger, unauthenticated_api_client, admin_user, lo
     Test GETing the logout view.
     """
     # First we need to login
-    url = reverse("login")
+    url = get_relative_url("login")
     data = {"username": "admin", "password": "password"}
     response = unauthenticated_api_client.post(url, data)
     assert response.status_code == 302
 
     # log out and assert error response code
-    url = reverse("logout")
+    url = get_relative_url("logout")
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 405

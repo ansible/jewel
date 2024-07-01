@@ -1,7 +1,7 @@
 from time import sleep
 
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 class TestSessionView:
@@ -21,12 +21,12 @@ class TestSessionView:
         else:
             client = unauthenticated_api_client
 
-        url = reverse('session-view')
+        url = get_relative_url('session-view')
         response = client.get(url)
         assert response.status_code == status_code
 
     def test_time_changes(self, admin_api_client):
-        url = reverse('session-view')
+        url = get_relative_url('session-view')
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert 'expires_in_seconds' in response.json()
@@ -43,7 +43,7 @@ class TestSessionView:
         assert expires_in_seconds != response.json().get('expires_in_seconds')
 
     def test_restart_of_session(self, admin_api_client):
-        url = reverse('session-view')
+        url = get_relative_url('session-view')
         sleep(1)
         response = admin_api_client.get(url)
         assert response.status_code == 200
@@ -55,7 +55,7 @@ class TestSessionView:
         assert response.json().get('expires_in_seconds') > expires_in_seconds
 
     def test_404_if_no_session(self, admin_api_client):
-        url = reverse('session-view')
+        url = get_relative_url('session-view')
         response = admin_api_client.get(url)
         from django.contrib.sessions.models import Session
 

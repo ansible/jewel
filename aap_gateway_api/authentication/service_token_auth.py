@@ -1,8 +1,8 @@
 import logging
 from base64 import b64encode
 
+from ansible_base.lib.utils.response import get_relative_url
 from django.core.exceptions import ValidationError
-from django.urls import reverse
 from rest_framework import HTTP_HEADER_ENCODING
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 
@@ -41,7 +41,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
             return None
 
     def is_user_authorized(self, request, user, service, token_data):
-        resources_api = reverse("service-index-root")
+        resources_api = get_relative_url("service-index-root")
 
         # Allow services to authenticate to the resource registry, regardless of
         # whether or not they are authorized by the user to access the service.

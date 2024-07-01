@@ -1,7 +1,7 @@
 from unittest import mock
 from unittest.mock import Mock
 
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import ServiceNode
 
@@ -10,7 +10,7 @@ def test_status_unauthenticated(unauthenticated_api_client):
     """
     When not authenticated, the status endpoint should not be accessible.
     """
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 401
 
@@ -19,7 +19,7 @@ def test_status_nonadmin(user_api_client):
     """
     The user must be an admin to access the status endpoint.
     """
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = user_api_client.get(url)
     assert response.status_code == 403
 
@@ -31,7 +31,7 @@ def test_status_no_services(admin_api_client):
     By default there are no services, so the status should be "good" and
     there should be no services listed.
     """
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["status"] == "good"
@@ -39,7 +39,7 @@ def test_status_no_services(admin_api_client):
 
 
 def test_status_route_with_no_nodes(admin_api_client, additional_route_controller):
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["status"] == "good"
@@ -50,7 +50,7 @@ def test_status_route_with_no_nodes(admin_api_client, additional_route_controlle
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
 def test_status_full_hierarchy_with_500(get, admin_api_client, full_service_hierarchy_controller):
     get.return_value = Mock(status_code=500, text="test")
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["status"] == "good"
@@ -64,7 +64,7 @@ def test_status_full_hierarchy_with_500(get, admin_api_client, full_service_hier
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
 def test_status_full_hierarchy_with_200(get, admin_api_client, full_service_hierarchy_controller):
     get.return_value = Mock(status_code=200, json=lambda: {"test": "test"})
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["status"] == "good"
@@ -77,7 +77,7 @@ def test_status_full_hierarchy_with_200(get, admin_api_client, full_service_hier
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
 def test_status_full_hierarchy_with_exception(get, admin_api_client, full_service_hierarchy_controller):
     get.side_effect = Exception("test")
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["status"] == "good"
@@ -102,7 +102,7 @@ def test_status_two_routes_same_service_cluster(get, admin_api_client, full_serv
     route_copy.name = randname('Different Route')
     route_copy.save()
 
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
 
     assert response.status_code == 200
@@ -131,7 +131,7 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
         address="127.0.0.100",
     )
 
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
 
     assert response.status_code == 200
@@ -157,7 +157,7 @@ def test_status_two_hierarchies(get, admin_api_client, full_service_hierarchy_co
     """
     get.return_value = Mock(status_code=200, json=lambda: {"test": "test"})
 
-    url = reverse("status-view")
+    url = get_relative_url("status-view")
     response = admin_api_client.get(url)
 
     assert response.status_code == 200

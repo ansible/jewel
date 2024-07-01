@@ -4,9 +4,9 @@ from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.response import get_relative_url
 from crum import get_current_user
 from django.db.utils import IntegrityError
-from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.fields import empty
@@ -252,5 +252,5 @@ class UserSerializer(CommonUserSerializer):
 
     def _get_related(self, obj) -> dict[str, str]:
         ret = super()._get_related(obj)
-        ret['authenticators'] = reverse('user-authenticators-list', kwargs={'pk': obj.pk})
+        ret['authenticators'] = get_relative_url('user-authenticators-list', kwargs={'pk': obj.pk})
         return ret

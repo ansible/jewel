@@ -1,10 +1,10 @@
 import collections
 
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.utils.translation import gettext_lazy as _
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.serializers import SettingSectionSerializer, SettingSingletonSerializer
@@ -54,6 +54,6 @@ class PreferenceListViewSet(GatewayModelViewSet):
         sorted_sections = ['all']
         sorted_sections.extend(sorted(sections))
         for section in sorted_sections:
-            url = reverse('setting-section-list', kwargs={'category_slug': section})
+            url = get_relative_url('setting-section-list', kwargs={'category_slug': section})
             setting_categories.append(PreferenceSection(url, section))
         return setting_categories
