@@ -1,5 +1,5 @@
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 @pytest.mark.parametrize(
@@ -7,7 +7,7 @@ from django.urls import reverse
     [("users", "team-users-list"), ("admins", "team-admins-list")],
 )
 def test_teams_related_fields(admin_api_client, team, key, route):
-    url = reverse("team-detail", kwargs={"pk": team.id})
+    url = get_relative_url("team-detail", kwargs={"pk": team.id})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     team = response.data
@@ -26,7 +26,7 @@ def test_teams_related_fields(admin_api_client, team, key, route):
     ],
 )
 def test_teams_create_description_is_optional(admin_api_client, randname, organization, description):
-    url = reverse("team-list")
+    url = get_relative_url("team-list")
     random_name = randname("Test Team")
     data = {"name": random_name, "organization": organization.id}
     if description is not None:
@@ -52,13 +52,13 @@ def test_teams_users_association(admin_api_client, team, user):
     """
     assert team.users.count() == 0
 
-    url = reverse("team-users-associate", kwargs={"pk": team.pk})
+    url = get_relative_url("team-users-associate", kwargs={"pk": team.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert team.users.count() == 1
     assert team.users.first() == user
 
-    url = reverse("team-users-disassociate", kwargs={"pk": team.pk})
+    url = get_relative_url("team-users-disassociate", kwargs={"pk": team.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert team.users.count() == 0
@@ -70,20 +70,20 @@ def test_teams_admins_association(admin_api_client, team, user):
     """
     assert team.admins.count() == 0
 
-    url = reverse("team-admins-associate", kwargs={"pk": team.pk})
+    url = get_relative_url("team-admins-associate", kwargs={"pk": team.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert team.admins.count() == 1
     assert team.admins.first() == user
 
-    url = reverse("team-admins-disassociate", kwargs={"pk": team.pk})
+    url = get_relative_url("team-admins-disassociate", kwargs={"pk": team.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert team.admins.count() == 0
 
 
 def test_teams_resource_summary_fields(admin_api_client, team):
-    url = reverse("team-detail", kwargs={"pk": team.pk})
+    url = get_relative_url("team-detail", kwargs={"pk": team.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["summary_fields"]["resource"]["ansible_id"] == team.resource.ansible_id

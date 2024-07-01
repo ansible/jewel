@@ -1,6 +1,6 @@
 import pytest
+from ansible_base.lib.utils.response import get_relative_url
 from django.test import override_settings
-from django.urls import reverse
 
 from aap_gateway_api.models import User
 from aap_gateway_api.tests.functional.rbac.conftest import api_get_and_assert
@@ -16,7 +16,7 @@ def test_organization_list_permissions(user_api_client, user, user_factory, orga
 
     user2 = user_factory("Test User 2")
 
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
 
     # User sees nothing by default
     api_get_and_assert(url, user_api_client, [])
@@ -39,7 +39,10 @@ def test_organization_list_permissions(user_api_client, user, user_factory, orga
 def test_organization_detail_permissions(user_api_client, user, organization_factory):
     organizations = [organization_factory("Test Org 1"), organization_factory("Test Org 2")]
 
-    urls = [reverse('organization-detail', kwargs={'pk': organizations[0].pk}), reverse('organization-detail', kwargs={'pk': organizations[1].pk})]
+    urls = [
+        get_relative_url('organization-detail', kwargs={'pk': organizations[0].pk}),
+        get_relative_url('organization-detail', kwargs={'pk': organizations[1].pk}),
+    ]
 
     response = user_api_client.get(urls[0])
     assert response.status_code == 404
@@ -57,7 +60,7 @@ def test_organization_detail_permissions(user_api_client, user, organization_fac
 
 
 def test_organization_create_permissions(user_api_client, user, randname):
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = user_api_client.post(url, data={"name": randname("Test Organization")})
     assert response.status_code == 403
 
@@ -66,7 +69,10 @@ def test_organization_create_permissions(user_api_client, user, randname):
 def test_organization_update_permissions(user_api_client, user, organization_factory, randname, method):
     organizations = [organization_factory("Test Org 1"), organization_factory("Test Org 2")]
 
-    urls = [reverse('organization-detail', kwargs={'pk': organizations[0].pk}), reverse('organization-detail', kwargs={'pk': organizations[1].pk})]
+    urls = [
+        get_relative_url('organization-detail', kwargs={'pk': organizations[0].pk}),
+        get_relative_url('organization-detail', kwargs={'pk': organizations[1].pk}),
+    ]
 
     user_api_call = getattr(user_api_client, method)
     new_name = randname("Test Organization")
@@ -92,7 +98,7 @@ def test_organization_update_permissions(user_api_client, user, organization_fac
 
 
 def test_organization_delete_permissions(admin_api_client, user_api_client, user, organization):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
 
     # User can't see => 404
     response = user_api_client.delete(url)
@@ -118,8 +124,8 @@ def test_organization_association_permissions(user_api_client, user, user_factor
     user3 = user_factory("Test User 3")
 
     urls_assoc = dict(
-        users=reverse("organization-users-associate", kwargs={"pk": organization.pk}),
-        admins=reverse("organization-admins-associate", kwargs={"pk": organization.pk}),
+        users=get_relative_url("organization-users-associate", kwargs={"pk": organization.pk}),
+        admins=get_relative_url("organization-admins-associate", kwargs={"pk": organization.pk}),
     )
 
     for assoc_type in ['users', 'admins']:
@@ -173,8 +179,8 @@ def test_organization_disassociation_permissions(user_api_client, user, user_fac
     user3 = user_factory("Test User 3")
 
     urls_disassoc = dict(
-        users=reverse("organization-users-disassociate", kwargs={"pk": organization.pk}),
-        admins=reverse("organization-admins-disassociate", kwargs={"pk": organization.pk}),
+        users=get_relative_url("organization-users-disassociate", kwargs={"pk": organization.pk}),
+        admins=get_relative_url("organization-admins-disassociate", kwargs={"pk": organization.pk}),
     )
     for assoc_type in ['users', 'admins']:
         url = urls_disassoc[assoc_type]
@@ -231,7 +237,7 @@ class TestOrganizationOptions:
     # @pytest.mark.xfail(reason="Not implemented yet")
     def test_organizations_list_options_user(self, user_api_client, user, organization, org_member_rd, org_admin_rd):
         """Any standard role can't create organization"""
-        url = reverse("organization-list")
+        url = get_relative_url("organization-list")
         roles = [None, org_member_rd, org_admin_rd]
         for role in roles:
             for r in roles:
@@ -248,7 +254,7 @@ class TestOrganizationOptions:
 
     # @pytest.mark.xfail(reason="Not implemented yet")
     def test_organizations_list_options_platform_auditor(self, user_api_client, user):
-        url = reverse("organization-list")
+        url = get_relative_url("organization-list")
         user.is_platform_auditor = True
         user.save()
 
@@ -257,7 +263,7 @@ class TestOrganizationOptions:
         assert response.data.get('actions', {}).get('POST', None) is None, "POST action shouldn't be available for system auditor"
 
     def test_organizations_list_options_superuser(self, admin_api_client, user):
-        url = reverse("organization-list")
+        url = get_relative_url("organization-list")
 
         response = admin_api_client.options(url)
         assert response.status_code == 200
@@ -265,7 +271,7 @@ class TestOrganizationOptions:
 
     def test_organization_detail_options_user(self, user_api_client, user, organization, org_member_rd, org_admin_rd):
         """Any standard role can't change organization"""
-        url = reverse("organization-detail", kwargs={"pk": organization.pk})
+        url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
         roles = [None, org_member_rd, org_admin_rd]
         for role in roles:
             for r in roles:
@@ -286,7 +292,7 @@ class TestOrganizationOptions:
 
     # @pytest.mark.xfail(reason="Not implemented yet")
     def test_organization_detail_options_platform_auditor(self, user_api_client, user, organization):
-        url = reverse("organization-detail", kwargs={"pk": organization.pk})
+        url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
         user.is_platform_auditor = True
         user.save()
 
@@ -295,7 +301,7 @@ class TestOrganizationOptions:
         assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for system auditor"
 
     def test_organization_detail_options_superuser(self, admin_api_client, user, organization):
-        url = reverse("organization-detail", kwargs={"pk": organization.pk})
+        url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
 
         response = admin_api_client.options(url)
         assert response.status_code == 200
@@ -312,14 +318,14 @@ def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd
     if api_type == 'old':
         # Method 1 for adding user as admin of organization - use deprecated association endpoint
         # denied because user can not see other_user
-        url = reverse('organization-admins-associate', kwargs={'pk': organization.pk})
+        url = get_relative_url('organization-admins-associate', kwargs={'pk': organization.pk})
         r = user_api_client.post(url, data={'instances': [other_user.id]})
         assert r.status_code == 400
         assert 'does not exist' in str(r.data)
     else:
         # Method 2 for adding user as admin of organization - use DAB RBAC API
         # denied because user can not see other_user
-        url = reverse('roleuserassignment-list')
+        url = get_relative_url('roleuserassignment-list')
         r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_member_rd.id})
         assert r.status_code == 400
         assert 'does not exist' in str(r.data)
@@ -328,11 +334,11 @@ def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd
     org_member_rd.give_permission(other_user, organization)
 
     if api_type == 'old':
-        url = reverse('organization-admins-associate', kwargs={'pk': organization.pk})
+        url = get_relative_url('organization-admins-associate', kwargs={'pk': organization.pk})
         r = user_api_client.post(url, data={'instances': [other_user.id]})
         assert r.status_code == 204
     else:
-        url = reverse('roleuserassignment-list')
+        url = get_relative_url('roleuserassignment-list')
         r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_admin_rd.id})
         assert r.status_code == 201
     assert other_user.has_obj_perm(organization, 'change')

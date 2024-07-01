@@ -1,5 +1,5 @@
 import pytest
-from rest_framework.reverse import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 class TestRelatedViews:
@@ -11,7 +11,7 @@ class TestRelatedViews:
         ],
     )
     def test_user_team_view(self, view_name, admin_api_client, admin_user):
-        url = reverse(view_name, kwargs={'pk': admin_user.id})
+        url = get_relative_url(view_name, kwargs={'pk': admin_user.id})
         response = admin_api_client.get(url)
         assert response.status_code == 200
 
@@ -23,7 +23,7 @@ class TestRelatedViews:
         ],
     )
     def test_user_team_view_invalid_user_id(self, view_name, admin_api_client):
-        url = reverse(view_name, kwargs={'pk': 27})
+        url = get_relative_url(view_name, kwargs={'pk': 27})
         response = admin_api_client.get(url)
         assert response.status_code == 404
 
@@ -70,7 +70,7 @@ class TestOrganizationRelatedUserViews(TestRelatedViewsBase):
     def test_organization_member_view(self, user_type, user, organization, user_factory):
         members, _ = self._init_users(organization, user_factory)
 
-        url = reverse('organization-users-list', kwargs={'pk': organization.id})
+        url = get_relative_url('organization-users-list', kwargs={'pk': organization.id})
         response = self.api_client.get(url)
 
         if user_type in ['user', 'team_member', 'team_admin']:
@@ -88,7 +88,7 @@ class TestOrganizationRelatedUserViews(TestRelatedViewsBase):
     def test_organization_admin_view(self, user_type, user, organization, user_factory):
         _, admins = self._init_users(organization, user_factory)
 
-        url = reverse('organization-admins-list', kwargs={'pk': organization.id})
+        url = get_relative_url('organization-admins-list', kwargs={'pk': organization.id})
         response = self.api_client.get(url)
 
         if user_type in ['user', 'team_member', 'team_admin']:
@@ -109,7 +109,7 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
     def test_team_member_view(self, user_type, user, team, user_factory):
         members, _ = self._init_users(team, user_factory)
 
-        url = reverse('team-users-list', kwargs={'pk': team.id})
+        url = get_relative_url('team-users-list', kwargs={'pk': team.id})
         response = self.api_client.get(url)
 
         if user_type in ['user', 'org_member']:
@@ -130,7 +130,7 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
     def test_team_admin_view(self, user_type, user, team, user_factory):
         _, admins = self._init_users(team, user_factory)
 
-        url = reverse('team-admins-list', kwargs={'pk': team.id})
+        url = get_relative_url('team-admins-list', kwargs={'pk': team.id})
         response = self.api_client.get(url)
 
         if user_type in ['user', 'org_member']:
@@ -156,13 +156,13 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
 
         if api_type == "old_api":
             success_code = 204
-            url = reverse('team-users-associate', kwargs={'pk': team.pk})
+            url = get_relative_url('team-users-associate', kwargs={'pk': team.pk})
             # data to add rando as a member
             data = {'instances': [rando.id]}
             response = self.api_client.post(url, data=data)
         else:
             success_code = 201
-            url = reverse('roleuserassignment-list')
+            url = get_relative_url('roleuserassignment-list')
             data = {'object_id': team.pk, 'user': rando.id, 'role_definition': team.member_rd.id}
             response = self.api_client.post(url, data=data)
 

@@ -1,4 +1,4 @@
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 
 def test_activitystream_gets_logged(admin_api_client, user):
@@ -12,7 +12,7 @@ def test_activitystream_gets_logged(admin_api_client, user):
     assert last_entry.operation == 'update'
     assert last_entry.changes == {'added_fields': {}, 'removed_fields': {}, 'changed_fields': {'first_name': ['', 'Jane']}}
 
-    url = reverse('activitystream-list')
+    url = get_relative_url('activitystream-list')
     response = admin_api_client.get(url, data={'order_by': '-created'})
     assert response.status_code == 200, response.data
     assert response.data['count'] > 0

@@ -3,10 +3,10 @@ from unittest import mock
 import pytest
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.response import get_relative_url
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.test.client import RequestFactory
-from django.urls import reverse
 
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers.user import PASSWORD_DISABLED, UserSerializer
@@ -27,7 +27,7 @@ class TestUserSerializer:
         ],
     )
     def test_password_constraints(self, admin_api_client, user, set_preference, pref_name, pref_value, password, error_substr):
-        url = reverse('user-detail', kwargs={'pk': user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
         for preference_name in ['password_min_length', 'password_min_digits', 'password_min_upper', 'password_min_special']:
             set_preference('local_login', preference_name, 0)
         set_preference('local_login', pref_name, pref_value)
@@ -49,7 +49,7 @@ class TestUserSerializer:
         ],
     )
     def test_password_edge_cases(self, admin_api_client, user, password, expected_password_field):
-        url = reverse('user-detail', kwargs={'pk': user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
         payload = {'password': password} if password is not None else {}
         response = admin_api_client.patch(url, payload)
         assert response.status_code == 200
@@ -73,7 +73,7 @@ class TestUserSerializer:
     def test_password_constraints_max_length(self, admin_api_client, user, password, expected_status):
         password_max_length = User._meta.get_field('password').max_length
 
-        url = reverse('user-detail', kwargs={'pk': user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
 
         response = admin_api_client.patch(url, {'password': password})
         assert response.status_code == expected_status, f'{response.data}'
@@ -92,7 +92,7 @@ class TestUserSerializer:
     def test_password_constraints_superuser_exemption(self, logger, admin_api_client, user, set_preference, allow_admins_to_set_insecure, expected_status):
         set_preference('local_login', 'password_min_length', 10)
         set_preference('local_login', 'allow_admins_to_set_insecure', allow_admins_to_set_insecure)
-        url = reverse('user-detail', kwargs={'pk': user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
         response = admin_api_client.patch(url, {'password': '123456789'})
 
         assert response.status_code == expected_status
@@ -103,7 +103,7 @@ class TestUserSerializer:
             logger.warning.assert_not_called()
 
     def test_users_resource_summary_fields(self, admin_api_client, user):
-        url = reverse("user-detail", kwargs={"pk": user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user.pk})
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["summary_fields"]["resource"]["ansible_id"] == user.resource.ansible_id
@@ -136,26 +136,26 @@ class TestUserSerializer:
         assert serializer.is_superuser_making_request() is False
 
     def test_validate_password_user_cannot_change(self, system_user, admin_api_client):
-        url = reverse('user-detail', kwargs={'pk': system_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': system_user.id})
         response = admin_api_client.patch(url, {'password': '123456789'})
 
         assert response.status_code == 400
 
     def test_validate_password_user_cannot_change_post(self, admin_api_client):
-        url = reverse('user-list')
+        url = get_relative_url('user-list')
         response = admin_api_client.post(url, {'username': settings.SYSTEM_USERNAME, 'password': '123456789'})
 
         assert response.status_code == 400
 
     def test_authenticators_no_superuser_not_allowed(self, user_api_client, local_authenticator):
-        url = reverse('user-list')
+        url = get_relative_url('user-list')
         payload = {'username': 'ronda', 'authenticators': [local_authenticator.id], 'authenticator_uid': 'ronda', 'password': 'asdf1234'}
         response = user_api_client.post(url, payload)
         assert response.status_code == 403, response.json()
 
     def test_authenticator_validation_no_changes(self, admin_api_client, local_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [local_authenticator.id],
@@ -166,7 +166,7 @@ class TestUserSerializer:
 
     def test_delete_authenticator(self, admin_api_client, local_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [],
@@ -175,7 +175,7 @@ class TestUserSerializer:
         assert response.status_code == 200
 
     def test_add_authenticator(self, admin_api_client, local_authenticator, random_user):
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [local_authenticator.id],
@@ -185,7 +185,7 @@ class TestUserSerializer:
         assert response.status_code == 200
 
     def test_add_multiple_authenticators(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [local_authenticator.id, ldap_authenticator.id],
@@ -198,7 +198,7 @@ class TestUserSerializer:
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
         other_user = User.objects.create(username='testing')
         AuthenticatorUser.objects.create(user=other_user, provider=ldap_authenticator, uid='a')
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [ldap_authenticator.id],
@@ -212,7 +212,7 @@ class TestUserSerializer:
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
         other_user = User.objects.create(username='testing')
         AuthenticatorUser.objects.create(user=other_user, provider=local_authenticator, uid='b')
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [local_authenticator.id],
@@ -223,13 +223,13 @@ class TestUserSerializer:
         assert 'authenticator_uid' in response.json()
 
     def test_create_user_with_authenticator(self, admin_api_client, local_authenticator):
-        url = reverse('user-list')
+        url = get_relative_url('user-list')
         payload = {'username': 'ronda', 'authenticators': [local_authenticator.id], 'authenticator_uid': 'ronda', 'password': 'asdf1234'}
         response = admin_api_client.post(url, payload)
         assert response.status_code == 201, response.json()
 
     def test_create_user_with_authenticator_no_uid(self, admin_api_client, local_authenticator):
-        url = reverse('user-list')
+        url = get_relative_url('user-list')
         payload = {'username': 'ronda', 'authenticators': [local_authenticator.id], 'password': 'asdf1234'}
         response = admin_api_client.post(url, payload)
         assert response.status_code == 400, response.json()
@@ -238,7 +238,7 @@ class TestUserSerializer:
     def test_cant_change_uid_if_multiple_authenticators_with_diff_uid(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
         AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid='b')
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticator_uid': 'c',
@@ -250,7 +250,7 @@ class TestUserSerializer:
     def test_delete_authenticator_from_multiple(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
         AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid='b')
-        url = reverse('user-detail', kwargs={'pk': random_user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticators': [local_authenticator.id],
@@ -262,7 +262,7 @@ class TestUserSerializer:
     def test_managed_field_unsetable_through_api(self, admin_api_client, random_user):
         """Test to ensure user.managed cannot be set to true via the API."""
         assert random_user.managed is False
-        url = reverse("user-detail", kwargs={"pk": random_user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": random_user.pk})
         response = admin_api_client.get(url)
         assert response.data['managed'] is False
         response = admin_api_client.patch(url, data={"managed": True})
@@ -275,7 +275,7 @@ class TestUserSerializer:
         user = User.objects.create(username="testing", managed=True)
         user.refresh_from_db()
         assert user.managed is True
-        url = reverse("user-detail", kwargs={"pk": user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user.pk})
         response = admin_api_client.get(url)
         assert response.data['managed'] is True
         response = admin_api_client.patch(url, data={"managed": False})

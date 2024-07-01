@@ -1,10 +1,10 @@
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import ServiceCluster
 
 
 def test_service_cluster_detail_controller(admin_api_client, service_cluster_controller):
-    url = reverse("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["name"] == "controller"
@@ -13,7 +13,7 @@ def test_service_cluster_detail_controller(admin_api_client, service_cluster_con
 
 
 def test_service_cluster_list(admin_api_client, service_cluster_controller, service_cluster_hub, service_cluster_gateway):
-    url = reverse("service_cluster-list")
+    url = get_relative_url("service_cluster-list")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert len(response.data["results"]) == 3
@@ -29,7 +29,7 @@ def test_service_cluster_list(admin_api_client, service_cluster_controller, serv
 
 
 def test_service_cluster_create(admin_api_client):
-    url = reverse("service_cluster-list")
+    url = get_relative_url("service_cluster-list")
     response = admin_api_client.post(url, {"name": "My Controller", "service_type": "controller"})
     assert response.status_code == 201
     assert response.data["name"] == "My Controller"
@@ -38,7 +38,7 @@ def test_service_cluster_create(admin_api_client):
 
 
 def test_service_cluster_update(admin_api_client, service_cluster_controller):
-    url = reverse("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
     response = admin_api_client.patch(url, {"service_type": "hub"})
     assert response.status_code == 200
     assert response.data["service_type"] == "hub"
@@ -51,14 +51,14 @@ def test_service_cluster_update(admin_api_client, service_cluster_controller):
 
 
 def test_service_cluster_delete(admin_api_client, service_cluster_controller):
-    url = reverse("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
     response = admin_api_client.delete(url)
     assert response.status_code == 204
     assert not ServiceCluster.objects.filter(pk=service_cluster_controller.pk).exists()
 
 
 def test_service_cluster_create_with_invalid_type(admin_api_client):
-    url = reverse("service_cluster-list")
+    url = get_relative_url("service_cluster-list")
     response = admin_api_client.post(url, {"service_type": "x"})
     assert response.status_code == 400
     assert response.data["service_type"][0] == '"x" is not a valid choice.'
@@ -66,7 +66,7 @@ def test_service_cluster_create_with_invalid_type(admin_api_client):
 
 
 def test_service_cluster_update_with_invalid_type(admin_api_client, service_cluster_controller):
-    url = reverse("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
     response = admin_api_client.patch(url, {"service_type": "x"})
     assert response.status_code == 400
     assert response.data["service_type"][0] == '"x" is not a valid choice.'
@@ -74,7 +74,7 @@ def test_service_cluster_update_with_invalid_type(admin_api_client, service_clus
 
 
 def test_service_cluster_name_must_be_unique(admin_api_client, service_cluster_controller):
-    url = reverse('service_cluster-list')
+    url = get_relative_url('service_cluster-list')
     data = {'name': service_cluster_controller.name, 'service_type': 'hub'}
     response = admin_api_client.post(url, data=data)
     assert response.status_code == 400
@@ -82,7 +82,7 @@ def test_service_cluster_name_must_be_unique(admin_api_client, service_cluster_c
 
 
 def test_service_cluster_create_with_missing_type(admin_api_client):
-    url = reverse("service_cluster-list")
+    url = get_relative_url("service_cluster-list")
     response = admin_api_client.post(url, {})
     assert response.status_code == 400
     assert response.data["service_type"][0] == "This field is required."

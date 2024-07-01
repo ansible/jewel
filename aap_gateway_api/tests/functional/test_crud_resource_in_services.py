@@ -1,5 +1,5 @@
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import Organization, ServiceAPIRoute, Team, User
 
@@ -36,7 +36,7 @@ def test_organizations_are_updated(
     patched_resource_client,
 ):
     org_name = "My test org"
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = admin_api_client.post(url, data={"name": org_name})
     assert response.status_code == 201
 
@@ -44,7 +44,7 @@ def test_organizations_are_updated(
 
     _assert_resource_identical(resource, patched_resource_client, admin_user)
 
-    url = reverse("organization-detail", kwargs={"pk": resource.object_id})
+    url = get_relative_url("organization-detail", kwargs={"pk": resource.object_id})
     response = admin_api_client.put(url, data={"name": "New Org Name"})
     assert response.status_code == 200
 
@@ -68,7 +68,7 @@ def test_users_are_updated(
 ):
     username = "my_username"
 
-    url = reverse("user-list")
+    url = get_relative_url("user-list")
     response = admin_api_client.post(url, data={"username": username, "password": "supersecret"})
     assert response.status_code == 201
 
@@ -76,7 +76,7 @@ def test_users_are_updated(
 
     _assert_resource_identical(resource, patched_resource_client, admin_user)
 
-    url = reverse("user-detail", kwargs={"pk": resource.object_id})
+    url = get_relative_url("user-detail", kwargs={"pk": resource.object_id})
     response = admin_api_client.patch(url, data={"email": "hello@aol.com", "first_name": "bob", "last_name": "bobberton"})
     assert response.status_code == 200
 
@@ -98,14 +98,14 @@ def test_teams_are_updated(
     admin_api_client,
     patched_resource_client,
 ):
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = admin_api_client.post(url, data={"name": "my_org_name"})
     assert response.status_code == 201
     org = response.json()
 
     team_name = "my cool team"
 
-    url = reverse("team-list")
+    url = get_relative_url("team-list")
     response = admin_api_client.post(url, data={"name": team_name, "organization": org["id"]})
     assert response.status_code == 201
 
@@ -113,7 +113,7 @@ def test_teams_are_updated(
 
     _assert_resource_identical(resource, patched_resource_client, admin_user)
 
-    url = reverse("team-detail", kwargs={"pk": resource.object_id})
+    url = get_relative_url("team-detail", kwargs={"pk": resource.object_id})
     response = admin_api_client.patch(url, data={"name": "hello world!"})
     assert response.status_code == 200
 

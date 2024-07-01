@@ -235,8 +235,24 @@ register(
     default=False,
     required=False,
     preference_type="bool",
-    help_text="For security reasons, users from external auth providers (LDAP, SAML, SSO, Radius, and others) "
-    "are not allowed to create OAuth2 tokens. To change this behavior, enable this setting. "
-    "Existing tokens will not be deleted when this setting is toggled off.",
+    help_text=_(
+        "For security reasons, users from external auth providers (LDAP, SAML, SSO, Radius, and others) "
+        "are not allowed to create OAuth2 tokens. To change this behavior, enable this setting. "
+        "Existing tokens will not be deleted when this setting is toggled off."
+    ),
+    encrypted=False,
+)
+
+register(
+    section="configuration",
+    preference_name="FRONT_END_URL",
+    required=False,
+    default="",
+    preference_type="url",
+    help_text=_(
+        "The scheme://server:port to be used for fully qualified URLs. "
+        "This setting is used if a load balancer, proxy or other device is in front of AAP "
+        "and constructed URLs need to point to that device."
+    ),
     encrypted=False,
 )

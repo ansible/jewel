@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from django.urls.exceptions import NoReverseMatch
 from django.utils.decorators import method_decorator
@@ -8,7 +9,6 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
 from rest_framework.schemas.generators import EndpointEnumerator
 
 logger = logging.getLogger('aap.gateway.views')
@@ -46,7 +46,7 @@ class V1RootView(AnsibleBaseView):
 
             for possible_view_name in [f'{singular_endpoint}-list', f'{singular_endpoint}-view', f"{singular_endpoint.replace('_', '')}-list"]:
                 try:
-                    data[endpoint] = reverse(possible_view_name)
+                    data[endpoint] = get_relative_url(possible_view_name)
                 except NoReverseMatch:
                     pass
 

@@ -1,6 +1,6 @@
 import pytest
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleUserAssignment
-from django.urls import reverse
 
 from aap_gateway_api.models import User
 from aap_gateway_api.tests.functional.rbac.conftest import api_get_and_assert
@@ -48,7 +48,7 @@ def test_team_list_permissions(user_api_client, user, teams, organizations):  # 
     - Admin or User of Team
     - Admin or User of Team's Org
     """
-    url = reverse("team-list")
+    url = get_relative_url("team-list")
 
     # User sees nothing by default
     api_get_and_assert(url, user_api_client, [])
@@ -71,7 +71,7 @@ def test_team_detail_permissions(user_api_client, user, teams, organizations):  
     for status in ['disassociated', 'associated']:
         for org, org_teams in teams.items():
             for org_team in org_teams:
-                url = reverse("team-detail", kwargs={'pk': org_team.pk})
+                url = get_relative_url("team-detail", kwargs={'pk': org_team.pk})
 
                 response = user_api_client.get(url)
                 if status == 'associated' and org_team in visible_teams:
@@ -83,7 +83,7 @@ def test_team_detail_permissions(user_api_client, user, teams, organizations):  
 
 
 def test_team_create_permissions(user_api_client, user, organization, org_admin_rd, org_member_rd):
-    url = reverse('team-list')
+    url = get_relative_url('team-list')
     create_data = {'name': 'new-team', 'organization': organization.pk}
 
     # Can not see organization
@@ -110,7 +110,7 @@ def test_team_detail_associate_members(user_api_client, user, organization, team
     admin_rd.give_permission(user, team)
 
     if api_type == "old":
-        url = reverse('team-users-associate', kwargs={'pk': team.pk})
+        url = get_relative_url('team-users-associate', kwargs={'pk': team.pk})
         # data to add rando as a member
         patch_data = {'instances': [rando.id]}
         # user can not add rando as a member due to not being able to view that user
@@ -118,7 +118,7 @@ def test_team_detail_associate_members(user_api_client, user, organization, team
         assert not team.users.filter(id=rando.id).exists()
         assert response.status_code == 400, response.data
     else:
-        url = reverse('roleuserassignment-list')
+        url = get_relative_url('roleuserassignment-list')
         data = {'object_id': team.pk, 'user': rando.id, 'role_definition': member_rd.id}
         response = user_api_client.post(url, data=data)
         assert response.status_code == 400, response.data
@@ -156,12 +156,12 @@ def test_team_detail_disassociate_members(user_api_client, user, user_type, orga
         rd_id = member_rd.id
 
     if api_type == "old_api":
-        url = reverse(viewname, kwargs={'pk': team.pk})
+        url = get_relative_url(viewname, kwargs={'pk': team.pk})
         patch_data = {'instances': [team_user.id]}
         response = user_api_client.post(url, data=patch_data)
     else:
         user_role = RoleUserAssignment.objects.get(object_id=team.pk, user_id=team_user.id, role_definition_id=rd_id)
-        url = reverse('roleuserassignment-detail', kwargs={'pk': user_role.id})
+        url = get_relative_url('roleuserassignment-detail', kwargs={'pk': user_role.id})
         response = user_api_client.delete(url)
 
     assert response.status_code == 204
@@ -176,7 +176,7 @@ def test_team_update_no_roles_permissions(user_api_client, user, teams, organiza
     for org, org_teams in teams.items():
         # user needs to have view permission to organization in order to PUT
         for org_team in org_teams:
-            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            url = get_relative_url("team-detail", kwargs={"pk": org_team.pk})
             changed_data = {"name": f"{org_team.name}-Changed", "description": "This is a testing team"}
 
             response = user_api_client.put(url, data=changed_data)
@@ -209,7 +209,7 @@ def test_team_update_with_roles_permissions(user_api_client, user, teams, organi
     for org, org_teams in teams.items():
         # user needs to have view permission to organization in order to PUT
         for org_team in org_teams:
-            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            url = get_relative_url("team-detail", kwargs={"pk": org_team.pk})
 
             changed_data = {"name": f"{org_team.name}-Changed", "description": "This is a testing team"}
 
@@ -229,7 +229,7 @@ def test_team_delete_no_roles_permissions(user_api_client, user, teams, organiza
     """Basic user can't delete any team"""
     for org, org_teams in teams.items():
         for org_team in org_teams:
-            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            url = get_relative_url("team-detail", kwargs={"pk": org_team.pk})
             response = user_api_client.delete(url)
 
             assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
@@ -244,7 +244,7 @@ def test_team_delete_with_roles_permissions(user_api_client, user, teams, organi
 
     for org, org_teams in teams.items():
         for org_team in org_teams:
-            url = reverse("team-detail", kwargs={"pk": org_team.pk})
+            url = get_relative_url("team-detail", kwargs={"pk": org_team.pk})
             response = user_api_client.delete(url)
 
             if org_team in deletable_teams:
@@ -274,7 +274,7 @@ class TestTeamOptions:
 
     def test_teams_list_options_user(self, user_api_client, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd):
         """Only Org Admin role can create team"""
-        url = reverse("team-list")
+        url = get_relative_url("team-list")
         roles = [None, member_rd, admin_rd, org_member_rd, org_admin_rd]
         for role in roles:
             self._assoc_role(role, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd)
@@ -289,7 +289,7 @@ class TestTeamOptions:
                 assert post_action is None, f"POST action shouldn't be available for {role_name}"
 
     def test_teams_list_options_platform_auditor(self, user_api_client, user):
-        url = reverse("team-list")
+        url = get_relative_url("team-list")
         user.is_platform_auditor = True
         user.save()
 
@@ -298,7 +298,7 @@ class TestTeamOptions:
         assert response.data.get('actions', {}).get('POST', None) is None, "POST action shouldn't be available for system auditor"
 
     def test_teams_list_options_superuser(self, admin_api_client, user):
-        url = reverse("team-list")
+        url = get_relative_url("team-list")
 
         response = admin_api_client.options(url)
         assert response.status_code == 200
@@ -306,7 +306,7 @@ class TestTeamOptions:
 
     def test_team_detail_options_user(self, user_api_client, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd):
         """Only Team/Org Admin can change team"""
-        url = reverse("team-detail", kwargs={"pk": team.pk})
+        url = get_relative_url("team-detail", kwargs={"pk": team.pk})
         roles = [None, member_rd, admin_rd, org_member_rd, org_admin_rd]
         for role in roles:
             self._assoc_role(role, user, team, organization, member_rd, admin_rd, org_member_rd, org_admin_rd)
@@ -323,7 +323,7 @@ class TestTeamOptions:
                 assert put_action is None, f"PUT action shouldn't be available for {role_name}"
 
     def test_team_detail_options_platform_auditor(self, user_api_client, user, team):
-        url = reverse("team-detail", kwargs={"pk": team.pk})
+        url = get_relative_url("team-detail", kwargs={"pk": team.pk})
         user.is_platform_auditor = True
         user.save()
 
@@ -332,7 +332,7 @@ class TestTeamOptions:
         assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for system auditor"
 
     def test_team_detail_options_superuser(self, admin_api_client, user, team):
-        url = reverse("team-detail", kwargs={"pk": team.pk})
+        url = get_relative_url("team-detail", kwargs={"pk": team.pk})
 
         response = admin_api_client.options(url)
         assert response.status_code == 200

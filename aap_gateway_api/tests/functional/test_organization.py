@@ -1,12 +1,12 @@
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import Organization
 
 
 def test_organizations_list(admin_api_client, organization):
     Organization.objects.filter(name='Default').delete()
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = admin_api_client.get(url)
     assert response.status_code == 200
     results = response.data["results"]
@@ -23,7 +23,7 @@ def test_organizations_list(admin_api_client, organization):
     ],
 )
 def test_organizations_related_fields(admin_api_client, organization, key, route):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     organization = response.data
@@ -34,14 +34,14 @@ def test_organizations_related_fields(admin_api_client, organization, key, route
 
 
 def test_organizations_list_unauthenticated(unauthenticated_api_client):
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 401
 
 
 def test_organizations_create(admin_api_client, randname):
     Organization.objects.all().delete()
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     random_name = randname("Test Organization")
     response = admin_api_client.post(url, data={"name": random_name})
     assert response.status_code == 201
@@ -64,7 +64,7 @@ def test_organizations_create(admin_api_client, randname):
 )
 def test_organizations_create_description_is_optional(admin_api_client, randname, description):
     Organization.objects.all().delete()
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     random_name = randname("Test Organization")
     data = {"name": random_name}
     if description is not None:
@@ -85,7 +85,7 @@ def test_organizations_create_description_is_optional(admin_api_client, randname
 
 
 def test_organizations_create_unauthenticated(unauthenticated_api_client, randname):
-    url = reverse("organization-list")
+    url = get_relative_url("organization-list")
     random_name = randname("Test Organization")
     response = unauthenticated_api_client.post(url, data={"name": random_name})
     assert response.status_code == 401
@@ -93,7 +93,7 @@ def test_organizations_create_unauthenticated(unauthenticated_api_client, randna
 
 
 def test_organizations_update(admin_api_client, organization, randname):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     random_name = randname("Test Organization")
     response = admin_api_client.put(url, data={"name": random_name})
     assert response.status_code == 200
@@ -105,14 +105,14 @@ def test_organizations_update(admin_api_client, organization, randname):
 
 
 def test_organizations_update_unauthenticated(unauthenticated_api_client, organization, randname):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     random_name = randname("Test Organization")
     response = unauthenticated_api_client.put(url, data={"name": random_name})
     assert response.status_code == 401
 
 
 def test_organizations_delete(admin_api_client, organization):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     response = admin_api_client.delete(url)
     assert response.status_code == 204
 
@@ -121,13 +121,13 @@ def test_organizations_delete(admin_api_client, organization):
 
 
 def test_organizations_delete_unauthenticated(unauthenticated_api_client, organization):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     response = unauthenticated_api_client.delete(url)
     assert response.status_code == 401
 
 
 def test_organizations_delete_nonexistent(admin_api_client):
-    url = reverse("organization-detail", kwargs={"pk": 999})
+    url = get_relative_url("organization-detail", kwargs={"pk": 999})
     response = admin_api_client.delete(url)
     assert response.status_code == 404
 
@@ -136,7 +136,7 @@ def test_organizations_users_associate(admin_api_client, organization, user):
     """
     Test that we can associate users with an organization.
     """
-    url = reverse("organization-users-associate", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-users-associate", kwargs={"pk": organization.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert organization.users.count() == 1
@@ -144,7 +144,7 @@ def test_organizations_users_associate(admin_api_client, organization, user):
 
 
 def test_organizations_summary_fields_counts(admin_api_client, organization, organization_1, user, team, team_1):
-    url = reverse("organization-detail", kwargs={"pk": organization_1.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization_1.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["summary_fields"]["related_field_counts"]["users"] == 0
@@ -164,20 +164,20 @@ def test_organizations_admins_association(admin_api_client, organization, user):
     """
     assert organization.admins.count() == 0
 
-    url = reverse("organization-admins-associate", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-admins-associate", kwargs={"pk": organization.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert organization.admins.count() == 1
     assert organization.admins.first() == user
 
-    url = reverse("organization-admins-disassociate", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-admins-disassociate", kwargs={"pk": organization.pk})
     response = admin_api_client.post(url, data={"instances": [user.pk]})
     assert response.status_code == 204
     assert organization.admins.count() == 0
 
 
 def test_organizations_resource_summary_fields(admin_api_client, organization):
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert response.data["summary_fields"]["resource"]["ansible_id"] == organization.resource.ansible_id
@@ -186,7 +186,7 @@ def test_organizations_resource_summary_fields(admin_api_client, organization):
 
 def test_managed_organization_field_API(admin_api_client, organization):
     """Test to ensure organization managed cannot be set to true via the API."""
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     response = admin_api_client.get(url)
     assert organization.managed is False
     response = admin_api_client.patch(url, data={"managed": True})
@@ -197,7 +197,7 @@ def test_managed_organization_field_API(admin_api_client, organization):
 def test_managed_organization_field_manual(admin_api_client):
     """Test to ensure that it can be set to true via command line"""
     organization = Organization.objects.create(name="testing", managed=True)
-    url = reverse("organization-detail", kwargs={"pk": organization.pk})
+    url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
     response = admin_api_client.get(url)
     assert organization.managed is True
     response = admin_api_client.patch(url, data={"managed": False})

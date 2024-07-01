@@ -1,7 +1,7 @@
 import pytest
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
-from django.urls import reverse
 
 from aap_gateway_api.models import Organization, Team
 from aap_gateway_api.tests.service_test_app.launch import launch_service
@@ -46,7 +46,7 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
         page += 1
 
         for resource in resources["results"]:
-            resp = admin_api_client.get(reverse("resource-detail", kwargs={"ansible_id": resource["ansible_id"]})).data
+            resp = admin_api_client.get(get_relative_url("resource-detail", kwargs={"ansible_id": resource["ansible_id"]})).data
             resource = service_client.get_resource(resource["ansible_id"]).json()
 
             resource_api_types.add(resource["resource_type"])

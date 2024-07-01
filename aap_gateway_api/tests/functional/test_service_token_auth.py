@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 
 import jwt
 import pytest
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
-from django.urls import reverse
 from rest_framework.test import APIClient
 
 from aap_gateway_api.models import ServiceKey
@@ -45,7 +45,7 @@ def service_jwt_client(service_jwt_token) -> APIClient:
 
 @pytest.mark.django_db
 def test_authentication(service_jwt_client, user):
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = service_jwt_client.get(url)
     assert resp.status_code == 200
     assert resp.wsgi_request.user == user
@@ -54,7 +54,7 @@ def test_authentication(service_jwt_client, user):
 @pytest.mark.django_db
 def test_multiple_active_keys(service_cluster_gateway, user, service_jwt_client):
     service_cluster_gateway.generate_key(mark_previous_inactive=False)
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = service_jwt_client.get(url)
     assert resp.status_code == 200
     assert resp.wsgi_request.user == user
@@ -63,7 +63,7 @@ def test_multiple_active_keys(service_cluster_gateway, user, service_jwt_client)
 @pytest.mark.django_db
 def test_deactivate_key(service_cluster_gateway, user, service_jwt_client):
     service_cluster_gateway.generate_key()
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = service_jwt_client.get(url)
     assert resp.status_code == 401
 
@@ -87,7 +87,7 @@ def test_resource_api_access(user, service_cluster, request):
     )
     client = _get_client(jwt)
 
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 200
 
@@ -100,7 +100,7 @@ def test_resource_api_access(user, service_cluster, request):
 
     # Check that the token can't be used for the rest of the gateway API since the
     # user has not authorized access to the service
-    url = reverse("me-list")
+    url = get_relative_url("me-list")
     resp = client.get(url)
     assert resp.status_code == 401
 
@@ -131,7 +131,7 @@ def test_invalid_jwt_schema(service_cluster_gateway, user, token_data):
 
     client = _get_client(jwt.encode(payload, secret, algorithm))
 
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 401
 
@@ -139,12 +139,12 @@ def test_invalid_jwt_schema(service_cluster_gateway, user, token_data):
 @pytest.mark.django_db
 def test_token_is_not_jwt(service_jwt_token):
     client = _get_client(service_jwt_token)
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 200
 
     client = _get_client("akfdjjfdlajsdflkjasdflkjasfdkljasdflkj")
-    url = reverse("resource-list")
+    url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 401
 
@@ -172,7 +172,7 @@ def test_delete_inactive_keys(service_cluster_gateway):
 
 @pytest.mark.django_db
 def test_generate_service_key_api(user_api_client, admin_api_client, service_cluster_eda):
-    url = reverse("service_key-list")
+    url = get_relative_url("service_key-list")
     data = {"service_cluster": service_cluster_eda.pk, "mark_previous_inactive": True}
 
     # Check that unprivileged users can't generate new keys.
@@ -190,7 +190,7 @@ def test_generate_service_key_api(user_api_client, admin_api_client, service_clu
 
 @pytest.mark.django_db
 def test_service_key_api(user_api_client, admin_api_client, service_cluster_eda):
-    key_list = reverse("service_key-list")
+    key_list = get_relative_url("service_key-list")
     key = service_cluster_eda.generate_key()
 
     # Check that unprivileged users can't access the keys api.
@@ -203,7 +203,7 @@ def test_service_key_api(user_api_client, admin_api_client, service_cluster_eda)
     for serialized in resp.json()["results"]:
         serialized["secret"] == "$encrypted$"
 
-    detail = reverse("service_key-detail", kwargs={"pk": key.pk})
+    detail = get_relative_url("service_key-detail", kwargs={"pk": key.pk})
 
     resp = user_api_client.get(detail)
     assert resp.status_code == 403

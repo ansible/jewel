@@ -2,9 +2,9 @@ import contextlib
 from abc import abstractmethod
 
 import pytest
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from ansible_base.rbac.policies import visible_users
-from django.urls import reverse
 
 from aap_gateway_api.models.user import User
 from aap_gateway_api.tests.functional.rbac.conftest import associate_users
@@ -61,7 +61,7 @@ class TestPlatformAuditorSync:
 
         assert not self.platform_auditor_qs(user.id).exists()
 
-        url = reverse('user-detail', kwargs={'pk': user.id})
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
         for flag_enabled in [True, False]:
             user.is_platform_auditor = flag_enabled
             user.save()
@@ -118,12 +118,12 @@ class TestUserPermissionsBase:
         # Some random users
         accessed_users = users[organizations[0]] + [users[organizations[1]][0]] + [users[teams[organizations[0]][0]][0]]
         for accessed_user in accessed_users:
-            url = reverse("user-detail", kwargs={"pk": accessed_user.pk})
+            url = get_relative_url("user-detail", kwargs={"pk": accessed_user.pk})
             response = user_api_client.get(url)
             assert response.status_code == 200, f"{self.ROLE_NAME} should see {accessed_user}"
 
     def _test_create_one(self, user_api_client, status_code, superuser=False):
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         data = {
             "username": "new-testing-user",
             "password": "password",
@@ -140,14 +140,14 @@ class TestUserPermissionsBase:
             user.delete()
 
     def _test_update_one(self, user_api_client, target_user, status_code):
-        url = reverse("user-detail", kwargs={"pk": target_user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": target_user.pk})
         data = {"password": "new_password"}
 
         response = user_api_client.patch(url, data)
         assert response.status_code == status_code, f"{self.ROLE_NAME} should PATCH with status code {status_code} | {response.data}"
 
     def _test_delete_one(self, user_api_client, target_user, status_code):
-        url = reverse("user-detail", kwargs={"pk": target_user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": target_user.pk})
 
         response = user_api_client.delete(url)
         assert response.status_code == status_code, f"{self.ROLE_NAME} should DELETE with status code {status_code}"
@@ -162,13 +162,13 @@ class TestUserUnauthenticatedPermissions(TestUserPermissionsBase):
 
     def _test_list(self, unauthenticated_api_client, user, users, teams, organizations):
         """Unauthenticated user can't list"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = unauthenticated_api_client.get(url)
         assert response.status_code == 401
 
     def _test_detail(self, unauthenticated_api_client, user, users, teams, organizations):
         """Unauthenticated can't see user detail"""
-        url = reverse("user-detail", kwargs={"pk": user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user.pk})
         response = unauthenticated_api_client.get(url)
         assert response.status_code == 401
 
@@ -196,7 +196,7 @@ class TestUserNoRolePermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Basic user sees self and superusers"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url)
         assert response.status_code == 200
         assert response.data['count'] == 1
@@ -213,12 +213,12 @@ class TestUserNoRolePermissions(TestUserPermissionsBase):
 
     def _test_detail(self, user_api_client, user, users, teams, organizations):
         """Basic user sees self and superusers"""
-        url = reverse("user-detail", kwargs={"pk": user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user.pk})
         response = user_api_client.get(url)
         assert response.status_code == 200
 
         another_user = users[None][1]
-        url = reverse("user-detail", kwargs={"pk": another_user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": another_user.pk})
         response = user_api_client.get(url)
         assert response.status_code == 404
 
@@ -272,7 +272,7 @@ class TestUserTeamMemberPermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Team Member doesn't see other team members"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
@@ -284,7 +284,7 @@ class TestUserTeamMemberPermissions(TestUserPermissionsBase):
         """Team Member doesn't see other users from the same team"""
         same_team = teams[organizations[0]][0]
         for team_member in users[same_team]:
-            url = reverse("user-detail", kwargs={"pk": team_member.pk})
+            url = get_relative_url("user-detail", kwargs={"pk": team_member.pk})
             response = user_api_client.get(url)
             assert response.status_code == 404
 
@@ -334,7 +334,7 @@ class TestUserTeamAdminPermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Team Admin doesn't see other users"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
@@ -346,7 +346,7 @@ class TestUserTeamAdminPermissions(TestUserPermissionsBase):
         """Team Admin doesn't see other users from the same team"""
         same_team = teams[organizations[0]][0]
         for team_member in users[same_team]:
-            url = reverse("user-detail", kwargs={"pk": team_member.pk})
+            url = get_relative_url("user-detail", kwargs={"pk": team_member.pk})
             response = user_api_client.get(url)
             assert response.status_code == 404
 
@@ -389,7 +389,7 @@ class TestUserOrgMemberPermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Org Member sees other Org Members in the same org"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
@@ -408,18 +408,18 @@ class TestUserOrgMemberPermissions(TestUserPermissionsBase):
         same_org, different_org = organizations[0], organizations[5]
 
         for same_org_member in users[same_org]:
-            url = reverse("user-detail", kwargs={"pk": same_org_member.pk})
+            url = get_relative_url("user-detail", kwargs={"pk": same_org_member.pk})
             response = user_api_client.get(url)
             assert response.status_code == 200, same_org_member
 
         for different_org_member in users[different_org]:
-            url = reverse("user-detail", kwargs={"pk": different_org_member.pk})
+            url = get_relative_url("user-detail", kwargs={"pk": different_org_member.pk})
             response = user_api_client.get(url)
             assert response.status_code == 404, different_org_member
 
         # Team members of the same organization, who ARE NOT Org Members are not visible
         org_team_member = users[teams[organizations[0]][0]][0]
-        url = reverse("user-detail", kwargs={"pk": org_team_member.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": org_team_member.pk})
         response = user_api_client.get(url)
         assert response.status_code == 404, org_team_member
 
@@ -465,7 +465,7 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Org Admin sees all users"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
@@ -563,7 +563,7 @@ class TestUserPlatformAuditorPermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Platform Auditor sees all users"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
@@ -596,7 +596,7 @@ class TestUserPlatformAuditorPermissions(TestUserPermissionsBase):
         RoleDefinition.objects.managed.platform_auditor.give_global_permission(user)
         other_user = User.objects.create(username='rando')
         assert other_user in visible_users(user)  # sanity
-        url = reverse('roleuserassignment-list')
+        url = get_relative_url('roleuserassignment-list')
         response = user_api_client.post(url, {'user': other_user.id, 'role_definition': RoleDefinition.objects.managed.platform_auditor.id}, format='json')
         assert response.status_code == 403, response.data
 
@@ -604,7 +604,7 @@ class TestUserPlatformAuditorPermissions(TestUserPermissionsBase):
         RoleDefinition.objects.managed.platform_auditor.give_global_permission(user)
         other_user = User.objects.create(username='rando')
         assignment = RoleDefinition.objects.managed.platform_auditor.give_global_permission(other_user)
-        url = reverse('roleuserassignment-detail', kwargs={'pk': assignment.pk})
+        url = get_relative_url('roleuserassignment-detail', kwargs={'pk': assignment.pk})
         response = user_api_client.delete(url)
         assert response.status_code == 403, response.data
 
@@ -630,7 +630,7 @@ class TestUserSuperuserPermissions(TestUserPermissionsBase):
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
         """Superuser sees all users"""
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
@@ -692,7 +692,7 @@ class TestRelatedUserListView:
     def test_org_admin_list_org_members(self, user, user_api_client, organization, org_member_rd, org_admin_rd):
         org_admin_rd.give_permission(user, organization)
 
-        url = reverse('organization-users-list', kwargs={'pk': organization.pk})
+        url = get_relative_url('organization-users-list', kwargs={'pk': organization.pk})
         self._initial_check(url, user_api_client)
         self._assign_users(org_member_rd, organization)
 
@@ -703,7 +703,7 @@ class TestRelatedUserListView:
     def test_org_member_list_org_members(self, user, user_api_client, organization, org_member_rd):
         org_member_rd.give_permission(user, organization)
 
-        url = reverse('organization-users-list', kwargs={'pk': organization.pk})
+        url = get_relative_url('organization-users-list', kwargs={'pk': organization.pk})
         self._initial_check(url, user_api_client, 1)
         self._assign_users(org_member_rd, organization)
 
@@ -715,7 +715,7 @@ class TestRelatedUserListView:
         user.is_superuser = True
         user.save()
 
-        url = reverse('organization-users-list', kwargs={'pk': organization.pk})
+        url = get_relative_url('organization-users-list', kwargs={'pk': organization.pk})
         self._initial_check(url, user_api_client)
         self._assign_users(org_member_rd, organization)
 
@@ -727,7 +727,7 @@ class TestRelatedUserListView:
 @pytest.mark.django_db
 class TestUserOptions:
     def test_users_list_options_user(self, user_api_client):
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.options(url)
         assert response.status_code == 200, "Options for list users should be available for standard user"
         assert response.data.get('actions', {}).get('POST', None) is None, "POST action for users should be forbidden for standard user"
@@ -736,25 +736,25 @@ class TestUserOptions:
         user.is_platform_auditor = True
         user.save()
 
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = user_api_client.options(url)
         assert response.status_code == 200, "Options for list users should be available for auditor"
         assert response.data.get('actions', {}).get('POST', None) is None, "POST action for user shouldn't be available for auditor"
 
     def test_users_list_options_superuser(self, admin_api_client):
-        url = reverse("user-list")
+        url = get_relative_url("user-list")
         response = admin_api_client.options(url)
         assert response.status_code == 200, "Options for list users should be available for superuser"
         assert response.data.get('actions', {}).get('POST', None) is not None, "POST action for users should be available for superuser"
 
     def test_users_detail_options_user(self, user_api_client, user, organization, team, org_admin_rd, org_member_rd, admin_rd, member_rd):
-        url = reverse("user-detail", kwargs={"pk": user.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user.pk})
         response = user_api_client.options(url)
         assert response.status_code == 200
         assert response.data.get('actions', {}).get('PUT', None) is not None, "user should be able to change self"
 
         user2 = User.objects.create(username='another user')
-        url = reverse("user-detail", kwargs={"pk": user2.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user2.pk})
 
         # Two unrelated users
         response = user_api_client.options(url)
@@ -803,20 +803,20 @@ class TestUserOptions:
         user.is_platform_auditor = True
         user.save()
 
-        url1 = reverse("user-detail", kwargs={"pk": user.pk})
+        url1 = get_relative_url("user-detail", kwargs={"pk": user.pk})
         response = user_api_client.options(url1)
         assert response.status_code == 200, "Platform Auditor should see OPTIONS for self"
         assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for auditor"
 
         user2 = User.objects.create(username='another user')
-        url2 = reverse("user-detail", kwargs={"pk": user2.pk})
+        url2 = get_relative_url("user-detail", kwargs={"pk": user2.pk})
         response = user_api_client.options(url2)
         assert response.status_code == 200, "Platform Auditor should see OPTIONS for 'another user'"
         assert response.data.get('actions', {}).get('PUT', None) is None, "PUT action shouldn't be available for auditor"
 
     def test_users_detail_options_superuser(self, admin_api_client):
         user2 = User.objects.create(username='another user')
-        url = reverse("user-detail", kwargs={"pk": user2.pk})
+        url = get_relative_url("user-detail", kwargs={"pk": user2.pk})
 
         response = admin_api_client.options(url)
         assert response.status_code == 200, "Options for 'another user' should be available for superuser"

@@ -1,32 +1,32 @@
 import pytest
-from django.urls import reverse
+from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.utils.preferences import update_preference_value
 
 
 def test_get_all_settings(admin_api_client):
-    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "all"})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert "gateway_token_name" in response.data
 
 
 def test_get_proxy_settings(admin_api_client):
-    url = reverse("setting-section-list", kwargs={"category_slug": "proxy"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "proxy"})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert "gateway_token_name" in response.data
 
 
 def test_get_all_settings_unauthenticated(unauthenticated_api_client):
-    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "all"})
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 401
 
 
 def test_set_setting(admin_api_client):
-    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "all"})
 
     response = admin_api_client.get(url)
     original_value = response.data["gateway_token_name"]
@@ -46,14 +46,14 @@ def test_set_setting(admin_api_client):
 
 
 def test_set_setting_unauthenticated(unauthenticated_api_client):
-    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "all"})
     response = unauthenticated_api_client.put(url, data={"gateway_token_name": "X-FOO-BAR-UNAUTH"})
     assert response.status_code == 401
     assert Preference.objects.filter(name="gateway_token_name").first().value != "X-FOO-BAR-UNAUTH"
 
 
 def test_set_setting_invalid(admin_api_client):
-    url = reverse("setting-section-list", kwargs={"category_slug": "all"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "all"})
     response = admin_api_client.put(url, data={"nonexistent_setting": "X-FOO-BAR"})
     assert response.status_code == 400
     assert Preference.objects.filter(name="nonexistent_setting").count() == 0
@@ -88,7 +88,7 @@ def test_set_setting_bad_type(admin_api_client, register_preference, preference_
         preference_type=preference_type,
     )
 
-    url = reverse("setting-section-list", kwargs={"category_slug": "general"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "general"})
     response = admin_api_client.put(url, data={"bad_type": value})
 
     assert response.status_code == 200 if err_substring is None else 400
@@ -106,7 +106,7 @@ def test_set_setting_bad_type(admin_api_client, register_preference, preference_
     ],
 )
 def test_set_readonly_setting(admin_api_client, preference):
-    url = reverse("setting-section-list", kwargs={"category_slug": preference[0]})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": preference[0]})
     response = admin_api_client.put(url, data={preference[1]: "This should not work"})
     assert response.status_code == 400
     assert str(response.data[preference[1]]) == f"Cannot change read-only setting {preference[1]}"
@@ -133,7 +133,7 @@ def test_on_update_changes_reflected_in_put(admin_api_client, register_preferenc
         preference_name="soda_but_uppercase",
     )
 
-    url = reverse("setting-section-list", kwargs={"category_slug": "general"})
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "general"})
     response = admin_api_client.put(url, data={"soda": "orange"})
     assert response.status_code == 200
     assert response.data["soda"] == "orange"

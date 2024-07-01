@@ -1,6 +1,6 @@
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import ObjectRole, RoleDefinition
 from django.db.models import Model
-from django.urls import reverse
 
 
 class UsersMembersMixin(Model):
@@ -13,7 +13,7 @@ class UsersMembersMixin(Model):
     def related_fields(self, request):
         ret = super().related_fields(request)
         for key in ('users', 'admins'):
-            ret[key] = reverse(f'{self._meta.model_name}-{key}-list', kwargs={'pk': self.id})
+            ret[key] = get_relative_url(f'{self._meta.model_name}-{key}-list', kwargs={'pk': self.id})
         return ret
 
     @property
