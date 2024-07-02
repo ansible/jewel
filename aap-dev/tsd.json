@@ -1,0 +1,24 @@
+{
+    "version": "0.1.4",
+    "artifact": {
+        "type": "aap-candidate",
+        "version": "2.4",
+        "builds": []
+    },
+    "scenario": {
+        "name": "rpm-gating",
+        "environment": {
+            "type": "gateway",
+            "automationcontroller": {
+                "url": "https://localhost:8043/",
+                "admin_user": "admin",
+                "admin_password": "admin"
+            },
+            "automationgateway": {
+                "url": "https://localhost/",
+                "admin_user": "admin",
+                "admin_password": "admin"
+            }
+        }
+    }
+}
