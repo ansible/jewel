@@ -17,10 +17,10 @@ $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml: $(SERVICE_D
 	cd $(SERVICE_DIR)/awx && make docker-compose COMPOSE_UP_OPTS=--detach EXTRA_SOURCES_ANSIBLE_OPTS="-e admin_password=$(ADMIN_PASSWORD)"
 
 awx-up: $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml
-	docker-compose -f $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml up --detach
+	docker compose -f $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml up --detach
 
 awx-down: $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml
-	-docker-compose -f $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml down
+	-docker compose -f $(SERVICE_DIR)/awx/tools/docker-compose/_sources/docker-compose.yml down
 
 .awx-settings-hack:
 	$(AAP_DEV_DIR)/awx-up-check.sh
@@ -48,8 +48,8 @@ $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py:
 
 eda-server-up: $(SERVICE_DIR)/eda-server/.git/HEAD $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py
 	echo "Using $(TASK_CMD)"
-	cd $(SERVICE_DIR)/eda-server && $(TASK_CMD) docker:build
-	cd $(SERVICE_DIR)/eda-server && EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.eda_server_settings $(TASK_CMD) docker:up
+	cd $(SERVICE_DIR)/eda-server && DOCKER_COMPOSE='docker compose' $(TASK_CMD) docker:build
+	cd $(SERVICE_DIR)/eda-server && DOCKER_COMPOSE='docker compose' EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.eda_server_settings $(TASK_CMD) docker:up
 
 eda-server-down: $(SERVICE_DIR)/eda-server/.git/HEAD
 	cd $(SERVICE_DIR)/eda-server && task docker:down
