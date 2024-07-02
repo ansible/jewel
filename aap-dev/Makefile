@@ -41,7 +41,7 @@ $(SERVICE_DIR)/eda-server/.git/HEAD: ;
 
 .eda-server-change-password-hack:
 	$(AAP_DEV_DIR)/eda-server-up-check.sh
-	docker exec -it eda_eda-api_1 /app/venv/bin/python /app/src/src/aap_eda/manage.py shell -c 'from django.contrib.auth import get_user_model; u=get_user_model().objects.get(username="admin"); u.set_password("$(ADMIN_PASSWORD)"); u.save()'
+	docker exec -it eda-eda-api-1 /app/venv/bin/python /app/src/src/aap_eda/manage.py shell -c 'from django.contrib.auth import get_user_model; u=get_user_model().objects.get(username="admin"); u.set_password("$(ADMIN_PASSWORD)"); u.save()'
 
 $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py:
 	cp $(AAP_DEV_DIR)/eda_server_settings.py $(SERVICE_DIR)/eda-server/src/aap_eda/settings/eda_server_settings.py
