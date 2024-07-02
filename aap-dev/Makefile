@@ -52,7 +52,7 @@ eda-server-up: $(SERVICE_DIR)/eda-server/.git/HEAD $(SERVICE_DIR)/eda-server/src
 	cd $(SERVICE_DIR)/eda-server && DOCKER_COMPOSE='docker compose' EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.eda_server_settings $(TASK_CMD) docker:up
 
 eda-server-down: $(SERVICE_DIR)/eda-server/.git/HEAD
-	cd $(SERVICE_DIR)/eda-server && task docker:down
+	cd $(SERVICE_DIR)/eda-server && DOCKER_COMPOSE='docker compose' $(TASK_CMD) docker:down
 
 dev-up: gateway-up awx-up .awx-settings-hack eda-server-up .eda-server-change-password-hack
 	$(AAP_DEV_DIR)/gateway-up-check.sh
