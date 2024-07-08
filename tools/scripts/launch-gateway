@@ -4,7 +4,7 @@ set -o errexit
 GATEWAY_BASE_DIR=/opt/aap_gateway
 GATEWAY_APP_DIR="${GATEWAY_BASE_DIR}/src"
 GATEWAY_PYTHON="${GATEWAY_BASE_DIR}/venv/bin/python"
-GATEWAY_MANAGE="/usr/bin/gateway-manage"
+GATEWAY_MANAGE="/usr/bin/aap-gateway-manage"
 
 timestamp() {
     TZ=UTC echo -n "[$(date +'%Y-%m-%d %H:%M:%S.%N %Z')]"
