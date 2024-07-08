@@ -5,6 +5,7 @@ import re
 from ansible_base.lib.utils.requests import get_remote_host
 from django.conf import settings
 from django.contrib.auth import views
+from django.core.exceptions import PermissionDenied
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from rest_framework import status
@@ -12,6 +13,7 @@ from rest_framework.exceptions import NotAcceptable
 from rest_framework.negotiation import DefaultContentNegotiation
 from rest_framework.renderers import StaticHTMLRenderer
 from rest_framework.response import Response
+from social_core.exceptions import AuthException
 
 logger = logging.getLogger('aap.gateway.views.local_login')
 
@@ -34,7 +36,14 @@ class LoggedLoginView(views.LoginView):
         return super(LoggedLoginView, self).get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        ret = super(LoggedLoginView, self).post(request, *args, **kwargs)
+        try:
+            ret = super(LoggedLoginView, self).post(request, *args, **kwargs)
+        except AuthException as e:
+            # Log a warning when an exception occurs during login,
+            # particularly when SYSTEM_USERNAME attempts to log in.
+            logger.warning("Exception occurred during login.")
+            raise PermissionDenied from e
+
         if request.user.is_authenticated:
             logger.info(f"User {self.request.user.username} logged in from {get_remote_host(request)}")
             return ret
