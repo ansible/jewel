@@ -1,4 +1,5 @@
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -12,7 +13,10 @@ class ServiceKeyViewSet(GatewayModelViewSet):
     API endpoint that allows configuring service authentication keys.
     """
 
-    permission_classes = (IsSuperuserOrAuditor,)
+    permission_classes = (
+        OAuth2ScopePermission,
+        IsSuperuserOrAuditor,
+    )
     queryset = ServiceKey.objects.all()
     serializer_class = ServiceKeySerializer
 

@@ -1,6 +1,7 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.policies import can_view_all_users, visible_users
@@ -20,7 +21,7 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     model = User
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer
-    permission_classes = [AnsibleBaseUserPermissions]
+    permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
     def filter_queryset(self, qs):
         qs = visible_users(self.request.user, queryset=qs)
@@ -56,7 +57,7 @@ class DeprecatedRelatedUserViewSet(DABOAuth2UserViewsetMixin, GatewayModelViewSe
     model = User
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer
-    permission_classes = [AnsibleBaseUserPermissions]
+    permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
     # Methods for compatibility with the old users and admins endpoints
     def get_association_role_definition(self, parent_instance):
