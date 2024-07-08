@@ -1,4 +1,4 @@
-### Init by Django command `gateway-manage register-service --config proxy.yml`
+### Init by Django command `aap-gateway-manage register-service --config proxy.yml`
 proxy:
   use_tls: true
   api_port: 9080

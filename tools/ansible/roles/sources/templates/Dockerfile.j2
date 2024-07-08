@@ -88,8 +88,7 @@ RUN for dir in \
     for file in \
       /etc/nginx/gateway.crt \
       /etc/nginx/gateway.key ; \
-    do touch $file ; chmod g+rw $file ; chgrp root $file ; done && \
-    ln -s /usr/bin/aap-gateway-manage /usr/bin/gateway-manage
+    do touch $file ; chmod g+rw $file ; chgrp root $file ; done
 
 # This is required for the xds protobuf defintions in order for them
 # to be compatible with protobuf 3.21+. This should be removed
