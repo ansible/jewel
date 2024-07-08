@@ -1,6 +1,7 @@
 import collections
 
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.utils.translation import gettext_lazy as _
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
@@ -12,7 +13,7 @@ from aap_gateway_api.views.api.v1.common import AnsibleBaseView, GatewayModelVie
 
 
 class PreferenceSingletonView(AnsibleBaseView):
-    permission_classes = [IsSuperuserOrAuditor]
+    permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 
     def get_serializer(self, *args, **kwargs):
         if not hasattr(self, 'serializer'):

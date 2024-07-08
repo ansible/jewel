@@ -1,3 +1,4 @@
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.policies import visible_users
 from django.http import Http404
@@ -10,7 +11,7 @@ from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPI
 class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Team
     serializer_class = TeamSerializer
-    permission_classes = [AnsibleBaseUserPermissions]
+    permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
     def get_queryset(self):
         try:
@@ -23,7 +24,7 @@ class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
 class UserOrganizationViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Organization
     serializer_class = OrganizationSerializer
-    permission_classes = [AnsibleBaseUserPermissions]
+    permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
     def get_queryset(self):
         try:

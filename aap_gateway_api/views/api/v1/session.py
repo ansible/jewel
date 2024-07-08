@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.contrib.sessions.models import Session
 from django.utils.translation import gettext as _
 from rest_framework import permissions, status
@@ -11,7 +12,7 @@ logger = logging.getLogger('aap.gateway.views.api.v1.session')
 
 
 class SessionView(AnsibleBaseDjangoAppApiView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [OAuth2ScopePermission, permissions.IsAuthenticated]
 
     def get(self, request, format=None):
         try:

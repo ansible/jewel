@@ -1,6 +1,7 @@
 from ansible_base.lib.utils.hashing import hash_serializer_data
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
@@ -11,12 +12,12 @@ from aap_gateway_api.utils.resources_client import AllServicesClient, ResourceRe
 
 
 class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
-    permission_classes = [IsSuperuserOrAuditor]
+    permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 
 
 class RoleModelViewSet(GatewayModelViewSet):
     "Use for models registered in the DAB RBAC permission registry"
-    permission_classes = [AnsibleBaseObjectPermissions]
+    permission_classes = [OAuth2ScopePermission, AnsibleBaseObjectPermissions]
 
     def filter_queryset(self, qs):
         if hasattr(qs, 'model'):

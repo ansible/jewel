@@ -2,6 +2,7 @@ from datetime import datetime
 
 import requests
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
@@ -12,7 +13,7 @@ ping_pages = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/",
 
 
 class StatusView(AnsibleBaseView):
-    permission_classes = [IsSuperuserOrAuditor]
+    permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 
     def get(self, request):
         current_time = datetime.now()
