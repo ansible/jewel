@@ -59,7 +59,6 @@ COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
 COPY tools/scripts/aap-gateway-manage /usr/bin/aap-gateway-manage
-ADD aap_gateway_api /opt/aap_gateway/aap_gateway/aap_gateway_api/
 COPY tools/configs/nginx.conf /etc/ansible-automation-platform/gateway/nginx.conf
 COPY tools/configs/nginx-gateway.conf /etc/ansible-automation-platform/gateway/nginx-gateway.conf
 COPY tools/configs/uwsgi.ini /etc/ansible-automation-platform/gateway/uwsgi.ini
@@ -70,6 +69,7 @@ COPY tools/configs/settings.py /etc/ansible-automation-platform/gateway/settings
 RUN for dir in \
       /etc/nginx \
       /opt/aap_gateway \
+      /opt/aap_gateway/src \
       /var/log/supervisor \
       /var/run/supervisor \
       /var/run/uwsgi \
@@ -79,12 +79,18 @@ RUN for dir in \
     for file in \
       /etc/nginx/gateway.crt \
       /etc/nginx/gateway.key ; \
-    do touch $file ; chmod g+rw $file ; chgrp root $file ; done
+    do touch $file ; chmod g+rw $file ; chgrp root $file ; done && \
+    ln -s /usr/bin/aap-gateway-manage /usr/bin/gateway-manage
 
 # This is required for the xds protobuf defintions in order for them
 # to be compatible with protobuf 3.21+. This should be removed
 # once a new version of xds-protos is available
 ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+
+ADD aap_gateway_api /opt/aap_gateway/src/aap_gateway_api/
+ADD gateway_configuration_collection /opt/aap_gateway/src/gateway_configuration_collection/
+ENV PATH=/opt/aap_gateway/venv/bin:$PATH
+ENV PYTHONPATH=/opt/aap_gateway/src
 
 # Pull in the platform-ui, this can change frequently so it should be one of the last things we try and do
 COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
