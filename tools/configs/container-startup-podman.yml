@@ -1,0 +1,24 @@
+---
+gateway_host: https://localhost:8000
+gateway_node_count: 1
+proxy_port: 8443
+gateway_validate_certs: False
+gateway_admin_username: admin
+gateway_admin_password: admin
+container_reference: 'localhost'
+container_engine: podman
+gateway_image: 'quay.io/ansible/aap-gateway:devel'
+gateway_host_address: host.containers.internal
+gateway_services: ['hub','controller','eda']
+gateway_container_name: aap_gw_1
+
+### Redis
+### Note: If you change the redis settings, please remove tools/generated/redis_cluster and let it rebuild
+redis_cluster_enabled: False
+redis_tls_enabled: True
+
+### Sidecars (uncomment to enable):
+# keycloak_enabled: True
+# ldap_enabled: True
+# tacacs_enabled: True
+# radius_enabled: True

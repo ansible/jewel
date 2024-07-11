@@ -1,0 +1,12 @@
+---
+- name: Run django-admin migrate_service_data inside a podman container
+  hosts: localhost
+  vars:
+    slugs:
+      eda: eda
+      hub: galaxy
+      controller: controller
+  tasks:
+    - name: Execute command in podman container {{ gateway_container_name }}
+      command: podman exec {{ gateway_container_name }} django-admin migrate_service_data --api-slug {{ slugs[item] }} --username {{ gateway_admin_username }}
+      loop: "{{ gateway_services }}"

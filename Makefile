@@ -13,6 +13,7 @@ COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
 ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
 GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+UNAME_S := $(shell uname -s)
 ANSIBLE_CONFIG ?= tools/ansible/ansible.cfg
 export ANSIBLE_CONFIG
 
@@ -103,6 +104,22 @@ help/generate:
 # Container related targets
 # --------------------------------------
 
+## prepare docker-compose-stage source files
+docker-compose-stage-sources: tools/ansible/roles/sources/templates/docker-compose-stage.yml.j2 tools/generated/sources tools/generated/proxy.yml tools/generated/gateway.crt
+## start docker-compose-stage pods
+docker-compose-stage: docker-compose-stage-sources
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose-stage.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) &
+## remove docker-compose-stage pods
+docker-compose-stage-cleanup:
+	if [ -f tools/generated/docker-compose-stage.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose-stage.yml down -v ; fi
+## Fetch service key
+fetch-service-key:
+	ansible-playbook tools/ansible/fetch-service-key.yml -e @container-startup.yml
+## Migrate service data to services
+migrate-service-data:
+	ansible-playbook tools/ansible/migrate-service-data.yml -e @container-startup.yml
+
+
 ## Start docker containers without additional playbooks
 docker-compose-basic: tools/generated/sources docker-compose-build .git/hooks/pre-commit
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
@@ -140,6 +157,15 @@ container-startup.yml: tools/configs/container-startup.yml
 		echo "container-startup.yml has been overwritten but a backup was taken (will be overwritten on next change)!"; \
 	fi;
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
+
+## Generate the container-startup.yml from container-startup-podman.yml file
+container-startup-podman.yml: tools/configs/container-startup-podman.yml
+	@if [ -f container-startup.yml ] ; then \
+		cp container-startup.yml container-startup.yml.backup; \
+		echo ">>>>>> WARNING <<<<<<<<" ; \
+		echo "container-startup.yml has been overwritten but a backup was taken (will be overwritten on next change)!"; \
+	fi;
+	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup-podman.yml > ./container-startup.yml
 
 ## Generate all files from generate-source playbook
 tools/generated/sources: tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 container-startup.yml
@@ -195,6 +221,9 @@ tools/generated/.has_built_ui:
 tools/generated/gateway.crt:
 	openssl req -nodes -newkey rsa:2048 -keyout tools/generated/gateway.key -out tools/generated/gateway.csr -subj "/C=US/ST=North Carolina/L=Durham/O=Ansible/OU=Gateway Development/CN=localhost"
 	openssl x509 -req -days 365 -in tools/generated/gateway.csr -signkey tools/generated/gateway.key -out tools/generated/gateway.crt
+ifeq ($(UNAME_S),Linux)
+	chmod 440 tools/generated/gateway.crt tools/generated/gateway.key
+endif
 
 ## Build the proxy config file
 tools/generated/proxy.yml: $(shell find tools/ansible/roles/proxy-config/templates -type f)

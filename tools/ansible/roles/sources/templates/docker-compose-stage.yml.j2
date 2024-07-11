@@ -1,0 +1,222 @@
+#jinja2: lstrip_blocks: True
+---
+version: '2.1'
+services:
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+  {% set exposed_port = 7999 + container_id | int %}
+  gateway{{ container_id }}:
+    image: {{ gateway_image }} 
+    entrypoint: [ "/usr/bin/launch-gateway" ]
+    container_name: aap_gw_{{ container_id }}
+    hostname: aap-gw-{{ container_id }}
+    depends_on:
+      - db
+    expose:
+      - "{{ exposed_port }}"
+    environment:
+      - DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+      - SECRET_KEY=${SECRET_KEY:-somesecret}
+      - DATABASE_NAME=gateway
+      - DATABASE_USER={{ db_username }}
+      - DATABASE_PASSWORD={{ db_password }}
+      - DATABASE_HOST=db
+      - PYTHONBREAKPOINT=remote_pdb.set_trace
+      - REMOTE_PDB_HOST=127.0.0.1
+      - REMOTE_PDB_PORT=4444
+      - REDIS_URL=rediss://{{ redis_username }}:{{ redis_password }}@{{ redis_node_prefix }}1:{{ redis_exposed_port }}
+      - REDIS_IS_CLUSTERED={{ redis_is_clustered }}
+      - REDIS_CLUSTERED_HOSTS={{ ",".join(redis_clustered_hosts) }}
+      - REDIS_TLS={{ redis_uses_tls }}
+      - CACHE_KEY_PREFIX={{ cache_key_prefix }}
+      - ENVOY_HOSTNAME=proxy
+      - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
+{% if container_engine == 'docker' %}
+    links:
+      - db
+{% endif %}
+{% for i in range(redis_node_count|int) %}
+{% set container_id = loop.index %}
+      - redis{{ container_id }}
+{% endfor %}
+    networks:
+      - dbnet
+      - service-mesh
+    ports:
+      - "{{ exposed_port }}:8000"
+      - "{{ container_id }}4444:4444"
+    user: "${UID:-1000}"
+    volumes:
+      - $PWD/container-startup.yml:/opt/aap_gateway/src/container-startup.yml:z
+      - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/etc/ansible-automation-platform/gateway/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/etc/ansible-automation-platform/gateway/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/etc/ansible-automation-platform/gateway/redis_ca.cert:z
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 4096
+  {% endfor %}
+
+{% for i in range(redis_node_count|int) %}
+{% set container_id = loop.index %}
+  redis{{ container_id }}:
+    container_name: {{ redis_node_prefix }}{{ container_id }}
+    hostname: {{ redis_node_prefix }}{{ container_id }}
+    image: brew.registry.redhat.io/rh-osbs/rhel8-redis-6
+    entrypoint: ["redis-server"]
+    command: 
+      - /usr/local/etc/redis/redis.conf
+{% if container_id == 1 %}
+    ports:
+      - "{{ redis_exposed_port }}:{{ redis_exposed_port }}"
+{% endif %}
+    volumes:
+      - $PWD/tools/generated/redis_cluster/redis.conf:/usr/local/etc/redis/redis.conf:z
+      - $PWD/tools/generated/redis_cluster/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/nodes{{ container_id }}.conf:/usr/local/etc/redis/nodes.conf:z
+    networks:
+      dbnet:
+        aliases:
+          - {{ redis_node_prefix }}{{ container_id }}
+
+{% endfor %}
+
+  db:
+    container_name: aap_gw_db_pgsql_1
+    command: run-postgresql -c log_destination=stderr -c log_min_messages=info
+    environment:
+      - POSTGRESQL_DATABASE=gateway
+      - POSTGRESQL_USER=gateway
+      - POSTGRESQL_PASSWORD=gateway
+    image: quay.io/sclorg/postgresql-15-c9s
+    hostname: db
+    networks:
+      - dbnet
+      - service-mesh
+    ports:
+      - "{{ db_port }}:5432"
+    volumes:
+      - "aap_gw_db:/var/lib/psql/data"
+
+  proxy:
+    container_name: aap_gw_proxy_1
+    hostname: aap-gw-proxy-1
+{% if container_engine == 'docker' %}
+    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    entrypoint: /usr/local/bin/envoy
+{% else %}
+    image: brew.registry.redhat.io/rh-osbs/ansible-automation-platform-25-gateway-proxy-rhel8
+    entrypoint: /usr/bin/envoy
+{% endif %}
+    command: --config-path /etc/envoy/envoy.yaml
+    environment:
+      - ENVOY_UID=0
+    ports:
+      - "{{ proxy_port }}:9080"
+      - "19000:19000"
+    volumes:
+      - $PWD/tools/generated/envoy.yml:/etc/envoy/envoy.yaml:z
+      - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
+      - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+{% if container_engine == 'docker' %}
+    extra_hosts:
+      host-gateway: "host-gateway"
+{% endif %}
+    networks:
+      - dbnet
+      - service-mesh
+
+# Optional containers
+{% if enabled_containers['keycloak']|bool %}
+  keycloak:
+    image: {{ keycloak_image }}:{{ keycloak_image_version }}
+    container_name: aap_gw_keycloak_1
+    hostname: keycloak
+    user: "${UID}"
+    ports:
+      - "{{ keycloak_exposed_port }}:8443"
+    environment:
+      KEYCLOAK_USER: "{{ keycloak_username }}"
+      KEYCLOAK_PASSWORD: "{{ keycloak_password }}"
+      DB_VENDOR: postgres
+      DB_ADDR: db
+      DB_DATABASE: keycloak
+      DB_USER: {{ db_username }}
+      DB_PASSWORD: {{ db_password }}
+      DB_PORT: 5432
+    depends_on:
+      - db
+    networks:
+      - dbnet
+{% endif %}
+
+{% if enabled_containers['ldap'] | bool %}
+  ldap:
+    image: bitnami/openldap:{{ ldap_image_version }}
+    container_name: aap_gw_ldap_1
+    hostname: ldap
+    user: "${UID}"
+    ports:
+      - "{{ ldap_exposed_ldap_port }}:1389"
+      - "{{ ldap_exposed_ldaps_port }}:1636"
+    environment:
+      LDAP_ADMIN_USERNAME: {{ ldap_admin_username }}
+      LDAP_ADMIN_PASSWORD: {{ ldap_admin_password }}
+      LDAP_CUSTOM_LDIF_DIR: /opt/bitnami/openldap/ldiffs
+      LDAP_ENABLE_TLS: "yes"
+      LDAP_LDAPS_PORT_NUMBER: 1636
+      LDAP_TLS_CERT_FILE: /opt/bitnami/openldap/certs/{{ ldap_public_key_file_name }}
+      LDAP_TLS_CA_FILE: /opt/bitnami/openldap/certs/{{ ldap_public_key_file_name }}
+      LDAP_TLS_KEY_FILE: /opt/bitnami/openldap/certs/{{ ldap_private_key_file_name }}
+    volumes:
+      - 'aap_gw_openldap_data:/bitnami/openldap'
+      - '$PWD/tools/generated/ldap_certs:/opt/bitnami/openldap/certs'
+      - '$PWD/tools/generated/ldap_diffs:/opt/bitnami/openldap/ldiffs'
+    networks:
+      - dbnet
+      - service-mesh
+{% endif %}
+
+{% if enabled_containers['tacacs'] | bool %}
+  tacacs:
+    image: dchidell/docker-tacacs:{{ tacacs_container_version }}
+    container_name: aap_gw_tacacs_1
+    hostname: tacacs
+    ports:
+      - "{{ tacacs_exposed_tacacs_port }}:49"
+    networks:
+      - dbnet
+{% endif %}
+
+{% if enabled_containers['radius'] | bool %}
+  radius:
+    image: {{ radius_image }}:{{ radius_image_version }}
+    container_name: aap_gw_radius_1
+    hostname: radius
+    command: ['-f', '-x', '-l', 'stdout']
+    volumes:
+      - '$PWD/tools/generated/radius/clients.conf:/etc/freeradius/clients.conf'
+      - '$PWD/tools/generated/radius/authorize:/etc/freeradius/mods-config/files/authorize'
+    networks:
+      - dbnet
+{% endif %}
+
+networks:
+  dbnet:
+  service-mesh:
+    name: service-mesh
+
+volumes:
+  aap_gw_db:
+    name: aap_gw_db
+{% if enabled_containers['ldap'] | bool %}
+  aap_gw_openldap_data:
+    name: aap_gw_ldap_1
+    driver: local
+{% endif %}

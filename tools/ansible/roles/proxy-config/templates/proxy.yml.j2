@@ -20,17 +20,17 @@ gateway_service_nodes:   # Nodes of service clusters
 {% set container_id = loop.index %}
   - name: Gateway Node {{ container_id }}        # -- name of node
     service_cluster: gateway                     # -- belonging service cluster
-    address: "gateway{{ container_id }}"         # -- hostname or IP of the service
+    address: "gateway{{ container_id  }}"        # -- hostname or IP of the service
 {% endfor %}
   - name: Controller Node
     service_cluster: controller
-    address: "host-gateway"
+    address: "{{ gateway_host_address }}"
   - name: Hub Node
     service_cluster: hub
-    address: "host-gateway"
+    address: "{{ gateway_host_address }}"
   - name: EDA Node
     service_cluster: eda
-    address: "host-gateway"
+    address: "{{ gateway_host_address }}"
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     # It configures proxy requests
@@ -46,6 +46,8 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_port: 8000                # -- port on the gateway API
     order: 100
 
+{% for service in gateway_services %}
+{% if service == 'hub' %}
     # It configures proxy requests
     # - from https://<gateway url>:9080/api/hub/...
     # - to http://localhost:5001/api/hub/...  # localhost is taken from service node "Hub Node"
@@ -58,6 +60,7 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_port: 5001                # -- API port on the Automation Hub
     order: 1
 
+{% elif service == 'controller' %}
     # It configures proxy requests
     # - from https://<gateway url>:9080/api/controller/...
     # - to https://localhost:8043/api/...  # localhost is taken from service node "Controller Node"
@@ -71,6 +74,7 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_port: 8043
     order: 2
 
+{% elif service == 'eda' %}
     # It configures proxy requests
     # - from https://<gateway url>:9080/api/eda/...
     # - to http://localhost:8010/api/eda/...  # localhost is taken from service node "Controller Node"
@@ -83,6 +87,8 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_path: '/api/eda/'
     service_port: 8010
     order: 3
+{% endif %}
+{% endfor %}
 
 gateway_routes:
     # It configures proxy requests
