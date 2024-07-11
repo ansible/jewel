@@ -8,7 +8,7 @@ from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences.types import IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
@@ -64,6 +64,7 @@ preference_type_mapping = {
     "url": URLPreference,
     "pem_private_key": PEMPrivateKeyPreference,
     "image": MimeTypedImagePreference,
+    "int_range": IntRangePreference,
 }
 
 
@@ -77,6 +78,7 @@ def register(
     help_text=_("No help text specified"),
     read_only=False,
     on_update=None,
+    **kwargs,
 ):
     if not preference_name:
         raise NameError(_("A preference must have a name"))
@@ -91,20 +93,22 @@ def register(
 
     class_name = f'{(preference_name.title())}_Preference'
 
+    preference_details = {
+        "section": sections[section],
+        "name": preference_name,
+        "default": default,
+        "required": required,
+        "encrypted": encrypted,
+        "field_type": type_class,
+        "help_text": help_text,
+        "read_only": read_only,
+        "on_update": on_update,
+    }
+    preference_details.update(kwargs)
     my_transient_class = type(
         class_name,
         (type_class,),
-        {
-            "section": sections[section],
-            "name": preference_name,
-            "default": default,
-            "required": required,
-            "encrypted": encrypted,
-            "field_type": type_class,
-            "help_text": help_text,
-            "read_only": read_only,
-            "on_update": on_update,
-        },
+        preference_details,
     )
     gateway_preference_registry.register(my_transient_class)
 

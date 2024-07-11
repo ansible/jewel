@@ -192,8 +192,11 @@ register(
     preference_name="SESSION_COOKIE_AGE",
     required=False,
     default=15 * 60,
-    preference_type="int",
+    preference_type="int_range",
     help_text=_("Time in seconds before a session expires"),
+    # We are copying this over directly from AWX to match their settings
+    min_value=60,
+    max_value=30000000000,  # approx 1,000 years, higher values give OverflowError
 )
 
 register(
