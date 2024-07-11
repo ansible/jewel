@@ -8,7 +8,7 @@ from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences.types import IntRangePreference, PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
 
 logger = logging.getLogger('aap.gateway.serializers.preferences')
@@ -49,6 +49,7 @@ class SettingSingletonSerializer(serializers.Serializer):
             types.MultipleChoicePreference: serializers.MultipleChoiceField,
             URLPreference: serializers.URLField,
             PEMPrivateKeyPreference: serializers.CharField,
+            IntRangePreference: serializers.IntegerField,
         }
 
         long_string_fields = (
@@ -68,6 +69,9 @@ class SettingSingletonSerializer(serializers.Serializer):
                 style={"base_template": "textarea.html"} if registered_preference.field_type in long_string_fields else None,
                 read_only=registered_preference.read_only,
             )
+            for field_name in ['max_value', 'min_value']:
+                if hasattr(registered_preference, field_name):
+                    setattr(fields[registered_preference.name], field_name, getattr(registered_preference, field_name))
 
         return fields
 

@@ -43,3 +43,16 @@ class MimeTypedImagePreference(types.LongStringPreference):
         """Check that an uploaded image file is valid data and in valid format"""
         validate_image_data(value)
         return value
+
+
+class IntRangePreference(types.IntegerPreference):
+    DEFAULT_MIN_VALUE = 0
+    DEFAULT_MAX_VALUE = 100
+
+    def validate(self, value):
+        min_value = getattr(self, 'min_value', self.DEFAULT_MIN_VALUE)
+        max_value = getattr(self, 'max_value', self.DEFAULT_MAX_VALUE)
+
+        """Validate the value is between the min and max values"""
+        if value < min_value or value > max_value:
+            raise ValidationError(_("Must be an integer between %(min)d and %(max)d") % {"min": min_value, "max": max_value})
