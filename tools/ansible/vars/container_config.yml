@@ -11,6 +11,12 @@ container_reference: localhost
 sources_dest: '{{ playbook_dir | dirname }}/generated'
 docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default='docker compose') }} -f {{ sources_dest }}/docker-compose.yml"
 
+container_engine: docker
+gateway_image: 'quay.io/ansible/jewel:devel'
+gateway_host_address: host-gateway
+gateway_services: ['hub','controller','eda']
+gateway_container_name: aap_gw_1
+
 enabled_containers:
   keycloak: "{{ keycloak_enabled | default(False) }}"
   ldap: "{{ ldap_enabled | default(False) }}"
