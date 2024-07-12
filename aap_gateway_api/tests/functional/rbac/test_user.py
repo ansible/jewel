@@ -3,6 +3,7 @@ from abc import abstractmethod
 
 import pytest
 from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+from ansible_base.rbac.policies import visible_users
 from django.urls import reverse
 
 from aap_gateway_api.models.user import User
@@ -590,6 +591,22 @@ class TestUserPlatformAuditorPermissions(TestUserPermissionsBase):
 
         for tested_user in tested_users:
             self._test_delete_one(user_api_client, tested_user, status_code=403)
+
+    def test_platform_auditor_auditor_assignment_permissions(self, user_api_client, user):
+        RoleDefinition.objects.managed.platform_auditor.give_global_permission(user)
+        other_user = User.objects.create(username='rando')
+        assert other_user in visible_users(user)  # sanity
+        url = reverse('roleuserassignment-list')
+        response = user_api_client.post(url, {'user': other_user.id, 'role_definition': RoleDefinition.objects.managed.platform_auditor.id}, format='json')
+        assert response.status_code == 403, response.data
+
+    def test_platform_auditor_auditor_removal_permissions(self, user_api_client, user):
+        RoleDefinition.objects.managed.platform_auditor.give_global_permission(user)
+        other_user = User.objects.create(username='rando')
+        assignment = RoleDefinition.objects.managed.platform_auditor.give_global_permission(other_user)
+        url = reverse('roleuserassignment-detail', kwargs={'pk': assignment.pk})
+        response = user_api_client.delete(url)
+        assert response.status_code == 403, response.data
 
 
 @pytest.mark.django_db
