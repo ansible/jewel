@@ -54,7 +54,7 @@ def test_xds_outlier_detection_params(admin_api_client, full_service_hierarchy_c
             "outlier_detection_interval_seconds": 200,
             "outlier_detection_base_ejection_time_seconds": 500,
             "outlier_detection_max_ejection_percent": 77,
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -88,7 +88,7 @@ def test_xds_health_check_params(admin_api_client, full_service_hierarchy_contro
             "health_check_timeout_seconds": 18,
             "health_check_unhealthy_threshold": 29,
             "health_check_healthy_threshold": 98,
-        }
+        },
     )
     assert response.status_code == 200
 
