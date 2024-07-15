@@ -1,6 +1,8 @@
 import logging
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.settings import is_aoc_instance
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
@@ -28,6 +30,9 @@ class SettingSingletonSerializer(serializers.Serializer):
         else:
             self.category_slug = category_slug
         super().__init__(None, *args, **kwargs)
+
+    def setting_is_cloud_readonly(self, setting_name: str) -> bool:
+        return is_aoc_instance() and setting_name in getattr(settings, 'AOC_UNCHANGEABLE_PREFERENCES', [])
 
     def get_fields(self) -> dict:
         # TODO: Maybe move this somewhere
@@ -60,6 +65,8 @@ class SettingSingletonSerializer(serializers.Serializer):
         fields = super().get_fields()
         for registered_preference in gateway_preference_registry.preferences(self.category_slug):
             constructor = preference_type_to_field_mapping.get(registered_preference.field_type, serializers.Field)
+            read_only = registered_preference.read_only or self.setting_is_cloud_readonly(registered_preference.name)
+
             fields[registered_preference.name] = constructor(
                 initial=get_preference_value_by_preference(registered_preference),
                 help_text=registered_preference.help_text,
@@ -67,7 +74,7 @@ class SettingSingletonSerializer(serializers.Serializer):
                 required=False,
                 default=registered_preference.default,
                 style={"base_template": "textarea.html"} if registered_preference.field_type in long_string_fields else None,
-                read_only=registered_preference.read_only,
+                read_only=read_only,
             )
             for field_name in ['max_value', 'min_value']:
                 if hasattr(registered_preference, field_name):
@@ -103,6 +110,10 @@ class SettingSingletonSerializer(serializers.Serializer):
                 errors[registered_preference.name] = _("Cannot change read-only setting %(registered_preference_name)s") % {
                     "registered_preference_name": registered_preference.name
                 }
+                continue
+
+            if current_value != new_value and self.setting_is_cloud_readonly(registered_preference.name):
+                errors[registered_preference.name] = _("Cannot be changed in AoC environment")
                 continue
 
             if current_value != new_value and new_value != ENCRYPTED_STRING:
