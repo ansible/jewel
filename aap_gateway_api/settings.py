@@ -23,6 +23,9 @@ from split_settings.tools import include, optional
 
 ALLOWED_HOSTS = ["*"]
 
+# This setting should not be overrideable
+AOC_UNCHANGEABLE_PREFERENCES = ['gateway_token_name']
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
