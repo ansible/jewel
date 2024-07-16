@@ -5,7 +5,6 @@ from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from crum import get_current_user
-from django.contrib.auth.hashers import is_password_usable
 from django.db.utils import IntegrityError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -14,9 +13,12 @@ from rest_framework.fields import empty
 from rest_framework.serializers import ValidationError
 
 from aap_gateway_api.models import User
+from aap_gateway_api.models.user import password_is_usable
 from aap_gateway_api.utils import get_preference_value
 
 logger = logging.getLogger('aap.gateway.serializer.user')
+
+PASSWORD_DISABLED = 'Password Disabled'  # signal unusable passwords
 
 
 class UserSerializer(CommonUserSerializer):
@@ -64,7 +66,7 @@ class UserSerializer(CommonUserSerializer):
     def validate_password(self, value: str) -> str:
         errors = []
         # Validate the password
-        if value and value != ENCRYPTED_STRING:
+        if value and value not in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
             user_instance = getattr(self, 'instance', None)
             if user_instance is not None:
                 if not can_user_change_password(user_instance):
@@ -189,8 +191,7 @@ class UserSerializer(CommonUserSerializer):
 
     def update(self, instance, validated_data):
         # We don't want the $encrypted$ password going back to the model
-        new_password = validated_data.get('password', None)
-        if new_password and new_password == ENCRYPTED_STRING:
+        if validated_data.get('password', "") in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
             validated_data.pop('password', None)
 
         # Remove the authenticators field since thats not a real field on the User model
@@ -221,12 +222,12 @@ class UserSerializer(CommonUserSerializer):
 
     def to_representation(self, obj):
         ret = super(UserSerializer, self).to_representation(obj)
-        if is_password_usable(ret['password']):
+        if password_is_usable(ret['password']):
             # If its an internal account lets assume there is a password and return a masked value to the user
             ret['password'] = ENCRYPTED_STRING
         else:
-            # User does not have a local password so pop this field
-            ret.pop('password', None)
+            # User does not have a local password, or password is unusable/ disabled
+            ret['password'] = PASSWORD_DISABLED
 
         # Get the users associated authenticator users
         authentications = AuthenticatorUser.objects.filter(user=obj)
