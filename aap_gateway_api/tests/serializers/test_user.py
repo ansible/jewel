@@ -9,7 +9,7 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 
 from aap_gateway_api.models import User
-from aap_gateway_api.serializers import UserSerializer
+from aap_gateway_api.serializers.user import PASSWORD_DISABLED, UserSerializer
 
 
 class TestUserSerializer:
@@ -38,15 +38,22 @@ class TestUserSerializer:
             assert response.status_code == 400
             assert error_substr in response.data['password'][0]
 
-    def test_password_constraints_password_is_encrypted_string(self, admin_api_client, user):
+    @pytest.mark.parametrize(
+        'password, expected_password_field',
+        [
+            ('', PASSWORD_DISABLED),
+            (None, ENCRYPTED_STRING),  # This case means password is not given
+            (' ', PASSWORD_DISABLED),
+            (ENCRYPTED_STRING, ENCRYPTED_STRING),
+            ('!ansible123', ENCRYPTED_STRING),
+        ],
+    )
+    def test_password_edge_cases(self, admin_api_client, user, password, expected_password_field):
         url = reverse('user-detail', kwargs={'pk': user.id})
-        response = admin_api_client.patch(url, {'password': ENCRYPTED_STRING})
+        payload = {'password': password} if password is not None else {}
+        response = admin_api_client.patch(url, payload)
         assert response.status_code == 200
-
-    def test_password_constraints_password_not_given(self, admin_api_client, user):
-        url = reverse('user-detail', kwargs={'pk': user.id})
-        response = admin_api_client.patch(url, {})
-        assert response.status_code == 200
+        assert response.json()['password'] == expected_password_field
 
     @pytest.mark.parametrize(
         'password, expected_status',
