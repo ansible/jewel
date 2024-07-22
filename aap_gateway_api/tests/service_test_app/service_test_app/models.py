@@ -1,11 +1,10 @@
-from ansible_base.lib.abstract_models import AbstractOrganization, AbstractTeam, CommonModel
+from ansible_base.lib.abstract_models import AbstractDABUser, AbstractOrganization, AbstractTeam, CommonModel
 from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
-from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
-class User(AbstractUser, CommonModel):
+class User(AbstractDABUser, CommonModel):
     resource = AnsibleResourceField(primary_key_field="id")
 
     def summary_fields(self):

@@ -2,12 +2,14 @@ import logging
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import CommonModel
+from ansible_base.lib.abstract_models.user import AbstractDABUser
 from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, UNUSABLE_PASSWORD_SUFFIX_LENGTH, get_hashers_by_algorithm, identify_hasher, make_password
-from django.contrib.auth.models import AbstractUser
 from django.db.models import BooleanField
 from django.utils.translation import gettext as _
+
+from aap_gateway_api.managers.user import UserUnmanagedManager
 
 logger = logging.getLogger('aap.gateway.models.user')
 
@@ -36,7 +38,7 @@ def password_is_usable(password):
     return password is None or not (password.startswith(UNUSABLE_PASSWORD_PREFIX) and len(password) == unusable_password_len)
 
 
-class User(AbstractUser, CommonModel, AuditableModel):
+class User(AbstractDABUser, CommonModel, AuditableModel):
     ignore_relations = [
         'groups',  # not using the auth app stuff, see Team model
         'user_permissions',  # not using auth app permissions
@@ -59,6 +61,9 @@ class User(AbstractUser, CommonModel, AuditableModel):
         default=False,
         help_text=_("Indicates if this user is managed by the system. It cannot be modified once created."),
     )
+
+    # By default, skip managed users (use all_objects for all users queryset)
+    objects = UserUnmanagedManager()
 
     def __init__(self, *args, is_platform_auditor=False, **kwargs):
         super().__init__(*args, **kwargs)
