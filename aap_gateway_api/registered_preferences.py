@@ -98,6 +98,16 @@ register(
 )
 
 register(
+    section="proxy",
+    preference_name="request_timeout",
+    default=30,
+    required=True,
+    preference_type="int",
+    help_text=_("Timeout (in seconds) before the proxy will report a timeout and generate a 504."),
+    encrypted=False,
+)
+
+register(
     section="local_login",
     preference_name="password_min_length",
     default=0,

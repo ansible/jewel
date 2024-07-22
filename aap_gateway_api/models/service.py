@@ -8,6 +8,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext as _
 
+from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.utils.resources_client import ServiceTypeChoices
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
 
@@ -255,7 +256,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     def get_xds_route_config(self):
         cfg = {
             "match": {"prefix": self.gateway_path},
-            "route": {"prefix_rewrite": self.service_path, "cluster": self.envoy_cluster_name},
+            "route": {
+                "prefix_rewrite": self.service_path,
+                "cluster": self.envoy_cluster_name,
+                "timeout": f"{get_preference_value('proxy', 'request_timeout')}s",
+            },
             "metadata": {},
             "typed_per_filter_config": {},
         }
