@@ -341,7 +341,7 @@ def simulated_eda_resource_api(patched_resource_client, service_api_route_eda):
 @pytest.fixture
 def system_user(db, settings, no_log_messages):
     with no_log_messages():
-        user_obj, _created = User.objects.get_or_create(username=settings.SYSTEM_USERNAME)
+        user_obj, _created = User.all_objects.get_or_create(username=settings.SYSTEM_USERNAME)
     yield user_obj
 
 

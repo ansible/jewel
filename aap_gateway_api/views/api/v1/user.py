@@ -27,6 +27,11 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
         qs = visible_users(self.request.user, queryset=qs)
         return super().filter_queryset(qs)
 
+    def get_queryset(self):
+        if self.detail:
+            return User.all_objects.select_related("resource").all()
+        return super().get_queryset()
+
     @action(detail=True, methods=["get"], url_name="authenticators-list")
     def authenticators(self, request, pk=None):
         # first, check if the current user has permission to view authenticators
