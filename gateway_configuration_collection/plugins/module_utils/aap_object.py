@@ -114,7 +114,7 @@ class AAPObject:
 
         self.init_tmp_file()
 
-        if type(msg) is dict:
+        if isinstance(msg, dict):
             msg = json.dumps(msg)
 
         if msg[-1] != '\n':

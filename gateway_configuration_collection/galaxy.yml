@@ -1,17 +1,15 @@
 ---
 namespace: ansible
-name: gateway_configuration
+name: platform
 description: A collection of roles to manage Ansible automation platform gateway
-version: 1.0.0
+version: 2.5.0
 readme: README.md
 authors:
-  - automation platform gateway project contributors <aap-project@googlegroups.com>  # TBD
+  - automation platform gateway <aap-project@googlegroups.com>  # TBD
   - Red Hat Contributor <@User>
-license:
-  - GPLv3
+license_file: COPYING
 tags:
   - gateway
-  - collection
   - gateway_configuration
   - automation_platform
   - infrastructure

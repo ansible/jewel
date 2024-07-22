@@ -11,3 +11,15 @@ plugins/modules/settings.py validate-modules:missing-gplv3-license # Licensed un
 plugins/modules/team.py validate-modules:missing-gplv3-license # Licensed under Apache 2.0
 plugins/modules/token.py validate-modules:missing-gplv3-license # Licensed under Apache 2.0
 plugins/modules/user.py validate-modules:missing-gplv3-license # Licensed under Apache 2.0
+plugins/modules/authenticator.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/authenticator_map.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/http_port.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/organization.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/route.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/service.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/service_cluster.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/service_node.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/settings.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/team.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/token.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use
+plugins/modules/user.py validate-modules:missing-module-utils-basic-import # imported in AAPModule which all modules use

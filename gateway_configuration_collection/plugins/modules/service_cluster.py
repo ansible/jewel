@@ -9,13 +9,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
-
 DOCUMENTATION = """
 ---
 module: service_cluster
@@ -69,25 +62,25 @@ options:
       description: The number of consecutive successful health checks before a node is considered healthy.
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 
 EXAMPLES = """
 - name: Add service cluster
-  ansible.gateway_configuration.service_cluster:
+  ansible.platform.service_cluster:
     name: Automation Controller
     service_type: controller
     state: present
 
 - name: Delete service cluster
-  ansible.gateway_configuration.service_cluster:
+  ansible.platform.service_cluster:
     name: Automation Controller
     state: absent
 
 - name: Check if cluster exists
-  ansible.gateway_configuration.service_cluster:
+  ansible.platform.service_cluster:
     name: Automation Controller
     state: exists
 ...

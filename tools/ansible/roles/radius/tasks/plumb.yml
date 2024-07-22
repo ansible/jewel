@@ -1,6 +1,6 @@
 ---
 - name: RADIUS authenticator
-  ansible.gateway_configuration.authenticator:
+  ansible.platform.authenticator:
     name: "{{ radius_authenticator_name }}"
     slug: "{{ radius_authenticator_name | replace(' ', '') | lower }}"
     enabled: True
@@ -10,7 +10,7 @@
     type: "ansible_base.authentication.authenticator_plugins.radius"    
 
 - name: RADIUS authenticator org map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ radius_auth_map_name }} - org"
     authenticator: "{{ radius_authenticator_name }}"
     map_type: "organization"

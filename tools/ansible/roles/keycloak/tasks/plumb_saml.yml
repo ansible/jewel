@@ -9,7 +9,7 @@
     private_key_content: "{{ lookup('file', private_key_file) | regex_replace('\n', '\\n') }}"
 
 - name: SAML authenticator
-  ansible.gateway_configuration.authenticator:
+  ansible.platform.authenticator:
     name: "{{ saml_adapter_name }}"
     slug: "{{ saml_adapter_name | replace(' ', '') | lower }}"
     enabled: True
@@ -19,7 +19,7 @@
     type: "ansible_base.authentication.authenticator_plugins.saml"    
 
 - name: SAML authenticator superuser attribute map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ saml_auth_map_name }} - superuser"
     authenticator: "{{ saml_adapter_name }}"
     map_type: "is_superuser"
@@ -27,7 +27,7 @@
     triggers: "{\"attributes\":{\"is_superuser\": {}, \"join_condition\": \"or\"}}"
 
 - name: SAML authenticator auditor attribute map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ saml_auth_map_name }} - auditor"
     authenticator: "{{ saml_adapter_name }}"
     map_type: "role"
@@ -36,7 +36,7 @@
     triggers: "{\"attributes\":{\"is_system_auditor\": {}, \"join_condition\": \"or\"}}"
 
 - name: SAML authenticator org map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ saml_auth_map_name }} - org"
     gateway_hostname: "{{ gateway_host }}"
     gateway_username: "{{ gateway_admin_username }}"

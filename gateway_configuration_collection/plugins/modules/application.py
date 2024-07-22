@@ -10,9 +10,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {'metadata_version': '0.1', 'status': ['preview'], 'supported_by': 'community'}
-
-
 DOCUMENTATION = '''
 ---
 module: application
@@ -73,7 +70,7 @@ options:
       description:
         - Desired state of the resource.
       default: "present"
-      choices: ["present", "absent", "exists"]
+      choices: ["present", "absent", "exists", "enforced"]
       type: str
     skip_authorization:
       description:
@@ -85,7 +82,7 @@ options:
       type: str
       required: False
 
-extends_documentation_fragment: ansible.gateway_configuration.auth
+extends_documentation_fragment: ansible.platform.auth
 '''
 
 
@@ -127,7 +124,7 @@ def main():
         client_type=dict(choices=['public', 'confidential']),
         redirect_uris=dict(type="list", elements='str'),
         skip_authorization=dict(type='bool'),
-        algorithm=dict(choices=["", "RSA256", "HS256"]),
+        algorithm=dict(choices=["", "RS256", "HS256"]),
         post_logout_redirect_uris=dict(type="list", elements="str"),
         user=dict(type="str"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),

@@ -52,7 +52,7 @@ options:
       default: "present"
       type: str
 extends_documentation_fragment:
-- ansible.gateway_configuration.auth
+- ansible.platform.auth
 '''
 
 

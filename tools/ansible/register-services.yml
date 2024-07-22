@@ -16,9 +16,9 @@
     retries: 10
     delay: 5
   roles:
-    - {role: ansible.gateway_configuration.http_ports, when: gateway_http_ports is defined}
-    - {role: ansible.gateway_configuration.service_clusters, when: gateway_service_clusters is defined}
-    - {role: ansible.gateway_configuration.service_nodes, when: gateway_service_nodes is defined}
-    - {role: ansible.gateway_configuration.services, when: gateway_services is defined}
-    - {role: ansible.gateway_configuration.routes, when: gateway_routes is defined}
+    - {role: http_ports, when: gateway_http_ports is defined}
+    - {role: service_clusters, when: gateway_service_clusters is defined}
+    - {role: service_nodes, when: gateway_service_nodes is defined}
+    - {role: services, when: gateway_services is defined}
+    - {role: routes, when: gateway_routes is defined}
 ...

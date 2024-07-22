@@ -132,7 +132,7 @@ class AAPModule(AnsibleModule):
         # Perform magic depending on whether ah_token is a string or a dict
         if self.params.get("gateway_token"):
             token_param = self.params.get("gateway_token")
-            if type(token_param) is dict:
+            if isinstance(token_param, dict):
                 if "token" in token_param:
                     self.oauth_token = self.params.get("gateway_token")["token"]
                 else:
@@ -569,7 +569,7 @@ class AAPModule(AnsibleModule):
                 return item["name"]
 
             for field_name in AAPModule.IDENTITY_FIELDS.values():
-                if type(field_name) is list:
+                if isinstance(field_name, list):
                     found = True
                     for sub_field_name in field_name:
                         if sub_field_name not in item:
@@ -613,7 +613,7 @@ class AAPModule(AnsibleModule):
     @staticmethod
     def get_name_field_from_endpoint(endpoint):
         unique = AAPModule.IDENTITY_FIELDS.get(endpoint)
-        if type(unique) is list:
+        if isinstance(unique, list):
             return unique[0]
 
         return unique or "name"

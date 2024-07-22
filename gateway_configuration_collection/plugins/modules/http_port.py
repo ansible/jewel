@@ -9,13 +9,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
-
 DOCUMENTATION = """
 ---
 module: http_port
@@ -48,14 +41,14 @@ options:
         - Only one can be set to True
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 
 EXAMPLES = """
 - name: Add API http port
-  ansible.gateway_configuration.http_port:
+  ansible.platform.http_port:
     name: "Port for APIs"
     number: 443
     use_https: true
@@ -63,12 +56,12 @@ EXAMPLES = """
     state: present
 
 - name: Remove API http port
-  ansible.gateway_configuration.http_port:
+  ansible.platform.http_port:
     name: "Port for APIs"
     state: absent
 
 - name: Update http port
-  ansible.gateway_configuration.http_port:
+  ansible.platform.http_port:
   name: "Port for APIs"
   number: 80
   use_https: false

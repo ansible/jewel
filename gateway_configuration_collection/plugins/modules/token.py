@@ -11,12 +11,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
 DOCUMENTATION = """
 ---
 module: aap_token
@@ -62,25 +56,25 @@ options:
       default: "present"
       type: str
 
-extends_documentation_fragment: ansible.gateway_configuration.auth
+extends_documentation_fragment: ansible.platform.auth
 """
 
 EXAMPLES = """
 - block:
     - name: Create a new token using an existing token
-      ansible.gateway_configuration.aap_token:
+      ansible.platform.aap_token:
         description: '{{ token_description }}'
         scope: "write"
         state: present
         aap_token: "{{ my_existing_token }}"
 
     - name: Delete this token
-      ansible.gateway_configuration.aap_token:
+      ansible.platform.aap_token:
         existing_token: "{{ aap_token }}"
         state: absent
 
     - name: Create a new token using username/password
-      ansible.gateway_configuration.aap_token:
+      ansible.platform.aap_token:
         description: '{{ token_description }}'
         scope: "write"
         state: present
@@ -94,13 +88,13 @@ EXAMPLES = """
 
   always:
     - name: Delete our Token with the token we created
-      ansible.gateway_configuration.aap_token:
+      ansible.platform.aap_token:
         existing_token: "{{ aap_token }}"
         state: absent
       when: token is defined
 
 - name: Delete a token by its id
-  ansible.gateway_configuration.aap_token:
+  ansible.platform.aap_token:
     existing_token_id: 4
     state: absent
 ...

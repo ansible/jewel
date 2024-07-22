@@ -4,13 +4,9 @@
 # Copyright: (c) 2024, Red Hat Contributor <@User>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
+from __future__ import absolute_import, division, print_function
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
+__metaclass__ = type
 
 DOCUMENTATION = """
 ---
@@ -37,6 +33,7 @@ options:
       - The name or ID of the Service Cluster
       type: str
     algorithm:
+      type: str
       description:
       - algorithm to use for this Service Key
       choices: ["HS256", "HS384", "HS512"]
@@ -55,11 +52,32 @@ options:
         - If true any other secret keys for this service will become inactive
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
-EXAMPLES = """"""
+EXAMPLES = """
+- name: Add service ckey
+  ansible.platform.service_key:
+    name: Automation Controller Service Key
+    is_active: true
+    service_cluster: Automation Controller
+    algorithm: HS256
+    secret: mysecret
+    secret_length: 32
+
+- name: Add new controller service key
+  ansible.platform.service_key:
+    name: Automation Controller Service Key
+    new_name: New Automation Controller Service Key
+    is_active: True
+    service_cluster: Automation Controller
+    algorithm: HS256
+    secret: mysecret1
+    secret_length: 32
+    mark_previous_inactive: true
+...
+"""
 
 from ..module_utils.aap_module import AAPModule  # noqa
 from ..module_utils.aap_service_key import AAPServiceKey  # noqa
@@ -72,7 +90,7 @@ def main():
         is_active=dict(type="bool"),
         service_cluster=dict(type="str"),
         algorithm=dict(type="str", choices=["HS256", "HS384", "HS512"]),
-        secret=dict(type="str"),
+        secret=dict(type="str", no_log=True),
         secret_length=dict(type="int"),
         mark_previous_inactive=dict(type="bool"),
         state=dict(type="str", choices=["present", "absent", "exists", "enforced"], default="present"),

@@ -9,12 +9,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
 DOCUMENTATION = """
 ---
 module: route
@@ -73,13 +67,13 @@ options:
       type: str
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
 - name: Create route
-  ansible.gateway_configuration_collection.route:
+  ansible.platform_collection.route:
   - name: Controller API
     description: Proxy to the Controller
     http_port: 1                                # ID of http_port
@@ -90,17 +84,17 @@ EXAMPLES = """
     service_port: 3000
 
 - name: Update route
-  ansible.gateway_configuration_collection.route:
+  ansible.platform_collection.route:
   - name: 1                                     # ID of route
     gateway_path: '/controller-config/'
 
 - name: Check route
-  ansible.gateway_configuration_collection.route:
+  ansible.platform_collection.route:
   - name: Controller API
     state: exists
 
 - name: Delete route
-  ansible.gateway_configuration_collection.route:
+  ansible.platform_collection.route:
   - name: Controller API
     state: absent
 ...
