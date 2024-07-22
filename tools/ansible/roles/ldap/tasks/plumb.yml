@@ -1,6 +1,6 @@
 ---
 - name: LDAP authenticator
-  ansible.gateway_configuration.authenticator:
+  ansible.platform.authenticator:
     name: "{{ ldap_container_name }}"
     slug: "{{ ldap_container_name | replace(' ', '') | lower }}"
     enabled: True
@@ -10,7 +10,7 @@
     type: "ansible_base.authentication.authenticator_plugins.ldap"
 
 - name: "LDAP authenticator group mappings"
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ ldap_auth_map_name }}-{{ item.ldap_group }}"
     authenticator: "{{ ldap_container_name }}"
     map_type: "{{ item.map_type }}"
@@ -22,7 +22,7 @@
   loop: "{{ ldap_group_mappings }}"
 
 - name: LDAP authenticator map - org admins
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ ldap_auth_map_name }}"
     authenticator: "{{ ldap_container_name }}"
     map_type: "team"
@@ -36,7 +36,7 @@
           - "cn=org_admins,ou=groups,dc=example,dc=org"
 
 - name: LDAP authenticator map - all users
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ ldap_auth_map_name }}"
     authenticator: "{{ ldap_container_name }}"
     map_type: "team"

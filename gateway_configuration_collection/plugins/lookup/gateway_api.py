@@ -60,7 +60,7 @@ options:
       - If a list view returns more an max_objects an exception will be raised
     type: integer
     default: 1000
-extends_documentation_fragment: ansible.gateway_configuration.auth_lookup
+extends_documentation_fragment: ansible.platform.auth_lookup
 notes:
   - If the query is not filtered properly this can cause a performance impact.
 """
@@ -68,21 +68,21 @@ notes:
 EXAMPLES = """
 - name: Load the UI settings
   set_fact:
-    ui_settings: "{{ lookup('ansible.gateway_configuration.gateway_api', 'settings/ui') }}"
+    ui_settings: "{{ lookup('ansible.platform.gateway_api', 'settings/ui') }}"
 
 - name: Load the UI settings specifying the connection info
   set_fact:
-    ui_settings: "{{ lookup('ansible.gateway_configuration.gateway_api', 'settings/ui', host='gateway.example.com',
+    ui_settings: "{{ lookup('ansible.platform.gateway_api', 'settings/ui', host='gateway.example.com',
                              username='admin', password=my_pass_var, verify_ssl=False) }}"
 
 - name: Report the usernames of all users with admin privs
   debug:
-    msg: "Admin users: {{ query('ansible.gateway_configuration.gateway_api', 'users', query_params={ 'is_superuser': true }) | map(attribute='username') | join(', ') }}"  # noqa
+    msg: "Admin users: {{ query('ansible.platform.gateway_api', 'users', query_params={ 'is_superuser': true }) | map(attribute='username') | join(', ') }}"  # noqa
 
 - name: debug all organizations in a loop  # use query to return a list
   debug:
     msg: "Organization description={{ item['description'] }} id={{ item['id'] }}"
-  loop: "{{ query('ansible.gateway_configuration.gateway_api', 'organizations') }}"
+  loop: "{{ query('ansible.platform.gateway_api', 'organizations') }}"
   loop_control:
     label: "{{ item['name'] }}"
 
@@ -91,7 +91,7 @@ EXAMPLES = """
     organization: Default
     role: admin
     user: john
-  when: "lookup('ansible.gateway_configuration.gateway_api', 'users', query_params={ 'username': 'john' }) | length == 1"
+  when: "lookup('ansible.platform.gateway_api', 'users', query_params={ 'username': 'john' }) | length == 1"
 
 - name: Create an inventory group with all 'foo' hosts
   group:
@@ -99,7 +99,7 @@ EXAMPLES = """
     inventory: "Demo Inventory"
     hosts: >-
       {{ query(
-           'ansible.gateway_configuration.gateway_api',
+           'ansible.platform.gateway_api',
             'hosts',
             query_params={ 'name__startswith' : 'foo', },
         ) | map(attribute='name') | list }}

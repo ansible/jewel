@@ -9,12 +9,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
 DOCUMENTATION = """
 ---
 module: organization
@@ -42,25 +36,25 @@ options:
       description: Setting this option will change the existing organization (looked up via the organization field)
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
 - name: Create Team
-  ansible.gateway_configuration.team:
+  ansible.platform.team:
   - name: Gateway Developers
     description: AAP Gateway Developers Team
     organization: Ansible Product Development
 
 - name: Update Team
-  ansible.gateway_configuration.team:
+  ansible.platform.team:
   - name: Gateway Developers
     organization: "1"
     new_organization: "Red Hat Ansible"
 
 - name: Delete Team
-  ansible.gateway_configuration.team:
+  ansible.platform.team:
   - name: Gateway Developers
     organization: "Red Hat Ansible"
     state: absent

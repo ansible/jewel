@@ -9,15 +9,10 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
 DOCUMENTATION = """
 ---
 module: authenticator_map
-author: Red Hat
+author: Red Hat (@RedHatOfficial)
 short_description: Configure a gateway authenticator maps.
 description:
     - Configure an automation platform gateway authenticator maps.
@@ -75,8 +70,8 @@ options:
       - Value must be greater or equal to 0
       - Defaults to 0 (by API)
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
@@ -92,8 +87,8 @@ def main():
         new_name=dict(type="str"),
         authenticator=dict(type="str", required=True),
         new_authenticator=dict(type="str"),
-        revoke=dict(type="bool"),
-        map_type=dict(type="str", choices=["allow", "is_superuser", "team", "organization", "role"]),
+        revoke=dict(type="bool", default=False),
+        map_type=dict(type="str", choices=["allow", "is_superuser", "team", "organization", "role"], default="team"),
         team=dict(type="str"),
         role=dict(type="str"),
         organization=dict(type="str"),

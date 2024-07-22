@@ -5,7 +5,7 @@
   hosts: localhost
   gather_facts: False
   module_defaults:
-    group/ansible.gateway_configuration.gateway:
+    group/ansible.platform.gateway:
       gateway_hostname: "{{ gateway_host }}"
       gateway_username: "{{ gateway_admin_username }}"
       gateway_password: "{{ gateway_admin_password }}"

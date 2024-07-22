@@ -10,13 +10,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
-
 DOCUMENTATION = """
 ---
 module: user
@@ -71,14 +64,14 @@ options:
       type: str
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 
 EXAMPLES = """
 - name: Add user
-  ansible.gateway_configuration.user:
+  ansible.platform.user:
     username: jdoe
     password: foobarbaz
     email: jdoe@example.org
@@ -87,7 +80,7 @@ EXAMPLES = """
     state: present
 
 - name: Add user as a system administrator
-  ansible.gateway_configuration.user:
+  ansible.platform.user:
     username: jdoe
     password: foobarbaz
     email: jdoe@example.org
@@ -95,7 +88,7 @@ EXAMPLES = """
     state: present
 
 - name: Delete user
-  ansible.gateway_configuration.user:
+  ansible.platform.user:
     username: jdoe
     email: jdoe@example.org
     state: absent

@@ -10,16 +10,10 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
 DOCUMENTATION = """
 ---
 module: organization
-author: Red Hat
+author: Red Hat (@RedHatOfficial)
 short_description: Configure a gateway organization.
 description:
     - Configure an automation platform gateway organizations.
@@ -35,28 +29,28 @@ options:
       description: The description of the Organization
       type: str
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
 - name: Create Organization
-  ansible.gateway_configuration.organization:
+  ansible.platform.organization:
   - name: Ansible Product Development
     description: Organization for ansible developers
 
 - name: Update Organization
-  ansible.gateway_configuration.organization:
+  ansible.platform.organization:
   - name: Ansible Product Development
 
 - name: Delete Organization
-  ansible.gateway_configuration.organization:
+  ansible.platform.organization:
   - name: Ansible Product Development
     state: absent
 """
 
-from ..module_utils.aap_module import AAPModule  # noqa
-from ..module_utils.aap_organization import AAPOrganization  # noqa
+from ..module_utils.aap_module import AAPModule
+from ..module_utils.aap_organization import AAPOrganization
 
 
 def main():

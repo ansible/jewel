@@ -1,6 +1,6 @@
 ---
 - name: OIDC authenticator
-  ansible.gateway_configuration.authenticator:
+  ansible.platform.authenticator:
     name: "{{ oidc_adapter_name }}"
     slug: "{{ oidc_adapter_name | replace(' ', '') | lower }}"
     enabled: True
@@ -10,7 +10,7 @@
     type: "ansible_base.authentication.authenticator_plugins.keycloak"
 
 - name: OIDC authenticator superuser attribute map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ oidc_auth_map_name }} - superuser"
     authenticator: "{{ oidc_adapter_name }}"
     map_type: "is_superuser"
@@ -18,7 +18,7 @@
     triggers: "{\"attributes\":{\"is_superuser\": {}, \"join_condition\": \"or\"}}"
 
 - name: OIDC authenticator auditor attribute map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ oidc_auth_map_name }} - auditor"
     authenticator: "{{ oidc_adapter_name }}"
     map_type: "role"
@@ -27,7 +27,7 @@
     triggers: "{\"attributes\":{\"is_system_auditor\": {}, \"join_condition\": \"or\"}}"
 
 - name: OIDC authenticator org map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ oidc_auth_map_name }} - org"
     authenticator: "{{ oidc_adapter_name }}"
     map_type: "organization"

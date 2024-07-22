@@ -48,7 +48,7 @@ options:
       type: str
       description:
       - The type of authentication service this is
-      - Can be one of the modules: 'ansible_base.authentication.authenticator_plugins.*'
+      - Can be one of the modules - 'ansible_base.authentication.authenticator_plugins.*'
       - https://github.com/ansible/django-ansible-base/tree/devel/ansible_base/authentication/authenticator_plugins
     configuration:
       type: dict
@@ -68,16 +68,16 @@ options:
         - For this to work, the field used for the user ID on both authenticators needs to have the same value.
         - This should only be used when migrating users between two authentication mechanisms that share the same user database.
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
 """
 
 
-from ..module_utils.aap_authenticator import AAPAuthenticator  # noqa
-from ..module_utils.aap_module import AAPModule  # noqa
+from ..module_utils.aap_authenticator import AAPAuthenticator
+from ..module_utils.aap_module import AAPModule
 
 
 def main():
@@ -87,9 +87,9 @@ def main():
         slug=dict(type="str"),
         enabled=dict(type="bool"),
         create_objects=dict(type="bool"),
-        remove_users=dict(type="bool"),
+        remove_users=dict(type="bool", default=True),
         type=dict(type="str"),
-        configuration=dict(type="dict", no_log=True),  # can contain secrets
+        configuration=dict(type="dict", default={}, no_log=True),  # can contain secrets
         order=dict(type="int"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
         auto_migrate_users_to=dict(type="str"),

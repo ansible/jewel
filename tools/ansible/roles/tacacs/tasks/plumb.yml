@@ -1,6 +1,6 @@
 ---
 - name: TACACS authenticator
-  ansible.gateway_configuration.authenticator:
+  ansible.platform.authenticator:
     name: "{{ tacacs_container_name }}"
     slug: "{{ tacacs_container_name | replace(' ', '') | lower }}"
     enabled: True
@@ -10,7 +10,7 @@
     type: "ansible_base.authentication.authenticator_plugins.tacacs"    
 
 - name: TACACS authenticator org map
-  ansible.gateway_configuration.authenticator_map:
+  ansible.platform.authenticator_map:
     name: "{{ tacacs_auth_map_name }} - org"
     authenticator: "{{ tacacs_container_name }}"
     map_type: "organization"

@@ -220,7 +220,7 @@ for root, dirs, files in os.walk(module_directory):
                 try:
                     documentation = yaml.load(resource_module.DOCUMENTATION, Loader=yaml.SafeLoader)
                     option_comparison[module_name]['module_options'] = documentation.get('options', {})
-                    if 'ansible.gateway_configuration.auth' in documentation.get('extends_documentation_fragment', []):
+                    if 'ansible.platform.auth' in documentation.get('extends_documentation_fragment', []):
                         needs_grouping.append(module_name)
 
                 except yaml.parser.ParserError as e:

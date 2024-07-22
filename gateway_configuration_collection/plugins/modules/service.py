@@ -8,12 +8,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
 DOCUMENTATION = """
 ---
 module: service
@@ -78,13 +72,13 @@ options:
       type: int
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
 - name: Create service
-  ansible.gateway_configuration.service:
+  ansible.platform.service:
   - name: Hub API
     description: Proxy to the Automation Hub
     api_slug: "hub"
@@ -96,17 +90,17 @@ EXAMPLES = """
     order: 100
 
 - name: Update service
-  ansible.gateway_configuration.service:
+  ansible.platform.service:
   - name: Hub API
     service_path: '/api/v2/'
 
 - name: Check service
-  ansible.gateway_configuration.service:
+  ansible.platform.service:
   - name: Gateway API
     state: exists
 
 - name: Delete service
-  ansible.gateway_configuration.service:
+  ansible.platform.service:
   - name: Gateway API
     state: absent
 ...

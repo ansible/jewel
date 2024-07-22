@@ -9,13 +9,6 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 
-ANSIBLE_METADATA = {
-    "metadata_version": "0.0.1",
-    "status": ["preview"],
-    "supported_by": "community",
-}
-
-
 DOCUMENTATION = """
 ---
 module: service_node
@@ -49,25 +42,25 @@ options:
       type: str
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.state
-- ansible.gateway_configuration.auth
+- ansible.platform.state
+- ansible.platform.auth
 """
 
 EXAMPLES = """
 - name: Create service node
-  ansible.gateway_configuration.service_node:
+  ansible.platform.service_node:
     name: "Controller - Node 1"
     address: 10.0.0.1
     service_cluster: controller
 
 - name: Delete service node
-  ansible.gateway_configuration.service_node:
+  ansible.platform.service_node:
     name: "Controller - Node 2"
     state: absent
     name: 3  # ID can be used
 
 - name: Update service node's cluster
-  ansible.gateway_configuration.service_node:
+  ansible.platform.service_node:
     name: "Controller - Node 1"
     address: 10.0.0.1
     service_cluster: 2 # service cluster's name or ID
