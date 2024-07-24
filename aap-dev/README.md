@@ -13,8 +13,28 @@ From the `aap-dev` directory.
 https://localhost/ `admin` / `admin`
 https://localhost/api/controller/v2/me/  <-- After logging in via the gateway this should work
 https://localhost:8043/ <-- awx
+http://localhost:8010/api/eda/ <-- eda
 
 `make dev-down` to bring it all down
+
+#### Bring Your Own Checkouts
+
+By default, this will create new clones in the aap-gateway `services/` directory.
+To use existing AWX and eda-server clones, customize the command like this:
+
+```
+EDA_REPO=~/repos/eda-server AWX_REPO=~/repos/awx COMPOSE_TAG=devel make dev-up
+```
+
+It is important you do not include a trailing slash (`/`) for the locations.
+The `COMPOSE_TAG` in AWX defaults to your current branch, so exclude this if that is what you want.
+
+Running this will create a new file in your eda-server directory, to ignore that,
+in your eda-server directory add it to the local exclude file.
+
+```
+echo src/aap_eda/settings/dev_hacked_settings.py > .git/info/exclude
+```
 
 ### How to check if rootless docker
 

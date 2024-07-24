@@ -36,6 +36,12 @@ docker build --file platform/Dockerfile --target platform-ui --tag platform-ui .
 docker image tag platform-ui:latest quay.io/ansible/platform-ui:latest
 ```
 
+Then in aap-gateway you will have to create the file to keep it from trying to build.
+
+```
+touch tools/generated/.has_built_ui
+```
+
 These steps will be subject to change later.
 
 ### Main installation

@@ -3,6 +3,7 @@
 # this is service-specific, so first CLI argument is the service identifier
 import subprocess
 import sys
+import os
 
 service_options = ('controller', 'eda')
 
@@ -28,4 +29,12 @@ if '_' in key:
         key = sub_part
         break
 
-print(key)
+settings_path = os.path.join(os.path.dirname(__file__), f'{service}_settings_template.py')
+
+with open(settings_path, 'r') as f:
+    settings_content = f.read()
+
+
+new_settings = settings_content.replace('# GATEWAY_SERVICE_SECRET', f'GATEWAY_SERVICE_SECRET = r"{key}"')
+
+print(new_settings)
