@@ -160,6 +160,11 @@ def organization_factory():
 
 
 @pytest.fixture
+def http_port(http_port_factory):
+    yield http_port_factory()
+
+
+@pytest.fixture
 def http_port_factory():
     port = None
 
