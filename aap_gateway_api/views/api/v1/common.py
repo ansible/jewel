@@ -9,10 +9,16 @@ from django.db import transaction
 from rest_framework import viewsets
 
 from aap_gateway_api.utils.resources_client import AllServicesClient, ResourceRequestBody
+from aap_gateway_api.utils.views.permissions import DisallowWriteFromProxy
 
 
 class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
+
+
+class ProxyUnsafeGatewayModelViewSet(GatewayModelViewSet):
+    "Use for models that should reject PUT and DELETE requests coming from proxy"
+    permission_classes = [DisallowWriteFromProxy & perm_class for perm_class in GatewayModelViewSet.permission_classes]
 
 
 class RoleModelViewSet(GatewayModelViewSet):

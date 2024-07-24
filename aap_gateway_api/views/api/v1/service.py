@@ -6,10 +6,10 @@ from aap_gateway_api.serializers import (
     ServiceClusterSerializer,
     ServiceNodeSerializer,
 )
-from aap_gateway_api.views.api.v1.common import GatewayModelViewSet
+from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ProxyUnsafeGatewayModelViewSet
 
 
-class ServiceAPIRouteViewSet(GatewayModelViewSet):
+class ServiceAPIRouteViewSet(ProxyUnsafeGatewayModelViewSet):
     """
     API endpoint that allows groups to be viewed or edited.
     """
@@ -18,7 +18,7 @@ class ServiceAPIRouteViewSet(GatewayModelViewSet):
     serializer_class = ServiceAPIRouteSerializer
 
 
-class ServiceNodeViewSet(GatewayModelViewSet):
+class ServiceNodeViewSet(ProxyUnsafeGatewayModelViewSet):
     """
     API endpoint that allows groups to be viewed or edited.
     """
@@ -27,7 +27,7 @@ class ServiceNodeViewSet(GatewayModelViewSet):
     serializer_class = ServiceNodeSerializer
 
 
-class HTTPPortViewSet(GatewayModelViewSet):
+class HTTPPortViewSet(ProxyUnsafeGatewayModelViewSet):
     """
     API endpoint that allows groups to be viewed or edited.
     """
@@ -36,7 +36,7 @@ class HTTPPortViewSet(GatewayModelViewSet):
     serializer_class = HTTPPortSerializer
 
 
-class ServiceClusterViewSet(GatewayModelViewSet):
+class ServiceClusterViewSet(ProxyUnsafeGatewayModelViewSet):
     """
     API endpoint that allows groups to be viewed or edited.
     """
