@@ -1,6 +1,8 @@
+import json
 import logging
 import time
 import uuid
+from io import BytesIO
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
@@ -10,10 +12,13 @@ from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError, connections
 from django.http import HttpRequest, parse_cookie
+from django.views.csrf import csrf_failure
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
 from envoy.service.auth.v3 import attribute_context_pb2, external_auth_pb2, external_auth_pb2_grpc
+from envoy.type.v3 import http_status_pb2
+from google.rpc import status_pb2
 from psycopg import OperationalError
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import APIException, AuthenticationFailed, PermissionDenied
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
@@ -28,19 +33,28 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
     d_request = HttpRequest()
     d_request.method = request.method
     d_request.path = request.path
+
+    # Set up stream for request body parsing
+    d_request._stream = BytesIO(request.raw_body)
+    d_request._read_started = False
+
     d_request.COOKIES = parse_cookie(request.headers.get("cookie", ""))
 
-    d_request.META = {**{"HTTP_" + k.upper(): v for k, v in request.headers.items()}, "QUERY_STRING": request.query}
+    d_request.META = {**{"HTTP_" + k.upper().replace("-", "_"): v for k, v in request.headers.items()}, "QUERY_STRING": request.query}
 
     d_request.META["SERVER_NAME"] = request.host
+    d_request.META.pop("HTTP_ORIGIN", None)  # Force Referer checking for CSRF
+    # Needed because body parser will break if called HTTP_CONTENT_LENGTH
+    d_request.META["CONTENT_LENGTH"] = d_request.META.pop("HTTP_CONTENT_LENGTH", 0)
 
     for middleware in MIDDLEWARE:
         middleware(lambda x: x).process_request(d_request)
 
-    req = DRFRequest(d_request, authenticators=[x() for x in api_settings.DEFAULT_AUTHENTICATION_CLASSES])
+    # set parsers, in case we are parsing a POST request and need to get csrf tokens from it
+    parsers = [parser_class() for parser_class in api_settings.DEFAULT_PARSER_CLASSES]
 
-    # Turn off CSRF enforcement
-    req._dont_enforce_csrf_checks = True
+    req = DRFRequest(d_request, parsers=parsers, authenticators=[x() for x in api_settings.DEFAULT_AUTHENTICATION_CLASSES])
+
     return req
 
 
@@ -81,6 +95,25 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         # not to accept the request is up to the service.
         self._log_process_time()
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
+
+    def _return_bad_csrf(self, request, error: APIException):
+        reason = str(error.detail)
+        logger.error(f"CSRF verification failure for {self.request_id} - {reason}")
+
+        if "application/json" == request.content_type:
+            body = json.dumps(dict(details=reason))
+            content_type = "application/json"
+        else:
+            body = csrf_failure(request, reason).content
+            content_type = "text/html"
+
+        # strip trusted proxy header, client makes no use of it.
+        self.headers = [HeaderValueOption(header=HeaderValue(key='content-type', value=content_type))]
+
+        response = external_auth_pb2.DeniedHttpResponse(status=http_status_pb2.HttpStatus(code=403), headers=self.headers, body=body)
+        status = status_pb2.Status(code=7, message=str(error.detail))
+
+        return external_auth_pb2.CheckResponse(status=status, denied_response=response)
 
     def _handle_db_error(self, e):
         logger.warning(f"Database error. We think it's a connection error. Resetting the connection so it can be tried again. ({self.request_id})")
@@ -152,6 +185,8 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
         except (DatabaseError, OperationalError) as e:
             self._handle_db_error(e)
+        except PermissionDenied as e:
+            return self._return_bad_csrf(drf_request, e)
         except Exception as e:
             # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
             logger.exception(e)

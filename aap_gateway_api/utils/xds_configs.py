@@ -21,6 +21,11 @@ def external_auth_filter():
                 "timeout": settings.GRPC_SERVER_AUTH_SERVICE_TIMEOUT,
             },
             "transport_api_version": "V3",
+            "with_request_body": {
+                "max_request_bytes": 20970000,
+                "allow_partial_message": False,
+                "pack_as_bytes": True,
+            },
             "status_on_error": {"code": "BadGateway"},
         },
     }
