@@ -3,12 +3,13 @@ from collections import OrderedDict
 
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from requests.exceptions import HTTPError
 
-from aap_gateway_api.models.service import ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
@@ -51,12 +52,22 @@ class Command(BaseCommand):
             ),
             default=False,
         )
+        parser.add_argument(
+            "--merge-users",
+            type=bool,
+            help=("If true, users with the same usernames on different services will be combined."),
+            default=True,
+        )
 
     def handle(self, *args, **options):
         self.service_slug = options["api_slug"]
         merge_teams = options["merge_teams"]
         merge_organizations = options["merge_organizations"]
+        merge_users = options["merge_users"]
         username = options["username"]
+
+        if merge_users is False:
+            raise CommandError('Running without merging users is unsupported for now.')
 
         # The order here matters. Organizations need to be migrated first.
         self.resource_types_to_migrate = OrderedDict()
@@ -74,6 +85,13 @@ class Command(BaseCommand):
             "unique_fields": [
                 "name",
                 "organization",
+            ],
+        }
+        self.resource_types_to_migrate["shared.user"] = {
+            "merge": merge_users,
+            "type": ResourceType.objects.get(name="shared.user"),
+            "unique_fields": [
+                "username",
             ],
         }
 
@@ -129,12 +147,13 @@ class Command(BaseCommand):
         original_name = f'{self.service_slug}:{name}'
         name = original_name
 
-        filter_kwargs = {resource_type_name_field: name, **unique_filter_kwargs}
+        filter_kwargs = unique_filter_kwargs.copy()
+        filter_kwargs[resource_type_name_field] = name
 
         counter = 1
-        while not LocalResourceModel.objects.filter(**filter_kwargs):
+        while LocalResourceModel.objects.filter(**filter_kwargs).exists():
             name = original_name + str(counter)
-            filter_kwargs["name"] = name
+            filter_kwargs[resource_type_name_field] = name
             counter += 1
 
         return name
@@ -162,9 +181,14 @@ class Command(BaseCommand):
         while True:
             data = self.client.list_resources(filters=api_call_filters).json()
             self.stdout.write(f"Items remaining: {data['count']}")
-            if data["count"] == 0:
+            results = data['results']
+            # As special case exclude the system user, since Gateway excludes this in its own resources
+            if resource_type_name == 'shared.user':
+                results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
+            if len(results) == 0:
                 break
-            for resource_list in data["results"]:
+
+            for resource_list in results:
                 resource_type_name = resource_list["resource_type"]
                 resource_ansible_id = resource_list["ansible_id"]
 
@@ -210,6 +234,17 @@ class Command(BaseCommand):
                 create_gateway_resource = True
 
                 if existing_resource:
+                    if str(existing_resource.ansible_id) == resource_ansible_id:
+                        # NOTE: the JWT auth classes create some items with correct ansible_id
+                        # but without the service_id fully set, so this will reconcile those cases
+                        create_gateway_resource = False
+                        updated_service_resource["ansible_id"] = existing_resource.ansible_id
+                        local_data = resource_type.serializer_class(existing_resource.content_object).data
+                        if resource.get("resource_data", {}) == local_data:
+                            logger.info(f"Correcting service_id of {resource_type} with name {resource['name']}.")
+                        else:
+                            updated_service_resource["resource_data"] = local_data
+                            logger.warn(f"Updating already-merged {resource_type} with name {resource['name']}.")
                     if merge:
                         # Set upstream metadata and ansible_id to be same as gateway's
                         # Don't update anything on the gateway
@@ -220,10 +255,10 @@ class Command(BaseCommand):
                     else:
                         # Change the name of the resource and update it on the upstream service
                         # Create a new resource in the Gateway with the updated name
-                        resource["resource_data"][resource_type_name_field] = self.get_new_resource_name(
-                            resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field
-                        )
+                        new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field)
+                        resource["resource_data"][resource_type_name_field] = new_name
                         updated_service_resource["resource_data"] = resource["resource_data"]
+                        logger.warn(f"Creating new {resource_type} with new name {resource['name']}.")
 
                 # Run this as a transaction so that if the REST call to update the resource on the service fails
                 # we also rollback any database changes that were made on the Gateway.

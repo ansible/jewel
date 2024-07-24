@@ -3,7 +3,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
 
-from aap_gateway_api.models import Organization, Team
+from aap_gateway_api.models import Organization, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 
@@ -26,6 +26,15 @@ def migration_service(patched_resource_client, service_api_route_controller):
     proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture="migration_tests")
     yield service_api_route_controller
     proc.kill()
+    stdout, stderr = proc.communicate()
+    if stdout:
+        print('')
+        print('AWX standard out:')
+        print(str(stdout, encoding='utf-8'))
+    if stderr:
+        print('')
+        print('AWX standard err:')
+        print(str(stderr, encoding='utf-8'))
 
 
 def _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client):
@@ -97,7 +106,11 @@ def test_migrate_merge_orgs(
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
     call_command(
-        "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=True
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=False,
+        merge_organizations=True,  # , merge_users=False
     )
 
     _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
@@ -128,3 +141,83 @@ def test_migrate_merge_orgs_and_teams(
 
     assert Team.objects.filter(organization=conflicting_org, name=conflicting_team.name).exists()
     assert not Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + ":" + conflicting_team.name).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skip(reason='Running without migrating users not supported yet')
+def test_migrate_conflicting_user(migration_service, admin_user, service_api_route_controller, admin_api_client, patched_resource_client):
+    # Check that users do not exist yet
+    assert not User.objects.filter(username="natasha").exists()
+    assert not User.objects.filter(username="hawkeye").exists()
+
+    # Create a conflict
+    User.objects.create(username="hawkeye")
+
+    service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
+
+    call_command(
+        "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=True, merge_organizations=True
+    )
+
+    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
+
+    # Check that users were migrated, they were created in the migration_tests script
+    assert User.objects.filter(username="natasha").exists()
+    assert User.objects.filter(username="hawkeye").exists()
+    assert User.objects.filter(username=f'{service_client.service.api_slug}:hawkeye').exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_merge_users(migration_service, admin_user, service_api_route_controller, admin_api_client, patched_resource_client):
+    # Create a conflict
+    u = User.objects.create(username="hawkeye", email="hawkeye@secretbase.invalid")
+
+    service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
+    call_command(
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=True,
+        merge_organizations=True,
+        merge_users=True,
+    )
+    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
+
+    # Check that users were migrated, they were created in the migration_tests script
+    assert User.objects.filter(username="hawkeye").exists()
+    assert not User.objects.filter(username=f'{service_client.service.api_slug}:hawkeye').exists()
+    updated_resource = service_client.get_resource(str(u.resource.ansible_id)).json()
+    assert updated_resource
+    updated_user = updated_resource['resource_data']
+    assert updated_user.get('username') == 'hawkeye', updated_user
+    assert updated_user.get('email') == 'hawkeye@secretbase.invalid', updated_user
+
+
+@pytest.fixture
+def cmd(patched_resource_client):
+    # By using patched_resource_client fixture before importing this, the mock should remain active
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    cmd = MigrateCommand()
+    cmd.service_slug = 'controller'
+    return cmd
+
+
+@pytest.mark.django_db
+def test_use_given_name_first_found(cmd):
+    # assert that the first argument takes precedence when the name-like field is given in unique fields
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser'
+
+    # If user bob exists that should not affect the result
+    User.objects.create(username='bob')
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser'
+
+
+@pytest.mark.django_db
+def test_use_given_name_iteration(cmd):
+    User.objects.create(username='controller:foouser')
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser1'
+
+    User.objects.create(username='controller:foouser1')
+    User.objects.create(username='controller:foouser2')
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser3'
