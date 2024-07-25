@@ -1,7 +1,26 @@
+from unittest.mock import patch
+
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import Organization, ServiceAPIRoute, Team, User
+from aap_gateway_api.utils.resources_client import AllServicesClient
+
+
+class PatchedAllServicesClient(AllServicesClient):
+    """
+    Patches the resources client so that traffic is routed directly to the test service,
+    rather than through envoy (which isn't available.)
+    """
+
+    def get_url_for_service(self, service):
+        return f"http://localhost:{service.service_port}/api/v1/service-index/"
+
+
+@pytest.fixture
+def patched_all_services_resource_client():
+    with patch("aap_gateway_api.views.api.v1.common.AllServicesClient", PatchedAllServicesClient) as client:
+        yield client
 
 
 def _assert_resource_identical(resource, patched_client, admin_user):
@@ -34,6 +53,7 @@ def test_organizations_are_updated(
     admin_user,
     admin_api_client,
     patched_resource_client,
+    patched_all_services_resource_client,
 ):
     org_name = "My test org"
     url = get_relative_url("organization-list")
@@ -65,6 +85,7 @@ def test_users_are_updated(
     admin_user,
     admin_api_client,
     patched_resource_client,
+    patched_all_services_resource_client,
 ):
     username = "my_username"
 
@@ -97,6 +118,7 @@ def test_teams_are_updated(
     admin_user,
     admin_api_client,
     patched_resource_client,
+    patched_all_services_resource_client,
 ):
     url = get_relative_url("organization-list")
     response = admin_api_client.post(url, data={"name": "my_org_name"})
