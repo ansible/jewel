@@ -3,6 +3,10 @@
 import os
 import sys
 
+from aap_gateway_api.version import get_api_version
+
+__version__ = get_api_version()
+
 
 def manage():
     """Run administrative tasks."""
