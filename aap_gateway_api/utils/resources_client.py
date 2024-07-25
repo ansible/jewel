@@ -7,6 +7,7 @@ from ansible_base.resource_registry.rest_client import ResourceAPIClient as DABR
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
+from requests.exceptions import ReadTimeout
 from requests.models import Response as Response
 
 from aap_gateway_api.utils.jwt_token import create_signed_jwt
@@ -90,6 +91,12 @@ class AllServicesClient(GWResourceAPIClient):
         responses = {}
         for service in ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceTypeChoices.GATEWAY):
             self.base_url = self.get_url_for_service(service)
-            responses[service.pk] = super()._make_request(method, path, data, params)
+            if self.wait_for_response:
+                responses[service.pk] = super()._make_request(method, path, data, params)
+            else:
+                try:
+                    responses[service.pk] = super()._make_request(method, path, data, params)
+                except ReadTimeout:
+                    responses[service.pk] = None
 
         return responses
