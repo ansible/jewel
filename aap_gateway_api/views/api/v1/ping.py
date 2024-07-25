@@ -7,6 +7,7 @@ from django.db.utils import OperationalError
 from rest_framework.response import Response
 
 from aap_gateway_api.utils import get_preference_value
+from aap_gateway_api.version import get_aap_version
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
 
@@ -16,6 +17,7 @@ class PingView(AnsibleBaseView):
     def get(self, request):
         current_time = datetime.now()
         response = {
+            "version": get_aap_version(),
             "pong": str(current_time),
             "status": "good",
         }

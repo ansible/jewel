@@ -29,6 +29,7 @@ dependencies = { file = [
   "requirements/requirements.in",
   "requirements/requirements_git.txt",
 ] }
+version = { attr = "aap_gateway_api.__version__" }
 
 
 [tool.setuptools.packages.find]
@@ -65,7 +66,7 @@ extend_skip = ["aap_gateway_api/migrations", "django-ansible-base", "aap-dev", "
 [tool.flake8]
 max-line-length = 160
 extend-ignore = ["E203"]
-exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base', 'aap-dev/*']
+exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base', 'aap-dev/*', 'services/*']
 # E402: module level import not at top of file. Ansible modules follow a
 # somewhat different convention here because DOCUMENTATION, EXAMPLES, and
 # RETRUN module variables contain documentation.

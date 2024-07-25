@@ -1,5 +1,7 @@
 from ansible_base.lib.utils.response import get_relative_url
 
+from aap_gateway_api.version import get_aap_version
+
 
 def test_ping(unauthenticated_api_client):
     url = get_relative_url("ping-view")
@@ -7,3 +9,5 @@ def test_ping(unauthenticated_api_client):
     assert response.status_code == 200
     assert "pong" in response.data
     assert response.data["pong"] is not None
+
+    assert response.data["version"] == get_aap_version()

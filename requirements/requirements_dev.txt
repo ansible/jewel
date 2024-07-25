@@ -7,5 +7,6 @@ logutils
 psycopg[binary]
 requests
 setuptools # Needed for the plumbing of the side cars
+setuptools_scm # Needed for proper version string on /api/gateway/v1/ping
 docker     # Needed for the plumbing of the side cars via Ansible
 PyYAML     # Collection tests
