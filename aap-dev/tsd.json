@@ -18,6 +18,11 @@
                 "url": "https://localhost/",
                 "admin_user": "admin",
                 "admin_password": "admin"
+            },
+            "automationedacontroller": {
+                "url": "https://localhost:8010/",
+                "admin_user": "admin",
+                "admin_password": "admin"
             }
         }
     }
