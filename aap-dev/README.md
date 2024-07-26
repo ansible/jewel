@@ -6,16 +6,22 @@
 * dnf install go-task openssl
 
 ### Quick Start
-From the `aap-dev` directory.
+From the `aap-dev` directory, run:
 
-`make dev-up`
+```
+make dev-up
+```
 
-https://localhost/ `admin` / `admin`
-https://localhost/api/controller/v2/me/  <-- After logging in via the gateway this should work
-https://localhost:8043/ <-- awx
-http://localhost:8010/api/eda/ <-- eda
+Services will be available at the following URLs:
+```
+https://localhost/                                  - Platform UI - admin/admin
+https://localhost/api/controller/v2/                - AWX API (through Gateway proxy)
+https://localhost/api/eda/v1/                       - EDA API (through Gateway proxy)
+http://localhost:8010/api/eda/                      - EDA API (direct access)
+https://localhost:8043/api/controller/v2/           - AWX API (direct access)
+```
 
-`make dev-down` to bring it all down
+Run `make dev-down` to bring it all down
 
 #### Bring Your Own Checkouts
 
@@ -70,9 +76,9 @@ Just in case it is not obvious.
 ```
 aap-gateway/
 ├── aap-dev						            <-- aap developer environment (not gateway things)
-│   ├── controller_settings.py				<-- SETTINGS OVERRIDES
+│   ├── controller_settings_template.py		<-- SETTINGS OVERRIDES
 │   ├── awx-up-check.sh						<-- UP
-│   ├── eda_server_settings.py				<-- SETTINGS OVERRIDES
+│   ├── eda_settings_template.py			<-- SETTINGS OVERRIDES
 │   ├── eda-server-up-check.sh				<-- UP
 │   ├── gateway-eda_server-config-hack.py	<-- HACK
 │   ├── gateway-up-check.sh					<-- UP
@@ -108,6 +114,6 @@ gateway-down: ...
     -docker-compose ...
 ```
 
-Applying `controller_settings.py` is hacky. I'd imagine the dev env code here will grow and do a LOT of settings overriding so we need a better pattern here.
+Applying `controller_settings_template.py` is hacky. I'd imagine the dev env code here will grow and do a LOT of settings overriding so we need a better pattern here.
 
 Each component spins up its own Postgres. We should share a postgres server. I'm thinking some docker-compose command to start all services except postgres. Put all the postgreses and whatever accesses them on their own network.

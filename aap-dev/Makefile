@@ -2,7 +2,7 @@
 	dev-up dev-down \
 	gateway-up gateway-up-check gateway-down \
 	eda-server-up eda-server-down \
-	smoke
+	smoke help help/generate
 
 ADMIN_PASSWORD := admin
 SERVICE_DIR := ../services
@@ -26,6 +26,30 @@ EDA_CONTAINER_NAME?=docker-eda-api-1
 # If you over-ride the repo, make sure to NOT use a trailing slash, like AWX_REPO=~/repos/awx
 AWX_REPO?=$(SERVICE_DIR)/awx
 
+## Display help targets
+help:
+	@printf "Available targets:\n"
+	@$(MAKE) -s help/generate | grep -vE "\w(.PHONY)"
+
+## Generate help output from MAKEFILE_LIST
+help/generate:
+	@awk '/^[-a-zA-Z_0-9%:\\\.\/]+:/ { \
+		helpMessage = match(lastLine, /^## (.*)/); \
+		if (helpMessage) { \
+			helpCommand = $$1; \
+			helpMessage = substr(lastLine, RSTART + 3, RLENGTH); \
+			gsub("\\\\", "", helpCommand); \
+			gsub(":+$$", "", helpCommand); \
+			printf "  \x1b[32;01m%-35s\x1b[0m %s\n", helpCommand, helpMessage; \
+		} else { \
+			helpCommand = $$1; \
+			gsub("\\\\", "", helpCommand); \
+			gsub(":+$$", "", helpCommand); \
+			printf "  \x1b[32;01m%-35s\x1b[0m %s\n", helpCommand, "No help available"; \
+		} \
+	} \
+	{ lastLine = $$0 }' $(MAKEFILE_LIST) | sort -u
+	@printf "\n"
 
 $(AWX_REPO)/.git/HEAD: ;
 	cd $(SERVICE_DIR) && git clone https://github.com/ansible/awx.git
@@ -33,12 +57,15 @@ $(AWX_REPO)/.git/HEAD: ;
 $(AWX_REPO)/tools/docker-compose/_sources/docker-compose.yml: $(AWX_REPO)/.git/HEAD
 	cd $(AWX_REPO) && make docker-compose-sources COMPOSE_UP_OPTS=--detach EXTRA_SOURCES_ANSIBLE_OPTS="-e admin_password=$(ADMIN_PASSWORD)"
 
+## Bring up AWX instance via docker-compose
 awx-up: $(AWX_REPO)/tools/docker-compose/_sources/docker-compose.yml
 	$(DOCKER_COMPOSE) -f $(AWX_REPO)/tools/docker-compose/_sources/docker-compose.yml up --detach
 
+## Bring down AWX instance
 awx-down: $(AWX_REPO)/tools/docker-compose/_sources/docker-compose.yml
 	-$(DOCKER_COMPOSE) -f $(AWX_REPO)/tools/docker-compose/_sources/docker-compose.yml down
 
+## Generate and copy over AWX related settings from template
 .awx-settings-hack:
 	$(AAP_DEV_DIR)/awx-up-check.sh
 	rm -rf /tmp/controller_settings.py
@@ -46,18 +73,22 @@ awx-down: $(AWX_REPO)/tools/docker-compose/_sources/docker-compose.yml
 	docker cp /tmp/controller_settings.py tools_awx_1:/etc/tower/conf.d/controller_settings.py
 	docker exec tools_awx_1 /bin/bash -c "supervisorctl restart tower-processes:awx-uwsgi"
 
+## Bring up Gateway instance
 gateway-up:
 	cd $(GW_DIR) && make docker-compose COMPOSE_UP_OPTS=--detach ADMIN_PASSWORD=$(ADMIN_PASSWORD)
 
+## Bring down Gateway instance
 gateway-down:
 	cd $(GW_DIR) && make docker-reset ADMIN_PASSWORD=$(ADMIN_PASSWORD)
 
 $(EDA_REPO)/.git/HEAD: ;
 	cd $(SERVICE_DIR) && git clone https://github.com/ansible/eda-server.git
 
+## Install task package
 /usr/local/bin/task:
 	sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin/
 
+## Change admin password for running EDA instance
 .eda-server-change-password-hack:
 	$(AAP_DEV_DIR)/eda-server-up-check.sh
 	docker exec -it docker-eda-api-1 /app/venv/bin/python /app/src/src/aap_eda/manage.py shell -c 'from django.contrib.auth import get_user_model; u=get_user_model().objects.get(username="admin"); u.set_password("$(ADMIN_PASSWORD)"); u.save()'
@@ -67,14 +98,17 @@ $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py:
 
 # Explaining: the EDA go-task docker:build runs `docker compose build`, which respects EDA_IMAGE environment var
 # this env var is referenced in the docker-compose yaml, so it obviously works in docker compose up too
+## Bring up EDA instance
 eda-server-up: $(EDA_REPO)/.git/HEAD $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py
 	echo "Using $(TASK_CMD)"
 	cd $(EDA_REPO) && $(EDA_ENV) $(TASK_CMD) docker:build
 	cd $(EDA_REPO) && $(EDA_ENV) $(DOCKER_COMPOSE) --file $(EDA_DOCKERFILE) up --detach --quiet-pull
 
+## Bring down EDA instance
 eda-server-down: $(EDA_REPO)/.git/HEAD
 	cd $(EDA_REPO) && $(EDA_ENV) $(DOCKER_COMPOSE) --file $(EDA_DOCKERFILE) down
 
+## Bring up AAP services (Gateway + Controller + EDA) all at once
 dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack
 	$(AAP_DEV_DIR)/gateway-up-check.sh
 	make .awx-settings-hack
@@ -83,7 +117,9 @@ dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack
 	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true
 	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true
 
+## Bring down all AAP services
 dev-down: awx-down gateway-down eda-server-down;
 
+## Run smoke tests
 smoke:
 	python3 $(AAP_DEV_DIR)/smoke.py
