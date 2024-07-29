@@ -310,8 +310,10 @@ class PatchedResourceClient(GWResourceAPIClient):
     rather than through envoy (which isn't available.)
     """
 
-    def get_url_for_service(self, service):
-        return f"http://localhost:{service.service_port}/api/v1/service-index/"
+    def __init__(self, service, **kwargs):
+        super().__init__(service, **kwargs)
+
+        self.base_url = f"http://localhost:{service.service_port}/api/v1/service-index/"
 
 
 @pytest.fixture
