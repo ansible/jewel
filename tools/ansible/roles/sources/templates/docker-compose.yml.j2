@@ -28,7 +28,7 @@ services:
       - REMOTE_PDB_HOST=127.0.0.1
       - REMOTE_PDB_PORT=4444
       - REDIS_URL=rediss://{{ redis_username }}:{{ redis_password }}@{{ redis_node_prefix }}1:{{ redis_exposed_port }}
-      - REDIS_IS_CLUSTERED={{ redis_is_clustered }}
+      - REDIS_IS_CLUSTERED={{ redis_mode == 'cluster' }}
       - REDIS_CLUSTERED_HOSTS={{ ",".join(redis_clustered_hosts) }}
       - REDIS_TLS={{ redis_uses_tls }}
       - CACHE_KEY_PREFIX={{ cache_key_prefix }}
@@ -68,9 +68,10 @@ services:
 
 {% for i in range(redis_node_count|int) %}
 {% set container_id = loop.index %}
+{% set name = redis_node_prefix ~ container_id %}
   redis{{ container_id }}:
-    container_name: {{ redis_node_prefix }}{{ container_id }}
-    hostname: {{ redis_node_prefix }}{{ container_id }}
+    container_name: {{ name }}
+    hostname: {{ name }}
     image: quay.io/fedora/redis-6:{{ redis_container_version }}
     entrypoint: ["redis-server"]
     command: 
@@ -85,13 +86,76 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+{% if redis_mode == 'cluster' %}
       - $PWD/tools/generated/redis_cluster/nodes{{ container_id }}.conf:/usr/local/etc/redis/nodes.conf:z
+{% endif %}
     networks:
       dbnet:
         aliases:
-          - {{ redis_node_prefix }}{{ container_id }}
+          - {{ name }}
+{% endfor %}
+
+{% if redis_mode == 'sentinel' %}
+{# Redis replica nodes #}
+{% for i in range(redis_sentinel_replica_nodes|int) %}
+{% set container_id = loop.index %}
+{% set name = redis_node_prefix ~ "replica-" ~ container_id %}
+  redis_replica_{{ container_id }}:
+    container_name: {{ name }}
+    hostname: {{ name }}
+    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    entrypoint: ["redis-server"]
+    command: 
+      - /usr/local/etc/redis/redis.replica.conf
+    ports:
+      - "{{ redis_exposed_port + container_id}}:{{ redis_exposed_port }}"
+    volumes:
+      - $PWD/tools/generated/redis_cluster/redis.replica.conf:/usr/local/etc/redis/redis.replica.conf:z
+      - $PWD/tools/generated/redis_cluster/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+    networks:
+      dbnet:
+        aliases:
+          - {{ name }}
+    depends_on:
+      - redis1
+{% endfor %}
+
+{# Sentinel nodes #}
+{% for i in range(redis_sentinel_sentinel_nodes|int) %}
+{% set container_id = loop.index %}
+{% set name = redis_node_prefix ~ "sentinel-" ~ container_id %}
+  redis_sentinel_{{ container_id }}:
+    container_name: {{ name }}
+    hostname: {{ name }}
+    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    entrypoint: ["redis-server"]
+    command: 
+      - /usr/local/etc/sentinel/sentinel.conf
+      - --sentinel
+    ports:
+      - "{{ container_id }}{{ redis_exposed_port}}:{{ container_id }}{{ redis_exposed_port }}"
+    volumes:
+      - $PWD/tools/generated/redis_cluster/sentinel{{ container_id }}:/usr/local/etc/sentinel/:z
+      - $PWD/tools/generated/redis_cluster/redis-users-sentinel.acl:/usr/local/etc/redis/redis-users-sentinel.acl:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+    networks:
+      dbnet:
+        aliases:
+          - {{ name }}
+    depends_on:
+      - redis1
+{% for i in range(redis_sentinel_replica_nodes|int) %}
+{% set container_id = loop.index %}
+      - redis_replica_{{ container_id }}
+{% endfor %}
 
 {% endfor %}
+{% endif %}
 
   db:
     container_name: aap_gw_db_pgsql_1
@@ -119,6 +183,9 @@ services:
     environment:
       - ENVOY_UID=0
     ports:
+{% if proxy_insecure_redirect_port is defined %}
+      - "{{ proxy_insecure_redirect_port }}:{{ proxy_insecure_redirect_port }}"
+{% endif %}
       - "{{ proxy_port }}:9080"
       - "19000:19000"
     volumes:

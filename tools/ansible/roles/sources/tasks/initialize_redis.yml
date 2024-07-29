@@ -1,4 +1,9 @@
 ---
+- name: Check redis mode
+  fail:
+    msg: "redis_type must be one of ['standalone', 'sentinel', 'cluster']"
+  when: redis_mode not in ['standalone', 'sentinel', 'cluster']
+
 - name: Create Redis directory
   file:
     path: "{{ redis_generated_dir }}"
@@ -6,10 +11,10 @@
 
 - name: Generate Redis node files
   file:
-     path: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
-     state: touch
-     modification_time: preserve
-     access_time: preserve
+    path: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
+    state: touch
+    modification_time: preserve
+    access_time: preserve
   loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
 
 - name: Generate Redis CA
@@ -56,6 +61,41 @@
   loop:
     - redis.conf
     - "redis-users.acl"
+
+- block:
+    - name: Render Redis replica conf file
+      template:
+        src: "redis.conf.j2"
+        dest: "{{ redis_generated_dir }}/redis.replica.conf"
+        mode: '0644'
+      vars:
+        is_replica: True
+
+    - name: Render Redis Sentinel ACL file
+      template:
+        src: "redis-users.acl.j2"
+        dest: "{{ redis_generated_dir }}/redis-users-sentinel.acl"
+        mode: '0644'
+      vars:
+        show_sentinel_user: False
+
+    - name: Create Redis sentinel directory
+      file:
+        state: directory
+        mode: 0777
+        path: "{{ redis_generated_dir }}/sentinel{{ item }}"
+      loop: "{{ query('sequence', 'start=1 end='+(redis_sentinel_sentinel_nodes)|string) }}"
+
+    - name: Render Redis sentinel files
+      template:
+        src: "redis-sentinel.conf.j2"
+        dest: "{{ redis_generated_dir }}/sentinel{{ item }}/sentinel.conf"
+        mode: 0666
+      vars:
+        sentinel_port: "{{ item }}{{ redis_exposed_port }}"
+        redis_node_number: "{{ item }}"
+      loop: "{{ query('sequence', 'start=1 end='+(redis_sentinel_sentinel_nodes)|string) }}"
+  when: redis_mode == 'sentinel'
 
 - block:
     - name: Generate cluster strings
@@ -110,4 +150,4 @@
       shell:
         cmd: "{{ docker_compose_cmd }} stop {{ ' '.join(nodes_to_start) }}"
         chdir: '../../'
-  when: redis_is_clustered
+  when: redis_mode == 'clustered'

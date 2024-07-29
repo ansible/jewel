@@ -25,7 +25,7 @@ services:
       - REMOTE_PDB_HOST=127.0.0.1
       - REMOTE_PDB_PORT=4444
       - REDIS_URL=rediss://{{ redis_username }}:{{ redis_password }}@{{ redis_node_prefix }}1:{{ redis_exposed_port }}
-      - REDIS_IS_CLUSTERED={{ redis_is_clustered }}
+      - REDIS_IS_CLUSTERED={{ redis_mode == 'clustered' }}
       - REDIS_CLUSTERED_HOSTS={{ ",".join(redis_clustered_hosts) }}
       - REDIS_TLS={{ redis_uses_tls }}
       - CACHE_KEY_PREFIX={{ cache_key_prefix }}

@@ -14,7 +14,7 @@ docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default=
 container_engine: docker
 gateway_image: 'quay.io/ansible/jewel:devel'
 gateway_host_address: host-gateway
-gateway_services: ['hub','controller','eda']
+gateway_services: ['hub', 'controller', 'eda']
 gateway_container_name: aap_gw_1
 
 enabled_containers:
@@ -24,8 +24,18 @@ enabled_containers:
   radius: "{{ radius_enabled | default(False) }}"
 
 # Redis settings
-redis_is_clustered: "{{ redis_cluster_enabled | default(False) }}"
-redis_node_count: "{{ redis_is_clustered | ternary(6, 1) }}"
+redis_mode_options:
+  - standalone
+  - sentinel
+  - cluster
+redis_node_topology_count:
+  standalone: 1
+  sentinel: 1
+  cluster: 6
+redis_sentinel_replica_nodes: 1
+redis_sentinel_sentinel_nodes: 3
+redis_mode: "{{ redis_type | default(redis_mode_options[0]) }}"
+redis_node_count: "{{ redis_node_topology_count[redis_mode] | default(1) }}"
 redis_uses_tls: "{{ redis_tls_enabled | default(True) }}"
 redis_node_prefix: 'aap-gw-redis-'
 cache_key_prefix: 'gateway'
@@ -61,3 +71,5 @@ redis_container_version: latest
 redis_exposed_port: 6380
 redis_username: gateway1
 redis_password: redis_password
+redis_sentinel_username: redis_sentinel_username
+redis_sentinel_password: redis_sentinel_password
