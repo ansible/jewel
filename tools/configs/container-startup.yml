@@ -9,7 +9,7 @@ container_reference: 'localhost'
 
 ### Redis
 ### Note: If you change the redis settings, please remove tools/generated/redis_cluster and let it rebuild
-redis_cluster_enabled: False
+# redis_type: # Possible options: standalone (default), sentinel, cluster
 redis_tls_enabled: True
 
 ### Sidecars (uncomment to enable):

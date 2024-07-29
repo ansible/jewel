@@ -1,0 +1,20 @@
+dir "/var/lib/redis/data"
+sentinel monitor aap-cache {{ redis_node_prefix }}1 {{ redis_exposed_port }} 2
+sentinel down-after-milliseconds aap-cache 60000
+sentinel failover-timeout aap-cache 180000
+sentinel parallel-syncs aap-cache 1
+sentinel auth-user aap-cache {{ redis_sentinel_username }}
+sentinel auth-pass aap-cache {{ redis_sentinel_password }}
+sentinel announce-port {{ sentinel_port }}
+sentinel resolve-hostnames yes
+protected-mode no
+port {{ redis_uses_tls | ternary(0, sentinel_port) }}
+{% if redis_uses_tls %}
+tls-port {{ sentinel_port }}
+tls-auth-clients yes
+tls-cert-file /usr/local/etc/redis/redis.cert
+tls-key-file /usr/local/etc/redis/redis.key
+tls-ca-cert-file /usr/local/etc/redis/ca.cert
+tls-replication yes
+{% endif %}
+aclfile /usr/local/etc/redis/redis-users-sentinel.acl

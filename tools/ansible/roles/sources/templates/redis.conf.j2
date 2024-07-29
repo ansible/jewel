@@ -1,28 +1,28 @@
+port {{ redis_uses_tls | ternary(0, redis_exposed_port) }}
 {% if redis_uses_tls %}
-port 0
 tls-port {{ redis_exposed_port }}
 tls-cert-file /usr/local/etc/redis/redis.cert
 tls-key-file /usr/local/etc/redis/redis.key
 tls-ca-cert-file /usr/local/etc/redis/ca.cert
-tls-auth-clients yes
-{% else %}
-port {{ redis_exposed_port }}
 {% endif %}
 bind 0.0.0.0
 aclfile /usr/local/etc/redis/redis-users.acl
-{% if redis_is_clustered %}
-{#
-# cluster-port appears to be a v7 thing
-cluster-port 1{{ redis_exposed_port }}
-#}
+tls-replication {{ redis_uses_tls | ternary('yes', 'no') }}
+tls-cluster {{ redis_uses_tls | ternary('yes', 'no') }}
+{% if redis_mode == 'clustered' %}
 cluster-enabled yes
 cluster-config-file /usr/local/etc/redis/nodes.conf
 cluster-node-timeout 5000
 appendonly yes
-{% if redis_uses_tls %}
-tls-replication yes
-tls-cluster yes
-{% endif %}
 masteruser {{ redis_username }}
 masterauth {{ redis_password }}
-{% endif %}
+{#
+    cluster-port appears to be a v7 thing, so we can't use this yet
+    cluster-port 1{{ redis_exposed_port }}
+#}
+{% endif %}{# clustered mode #}
+{% if redis_mode == 'sentinel' and is_replica | default(False) %}
+replicaof {{ redis_node_prefix }}1 {{ redis_exposed_port }}
+masterauth {{ redis_password }}
+masteruser {{ redis_username }}
+{% endif %}{# Sentinel mode #}

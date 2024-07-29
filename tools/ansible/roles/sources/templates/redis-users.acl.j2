@@ -1,2 +1,5 @@
 user {{ redis_username }} on >{{ redis_password }} ~{{ cache_key_prefix }}:* &* +@all
+{% if redis_mode == 'sentinel' and show_sentinel_user | default(True) %}
+user {{ redis_sentinel_username }} on >{{ redis_sentinel_password }} allchannels +multi +slaveof +ping +exec +subscribe +config|rewrite +role +publish +info +client|setname +client|kill +script|kill
+{% endif %}
 user default off
