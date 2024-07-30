@@ -57,8 +57,8 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
             "CLIENT_CLASS_KWARGS": {
-                "clustered": False,
-                'clustered_hosts': '',
+                "mode": 'standalone',
+                'redis_hosts': '',
                 'ssl': True,
                 'ssl_keyfile': '/etc/ansible-automation-platform/gateway/redis.key',
                 'ssl_certfile': '/etc/ansible-automation-platform/gateway/redis.cert',
@@ -374,12 +374,12 @@ if getenv('CACHE_KEY_PREFIX', None) is not None:
     CACHES["default"]['KEY_PREFIX'] = getenv('CACHE_KEY_PREFIX')
 if getenv('REDIS_TLS', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl'] = to_python_boolean(getenv('REDIS_TLS'))
-if getenv('REDIS_IS_CLUSTERED', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['clustered'] = to_python_boolean(getenv('REDIS_IS_CLUSTERED'))
+if getenv('REDIS_MODE', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = getenv('REDIS_MODE')
 if getenv('REDIS_SSL_CERT_REQS', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_cert_reqs'] = getenv('REDIS_SSL_CERT_REQS')
-if getenv('REDIS_CLUSTERED_HOST', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['clustered_host'] = getenv('REDIS_CLUSTERED_HOST')
+if getenv('REDIS_HOSTS', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_HOSTS')
 if getenv('REDIS_KEY_FILE', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_keyfile'] = getenv('REDIS_KEY_FILE')
 if getenv('REDIS_CERT_FILE', None) is not None:

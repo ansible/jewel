@@ -63,6 +63,14 @@
     - "redis-users.acl"
 
 - block:
+    - name: Generate Redis Sentinel host list
+      set_fact:
+        redis_hosts: "{{ redis_hosts | default([]) + [ host_port ] }}"
+      loop: "{{ query('sequence', 'start=1 end='+(redis_sentinel_sentinel_nodes)|string) }}"
+      vars:
+        hostname: "{{ redis_node_prefix }}sentinel-{{ item }}"
+        host_port: "{{ hostname }}:{{ item }}{{ redis_exposed_port }}"
+
     - name: Render Redis replica conf file
       template:
         src: "redis.conf.j2"
@@ -150,4 +158,4 @@
       shell:
         cmd: "{{ docker_compose_cmd }} stop {{ ' '.join(nodes_to_start) }}"
         chdir: '../../'
-  when: redis_mode == 'clustered'
+  when: redis_mode == 'cluster'
