@@ -9,7 +9,7 @@ bind 0.0.0.0
 aclfile /usr/local/etc/redis/redis-users.acl
 tls-replication {{ redis_uses_tls | ternary('yes', 'no') }}
 tls-cluster {{ redis_uses_tls | ternary('yes', 'no') }}
-{% if redis_mode == 'clustered' %}
+{% if redis_mode == 'cluster' %}
 cluster-enabled yes
 cluster-config-file /usr/local/etc/redis/nodes.conf
 cluster-node-timeout 5000
@@ -20,7 +20,7 @@ masterauth {{ redis_password }}
     cluster-port appears to be a v7 thing, so we can't use this yet
     cluster-port 1{{ redis_exposed_port }}
 #}
-{% endif %}{# clustered mode #}
+{% endif %}{# cluster mode #}
 {% if redis_mode == 'sentinel' and is_replica | default(False) %}
 replicaof {{ redis_node_prefix }}1 {{ redis_exposed_port }}
 masterauth {{ redis_password }}

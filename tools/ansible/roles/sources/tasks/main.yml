@@ -2,7 +2,7 @@
 - name: Generate Redis cert subjectAltName and clustered host list
   set_fact:
     sans: "{{ sans | default([]) + [host_sans] }}"
-    redis_clustered_hosts: "{{ redis_clustered_hosts | default([]) + [ host_port ] }}"
+    redis_hosts: "{{ redis_hosts | default([]) + [ host_port ] }}"
   loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
   vars:
     hostname: "{{ redis_node_prefix }}{{ item }}"
