@@ -41,7 +41,7 @@ class GWResourceAPIClient(DABResourceAPIClient):
         self.base_url = f"{protocol}://{settings.ENVOY_HOSTNAME}:{port}{path}"
 
         if user is None:
-            user = get_user_model().objects.get(username=settings.SYSTEM_USERNAME)
+            user = get_user_model().all_objects.get(username=settings.SYSTEM_USERNAME)
         self.user = user
         self.header_name = get_preference_value('proxy', 'gateway_token_name')
         self.service = service
