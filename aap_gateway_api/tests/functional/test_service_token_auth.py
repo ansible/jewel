@@ -21,6 +21,17 @@ def _create_jwt(user, key, additional_payload=None, service=None, expiration=60)
     return jwt.encode(payload, key.secret, key.algorithm)
 
 
+def _create_jwt_system_user(key, additional_payload=None, service=None, expiration=60):
+    if additional_payload is None:
+        additional_payload = {}
+    if service is None:
+        service = service_id()
+
+    payload = {"iss": str(service), "exp": datetime.now() + timedelta(seconds=expiration), **additional_payload}
+
+    return jwt.encode(payload, key.secret, key.algorithm)
+
+
 def _get_client(token):
     return APIClient(headers={"Authorization": "Token " + token})
 
@@ -39,8 +50,20 @@ def service_jwt_token(user, service_cluster_gateway):
 
 
 @pytest.fixture
+def service_jwt_token_system_user(system_user, service_cluster_gateway):
+    key = _set_up_service_key(service_cluster_gateway, service_id())
+
+    return _create_jwt_system_user(key)
+
+
+@pytest.fixture
 def service_jwt_client(service_jwt_token) -> APIClient:
     return _get_client(service_jwt_token)
+
+
+@pytest.fixture
+def service_jwt_client_system_user(service_jwt_token_system_user) -> APIClient:
+    return _get_client(service_jwt_token_system_user)
 
 
 @pytest.mark.django_db
@@ -49,6 +72,14 @@ def test_authentication(service_jwt_client, user):
     resp = service_jwt_client.get(url)
     assert resp.status_code == 200
     assert resp.wsgi_request.user == user
+
+
+@pytest.mark.django_db
+def test_authentication_system_user(service_jwt_client_system_user, system_user):
+    url = get_relative_url("resource-list")
+    resp = service_jwt_client_system_user.get(url)
+    assert resp.status_code == 200
+    assert resp.wsgi_request.user == system_user
 
 
 @pytest.mark.django_db

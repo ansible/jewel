@@ -75,7 +75,7 @@ def validate_service_token(token) -> ValidatedToken:
         except User.DoesNotExist:
             raise ValidationError(_("Token subject %(sub)s does not exist.") % {'sub': verified_payload['sub']})
     else:
-        user = User.objects.get(username=settings.SYSTEM_USERNAME)
+        user = User.all_objects.get(username=settings.SYSTEM_USERNAME)
 
     return ValidatedToken(
         {

@@ -74,6 +74,12 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
 
 
 @pytest.mark.django_db(transaction=True)
+def test_resource_client_with_system_user(migration_service, patched_resource_client, system_user):
+    client = patched_resource_client(service=migration_service, user=None)
+    assert client.user == system_user
+
+
+@pytest.mark.django_db(transaction=True)
 def test_migrate_no_merge(migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client):
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
