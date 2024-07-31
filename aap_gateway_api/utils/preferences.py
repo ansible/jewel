@@ -29,6 +29,13 @@ def get_preference_value_by_preference(preference: object, encrypted: bool = Tru
     return get_preference_value(preference.section.name, preference.name, encrypted)
 
 
+def get_default_value_by_preference(preference: object, encrypted: bool = True) -> str:
+    # is_encrypted = gateway_preference_registry.get(preference.name, preference.section.name).encrypted
+    if encrypted:
+        return ENCRYPTED_STRING
+    return getattr(preference, 'default', None)
+
+
 def get_preference_key(section: str, name: str) -> str:
     return f"{section}{separator}{name}"
 

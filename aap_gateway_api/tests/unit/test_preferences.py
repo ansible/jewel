@@ -8,6 +8,7 @@ from dynamic_preferences.managers import PreferencesManager
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
+from aap_gateway_api.preferences import gateway_preference_registry
 from aap_gateway_api.preferences.registry import PreferenceRegistry
 from aap_gateway_api.utils import preferences
 
@@ -240,3 +241,12 @@ def test_encrypted_manager(register_preference):
         assert len(settings_values) == 1
         assert value not in settings_values
         assert settings_values[0].startswith(ENCRYPTED_STRING)
+
+
+@pytest.mark.parametrize("is_encrypted", [True, False])
+def test_get_default_value_by_preference(register_preference, is_encrypted):
+
+    register_preference(section='general', preference_name='test_get_default', default='iam_default', preference_type="string", encrypted=is_encrypted)
+
+    preference = gateway_preference_registry.get('test_get_default', 'general')
+    assert preferences.get_default_value_by_preference(preference, is_encrypted) == ENCRYPTED_STRING if is_encrypted else 'iam_default'

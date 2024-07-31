@@ -33,7 +33,7 @@ router.register(
 )
 router.register(
     r'settings',
-    views.PreferenceListViewSet,
+    views.SettingSectionViewSet,
     basename='setting',
 )
 router.register(

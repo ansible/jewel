@@ -35,7 +35,12 @@ urlpatterns = [
     path('api/gateway/v1/me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
     path('api/gateway/v1/session/', views.SessionView.as_view(), name='session-view'),
     # settings
-    re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.PreferenceSingletonView.as_view(), name='setting-section-list'),
+    re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.SettingSectionView.as_view(), name='setting-section-list'),
+    re_path(
+        r'^api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/(?P<preference_name>[a-zA-Z0-9_]+)/$',
+        views.SettingPreferenceView.as_view(),
+        name='setting-detail',
+    ),
     # xDS
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
