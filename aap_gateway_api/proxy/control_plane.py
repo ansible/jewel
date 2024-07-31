@@ -100,7 +100,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         reason = str(error.detail)
         logger.error(f"CSRF verification failure for {self.request_id} - {reason}")
 
-        if "application/json" == request.content_type:
+        if "application/json" in request.META.get("HTTP_ACCEPT", ""):
             body = json.dumps(dict(details=reason))
             content_type = "application/json"
         else:

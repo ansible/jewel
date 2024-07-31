@@ -7,10 +7,13 @@ from rest_framework.authentication import SessionAuthentication
 
 from aap_gateway_api.proxy.control_plane import ExternalAuth, get_drf_request
 
-request_body_multipart = '''-----------------------------25667258076756890893396248524
+csrf_cookie_string = "aAKwsypSuCpSmU4SMt7WrbGmvTBYfryg"
+bad_csrf_form_token = "gJElunW0ICBSx1jtgk9HGMD6qzTRdQdM3ycFn1DgkXi0UWFjDKUts1Azq5jmCTcS"
+
+request_body_multipart = f'''-----------------------------25667258076756890893396248524
 Content-Disposition: form-data; name=\"csrfmiddlewaretoken\"
 
-NtKB9gTfzeqBQD7l0It7BlH5nN6SUBQPNTkXrE8XTGFj2n13C1qTSmdhIwxGZSeV
+{bad_csrf_form_token}
 -----------------------------25667258076756890893396248524
 '''.replace(
     linesep, "\r\n"
@@ -18,7 +21,7 @@ NtKB9gTfzeqBQD7l0It7BlH5nN6SUBQPNTkXrE8XTGFj2n13C1qTSmdhIwxGZSeV
 
 request_body_json = dumps(
     {
-        "csrfmiddlewaretoken": "NtKB9gTfzeqBQD7l0It7BlH5nN6SUBQPNTkXrE8XTGFj2n13C1qTSmdhIwxGZSeV",
+        "csrfmiddlewaretoken": bad_csrf_form_token,
     }
 )
 
@@ -36,7 +39,7 @@ request_headers = {
     'UPGRADE_INSECURE_REQUESTS': '1',
     'CONTENT_LENGTH': '1147',
     ':PATH': '/api/galaxy/v3/namespaces/',
-    'COOKIE': 'csrftoken=aAKwsypSuCpSmU4SMt7WrbGmvTBYfryg; tabstyle=html-tab',
+    'cookie': f'csrftoken={csrf_cookie_string}; tabstyle=html-tab',
     'X_ENVOY_AUTH_PARTIAL_BODY': 'false',
     'ACCEPT_LANGUAGE': 'en-US,en;q=0.5',
     ':SCHEME': 'https',
@@ -109,6 +112,7 @@ class TestExternalAuth:
         "method,host,path,body,headers",
         [
             # json requests with no token header will fail csrf verification, since body is not checked in this case
+            ("POST", "localhost", "/api/galaxy/v3/namespaces", request_body_multipart, {}),
             (
                 "POST",
                 "localhost",
