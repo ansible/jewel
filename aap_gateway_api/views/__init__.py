@@ -21,7 +21,7 @@ from aap_gateway_api.views.api.v1.local_login import LoggedLoginView, LoggedLogo
 from aap_gateway_api.views.api.v1.me import MeViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.organization import OrganizationViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.ping import PingView  # noqa: 401
-from aap_gateway_api.views.api.v1.preference import PreferenceListViewSet, PreferenceSingletonView  # noqa: F401
+from aap_gateway_api.views.api.v1.preference import SettingPreferenceView, SettingSectionView, SettingSectionViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.related_views import UserOrganizationViewSet, UserTeamViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.service import (  # noqa: F401
     AdditionalRouteViewSet,

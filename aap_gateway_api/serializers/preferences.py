@@ -9,6 +9,7 @@ from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
+from aap_gateway_api.models.preference import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
 from aap_gateway_api.preferences.types import IntRangePreference, PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
@@ -16,14 +17,14 @@ from aap_gateway_api.utils import get_preference_value_by_preference, update_pre
 logger = logging.getLogger('aap.gateway.serializers.preferences')
 
 
-class SettingSectionSerializer(serializers.Serializer):
-    """Serialize setting category"""
+class SettingSectionListSerializer(serializers.Serializer):
+    """Serialize list of settings category"""
 
     url = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
 
 
-class SettingSingletonSerializer(serializers.Serializer):
+class SettingSectionSerializer(serializers.Serializer):
     def __init__(self, category_slug=None, *args, **kwargs):
         if category_slug == 'all':
             self.category_slug = None
@@ -61,7 +62,6 @@ class SettingSingletonSerializer(serializers.Serializer):
             types.LongStringPreference,
             PEMPrivateKeyPreference,
         )
-
         fields = super().get_fields()
         for registered_preference in gateway_preference_registry.preferences(self.category_slug):
             constructor = preference_type_to_field_mapping.get(registered_preference.field_type, serializers.Field)
@@ -95,7 +95,6 @@ class SettingSingletonSerializer(serializers.Serializer):
         validated_fields = {}
         errors = {}
         values_to_save = {}
-
         for registered_preference in gateway_preference_registry.preferences(self.category_slug):
             current_value = get_preference_value_by_preference(registered_preference, encrypted=True)
             validated_fields[registered_preference.name] = current_value
@@ -149,7 +148,6 @@ class SettingSingletonSerializer(serializers.Serializer):
         logger.info(f"Validating settings for section {self.category_slug if self.category_slug else 'all'}")
 
         validated_fields, errors, values_to_save = self.process_fields(data)
-
         # Search for user sending us additional random data
         if data.keys() != validated_fields.keys():
             for additional_key in list(set(data.keys()) - set(validated_fields.keys())):
@@ -166,3 +164,16 @@ class SettingSingletonSerializer(serializers.Serializer):
         # It is not enough to return validated_fields, since on_update might have changed some other fields
         # Re-fetch the whole section
         return self.to_representation()
+
+
+class SettingPreferenceSerializer(serializers.ModelSerializer):
+    value = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Preference
+        fields = ['section', 'name', 'value']
+
+    def get_value(self, obj):
+        if obj.preference.encrypted:
+            return ENCRYPTED_STRING
+        return obj.value

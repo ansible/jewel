@@ -14,7 +14,7 @@ from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster, ServiceNode, User
+from aap_gateway_api.models import AdditionalRoute, Preference, ServiceAPIRoute, ServiceCluster, ServiceNode, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
@@ -61,6 +61,45 @@ def register_preference(db):
     yield _register_preference
     del gateway_preference_registry[kwargs_cache["section"]][kwargs_cache["preference_name"]]
     Preference.objects.filter(section=kwargs_cache["section"], name=kwargs_cache["preference_name"]).delete()
+
+
+@pytest.fixture
+def setup_test_preferences(db, request, register_preference):
+    """
+    Set up the testing environment for reverting settings to their default values.
+    This function performs the following steps:
+        1. Registers preferences whose name specified in request.param for the 'general' section.
+        2. Updates the preference values to new values to simulate changes from the default.
+
+    Example:
+        if request.param = ["fruit", "animal"]
+        This will register a preference with:
+            section="general"
+            preference_name="fruit"
+            default="fruit_default"
+        And then update the preference value to "fruit_updated".
+        Similarly for preference="animal"
+    """
+    preferences = []
+    for pref_name in request.param:
+        register_preference(
+            section="general",
+            preference_name=pref_name,
+            default=f"{pref_name}_default",
+            preference_type="string",
+        )
+
+        preference = Preference.objects.get(section='general', name=pref_name)
+
+        # update the value
+        preference.raw_value = f"{pref_name}_updated"
+        preference.save()
+
+        preferences.append(preference)
+
+    yield preferences
+
+    # no need a cleanup section here because register_preference fixture should take care of it
 
 
 @pytest.fixture
