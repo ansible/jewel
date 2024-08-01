@@ -37,7 +37,7 @@ redis_sentinel_sentinel_nodes: 3
 redis_mode: "{{ redis_type | default(redis_mode_options[0]) }}"
 redis_node_count: "{{ redis_node_topology_count[redis_mode] | default(1) }}"
 redis_uses_tls: "{{ redis_tls_enabled | default(True) }}"
-redis_node_prefix: 'aap-gw-redis-'
+redis_node_prefix: 'aap_gw_redis_'
 cache_key_prefix: 'gateway'
 
 # Keycloak settings
