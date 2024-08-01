@@ -86,6 +86,7 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/redis-volume{{ container_id }}:/var/lib/redis/data:z
 {% if redis_mode == 'cluster' %}
       - $PWD/tools/generated/redis_cluster/nodes{{ container_id }}.conf:/usr/local/etc/redis/nodes.conf:z
 {% endif %}
@@ -115,6 +116,7 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/replica-volume{{ container_id }}:/var/lib/redis/data:z
     networks:
       dbnet:
         aliases:
@@ -143,6 +145,7 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/sentinel-volume{{ container_id }}:/var/lib/redis/data:z
     networks:
       dbnet:
         aliases:
