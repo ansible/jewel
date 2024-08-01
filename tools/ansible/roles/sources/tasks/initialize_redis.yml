@@ -9,14 +9,6 @@
     path: "{{ redis_generated_dir }}"
     state: directory
 
-- name: Generate Redis node files
-  file:
-    path: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
-    state: touch
-    modification_time: preserve
-    access_time: preserve
-  loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
-
 - name: Generate Redis CA
   command: '{{ item.command }}'
   args:
@@ -62,6 +54,12 @@
     - redis.conf
     - "redis-users.acl"
 
+- name: Zero out volume directories
+  include_tasks: volume_dirs.yml
+  loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+  vars:
+    volume_type: "redis"
+
 - block:
     - name: Generate Redis Sentinel host list
       set_fact:
@@ -103,9 +101,28 @@
         sentinel_port: "{{ item }}{{ redis_exposed_port }}"
         redis_node_number: "{{ item }}"
       loop: "{{ query('sequence', 'start=1 end='+(redis_sentinel_sentinel_nodes)|string) }}"
+
+    - name: Zero out replica volume directories
+      include_tasks: volume_dirs.yml
+      loop: "{{ query('sequence', 'start=1 end='+(redis_sentinel_replica_nodes)|string) }}"
+      vars:
+        volume_type: "replica"
+
+    - name: Zero out sentinel volume directories
+      include_tasks: volume_dirs.yml
+      loop: "{{ query('sequence', 'start=1 end='+(redis_sentinel_sentinel_nodes)|string) }}"
+      vars:
+        volume_type: "sentinel"
   when: redis_mode == 'sentinel'
 
 - block:
+    - name: Zero Redis node files
+      copy:
+        dest: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
+        content: ""
+        force: True
+      loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+
     - name: Generate cluster strings
       set_fact:
         nodes_to_start: "{{ nodes_to_start | default([]) + [ 'redis'+item ] }}"

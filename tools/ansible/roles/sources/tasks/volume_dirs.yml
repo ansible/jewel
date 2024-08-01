@@ -1,0 +1,10 @@
+---
+- name: Remove Redis data directories
+  file:
+    path: "{{ redis_generated_dir }}/{{ volume_type }}-volume{{ item }}"
+    state: absent
+
+- name: Create empty Redis data directory mounts
+  file:
+    path: "{{ redis_generated_dir }}/{{ volume_type }}-volume{{ item }}"
+    state: directory
