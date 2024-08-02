@@ -99,6 +99,16 @@ register(
 
 register(
     section="proxy",
+    preference_name="status_endpoint_backend_verify",
+    default=True,
+    required=True,
+    preference_type="bool",
+    help_text=_("Should SSL certificates of the services be verified when calling individual nodes for statuses."),
+    encrypted=False,
+)
+
+register(
+    section="proxy",
     preference_name="resource_client_request_timeout",
     default=0.5,
     required=True,
