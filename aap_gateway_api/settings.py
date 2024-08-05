@@ -374,10 +374,17 @@ if getenv('CACHE_KEY_PREFIX', None) is not None:
     CACHES["default"]['KEY_PREFIX'] = getenv('CACHE_KEY_PREFIX')
 if getenv('REDIS_TLS', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl'] = to_python_boolean(getenv('REDIS_TLS'))
+if getenv('REDIS_IS_CLUSTERED', None) is not None:
+    if to_python_boolean(getenv('REDIS_IS_CLUSTERED')) is True:
+        CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = 'cluster'
+    else:
+        CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = 'standalone'
 if getenv('REDIS_MODE', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = getenv('REDIS_MODE')
 if getenv('REDIS_SSL_CERT_REQS', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_cert_reqs'] = getenv('REDIS_SSL_CERT_REQS')
+if getenv('REDIS_CLUSTERED_HOST', None) is not None:
+    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_CLUSTERED_HOST')
 if getenv('REDIS_HOSTS', None) is not None:
     CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_HOSTS')
 if getenv('REDIS_KEY_FILE', None) is not None:
