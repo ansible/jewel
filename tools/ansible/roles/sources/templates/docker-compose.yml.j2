@@ -60,6 +60,7 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.cert:/etc/ansible-automation-platform/gateway/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/etc/ansible-automation-platform/gateway/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/etc/ansible-automation-platform/gateway/redis_ca.cert:z
+      - $PWD/tools/configs/dev_secret_key:/etc/ansible-automation-platform/gateway/SECRET_KEY:z
     ulimits:
       nofile:
         soft: 4096

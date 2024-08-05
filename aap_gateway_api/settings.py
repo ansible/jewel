@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import socket
-import sys
 from os import getenv, path
 from pathlib import Path
 
@@ -407,10 +406,8 @@ try:
         SECRET_KEY = f.read().strip()
     read_key = True
 except FileNotFoundError:
-    print(f"Failed to load file {secret_key_file}, will use default", file=sys.stderr)
+    raise ImportError(f"Missing secret file {secret_key_file}")
 except PermissionError:
-    print(f"Unable to read {secret_key_file}, will use default", file=sys.stderr)
+    raise ImportError(f"Unable to read {secret_key_file}")
 except Exception as e:
-    print(f"Unhandled exception when reading {secret_key_file}, will use default, ({e.__class__}): {e}", file=sys.stderr)
-if not read_key:
-    SECRET_KEY = 'django-insecure-aa$p$j(w3+l)77o3d4hb^_qoed!#!$d0g*t1%4a$x7gtrezoio'
+    raise ImportError(f"Unhandled exception when reading {secret_key_file}, ({e.__class__}): {e}")
