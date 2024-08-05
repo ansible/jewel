@@ -95,6 +95,7 @@ legacy_tox_ini = """
     allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
     setenv =
         PYTHONPATH = {toxinidir}/django-ansible-base/
+        GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
@@ -107,6 +108,7 @@ legacy_tox_ini = """
     allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
+        GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
