@@ -200,6 +200,10 @@ LOGGING = {
 
 LOGIN_URL = '/'
 
+# Set to desired external URL (load balancer, proxy, etc.)
+# Used to construct fully qualified URLs to gateway
+FRONT_END_URL = ''
+
 LOGOUT_ALLOWED_HOSTS = []
 
 MIDDLEWARE = [
