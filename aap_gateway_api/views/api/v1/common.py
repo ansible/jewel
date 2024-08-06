@@ -40,7 +40,7 @@ class ResourceAPIUpdateMixin:
 
     @property
     def _resources_client(self):
-        return AllServicesClient()
+        return AllServicesClient(user=self.request.user, wait_for_response=False)
 
     @transaction.atomic
     def perform_destroy(self, instance):

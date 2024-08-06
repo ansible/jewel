@@ -99,6 +99,17 @@ register(
 
 register(
     section="proxy",
+    preference_name="resource_client_request_timeout",
+    default=0.5,
+    required=True,
+    preference_type="float_range",
+    help_text=_("Timeout (in seconds) before the resource client will drop requests after forming connections."),
+    encrypted=False,
+    min_value=0.0,
+)
+
+register(
+    section="proxy",
     preference_name="request_timeout",
     default=30,
     required=True,

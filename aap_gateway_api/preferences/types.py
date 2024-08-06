@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from ansible_base.lib.utils.validation import validate_image_data
 from cryptography.hazmat.primitives import serialization
@@ -43,6 +44,18 @@ class MimeTypedImagePreference(types.LongStringPreference):
         """Check that an uploaded image file is valid data and in valid format"""
         validate_image_data(value)
         return value
+
+
+class FloatRangePreference(types.FloatPreference):
+    DEFAULT_MIN_VALUE = sys.float_info.min
+    DEFAULT_MAX_VALUE = sys.float_info.max
+
+    def validate(self, value):
+        min_value = getattr(self, 'min_value', self.DEFAULT_MIN_VALUE)
+        max_value = getattr(self, 'max_value', self.DEFAULT_MAX_VALUE)
+
+        if value < min_value or value > max_value:
+            raise ValidationError(_(f"Must be a float between {min_value} and {max_value}"))
 
 
 class IntRangePreference(types.IntegerPreference):

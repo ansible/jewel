@@ -11,7 +11,7 @@ from rest_framework import serializers
 
 from aap_gateway_api.models.preference import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import IntRangePreference, PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
 
 logger = logging.getLogger('aap.gateway.serializers.preferences')
@@ -56,6 +56,7 @@ class SettingSectionSerializer(serializers.Serializer):
             URLPreference: serializers.URLField,
             PEMPrivateKeyPreference: serializers.CharField,
             IntRangePreference: serializers.IntegerField,
+            FloatRangePreference: serializers.FloatField,
         }
 
         long_string_fields = (
