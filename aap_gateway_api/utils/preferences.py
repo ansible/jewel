@@ -8,7 +8,7 @@ from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
@@ -72,6 +72,7 @@ preference_type_mapping = {
     "pem_private_key": PEMPrivateKeyPreference,
     "image": MimeTypedImagePreference,
     "int_range": IntRangePreference,
+    "float_range": FloatRangePreference,
 }
 
 

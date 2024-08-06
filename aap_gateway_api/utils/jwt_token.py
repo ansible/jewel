@@ -15,7 +15,7 @@ from aap_gateway_api.utils.preferences import get_preference_value, update_prefe
 logger = logging.getLogger('aap.gateway.utils.jwt_token')
 
 
-def create_signed_jwt(user):
+def create_signed_jwt(user, resource_api_actions=None):
     """
     Create a signed JWT token for the given user
 
@@ -153,6 +153,9 @@ def create_signed_jwt(user):
     # See if the user has any global roles
     for rd in RoleDefinition.objects.filter(content_type=None, user_assignments__user=user.pk):
         payload['global_roles'].append(rd.name)
+
+    if resource_api_actions:
+        payload["resource_api_actions"] = resource_api_actions
 
     token = jwt.encode(payload, get_jwt_rsa_key(public=False), algorithm='RS256')
     return token
