@@ -69,6 +69,14 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         super().__init__(*args, **kwargs)
         if is_platform_auditor:
             self._is_platform_auditor = True
+        # Store the original value of the fields to check for field changes later
+        self._original_fields = self._get_fields()
+
+    def _get_fields(self):
+        """
+        Return a dictionary of the model's instance fields and their current values.
+        """
+        return {field.name: self.__dict__.get(field.name) for field in self._meta.fields}
 
     def fetch_platform_auditor_membership(self):
         "Get from the database True or False, this user is a system auditor"
@@ -100,6 +108,18 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
         if password_is_usable(self.password) and not password_is_hashed(self.password):
             self.password = make_password(self.password)
+
+        # Verify if the user's information has been updated for existing and unmanaged users.
+        # If yes, invalidated jwt cache
+        if not is_new_user and not self.managed:
+            fields = ["username", "first_name", "last_name", "email", "is_superuser"]
+            fields_changed = any(self._original_fields[field] != getattr(self, field) for field in fields)
+
+            if fields_changed:
+                from aap_gateway_api.utils.jwt_cache import invalidate_cached_jwt
+
+                invalidate_cached_jwt(self)
+
         super().save(*args, **kwargs)
 
         # If the system auditor role was set on unsaved object, apply it now that it is saved
@@ -150,5 +170,5 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
     @property
     def is_system_auditor(self):
-        """Temporary shim to satisify ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor"""
+        """Temporary shim to satisfy ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor"""
         return self.is_platform_auditor
