@@ -1,4 +1,9 @@
+import logging
+
 from django.core.cache import cache
+
+logger = logging.getLogger('aap.gateway.utils.jwt_cache')
+
 
 JWT_SESSION_PREFIX = "jwt-session-"
 
@@ -23,3 +28,14 @@ class JWTSessionCache:
     @staticmethod
     def remove(user_pk):
         return cache.delete(JWT_SESSION_PREFIX + str(user_pk))
+
+
+def invalidate_cached_jwt(user):
+    """
+    Invalidate the JWT cache for the given user.
+    """
+    if user:
+        logger.debug(f"Invalidating and issuing new JWT token for {user.username}")
+        JWTSessionCache.remove(user.pk)
+    else:
+        logger.warning("Attempted to invalidate JWT cache for a non-existent user.")
