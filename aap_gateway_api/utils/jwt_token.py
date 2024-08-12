@@ -139,14 +139,16 @@ def create_signed_jwt(user, resource_api_actions=None):
     # Now we are going to trim up any team references to organizations with the index instead of the ansible ID
     # i.e. we currently have entries like: payload['objects']['team'][0]['org'] = <ansible_id>
     # and we are going to convert that to: payload['objects']['team'][0]['org'] = 0
+
     for team in payload['objects'][team_content_type_model]:
         org_ansible_id = team['org']
         if org_ansible_id in cached_objects_index[org_content_type_model]:
             team['org'] = cached_objects_index[org_content_type_model][org_ansible_id]
         else:
             # The user is in a team related to an org but we didn't pull that org in yet
-            org_id = team['org']
-            org_data = required_data[org_content_type_model][org_id]
+            # Cache the index of the org, which is the current len
+            cached_objects_index[org_content_type_model][org_ansible_id] = len(payload['objects'][org_content_type_model])
+            org_data = required_data[org_content_type_model][org_ansible_id]
             team['org'] = len(payload['objects'][org_content_type_model])
             payload['objects'][org_content_type_model].append(org_data)
 
