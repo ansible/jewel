@@ -33,7 +33,8 @@ class AAPServiceNode(AAPObject):
         # Create the data that gets sent for create and update
         self.set_name_field()
 
-        if (address := self.params.get('address')) is not None:
+        address = self.params.get('address')
+        if address is not None:
             self.new_fields['address'] = address
 
         if self.service_cluster:

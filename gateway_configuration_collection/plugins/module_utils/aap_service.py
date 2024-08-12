@@ -47,10 +47,12 @@ class AAPService(AAPObject):
     def set_new_fields(self):
         self.set_name_field()
 
-        if (api_slug := self.params.get('api_slug')) is not None:
+        api_slug = self.params.get('api_slug')
+        if api_slug is not None:
             self.new_fields['api_slug'] = api_slug
 
-        if (description := self.params.get('description')) is not None:
+        description = self.params.get('description')
+        if description is not None:
             self.new_fields['description'] = description
 
         gateway_path = self.get_gateway_path()
@@ -67,19 +69,24 @@ class AAPService(AAPObject):
             if service_cluster_id is not None:
                 self.new_fields['service_cluster'] = service_cluster_id
 
-        if (enable_gateway_auth := self.params.get('enable_gateway_auth')) is not None:
+        enable_gateway_auth = self.params.get('enable_gateway_auth')
+        if enable_gateway_auth is not None:
             self.new_fields['enable_gateway_auth'] = enable_gateway_auth
 
-        if (is_service_https := self.params.get('is_service_https')) is not None:
+        is_service_https = self.params.get('is_service_https')
+        if is_service_https is not None:
             self.new_fields['is_service_https'] = is_service_https
 
-        if (service_path := self.params.get('service_path')) is not None:
+        service_path = self.params.get('service_path')
+        if service_path is not None:
             self.new_fields['service_path'] = service_path
 
-        if (service_port := self.params.get('service_port')) is not None:
+        service_port = self.params.get('service_port')
+        if service_port is not None:
             self.new_fields['service_port'] = service_port
 
-        if (order := self.params.get('order')) is not None:
+        order = self.params.get('order')
+        if order is not None:
             self.new_fields['order'] = order
 
     def get_gateway_path(self):
