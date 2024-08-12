@@ -12,23 +12,17 @@ logger = logging.getLogger('aap.gateway.authentication.service_token_auth')
 
 
 class ServiceTokenAuthentication(BaseAuthentication):
-    keywords = ["Token", "Bearer"]
+    keyword = "Token"
 
     def authenticate(self, request):
         auth = get_authorization_header(request).split()
-
-        keywords = [keyword.lower().encode(HTTP_HEADER_ENCODING) for keyword in self.keywords]
 
         if not auth:
             logger.debug("No authorization header found")
             return None
 
-        elif auth[0].lower() not in keywords or len(auth) != 2:
-            logger.info(
-                "Invalid header, it must be in the form of "
-                "'Token <secret>' or 'Bearer <secret>' with no extra spaces: "
-                f"{b64encode(get_authorization_header(request))}"
-            )
+        elif auth[0].lower() != self.keyword.lower().encode(HTTP_HEADER_ENCODING) or len(auth) != 2:
+            logger.warning(f"Invalid header, it must be in the form of 'Token <secret>' with no extra spaces: {b64encode(get_authorization_header(request))}")
             return None
 
         token = auth[1]
