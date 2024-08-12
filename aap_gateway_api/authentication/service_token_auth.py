@@ -18,7 +18,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
         auth = get_authorization_header(request).split()
 
         if not auth or auth[0].lower() != self.keyword.lower().encode(HTTP_HEADER_ENCODING) or len(auth) != 2:
-            logger.info(f"Invalid header, it must be in the form of 'Token <secret>' with no extra spaces: {b64encode(get_authorization_header(request))}")
+            logger.debug(f"Invalid header, it must be in the form of 'Token <secret>' with no extra spaces: {b64encode(get_authorization_header(request))}")
             return None
 
         token = auth[1]
