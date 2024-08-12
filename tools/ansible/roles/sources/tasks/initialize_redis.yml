@@ -121,6 +121,8 @@
         dest: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
         content: ""
         force: True
+        mode: "0666"
+
       loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
 
     - name: Generate cluster strings
