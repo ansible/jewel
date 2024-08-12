@@ -32,8 +32,8 @@ def _create_jwt_system_user(key, additional_payload=None, service=None, expirati
     return jwt.encode(payload, key.secret, key.algorithm)
 
 
-def _get_client(token, token_type="Token"):
-    return APIClient(headers={"Authorization": f"{token_type} " + token})
+def _get_client(token):
+    return APIClient(headers={"Authorization": "Token " + token})
 
 
 def _set_up_service_key(service, service_id):
@@ -116,7 +116,7 @@ def test_resource_api_access(user, service_cluster, request):
         key,
         service=id,
     )
-    client = _get_client(jwt, "Bearer")
+    client = _get_client(jwt)
 
     url = get_relative_url("resource-list")
     resp = client.get(url)
@@ -169,7 +169,7 @@ def test_invalid_jwt_schema(service_cluster_gateway, user, token_data):
 
 @pytest.mark.django_db
 def test_token_is_not_jwt(service_jwt_token):
-    client = _get_client(service_jwt_token, "Bearer")
+    client = _get_client(service_jwt_token)
     url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 200
