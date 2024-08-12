@@ -18,7 +18,11 @@ class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
 
 class ProxyUnsafeGatewayModelViewSet(GatewayModelViewSet):
     "Use for models that should reject PUT and DELETE requests coming from proxy"
-    permission_classes = [DisallowWriteFromProxy & perm_class for perm_class in GatewayModelViewSet.permission_classes]
+    permission_classes = [perm_class & DisallowWriteFromProxy for perm_class in GatewayModelViewSet.permission_classes]
+
+    def object_write_unsafe(self, request, obj) -> bool:
+        "Override this in viewset, called by proxy object permission classes."
+        return True
 
 
 class RoleModelViewSet(GatewayModelViewSet):

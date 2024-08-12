@@ -204,6 +204,11 @@ def http_port(http_port_factory):
 
 
 @pytest.fixture
+def http_api_port(http_api_port_factory):
+    yield http_api_port_factory()
+
+
+@pytest.fixture
 def http_port_factory():
     port = None
 

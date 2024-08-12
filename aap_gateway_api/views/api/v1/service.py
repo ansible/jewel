@@ -17,6 +17,11 @@ class ServiceAPIRouteViewSet(ProxyUnsafeGatewayModelViewSet):
     queryset = ServiceAPIRoute.objects.all()
     serializer_class = ServiceAPIRouteSerializer
 
+    def object_write_unsafe(self, request, obj: ServiceAPIRoute) -> bool:
+        # Currently we can be sure that there will only be one server per type,
+        # so we do not have to check if there are any more services of type GATEWAY
+        return obj.service_cluster.service_type in ServiceCluster.ServiceType.GATEWAY
+
 
 class ServiceNodeViewSet(ProxyUnsafeGatewayModelViewSet):
     """
@@ -26,6 +31,11 @@ class ServiceNodeViewSet(ProxyUnsafeGatewayModelViewSet):
     queryset = ServiceNode.objects.all()
     serializer_class = ServiceNodeSerializer
 
+    def object_write_unsafe(self, request, obj: ServiceNode) -> bool:
+        # Currently we can be sure that there will only be one server per type,
+        # so we do not have to check if there are any more services of type GATEWAY
+        return obj.service_cluster.service_type in ServiceCluster.ServiceType.GATEWAY
+
 
 class HTTPPortViewSet(ProxyUnsafeGatewayModelViewSet):
     """
@@ -34,6 +44,10 @@ class HTTPPortViewSet(ProxyUnsafeGatewayModelViewSet):
 
     queryset = HTTPPort.objects.all()
     serializer_class = HTTPPortSerializer
+
+    def object_write_unsafe(self, request, obj: HTTPPort) -> bool:
+        # reject all requests to modify the API port
+        return bool(obj.is_api_port)
 
 
 class ServiceClusterViewSet(ProxyUnsafeGatewayModelViewSet):
