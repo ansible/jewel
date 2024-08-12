@@ -14,11 +14,14 @@ class AAPOrganization(AAPObject):
         # Create the data that gets sent for create and update
         self.set_name_field()
 
-        if (description := self.params.get('description')) is not None:
+        description = self.params.get('description')
+        if description is not None:
             self.new_fields['description'] = description
 
-        if (users := self.params.get('users')) is not None:
+        users = self.params.get('users')
+        if users is not None:
             self.new_fields['users'] = users
 
-        if (admins := self.params.get('admins')) is not None:
+        admins = self.params.get('admins')
+        if admins is not None:
             self.new_fields['admins'] = admins

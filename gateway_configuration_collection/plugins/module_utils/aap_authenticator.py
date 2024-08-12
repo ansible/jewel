@@ -16,23 +16,30 @@ class AAPAuthenticator(AAPObject):
         # Create the data that gets sent for create and update
         self.set_name_field()
 
-        if (slug := self.module.params.get('slug')) is not None:
+        slug = self.module.params.get('slug')
+        if slug is not None:
             self.new_fields['slug'] = slug
 
-        if (enabled := self.module.params.get('enabled')) is not None:
+        enabled = self.module.params.get('enabled')
+        if enabled is not None:
             self.new_fields['enabled'] = enabled
 
-        if (create_objects := self.module.params.get('create_objects')) is not None:
+        create_objects = self.module.params.get('create_objects')
+        if create_objects is not None:
             self.new_fields['create_objects'] = create_objects
 
-        if (remove_users := self.module.params.get('remove_users')) is not None:
+        remove_users = self.module.params.get('remove_users')
+        if remove_users is not None:
             self.new_fields['remove_users'] = remove_users
 
-        if (configuration := self.module.params.get('configuration')) is not None:
+        configuration = self.module.params.get('configuration')
+        if configuration is not None:
             self.new_fields['configuration'] = configuration
 
-        if (type := self.module.params.get('type')) is not None:
-            self.new_fields['type'] = type
+        _type = self.module.params.get('type')
+        if _type is not None:
+            self.new_fields['type'] = _type
 
-        if (order := self.module.params.get('order')) is not None:
+        order = self.module.params.get('order')
+        if order is not None:
             self.new_fields['order'] = order

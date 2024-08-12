@@ -81,7 +81,8 @@ class AAPObject:
 
     def set_name_field(self):
         # Update
-        if (name := self.module.params.get('new_name')) is not None:
+        name = self.module.params.get('new_name')
+        if name is not None:
             self.new_fields['name'] = name
         # Get from existing item
         elif self.data is not None:

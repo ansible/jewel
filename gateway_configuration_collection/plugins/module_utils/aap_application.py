@@ -74,28 +74,35 @@ class AAPApplication(AAPObject):
         self.set_name_field()
         self._set_organization_field()
 
-        if (description := self.module.params.get('description')) is not None:
+        description = self.module.params.get('description')
+        if description is not None:
             self.new_fields['description'] = description
 
-        if (algorithm := self.module.params.get('algorithm')) is not None:
+        algorithm = self.module.params.get('algorithm')
+        if algorithm is not None:
             self.new_fields['algorithm'] = algorithm
 
-        if (authorization_grant_type := self.module.params.get('authorization_grant_type')) is not None:
+        authorization_grant_type = self.module.params.get('authorization_grant_type')
+        if authorization_grant_type is not None:
             self.new_fields['authorization_grant_type'] = authorization_grant_type
 
-        if (client_type := self.module.params.get('client_type')) is not None:
+        client_type = self.module.params.get('client_type')
+        if client_type is not None:
             self.new_fields['client_type'] = client_type
 
-        if (redirect_uris := self.module.params.get('redirect_uris')) is not None:
+        redirect_uris = self.module.params.get('redirect_uris')
+        if redirect_uris is not None:
             # Has to be space separated value in API!
             if isinstance(redirect_uris, list):
                 redirect_uris = ' '.join(redirect_uris)
             self.new_fields['redirect_uris'] = redirect_uris
 
-        if (skip_authorization := self.module.params.get('skip_authorization')) is not None:
+        skip_authorization = self.module.params.get('skip_authorization')
+        if skip_authorization is not None:
             self.new_fields['skip_authorization'] = skip_authorization
 
-        if (post_logout_redirect_uris := self.module.params.get('post_logout_redirect_uris')) is not None:
+        post_logout_redirect_uris = self.module.params.get('post_logout_redirect_uris')
+        if post_logout_redirect_uris is not None:
             # Has to be space separated value in API!
             if isinstance(post_logout_redirect_uris, list):
                 post_logout_redirect_uris = ' '.join(post_logout_redirect_uris)

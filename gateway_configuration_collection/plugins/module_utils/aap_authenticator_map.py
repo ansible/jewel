@@ -59,25 +59,32 @@ class AAPAuthenticatorMap(AAPObject):
 
         self._set_authenticator_field()
 
-        if (revoke := self.params.get('revoke')) is not None:
+        revoke = self.params.get('revoke')
+        if revoke is not None:
             self.new_fields['revoke'] = revoke
 
-        if (map_type := self.params.get('map_type')) is not None:
+        map_type = self.params.get('map_type')
+        if map_type is not None:
             self.new_fields['map_type'] = map_type
 
-        if (team := self.params.get('team')) is not None:
+        team = self.params.get('team')
+        if team is not None:
             self.new_fields['team'] = team
 
-        if (organization := self.params.get('organization')) is not None:
+        organization = self.params.get('organization')
+        if organization is not None:
             self.new_fields['organization'] = organization
 
-        if (role := self.params.get('role')) is not None:
+        role = self.params.get('role')
+        if role is not None:
             self.new_fields['role'] = role
 
-        if (triggers := self.params.get('triggers')) is not None:
+        triggers = self.params.get('triggers')
+        if triggers is not None:
             self.new_fields['triggers'] = triggers
 
-        if (order := self.params.get('order')) is not None:
+        order = self.params.get('order')
+        if order is not None:
             self.new_fields['order'] = order
 
     def _set_authenticator_field(self):

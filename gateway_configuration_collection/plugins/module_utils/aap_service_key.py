@@ -33,7 +33,8 @@ class AAPServiceKey(AAPObject):
         # Create the data that gets sent for create and update
         self.set_name_field()
 
-        if (is_active := self.params.get('is_active')) is not None:
+        is_active = self.params.get('is_active')
+        if is_active is not None:
             self.new_fields['is_active'] = is_active
 
         if self.service_cluster:
@@ -41,14 +42,18 @@ class AAPServiceKey(AAPObject):
             if service_cluster_id is not None:
                 self.new_fields['service_cluster'] = service_cluster_id
 
-        if (algorithm := self.params.get('algorithm')) is not None:
+        algorithm = self.params.get('algorithm')
+        if algorithm is not None:
             self.new_fields['algorithm'] = algorithm
 
-        if (secret := self.params.get('secret')) is not None:
+        secret = self.params.get('secret')
+        if secret is not None:
             self.new_fields['secret'] = secret
 
-        if (secret_length := self.params.get('secret_length')) is not None:
+        secret_length = self.params.get('secret_length')
+        if secret_length is not None:
             self.new_fields['secret_length'] = secret_length
 
-        if (mark_previous_inactive := self.params.get('mark_previous_inactive')) is not None:
+        mark_previous_inactive = self.params.get('mark_previous_inactive')
+        if mark_previous_inactive is not None:
             self.new_fields['mark_previous_inactive'] = mark_previous_inactive
