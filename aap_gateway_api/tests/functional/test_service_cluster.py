@@ -1,6 +1,7 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 
+from aap_gateway_api.exceptions import ProxyDenied
 from aap_gateway_api.models import ServiceCluster
 
 
@@ -96,16 +97,18 @@ def test_service_cluster_create_with_missing_type(admin_api_client):
         ("service_cluster-detail", "service_cluster_gateway"),
         ("service_node-detail", "service_node_gateway"),
         ("service-detail", "service_api_route_gateway"),
-        ("http_port-detail", "http_port"),
+        ("http_port-detail", "http_api_port"),
     ],
 )
 def test_service_model_write_from_proxy(request, admin_api_client, endpoint_name, endpoint_fixture):
     endpoint_object = request.getfixturevalue(endpoint_fixture)
     url = get_relative_url(endpoint_name, kwargs={"pk": endpoint_object.pk})
     extras = {"HTTP_X_TRUSTED_PROXY": "True"}
-    response = admin_api_client.post(url, **extras)
-    assert response.status_code == 403
+
     response = admin_api_client.put(url, **extras)
     assert response.status_code == 403
+    assert str(ProxyDenied.default_detail) in str(response.content)
+
     response = admin_api_client.delete(url, **extras)
     assert response.status_code == 403
+    assert str(ProxyDenied.default_detail) in str(response.content)
