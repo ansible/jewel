@@ -137,3 +137,29 @@ class TestUserObjectRoles:
 
         assert len(expected) == 7
         assert set(get_user_object_roles(user)) == expected
+
+    def test_unique_orgs_and_teams(self, user, set_preference, rsa_keypair, organization):
+        """
+        Ensure that organization and team objects in the jwt token payload are unique
+        Test Scenario:
+        - user is assigned as "Team Member" for Team 1 and both "Team Member" and "Team Admin" for Team 2
+        - both team 1 and team 2 belong to the same test organization
+        - verify that the JWT payload contains only 1 organization object and 2 distinct team objects.
+        """
+
+        team1 = Team.objects.create(name="Team 1", organization=organization)
+        team2 = Team.objects.create(name="Team 2", organization=organization)
+        # Give user team member permission to team 1
+        RoleDefinition.objects.managed.team_member.give_permission(user, team1)
+        # Give user team member and admin permission to team 2
+        RoleDefinition.objects.managed.team_member.give_permission(user, team2)
+        RoleDefinition.objects.managed.team_admin.give_permission(user, team2)
+
+        set_preference("proxy", "jwt_private_key", rsa_keypair.private)
+        set_preference("proxy", "jwt_public_key", rsa_keypair.public)
+        jwt_token = create_signed_jwt(user)
+        decoded = decode_signed_jwt(jwt_token)
+
+        for object_type, object_list in decoded["objects"].items():
+            unique_object_ids = set(obj_data["ansible_id"] for obj_data in object_list)
+            assert len(unique_object_ids) == len(object_list), f"Duplicate found in {object_type} list"
