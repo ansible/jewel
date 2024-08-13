@@ -245,9 +245,9 @@ class TestUserNoRolePermissions(TestUserPermissionsBase):
         """Basic user can't delete any user"""
         org = organizations[0]
         for org_member in users[org]:
-            self._test_delete_one(user_api_client, org_member, status_code=401)
+            self._test_delete_one(user_api_client, org_member, status_code=404)
 
-        self._test_delete_one(user_api_client, user, status_code=401)
+        self._test_delete_one(user_api_client, user, status_code=403)
 
 
 @pytest.mark.django_db

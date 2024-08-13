@@ -6,6 +6,7 @@ from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from crum import get_current_user
+from django.contrib.auth import update_session_auth_hash
 from django.db.utils import IntegrityError
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
@@ -202,6 +203,10 @@ class UserSerializer(CommonUserSerializer):
         return_value = super().update(instance, validated_data)
 
         self.update_users_authenticators(authenticators, authenticator_uid, instance)
+
+        # If we are updating a password we need to reset the session or the user will be logged out
+        if validated_data.get('password', None) and self.context['request'].user.username == instance.username:
+            update_session_auth_hash(self.context['request'], instance)
 
         return return_value
 
