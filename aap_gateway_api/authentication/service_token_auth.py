@@ -1,10 +1,8 @@
 import logging
-from base64 import b64encode
 
 from ansible_base.lib.utils.response import get_relative_url
 from django.core.exceptions import ValidationError
-from rest_framework import HTTP_HEADER_ENCODING
-from rest_framework.authentication import BaseAuthentication, get_authorization_header
+from rest_framework.authentication import BaseAuthentication
 
 from aap_gateway_api.utils.service_token import validate_service_token
 
@@ -12,20 +10,11 @@ logger = logging.getLogger('aap.gateway.authentication.service_token_auth')
 
 
 class ServiceTokenAuthentication(BaseAuthentication):
-    keyword = "Token"
-
     def authenticate(self, request):
-        auth = get_authorization_header(request).split()
+        token = request.headers.get("X-ANSIBLE-SERVICE-AUTH", None)
 
-        if not auth:
-            logger.debug("No authorization header found")
+        if token is None:
             return None
-
-        elif auth[0].lower() != self.keyword.lower().encode(HTTP_HEADER_ENCODING) or len(auth) != 2:
-            logger.warning(f"Invalid header, it must be in the form of 'Token <secret>' with no extra spaces: {b64encode(get_authorization_header(request))}")
-            return None
-
-        token = auth[1]
 
         try:
             token_data = validate_service_token(token)
