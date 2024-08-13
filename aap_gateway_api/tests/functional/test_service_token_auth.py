@@ -33,7 +33,7 @@ def _create_jwt_system_user(key, additional_payload=None, service=None, expirati
 
 
 def _get_client(token):
-    return APIClient(headers={"Authorization": "Token " + token})
+    return APIClient(headers={"X-ANSIBLE-SERVICE-AUTH": token})
 
 
 def _set_up_service_key(service, service_id):
