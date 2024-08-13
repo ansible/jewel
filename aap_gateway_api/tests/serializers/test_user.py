@@ -281,3 +281,13 @@ class TestUserSerializer:
         response = admin_api_client.patch(url, data={"managed": False})
         assert response.status_code == 200
         assert response.data["managed"] is True
+
+    @pytest.mark.django_db
+    def test_user_password_change_does_not_reset_session(self, random_user, user_api_client):
+        user_api_client.login(username=random_user.username, password='password')
+        url = get_relative_url("user-detail", kwargs={"pk": random_user.pk})
+        payload = {'password': 'asdf1234'}
+        response = user_api_client.patch(url, payload)
+        assert response.status_code == 200, response.json()
+        response = user_api_client.get(url)
+        assert response.status_code == 200, response.json()
