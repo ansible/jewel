@@ -5,6 +5,7 @@
     new_name:                 "{{ __gateway_service_nodes_item.new_name | default(omit) }}"
     address:                  "{{ __gateway_service_nodes_item.address | default(omit) }}"
     service_cluster:          "{{ __gateway_service_nodes_item.service_cluster | default(omit) }}"
+    tags:                     "{{ __gateway_service_nodes_item.tags | default(omit) }}"
     state:                    "{{ __gateway_service_nodes_item.state | default(gateway_state | default(omit, true)) }}"
 
     # Role Standard Options

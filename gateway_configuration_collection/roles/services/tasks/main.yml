@@ -11,6 +11,7 @@
     enable_gateway_auth:      "{{ __gateway_services_item.enable_gateway_auth | default(omit) }}"
     service_path:             "{{ __gateway_services_item.service_path | default(omit) }}"
     service_port:             "{{ __gateway_services_item.service_port | default(omit) }}"
+    node_tags:                "{{ __gateway_services_item.node_tags | default(omit) }}"
     order:                    "{{ __gateway_services_item.order | default(omit) }}"
     state:                    "{{ __gateway_services_item.state | default(gateway_state | default(omit, true)) }}"
 

@@ -21,7 +21,7 @@ author: Red Hat Contributor (@User)
 short_description: Configure a gateway service.
 description:
     - Configure an automation platform gateway service.
-    - Their gateway API paths have a prefixes: / in case of gateway, /api/ otherwise
+    - Their gateway API paths have prefixes: / in case of gateway, /api/ otherwise
 options:
     name:
       required: true
@@ -66,6 +66,11 @@ options:
       - Port on the service cluster to route traffic to
       - Required when creating a new Service
       type: int
+    node_tags:
+      description:
+      - Comma separated string
+      - Selects which (tagged) nodes receive traffic from this route
+      type: str
     order:
       description:
       - The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order
@@ -123,6 +128,7 @@ def main():
         enable_gateway_auth=dict(type="bool"),
         service_path=dict(type="str"),
         service_port=dict(type="int"),
+        node_tags=dict(type="str"),
         order=dict(type="int"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )

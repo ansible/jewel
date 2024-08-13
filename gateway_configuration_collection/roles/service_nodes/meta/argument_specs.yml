@@ -22,6 +22,11 @@ argument_specs:
           service_cluster:
             description: Type of service ("hub", "controller", "eda", "gateway")
             type: str
+          tags:
+            type: str
+            description:
+              - Comma separated string
+              - Selects which (tagged) nodes receive traffic from this route
           state:
             default: "{{ gateway_state | default('present') }}"
             required: false
