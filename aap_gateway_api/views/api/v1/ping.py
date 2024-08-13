@@ -2,13 +2,22 @@ from datetime import datetime
 from urllib.parse import urljoin
 
 import requests
+from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_GOOD
 from django.db import connections
-from django.db.utils import OperationalError
 from rest_framework.response import Response
 
 from aap_gateway_api.utils import get_preference_value
 from aap_gateway_api.version import get_aap_version
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
+
+
+def _get_db_connection_status(db_conn):
+    try:
+        db_conn.cursor()
+        return {'db_connected': True}
+    except Exception as e:
+        # We only log the exception type because the message could contain sensitive information
+        return {'db_connected': False, 'db_exception': type(e).__name__, 'status': STATUS_DEGRADED}
 
 
 class PingView(AnsibleBaseView):
@@ -19,20 +28,12 @@ class PingView(AnsibleBaseView):
         response = {
             "version": get_aap_version(),
             "pong": str(current_time),
-            "status": "good",
+            "status": STATUS_GOOD,
         }
 
         # Attempt a db connection
-        db_conn = connections['default']
-        try:
-            db_conn.cursor()
-        except OperationalError as e:
-            connected = False
-            response['db_exception'] = type(e).__name__
-            response['status'] = "degraded"
-        else:
-            connected = True
-        response['db_connected'] = connected
+        db_info = _get_db_connection_status(connections['default'])
+        response.update(db_info)
 
         # Check the proxy
         ping_url = urljoin(get_preference_value('proxy', 'gateway_proxy_url'), '/up')
@@ -44,12 +45,13 @@ class PingView(AnsibleBaseView):
             else:
                 connected = False
                 response['proxy_status_code'] = proxy_response.status_code
-                response['status'] = "degraded"
+                response['status'] = STATUS_DEGRADED
         except Exception as e:
             # Exception might expose the host names so we don't want to add a reason for the exception
             connected = False
-            response['proxy_exception'] = type(e).__name__
-            response['status'] = "degraded"
+            # We only log the exception type because the message could contain sensitive information
+            response['proxy_exception_type'] = type(e).__name__
+            response['status'] = STATUS_DEGRADED
         response['proxy_connected'] = connected
 
         return Response(response)
