@@ -51,6 +51,11 @@ argument_specs:
             description:
             - Port on the service to route traffic to
             - Required when creating a new Service
+          node_tags:
+            type: str
+            description:
+              - Comma separated string
+              - Selects which (tagged) nodes receive traffic from this route
           order:
             type: int
             description: The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order

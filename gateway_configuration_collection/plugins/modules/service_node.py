@@ -42,6 +42,11 @@ options:
           - Service Cluster containing this node - name or ID
           - Required when creating new Service Node
         type: str
+    tags:
+      description:
+      - Comma separated string
+      - All nodes with tags referenced in a route's node_tags will receive traffic from that route
+      type: str
 
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
@@ -79,6 +84,7 @@ def main():
         new_name=dict(type="str"),
         address=dict(type="str"),
         service_cluster=dict(type="str"),
+        tags=dict(type="str"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 

@@ -6,6 +6,18 @@ from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, S
 from aap_gateway_api.models.service import API_PREFIX
 
 
+def _validate_tags_field(value):
+    if not value:
+        return value
+    cleaned_tags = set()
+    for tag in value.split(','):
+        tag = tag.strip()
+        if not tag:
+            continue
+        cleaned_tags.add(tag)
+    return ','.join(cleaned_tags)
+
+
 class HTTPPortSerializer(NamedCommonModelSerializer):
     class Meta:
         model = HTTPPort
@@ -45,15 +57,22 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
             'api_slug',
             'enable_gateway_auth',
             'order',
+            'node_tags',
         ]
 
         read_only_fields = ('gateway_path',)
+
+    def validate_node_tags(self, value):
+        return _validate_tags_field(value)
 
 
 class ServiceNodeSerializer(NamedCommonModelSerializer):
     class Meta:
         model = ServiceNode
-        fields = NamedCommonModelSerializer.Meta.fields + ['address', 'service_cluster']
+        fields = NamedCommonModelSerializer.Meta.fields + ['address', 'service_cluster', 'tags']
+
+    def validate_tags(self, value):
+        return _validate_tags_field(value)
 
 
 class AdditionalRouteSerializer(NamedCommonModelSerializer):
@@ -70,7 +89,11 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
             'gateway_path',
             'description',
             'enable_gateway_auth',
+            'node_tags',
         ]
+
+    def validate_node_tags(self, value):
+        return _validate_tags_field(value)
 
     def validate(self, attrs):
         if attrs.get("http_port") and attrs["http_port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):

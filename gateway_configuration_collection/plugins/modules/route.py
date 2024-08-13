@@ -66,6 +66,11 @@ options:
       - Port on the service cluster to route traffic to
       - Required when creating a new route
       type: int
+    node_tags:
+      description:
+      - Comma separated string
+      - Selects which (tagged) nodes receive traffic from this route
+      type: str
 
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
@@ -117,6 +122,7 @@ def main():
         enable_gateway_auth=dict(type="bool"),
         service_path=dict(type="str"),
         service_port=dict(type="int"),
+        node_tags=dict(type="str"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 

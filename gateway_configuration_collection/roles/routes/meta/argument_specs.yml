@@ -51,6 +51,11 @@ argument_specs:
             description:
             - Port on the service to route traffic to
             - Required when creating a new Route
+          node_tags:
+            type: str
+            description:
+              - Comma separated string
+              - Selects which (tagged) nodes receive traffic from this route
           state:
             default: "{{ gateway_state | default('present') }}"
             required: false

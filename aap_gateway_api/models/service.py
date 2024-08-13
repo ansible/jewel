@@ -219,6 +219,16 @@ class ServiceNode(UniqueNamedCommonModel, AuditableModel):
         ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text=_("AAP Service cluster that this node belongs to.")
     )
     address = models.CharField(max_length=255, help_text=_("Network address to route traffic for this service to."))
+    tags = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False,
+        default="",
+        help_text=_("Comma-separated. Used to assign roles to a node, to be selective about which routes point to it."),
+    )
+
+    def tags_list(self):
+        return [tag.strip() for tag in self.tags.split(",")] if self.tags else []
 
 
 class Route(UniqueNamedCommonModel, AuditableModel):
@@ -279,6 +289,20 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         help_text=_("The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order"),
     )
 
+    node_tags = models.CharField(
+        max_length=255,
+        blank=True,
+        null=False,
+        default="",
+        help_text=_(
+            "Comma-separated. Allows for being selective about which nodes in the service cluster receive traffic from this route. "
+            "Leave blank to select all nodes."
+        ),
+    )
+
+    def node_tags_list(self):
+        return [tag.strip() for tag in self.node_tags.split(",")] if self.node_tags else []
+
     def save(self, *args, **kwargs):
         self.envoy_cluster_name = f"cluster-{self.service_cluster.pk}-{self.service_port}"
 
@@ -287,6 +311,10 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     def get_xds_cluster_config(self):
         endpoints = []
         for node in self.service_cluster.nodes.all():
+            if self.node_tags and not any(tag in node.tags_list() for tag in self.node_tags_list()):
+                # Skip nodes that don't have the required tags, if tags are specified.
+                continue
+
             endpoint = {
                 "endpoint": {
                     "address": {
