@@ -33,13 +33,14 @@ Options for the `gateway_services` variable:
 | `description`         |         ""          |    no    | str  | Description of the service                                                                                                                        |
 | `api_slug`            |         ""          |    no    | str  | URL slug for the gateway API path for the Controller, Hub and EDA services (gateway API route requires value "gateway", but the slug is not used) |
 | `http_port`           |         N/A         |    no    | str  | ID or name referencing the [Http Port](../http_ports/README.md)                                                                                   |
-| `service_cluster`     |         N/A         |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)                                                                       | 
+| `service_cluster`     |         N/A         |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)                                                                       |
 | `is_service_https`    |       `false`       |    no    | bool | Flag whether or not the service cluster uses https                                                                                                |
 | `enable_gateway_auth` | N/A (`true` by API) |    no    | bool | If false, the AAP gateway will not insert a gateway token into the proxied request                                                                |
-| `service_path`        |         ""          |    no    | str  | URL path on the AAP Service cluster to route traffic to                                                                                           | 
-| `service_port`        |         N/A         |    no    | int  | Port on the service cluster to route traffic to                                                                                                   | 
-| `order`               |  "" (`50` by API)   |    no    | int  | The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order                                      | 
-| `state`               |      `present`      |    no    | str  | [more](../../README.md#state-variable)                                                                                                            | 
+| `service_path`        |         ""          |    no    | str  | URL path on the AAP Service cluster to route traffic to                                                                                           |
+| `service_port`        |         N/A         |    no    | int  | Port on the service cluster to route traffic to                                                                                                   |
+| `order`               |  "" (`50` by API)   |    no    | int  | The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order                                      |
+| `tags`                |         ""          |    no    | str  | Comma-separated string, selects which (tagged) nodes receive traffic from this route                                                              |
+| `state`               |      `present`      |    no    | str  | [more](../../README.md#state-variable)                                                                                                            |
 
 **Unique value:**
 

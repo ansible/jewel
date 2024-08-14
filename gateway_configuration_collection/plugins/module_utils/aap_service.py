@@ -89,6 +89,10 @@ class AAPService(AAPObject):
         if order is not None:
             self.new_fields['order'] = order
 
+        node_tags = self.params.get('node_tags')
+        if node_tags is not None:
+            self.new_fields['node_tags'] = node_tags
+
     def get_gateway_path(self):
         if self.data:
             gateway_path = self.data['gateway_path']
