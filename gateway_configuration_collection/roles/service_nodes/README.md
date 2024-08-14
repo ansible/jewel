@@ -30,6 +30,7 @@ Options for the `gateway_service_nodes` variable:
 | `new_name`        |      N/A      |    no    | str  | Setting this option will change the existing name (looked up via the name field) |
 | `address`         |      N/A      |    no    | str  | Network address for this service                                                 |
 | `service_cluster` |      N/A      |    no    | str  | ID or name referencing the [Service Cluster](../service_clusters/README.md)      |
+| `tags`            |      N/A      |    no    | str  | Comma separated list of tags to assign to the node, for filtering route traffic  |
 | `state`           |   `present`   |    no    | str  | [more](../../README.md#state-variable)                                           |
 
 **Unique value:**
