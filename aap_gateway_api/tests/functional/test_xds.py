@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 
-from aap_gateway_api.models import HTTPPort
+from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceNode
 
 
 def test_xds_listener_discover_service_httpport_count(unauthenticated_api_client):
@@ -182,3 +182,94 @@ def test_xds_cluster_discover_service_route_tags(admin_api_client, full_service_
     assert len(nodes) == 2
     assert old_node_address in nodes
     assert new_node_address in nodes
+
+
+def get_lds_routes(admin_api_client):
+    routes = {}
+    url = reverse("lds")
+    response = admin_api_client.post(url, data={})
+    assert response.status_code == 200
+    filter = response.data['resources'][0]["filterChains"][0]["filters"][0]
+    for route in filter["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]:
+        routes[route["match"]["prefix"]] = route["route"]["cluster"]
+    return routes
+
+
+def get_cds_clusters(admin_api_client):
+    clusters = {}
+    url = reverse("cds")
+    response = admin_api_client.post(url, data={})
+    assert response.status_code == 200
+    for cluster in response.data['resources']:
+        name = cluster['loadAssignment']["clusterName"]
+        endpoints = cluster['loadAssignment']['endpoints'][0]['lbEndpoints']
+        addresses = [x['endpoint']['address']['socketAddress']['address'] for x in endpoints]
+        clusters[name] = addresses
+    return clusters
+
+
+def test_xds_cluster_names(admin_api_client, service_cluster_eda, http_api_port_factory, randname):
+    port = http_api_port_factory()
+    service_port = "8000"
+
+    route = AdditionalRoute.objects.create(
+        name=randname("webhook"),
+        http_port=port,
+        service_cluster=service_cluster_eda,
+        service_port=service_port,
+        is_service_https=False,
+        service_path="/eda-webhooks/",
+        gateway_path="/eda-webhooks/",
+        node_tags="",
+    )
+
+    service = ServiceAPIRoute.objects.create(
+        name=randname("api"),
+        http_port=port,
+        service_cluster=service_cluster_eda,
+        service_port=service_port,
+        is_service_https=False,
+        service_path="/api/eda/",
+        api_slug="eda",
+        node_tags="",
+    )
+
+    node_a = ServiceNode.objects.create(name=randname("eda_node"), service_cluster=service_cluster_eda, address="eda_a", tags="a")
+    node_b = ServiceNode.objects.create(name=randname("eda_node"), service_cluster=service_cluster_eda, address="eda_b", tags="b")
+
+    cluster_base_name = f"cluster-{service_cluster_eda.pk}-{service_port}-nodes:"
+
+    # Check that routes with no tag both select the same cluster with all nodes
+    routes = get_lds_routes(admin_api_client)
+    clusters = get_cds_clusters(admin_api_client)
+    assert routes["/api/eda/"] == routes["/eda-webhooks/"]
+    assert set(clusters[cluster_base_name + "*"]) == set([node_a.address, node_b.address])
+    assert len(clusters) == 1
+
+    # Check that routes with unique tag combos create distinct clusters
+    route.node_tags = "a"
+    route.save()
+    service.node_tags = "b"
+    service.save()
+
+    routes = get_lds_routes(admin_api_client)
+    clusters = get_cds_clusters(admin_api_client)
+    assert routes["/api/eda/"] == cluster_base_name + "b"
+    assert routes["/eda-webhooks/"] == cluster_base_name + "a"
+    assert set(clusters[cluster_base_name + "b"]) == set([node_b.address])
+    assert set(clusters[cluster_base_name + "a"]) == set([node_a.address])
+    assert len(clusters) == 2
+
+    # Check that the order of the tags doesn't matter
+    route.node_tags = "a,b"
+    route.save()
+    service.node_tags = "b,a"
+    service.save()
+
+    routes = get_lds_routes(admin_api_client)
+    clusters = get_cds_clusters(admin_api_client)
+    assert routes["/api/eda/"] == cluster_base_name + "a,b"
+    assert routes["/eda-webhooks/"] == cluster_base_name + "a,b"
+    assert routes["/api/eda/"] == routes["/eda-webhooks/"]
+    assert set(clusters[cluster_base_name + "a,b"]) == set([node_a.address, node_b.address])
+    assert len(clusters) == 1
