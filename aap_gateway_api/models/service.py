@@ -304,7 +304,18 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         return [tag.strip() for tag in self.node_tags.split(",")] if self.node_tags else []
 
     def save(self, *args, **kwargs):
-        self.envoy_cluster_name = f"cluster-{self.service_cluster.pk}-{self.service_port}"
+        nodes = self.node_tags_list()
+
+        # Sort the list of nodes so that if the same set of tags are provided in a different order, it will result
+        # in the same cluster being created for envoy.
+        nodes.sort()
+        if len(nodes) == 0:
+            nodes = "*"
+        else:
+            nodes = ",".join(nodes)
+
+        # The same route can result in the same envoy cluster if the set of nodes and service port are the same.
+        self.envoy_cluster_name = f"cluster-{self.service_cluster.pk}-{self.service_port}-nodes:{nodes}"
 
         return super().save(*args, **kwargs)
 
