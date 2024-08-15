@@ -6,7 +6,7 @@ from ansible_base.lib.abstract_models.user import AbstractDABUser
 from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, UNUSABLE_PASSWORD_SUFFIX_LENGTH, get_hashers_by_algorithm, identify_hasher, make_password
-from django.db.models import BooleanField
+from django.db import models
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.managers.user import UserUnmanagedManager
@@ -55,7 +55,7 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
     resource = AnsibleResourceField(primary_key_field="id")
 
-    managed = BooleanField(
+    managed = models.BooleanField(
         editable=False,
         blank=False,
         default=False,
@@ -172,3 +172,21 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
     def is_system_auditor(self):
         """Temporary shim to satisfy ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor"""
         return self.is_platform_auditor
+
+
+class MigratedUserMetadata(CommonModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="original_accounts")
+    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE)
+
+    original_username = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = [('user', 'service')]
+
+
+class SocialMap(models.Model):
+    uid = models.CharField(max_length=256)
+    backend_type = models.CharField(max_length=256)
+    sso_server = models.CharField(max_length=256, null=True)
+
+    migrated_user = models.ForeignKey(MigratedUserMetadata, on_delete=models.CASCADE, related_name="sso_backends")

@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'ansible_base.jwt_consumer',
     'ansible_base.resource_registry',
     'service_test_app',
+    'social_django',
 ]
 
 MIDDLEWARE = [
@@ -132,6 +133,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 ANSIBLE_BASE_TEAM_MODEL = 'service_test_app.Team'
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'service_test_app.Organization'
+
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.keycloak.KeycloakOAuth2',
+    'django.contrib.auth.backends.ModelBackend',
+)
 
 
 from ansible_base.lib import dynamic_config  # noqa: E402

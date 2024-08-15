@@ -1,5 +1,5 @@
 # User must be imported first or else we end up with a circular import
-from aap_gateway_api.models.user import User  # noqa: 401  # isort: skip
+from aap_gateway_api.models.user import User, MigratedUserMetadata, SocialMap  # noqa: 401  # isort: skip
 
 from ansible_base.rbac import permission_registry
 

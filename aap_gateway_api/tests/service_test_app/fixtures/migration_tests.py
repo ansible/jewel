@@ -1,4 +1,6 @@
+from ansible_base.resource_registry.models import Resource
 from service_test_app.models import Organization, Team, User
+from social_django.models import UserSocialAuth
 
 
 def setup():
@@ -56,3 +58,10 @@ def setup():
 
     u = User.objects.create(username="hawkeye")
     u.teams.set([normal_h])
+
+    UserSocialAuth.objects.create(user=u, provider="keycloak", uid="mr_hawk")
+
+    u = User.objects.create(username="already_migrated")
+    r = Resource.get_resource_for_object(u)
+    r.is_partially_migrated = True
+    r.save()

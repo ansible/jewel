@@ -3,7 +3,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
 
-from aap_gateway_api.models import Organization, Team, User
+from aap_gateway_api.models import MigratedUserMetadata, Organization, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 
@@ -71,6 +71,17 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
             break
 
     assert set(migrated_types) == resource_api_types
+
+    # check idempotence
+    resources = service_client.list_resources(
+        {
+            "service_id": service_client.service.service_cluster.service_id,
+            "is_partially_migrated": "false",
+        }
+    ).json()
+
+    # _system user won't get synced
+    assert resources["count"] == 1
 
 
 @pytest.mark.django_db(transaction=True)
@@ -150,20 +161,36 @@ def test_migrate_merge_orgs_and_teams(
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.skip(reason='Running without migrating users not supported yet')
-def test_migrate_conflicting_user(migration_service, admin_user, service_api_route_controller, admin_api_client, patched_resource_client):
+def test_migrate_conflicting_user(
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    service_api_route_hub,
+    admin_api_client,
+    patched_resource_client,
+):
     # Check that users do not exist yet
     assert not User.objects.filter(username="natasha").exists()
     assert not User.objects.filter(username="hawkeye").exists()
 
     # Create a conflict
-    User.objects.create(username="hawkeye")
+    u = User.objects.create(username="hawkeye")
+    MigratedUserMetadata.objects.create(user=u, service=service_api_route_hub.service_cluster, original_username="hawkeye")
 
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
     call_command(
-        "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=True, merge_organizations=True
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=True,
+        merge_organizations=True,
+        merge_users=False,
     )
+
+    pre_sync_resources = service_client.list_resources(
+        {"service_id": service_client.service.service_cluster.service_id, "content_type__resource_type__name": "shared.user"}
+    ).json()
 
     _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
 
@@ -172,11 +199,45 @@ def test_migrate_conflicting_user(migration_service, admin_user, service_api_rou
     assert User.objects.filter(username="hawkeye").exists()
     assert User.objects.filter(username=f'{service_client.service.api_slug}:hawkeye').exists()
 
+    renamed_user = User.objects.get(username=f'{service_client.service.api_slug}:hawkeye')
+
+    assert renamed_user.original_accounts.count() == 1
+    original_data = renamed_user.original_accounts.get(service=migration_service.service_cluster)
+    assert original_data.original_username == "hawkeye"
+
+    assert original_data.sso_backends.filter(backend_type="keycloak", uid="mr_hawk").exists()
+
+    updated_resource = service_client.get_resource(str(renamed_user.resource.ansible_id)).json()
+    assert updated_resource
+
+    # When merge_users=False, users should get partially migrated
+    assert updated_resource["is_partially_migrated"] is True
+
+    # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
+    assert not User.objects.filter(username="already_migrated").exists()
+
+    resources = service_client.list_resources(
+        {"service_id": service_client.service.service_cluster.service_id, "content_type__resource_type__name": "shared.user"}
+    ).json()
+
+    # Check that the user's service ID's were not updated
+    assert resources["count"] == pre_sync_resources["count"]
+
+    assert renamed_user.resource.service_id == migration_service.service_cluster.service_id
+
 
 @pytest.mark.django_db(transaction=True)
-def test_merge_users(migration_service, admin_user, service_api_route_controller, admin_api_client, patched_resource_client):
+def test_merge_users(
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    service_api_route_hub,
+    admin_api_client,
+    patched_resource_client,
+):
     # Create a conflict
     u = User.objects.create(username="hawkeye", email="hawkeye@secretbase.invalid")
+    MigratedUserMetadata.objects.create(user=u, service=service_api_route_hub.service_cluster, original_username="hawkeye")
 
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
     call_command(
@@ -191,12 +252,23 @@ def test_merge_users(migration_service, admin_user, service_api_route_controller
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="hawkeye").exists()
+    assert User.objects.get(username="hawkeye").original_accounts.count() == 2
     assert not User.objects.filter(username=f'{service_client.service.api_slug}:hawkeye').exists()
     updated_resource = service_client.get_resource(str(u.resource.ansible_id)).json()
     assert updated_resource
+
+    # When merge_users=True, users should get fully migrated
+    assert updated_resource["is_partially_migrated"] is False
+
     updated_user = updated_resource['resource_data']
     assert updated_user.get('username') == 'hawkeye', updated_user
     assert updated_user.get('email') == 'hawkeye@secretbase.invalid', updated_user
+
+    original_data = User.objects.get(username="hawkeye").original_accounts.get(service=migration_service.service_cluster)
+    assert original_data.sso_backends.filter(backend_type="keycloak", uid="mr_hawk").exists()
+
+    # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
+    assert not User.objects.filter(username="already_migrated").exists()
 
 
 @pytest.fixture

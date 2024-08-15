@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from requests.exceptions import HTTPError
 
-from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models import MigratedUserMetadata, ServiceAPIRoute, ServiceCluster, SocialMap
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
@@ -66,9 +66,6 @@ class Command(BaseCommand):
         merge_users = options["merge_users"]
         username = options["username"]
 
-        if merge_users is False:
-            raise CommandError('Running without merging users is unsupported for now.')
-
         # The order here matters. Organizations need to be migrated first.
         self.resource_types_to_migrate = OrderedDict()
 
@@ -78,6 +75,7 @@ class Command(BaseCommand):
             "unique_fields": [
                 "name",
             ],
+            "perform_partial_migration": False,
         }
         self.resource_types_to_migrate["shared.team"] = {
             "merge": merge_teams,
@@ -86,6 +84,7 @@ class Command(BaseCommand):
                 "name",
                 "organization",
             ],
+            "perform_partial_migration": False,
         }
         self.resource_types_to_migrate["shared.user"] = {
             "merge": merge_users,
@@ -93,6 +92,7 @@ class Command(BaseCommand):
             "unique_fields": [
                 "username",
             ],
+            "perform_partial_migration": True,
         }
 
         try:
@@ -158,6 +158,17 @@ class Command(BaseCommand):
 
         return name
 
+    def create_user_migration_entry(self, user, initial_data, additional_data):
+        service_cluster = self.client.service.service_cluster
+        migrated_user = MigratedUserMetadata.objects.create(
+            user=user.content_object,
+            service=service_cluster,
+            original_username=initial_data["username"],
+        )
+
+        for social in additional_data["social_auth"]:
+            SocialMap.objects.create(migrated_user=migrated_user, **social)
+
     def migrate_resource(self, resource_type_name):
         """
         Get a list of resources from the upstream service and add them to the gateway.
@@ -167,6 +178,12 @@ class Command(BaseCommand):
         resource_type = self.resource_types_to_migrate[resource_type_name]["type"]
         merge = self.resource_types_to_migrate[resource_type_name]["merge"]
         unique_fields = self.resource_types_to_migrate[resource_type_name]["unique_fields"]
+
+        # Perform a partial migration if it is enable for the resource type and merge is set
+        # to false. This will result in the resource being copied to Gateway, but the service_id
+        # being kept to the original service's.
+        perform_partial_migration = self.resource_types_to_migrate[resource_type_name]["perform_partial_migration"] and not merge
+
         resource_serializer = resource_type.serializer_class
         resource_type_name_field = resource_type.get_resource_config().name_field
 
@@ -176,7 +193,11 @@ class Command(BaseCommand):
         # the migrated resources to be filtered out of the server response, so we don't need to
         # deal with pagination here. We just keep calling the list view until the filter returns
         # no items.
-        api_call_filters = {"service_id": self.upstream_service_id, "content_type__resource_type__name": resource_type_name}
+        api_call_filters = {
+            "service_id": self.upstream_service_id,
+            "is_partially_migrated": "false",
+            "content_type__resource_type__name": resource_type_name,
+        }
 
         while True:
             data = self.client.list_resources(filters=api_call_filters).json()
@@ -198,13 +219,13 @@ class Command(BaseCommand):
                 resource = self.client.get_resource(resource_ansible_id).json()
 
                 # de-serialize the data so that we can decode ansible_ids into foreign key values
-                internal_data = resource_serializer(data=resource["resource_data"])
-                internal_data.is_valid(raise_exception=True)
-                internal_data = internal_data.validated_data
+                original_resource_data = resource_serializer(data=resource["resource_data"])
+                original_resource_data.is_valid(raise_exception=True)
+                original_resource_data = original_resource_data.validated_data
 
                 unique_filter_kwargs = {}
                 for field_name in unique_fields:
-                    unique_filter_kwargs[field_name] = internal_data[field_name]
+                    unique_filter_kwargs[field_name] = original_resource_data[field_name]
 
                 try:
                     existing_resource = LocalResourceModel.objects.select_related("resource").get(**unique_filter_kwargs).resource
@@ -244,25 +265,43 @@ class Command(BaseCommand):
                             logger.info(f"Correcting service_id of {resource_type} with name {resource['name']}.")
                         else:
                             updated_service_resource["resource_data"] = local_data
-                            logger.warn(f"Updating already-merged {resource_type} with name {resource['name']}.")
+                            logger.warning(f"Updating already-merged {resource_type} with name {resource['name']}.")
                     if merge:
                         # Set upstream metadata and ansible_id to be same as gateway's
                         # Don't update anything on the gateway
                         create_gateway_resource = False
                         updated_service_resource["ansible_id"] = existing_resource.ansible_id
                         updated_service_resource["resource_data"] = resource_type.serializer_class(existing_resource.content_object).data
-                        logger.warn(f"Merging {resource_type} with conflicting name {resource['name']}.")
+                        logger.warning(f"Merging {resource_type} with conflicting name {resource['name']}.")
                     else:
                         # Change the name of the resource and update it on the upstream service
                         # Create a new resource in the gateway with the updated name
                         new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field)
                         resource["resource_data"][resource_type_name_field] = new_name
                         updated_service_resource["resource_data"] = resource["resource_data"]
-                        logger.warn(f"Creating new {resource_type} with new name {resource['name']}.")
+                        logger.warning(f"Creating new {resource_type} with new name {resource['name']}.")
 
                 # Run this as a transaction so that if the REST call to update the resource on the service fails
                 # we also rollback any database changes that were made on the gateway.
                 with transaction.atomic():
                     if create_gateway_resource:
-                        Resource.create_resource(resource_type, resource["resource_data"], ansible_id=resource_ansible_id)
-                    self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
+                        id_kwargs = {"ansible_id": resource_ansible_id}
+
+                        if perform_partial_migration:
+                            id_kwargs["service_id"] = self.upstream_service_id
+
+                        gw_resource = Resource.create_resource(resource_type, resource["resource_data"], **id_kwargs)
+                    else:
+                        gw_resource = existing_resource
+
+                    if resource_type_name == "shared.user":
+                        self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
+
+                    if perform_partial_migration:
+                        # If we're doing a partial migration, just set the "is_partially_migrated" flag to true, and don't update
+                        # anything on the service. By not updating the service ID, we'll prevent this resource from getting synced
+                        # to other services until it has been fully migrated. The "is_partially_migrated" flag will allow this
+                        # command to remain idempotent without having to iterate through all of the resources in the system.
+                        self.client.update_resource(resource_ansible_id, ResourceRequestBody(is_partially_migrated=True), partial=True)
+                    else:
+                        self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
