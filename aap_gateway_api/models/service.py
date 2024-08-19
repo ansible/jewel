@@ -17,7 +17,7 @@ API_PREFIX = "/api/"
 # This is a list of API endpoints across supported services that Envoy will ping to determine if a node is healthy.
 # This is also used by aap_gateway_api.views.api.v1.status
 # TODO: This should move somewhere, but not sure where yet.
-SERVICE_PING_PAGES = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/eda/api/v1/status"}
+SERVICE_PING_PAGES = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/api/eda/v1/status"}
 
 
 class HTTPPort(UniqueNamedCommonModel, AuditableModel):
