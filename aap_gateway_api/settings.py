@@ -17,8 +17,6 @@ from pathlib import Path
 
 from ansible_base.lib import dynamic_config  # noqa: E402
 from ansible_base.lib.utils.validation import to_python_boolean
-from redis.backoff import ConstantBackoff
-from redis.retry import Retry
 from split_settings.tools import include, optional
 
 ALLOWED_HOSTS = ["*"]
@@ -50,6 +48,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 CACHES = {
     "default": {
+        "BACKEND": "ansible_base.lib.cache.fallback_cache.DABCacheWithFallback",
+    },
+    "primary": {
         "BACKEND": "django_redis.cache.RedisCache",
         # Note, the location is not really used but we parse it in the client to get settings like host/port/username/etc.
         "LOCATION": '',
@@ -65,10 +66,17 @@ CACHES = {
                 'ssl_cert_reqs': 'required',
                 'ssl_ca_certs': '/etc/ansible-automation-platform/gateway/redis_ca.cert',
                 'ssl_check_hostname': False,
-                'retry': Retry(backoff=ConstantBackoff(3), retries=20),
+                'socket_keepalive': True,
+                'socket_timeout': 1,
+                'socket_connect_timeout': 1,
+                'cluster_error_retry_attempts': 0,
             },
         },
-    }
+    },
+    "fallback": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": "/var/tmp/django_cache",
+    },
 }
 
 CLUSTER_HOST_ID = socket.gethostname()
@@ -375,30 +383,33 @@ if getenv('GATEWAY_PATH_REWRITE_SCRIPT_FILE', None) is not None:
     GATEWAY_PATH_REWRITE_SCRIPT_FILE = getenv('GATEWAY_PATH_REWRITE_SCRIPT_FILE')
 
 if getenv('REDIS_URL', None) is not None:
-    CACHES["default"]['LOCATION'] = getenv('REDIS_URL')
+    CACHES["primary"]['LOCATION'] = getenv('REDIS_URL')
 if getenv('CACHE_KEY_PREFIX', None) is not None:
-    CACHES["default"]['KEY_PREFIX'] = getenv('CACHE_KEY_PREFIX')
+    CACHES["primary"]['KEY_PREFIX'] = getenv('CACHE_KEY_PREFIX')
 if getenv('REDIS_TLS', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl'] = to_python_boolean(getenv('REDIS_TLS'))
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl'] = to_python_boolean(getenv('REDIS_TLS'))
 if getenv('REDIS_IS_CLUSTERED', None) is not None:
     if to_python_boolean(getenv('REDIS_IS_CLUSTERED')) is True:
-        CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = 'cluster'
+        CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = 'cluster'
     else:
-        CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = 'standalone'
+        CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = 'standalone'
 if getenv('REDIS_MODE', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = getenv('REDIS_MODE')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = getenv('REDIS_MODE')
 if getenv('REDIS_SSL_CERT_REQS', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_cert_reqs'] = getenv('REDIS_SSL_CERT_REQS')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_cert_reqs'] = getenv('REDIS_SSL_CERT_REQS')
 if getenv('REDIS_CLUSTERED_HOST', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_CLUSTERED_HOST')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_CLUSTERED_HOST')
 if getenv('REDIS_HOSTS', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_HOSTS')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_HOSTS')
 if getenv('REDIS_KEY_FILE', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_keyfile'] = getenv('REDIS_KEY_FILE')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_keyfile'] = getenv('REDIS_KEY_FILE')
 if getenv('REDIS_CERT_FILE', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_certfile'] = getenv('REDIS_CERT_FILE')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_certfile'] = getenv('REDIS_CERT_FILE')
 if getenv('REDIS_CA_CERT_FILE', None) is not None:
-    CACHES["default"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_ca_certs'] = getenv('REDIS_CA_CERT_FILE')
+    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_ca_certs'] = getenv('REDIS_CA_CERT_FILE')
+
+if getenv('FALLBACK_CACHE_FILE', None) is not None:
+    CACHES['fallback']['LOCATION'] = getenv('FALLBACK_CACHE_FILE')
 
 if getenv('CSRF_TRUSTED_ORIGINS', None) is not None:
     CSRF_TRUSTED_ORIGINS = getenv('CSRF_TRUSTED_ORIGINS')
