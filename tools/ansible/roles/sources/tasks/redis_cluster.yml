@@ -1,0 +1,62 @@
+---
+- name: Zero Redis node files
+  copy:
+    dest: "{{ redis_generated_dir }}/nodes{{ item }}.conf"
+    content: ""
+    force: True
+    mode: "0666"
+  loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+
+- name: Generate cluster strings
+  set_fact:
+    nodes_to_start: "{{ nodes_to_start | default([]) + [ 'redis'+item ] }}"
+  loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+  vars:
+    node_name: "{{ redis_node_prefix }}{{ item }}"
+
+- block:
+    - name: Start redis containers
+      shell:
+        cmd: "{{ docker_compose_cmd }} up -d --wait {{ ' '.join(nodes_to_start) }}"
+        chdir: '../../'
+
+    - name: Wait for port to open
+      ansible.builtin.wait_for:
+        port: "{{ redis_exposed_port }}"
+        delay: 2
+
+    - name: Check cluster nodes
+      shell:
+        cmd: "{{ docker_compose_cmd }} exec -t redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} cluster nodes"
+      changed_when: False
+      register: cluster_nodes
+
+    - name: Get IPs from Redis cluster
+      shell:
+        cmd: "docker inspect -f '{{ filter }}' {{ redis_node_prefix }}{{ item }}"
+      vars:
+        filter: !unsafe '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+      loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
+      register: cluster_ips
+      changed_when: False
+
+    - name: Generate cluster join by IP list
+      set_fact:
+        nodes_to_cluster: "{{ nodes_to_cluster | default([]) + [ node_specification ] }}"
+      loop: "{{ cluster_ips['results'] }}"
+      loop_control:
+        label: "{{ item['stdout_lines'][0] | default('') }}"
+      vars:
+        node_specification: "{{ item['stdout_lines'][0] }}:{{ redis_exposed_port }}"
+
+    - name: Join the redis Redis cluster
+      shell:
+        cmd: "{{ docker_compose_cmd }} exec -t redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} --cluster create {{ ' '.join(nodes_to_cluster) }} --cluster-replicas 1 --cluster-yes"
+      register: cluster_command
+      when: cluster_nodes.stdout_lines | length == 1
+
+  always:
+    - name: Shutdown containers we started
+      shell:
+        cmd: "{{ docker_compose_cmd }} stop {{ ' '.join(nodes_to_start) }}"
+        chdir: '../../'
