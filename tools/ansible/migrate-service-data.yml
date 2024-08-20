@@ -8,5 +8,5 @@
       controller: controller
   tasks:
     - name: Execute command in podman container {{ gateway_container_name }}
-      command: podman exec {{ gateway_container_name }} django-admin migrate_service_data --api-slug {{ slugs[item] }} --username {{ gateway_admin_username }}
+      command: podman exec {{ gateway_container_name }} django-admin migrate_service_data --api-slug {{ slugs[item] }} --username {{ gateway_admin_username }} --merge-organizations true
       loop: "{{ gateway_services }}"
