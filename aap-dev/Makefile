@@ -101,7 +101,7 @@ $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py:
 ## Bring up EDA instance
 eda-server-up: $(EDA_REPO)/.git/HEAD $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py
 	echo "Using $(TASK_CMD)"
-	cd $(EDA_REPO) && $(EDA_ENV) $(TASK_CMD) docker:build
+	cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build
 	cd $(EDA_REPO) && $(EDA_ENV) $(DOCKER_COMPOSE) --file $(EDA_DOCKERFILE) up --detach --quiet-pull
 
 ## Bring down EDA instance
