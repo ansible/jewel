@@ -12,6 +12,7 @@ from aap_gateway_api.proxy.control_plane import ExternalAuth
 
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
+_MAX_RECEIVE_MESSAGE_LENGTH = settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH
 _THREAD_CONCURRENCY = settings.GRPC_SERVER_MAX_THREADS_PER_PROCESS
 _PROCESS_COUNT = settings.GRPC_SERVER_PROCESSES
 _PORT = settings.GRPC_SERVER_PORT
@@ -20,7 +21,7 @@ _PORT = settings.GRPC_SERVER_PORT
 def _run_server(bind_address):
     """Start a server in a subprocess."""
     logger.info("Starting gRPC worker process.")
-    options = (("grpc.so_reuseport", 1),)
+    options = (("grpc.so_reuseport", 1), ("grpc.max_receive_message_length", _MAX_RECEIVE_MESSAGE_LENGTH))
 
     server = grpc.server(
         futures.ThreadPoolExecutor(

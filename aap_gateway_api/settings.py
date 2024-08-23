@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import socket
+import sys
 from os import getenv, path
 from pathlib import Path
 
@@ -112,6 +113,9 @@ GATEWAY_KEY_FILE = '/etc/ansible-automation-platform/gateway/gateway.key'
 GATEWAY_PATH_REWRITE_SCRIPT_FILE = '/etc/envoy/envoy-path-rewrite.lua'
 
 GRPC_SERVER_AUTH_SERVICE_TIMEOUT = "10s"
+GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH = (2**20) * 20  # 20 MiB, formatted <1MiB> * <num_mib>
+# Do not override. Sets minimum for GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH
+GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE = (2**20) * 4
 GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10
 GRPC_SERVER_PORT = "50051"
 GRPC_SERVER_PROCESSES = 5
@@ -353,6 +357,9 @@ if getenv("ENVOY_HOSTNAME", None) is not None:
 if getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES", None) is not None:
     ENVOY_VERIFY_HTTPS_CERTIFICATES = getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES")
 
+if getenv('GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH', None) is not None:
+    GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH = getenv('GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH')
+
 if getenv('GATEWAY_STATIC_ROOT', None) is not None:
     STATIC_ROOT = getenv('GATEWAY_STATIC_ROOT')
 if getenv('GATEWAY_SECRET_KEY_FILE', None) is not None:
@@ -398,6 +405,14 @@ if getenv('CSRF_TRUSTED_ORIGINS', None) is not None:
 
 if getenv('LOGOUT_ALLOWED_HOSTS', None) is not None:
     LOGOUT_ALLOWED_HOSTS = getenv('LOGOUT_ALLOWED_HOSTS').split(",")
+
+# override invalid settings
+if GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH < GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE:
+    sys.stderr.write(
+        f"GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH was set lower than allowed minimum ({GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE}),"
+        f" setting to {GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE}\n"
+    )
+    GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH = GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE
 
 # Make this unique, and don't share it with anybody.
 read_key = False
