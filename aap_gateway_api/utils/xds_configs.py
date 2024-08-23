@@ -22,7 +22,8 @@ def external_auth_filter():
             },
             "transport_api_version": "V3",
             "with_request_body": {
-                "max_request_bytes": 20970000,
+                # Subtract 8KiB max GRPC header length: https://grpc.io/docs/guides/metadata/#be-aware
+                "max_request_bytes": settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH - 8192,
                 "allow_partial_message": False,
                 "pack_as_bytes": True,
             },
