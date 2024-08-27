@@ -1,15 +1,19 @@
 import logging
 
+from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_plugin
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
-from django.db.utils import IntegrityError
+from django.db import transaction
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from rest_framework.exceptions import ErrorDetail
 from rest_framework.fields import empty
 from rest_framework.serializers import ValidationError
 
@@ -68,7 +72,7 @@ class UserSerializer(CommonUserSerializer):
         errors = []
         # Validate the password
         if value and value not in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
-            user_instance = getattr(self, 'instance', None)
+            user_instance = self.instance  # This will be None for creation
             if user_instance is not None:
                 if not can_user_change_password(user_instance):
                     raise ValidationError(_('Password can not be set for this user'))
@@ -103,125 +107,337 @@ class UserSerializer(CommonUserSerializer):
         return value
 
     def validate_authenticator_uid(self, value: str) -> str:
-        user_instance = getattr(self, 'instance', None)
+        """
+        Validates the UID according to constraints on users with multiple authenticators.
+        Specifically:
+        - Prevents changes to the UID if the user has more than one authenticator.
+        - Ensures data integrity by disallowing ambiguous or unsupported UID changes.
+        """
+        user_instance = self.instance  # This will be None for creation
+        current_uids = user_instance.get_authenticator_uids() if user_instance else []
 
-        current_uid = []
-        if user_instance:
-            current_uid = user_instance.get_authenticator_uids()
-
-        # If nothing is changing its fine
-        if value == ', '.join(current_uid):
+        # If the value is not changing, it's valid
+        if value == ', '.join(current_uids):
             return value
 
-        if not self.is_superuser_making_request():
-            raise ValidationError(_("Only a superuser is allowed to change this field"))
-
-        # Its not possible to change the UID when working with multiple authenticators
-        # (because we don't know which is which)
-        # if we made it here we already know the value is changing
-        if user_instance and len(user_instance.get_authenticator_uids()) > 1:
+        # Disallow UID changes for users with multiple authenticators to prevent ambiguity and data loss.
+        # Future improvements could include:
+        # - Setting all authenticators to a single UID
+        # - Updating specific authenticator UIDs
+        # - Adding an endpoint for managing multiple authenticators
+        if user_instance and len(current_uids) > 1:
             raise ValidationError(
-                _("You can not change this if the user is tied to multiple authenticators. If you are deleting the authenticator leave this field as is.")
+                _(
+                    "UID changes are not supported for users with multiple authenticators to "
+                    "prevent ambiguous updates. Use specific authenticator endpoints for changes. "
+                    "If you are deleting the authenticator leave this field as is."
+                )
             )
 
         return value
 
-    def validate_authenticators(self, value: str) -> str:
-        user_instance = getattr(self, 'instance', None)
+    def validate_authenticators(self, value):
+        """
+        1. Enforce the single authenticator rule, with an exception for migrated users.
+        2. Skip validation if the authenticators are not changing or are being removed.
+        3. Authenticator ID validation is implicitly handled by DRF's choice field validation.
 
-        # Get the users current authenticators (if there is a user)
-        current_authenticators = []
-        if user_instance:
-            current_authenticators = user_instance.get_authenticator_ids()
+        Note: The restriction of authenticator modifications to superusers is enforced at the view level.
+        """
+        user_instance = self.instance  # This will be None for creation
 
-        # If nothing is changing its fine
+        # Get the user's current authenticators (if there is a user)
+        current_authenticators = user_instance.get_authenticator_ids() if user_instance else []
+
+        # If the authenticators are not changing, it's fine
         if value is None or (set(value) == set(current_authenticators)):
             return value
 
-        # Only admin is allowed to change the authenticators/authenticator_uid
-        if not self.is_superuser_making_request():
-            raise ValidationError(_("Only a superuser is allowed to change this field"))
-
+        # Handle specific case for removing a provider from a migrated user with multiple authenticators
         if user_instance and value != current_authenticators:
-            # We have one special use case were maybe we are removing a provider from a migrated user who had multiple authenticators
-            if set(value).issubset(set(current_authenticators)):
+            if self._is_only_removing_authenticators(value, current_authenticators):
                 return value
 
-            # We don't want a user tied to multiple authenticators normally
-            if len(value) > 1:
-                raise ValidationError(_("You can only tie a user to a single authenticator"))
+        # Enforce the rule: a user cannot be tied to multiple authenticators
+        if len(value) > 1:
+            raise ValidationError(ErrorDetail(_("You can only tie a user to a single authenticator"), code='multiple_authenticators'))
+
         return value
 
-    def update_users_authenticators(self, authenticators, authenticator_uid, user_object):
-        existing_authenticators = user_object.get_authenticator_ids()
-        existing_authenticator_uid = user_object.get_authenticator_uids()
+    def validate(self, data):
+        """
+        Perform cross-field validation for authenticators and authenticator_uid.
 
-        if authenticators is not None and set(authenticators) != set(existing_authenticators):
-            logger.info(f"Changing authenticator instances for {user_object.username} from {existing_authenticators} to {list(authenticators)}")
+        This method:
+        1. Handles partial updates for authenticator_uid.
+        2. Validates authenticator and UID combinations:
+           - Ensures UID is present when adding/modifying authenticators.
+           - Checks for UID conflicts across authenticators.
+           - Validates new authenticators for conflicts.
+        3. Ensures authenticator_uid is empty when removing all authenticators.
 
-            # remove any authenticators which are no longer being used
-            for remove_authenticator_id in set(existing_authenticators).difference(set(authenticators)):
-                logger.debug(f"Deleting authenticator {remove_authenticator_id} from {user_object.username}")
-                user_object.authenticator_users.get(provider__id=remove_authenticator_id).delete()
+        Raises ValidationError if any validation fails.
+        """
+        authenticators = data.get('authenticators')
+        authenticator_uid = data.get('authenticator_uid')
+        user_instance = self.instance  # This will be None for creation
+        current_authenticators = user_instance.get_authenticator_ids() if user_instance else []
 
-            # Add the new authenticators
-            for add_authenticator_id in set(authenticators).difference(set(existing_authenticators)):
-                logger.debug(f"Adding authenticator {add_authenticator_id} to {user_object.username}")
-                authenticator = Authenticator.objects.get(id=add_authenticator_id)
-                try:
-                    AuthenticatorUser.objects.create(uid=authenticator_uid, user=user_object, provider=authenticator)
-                except IntegrityError:
-                    logger.error(
-                        f"Unable to add {user_object.username} to authenticator {authenticator.name}"
-                        f" because uid {authenticator_uid} is already in use for that authenticator"
+        self._handle_partial_update(data, user_instance)
+
+        errors = {}
+
+        if authenticators:
+            self._validate_authenticators_and_uid(authenticators, authenticator_uid, user_instance, current_authenticators, errors)
+
+        self._validate_empty_authenticators(authenticators, authenticator_uid, errors)
+
+        if errors:
+            raise ValidationError(errors)
+
+        return data
+
+    def _handle_partial_update(self, data, user_instance):
+        if self.partial and 'authenticators' in self.initial_data:
+            # Default to current authenticator_uid if not provided
+            if 'authenticator_uid' not in self.initial_data and user_instance:
+                data['authenticator_uid'] = user_instance.get_authenticator_uids()[0]
+
+    def _validate_authenticators_and_uid(self, authenticators, authenticator_uid, user_instance, current_authenticators, errors):
+        # Skip UID validation if we're only removing authenticators
+        if not self._is_only_removing_authenticators(authenticators, current_authenticators):
+            self._validate_uid_presence(authenticator_uid, authenticators, errors)
+            self._validate_uid_conflicts(authenticators, authenticator_uid, user_instance, errors)
+            self._validate_new_authenticators(authenticators, authenticator_uid, user_instance, current_authenticators, errors)
+
+    def _is_only_removing_authenticators(self, authenticators, current_authenticators):
+        return set(authenticators) < set(current_authenticators)
+
+    def _validate_uid_presence(self, authenticator_uid, authenticators, errors):
+        # Ensure authenticator_uid is not empty when setting authenticators
+        if not authenticator_uid and authenticators:
+            errors.setdefault('authenticator_uid', []).append(ErrorDetail(_("Authenticator UID cannot be empty when setting authenticators."), code='required'))
+
+    def _validate_uid_conflicts(self, authenticators, authenticator_uid, user_instance, errors):
+        for authenticator_id in authenticators:
+            authenticator = Authenticator.objects.get(id=authenticator_id)
+            # Check for UID conflicts using Q objects for efficiency
+            if AuthenticatorUser.objects.filter(Q(uid=authenticator_uid) & Q(provider=authenticator)).exclude(user=user_instance).exists():
+                errors.setdefault('authenticator_uid', []).append(
+                    ErrorDetail(_("UID is already in use for authenticator: {}").format(authenticator.name), code='unique')
+                )
+
+    def _validate_new_authenticators(self, authenticators, authenticator_uid, user_instance, current_authenticators, errors):
+        # Handle the specific case for new authenticators being added
+        new_authenticators = set(authenticators) - set(current_authenticators)
+        for authenticator_id in new_authenticators:
+            self._check_conflicting_user(authenticator_id, authenticator_uid, user_instance, errors)
+
+    def _check_conflicting_user(self, authenticator_id, authenticator_uid, user_instance, errors):
+        authenticator = Authenticator.objects.get(id=authenticator_id)
+
+        # If an authenticator_uid is provided, check for UID conflicts
+        if authenticator_uid:
+            conflicting_user = AuthenticatorUser.objects.filter(uid=authenticator_uid, provider=authenticator).exclude(user=user_instance).first()
+            # Since we found a conflicting user we can't let this user be added to this authenticator
+            if conflicting_user:
+                errors.setdefault('authenticator_uid', []).append(
+                    ErrorDetail(
+                        _("UID '%(uid)s' is already in use for authenticator: %(auth)s").format(auth=authenticator.name, uid=authenticator_uid),
+                        code='uid_conflict',
                     )
-                    raise ValidationError({"authenticators": _("Can not be set because UID is already in use")})
-        elif authenticator_uid is not None and authenticator_uid != existing_authenticator_uid:
-            # We just requested to change the uid
-            for authenticator_user in user_object.authenticator_users.all():
-                logger.debug(f"Setting uid to {authenticator_uid} for {user_object.username} on {authenticator_user.provider.name}")
-                authenticator_user.uid = authenticator_uid
-                try:
-                    authenticator_user.save(update_fields=['uid'])
-                except Exception:
-                    logger.error(
-                        f"Unable to update {user_object.username}'s UID to {authenticator_uid}"
-                        f" because is already in use by authenticator {authenticator_user.provider.name}"
+                )
+                errors.setdefault('authenticators', []).append(
+                    ErrorDetail(
+                        _("Cannot set authenticator '%(auth)s': UID '%(uid)s' is already in use by user '%(user)s'").format(
+                            auth=authenticator.name, uid=authenticator_uid, user=conflicting_user.user.username
+                        ),
+                        code='uid_conflict',
                     )
-                    raise ValidationError({"authenticator_uid": _("UID is already in use for given authenticator")})
+                )
 
+    def _validate_empty_authenticators(self, authenticators, authenticator_uid, errors):
+        if authenticators is not None and len(authenticators) == 0 and authenticator_uid:
+            errors.setdefault('authenticator_uid', []).append(
+                ErrorDetail(_("Authenticator UID should be empty when removing all authenticators."), code='invalid')
+            )
+
+    def validate_username(self, value):
+        """
+        1. Check if the username is being changed.
+        2. For each authenticator associated with the user, determine the expected username
+           based on the authenticator's rules and the new username value.
+        3. Raise a ValidationError if the new username doesn't match the expected username
+           for any associated authenticator.
+
+        This validation ensures that the new username complies with the rules of all
+        associated authenticators, including potential modifications (e.g., adding a hash)
+        to maintain uniqueness across the system.
+        """
+        user_instance = self.instance  # This will be None for creation
+        old_username = user_instance.username if user_instance else None
+
+        errors = []
+
+        if old_username and value != old_username:
+            for authenticator_user in user_instance.authenticator_users.all():
+                expected_username = determine_username_from_uid(value, authenticator_user.provider)
+
+                if expected_username != value:
+                    errors.append(
+                        ErrorDetail(
+                            _(
+                                "New username '%(value)s' does not comply with the rules for authenticator '%(auth)s'. "
+                                "The expected username would be '%(expected)s'. "
+                                "This may be due to conflicts with existing usernames or authenticator-specific rules."
+                            )
+                            % {'value': value, 'expected': expected_username, 'auth': authenticator_user.provider.name},
+                            code='invalid',
+                        )
+                    )
+
+        if errors:
+            raise ValidationError({'username': errors})
+
+        return value
+
+    def _remove_authenticators(self, authenticators_to_remove, user_instance):
+        """
+        Remove specified authenticators from the user and log each removal action.
+        """
+        for remove_authenticator_id in authenticators_to_remove:
+            logger.debug(f"Deleting authenticator {remove_authenticator_id} from {user_instance.username}")
+            user_instance.authenticator_users.filter(provider__id=remove_authenticator_id).delete()
+
+        logger.info(f"Removed authenticators: {list(authenticators_to_remove)}")
+
+    def _add_authenticators(self, authenticators_to_add, authenticator_uid, user_instance):
+        """
+        Add new authenticators to the user, create AuthenticatorUser objects, and log the additions.
+        """
+        for add_authenticator_id in authenticators_to_add:
+            authenticator = Authenticator.objects.get(id=add_authenticator_id)
+            logger.info(f"Adding authenticator {authenticator.name} with UID {authenticator_uid} for user {user_instance.username}")
+            AuthenticatorUser.objects.create(uid=authenticator_uid, user=user_instance, provider=authenticator)
+
+        logger.info(f"Added authenticators: {authenticators_to_add}")
+
+    def _update_authenticator_uids(self, authenticator_uid, user_instance):
+        """
+        Update UIDs for all authenticators of the user, logging each update.
+        For local authenticators, ensure UID matches the username.
+        For non-local authenticators, update UID to the provided authenticator_uid.
+        """
+        new_username = user_instance.username  # This will be the new username if it was changed
+        existing_authenticator_uid = user_instance.get_authenticator_uids()
+
+        if authenticator_uid is None or authenticator_uid in existing_authenticator_uid:
+            return  # No update needed if UID is unchanged
+
+        for authenticator_user in user_instance.authenticator_users.all():
+            auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
+
+            if auth_type == 'local':
+                # For local authenticators, UID must match the username
+                new_uid = new_username
+                if new_username != authenticator_uid:
+                    logger.warning(
+                        f"We had to convert authenticator_uid to {new_username} for user {new_username} "
+                        f"for the local authenticator on {authenticator_user.provider.name}"
+                    )
+            else:
+                new_uid = authenticator_uid
+
+            logger.debug(
+                f"Updating UID to {new_uid} for user {new_username} "
+                f"(old username: {authenticator_user.user.username}) on {authenticator_user.provider.name}"
+            )
+
+            authenticator_user.uid = new_uid
+            authenticator_user.save(update_fields=['uid'])
+
+        logger.info(f"Updated authenticator UID to {authenticator_uid}")
+
+    def _update_users_authenticators(self, authenticators, authenticator_uid, user_instance):
+        """
+        Update user's authenticators:
+        1. Remove old authenticators
+        2. Add new authenticators
+        3. Update UIDs if changed
+        Log all actions performed.
+        """
+        logger.info(f"Updating authenticators for user {user_instance.username}")
+
+        existing_authenticators = user_instance.get_authenticator_ids()
+
+        if authenticators is not None:
+            authenticators_to_remove = set(existing_authenticators) - set(authenticators)
+            authenticators_to_add = set(authenticators) - set(existing_authenticators)
+
+            self._remove_authenticators(authenticators_to_remove, user_instance)
+            self._add_authenticators(authenticators_to_add, authenticator_uid, user_instance)
+
+        self._update_authenticator_uids(authenticator_uid, user_instance)
+
+        logger.info(f"Successfully updated authenticators for user {user_instance.username}")
+
+    @transaction.atomic
     def update(self, instance, validated_data):
+        """
+        Update user instance:
+        1. Handle password changes (removing encrypted strings)
+        2. Process username changes, updating related authenticator information
+        3. Update authenticators and UIDs
+        Wrapped in a database transaction for atomicity.
+        """
         # We don't want the $encrypted$ password going back to the model
         if validated_data.get('password', "") in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
             validated_data.pop('password', None)
+        old_username = instance.username
+        new_username = validated_data.get('username', old_username)
+
+        if old_username != new_username:
+            # Handle username change, updating related authenticator information
+            for authenticator_user in instance.authenticator_users.all():
+                auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
+                new_username = determine_username_from_uid(new_username, authenticator_user.provider)
+                if auth_type == 'local':
+                    # For local auth, update both username and uid
+                    authenticator_user.uid = new_username
+                    authenticator_user.save()
+
+            validated_data['username'] = new_username
 
         # Remove the authenticators field since thats not a real field on the User model
         authenticators = validated_data.pop('authenticators', None)
         authenticator_uid = validated_data.pop('authenticator_uid', None)
 
-        # Update the User model
-        return_value = super().update(instance, validated_data)
-
-        self.update_users_authenticators(authenticators, authenticator_uid, instance)
+        # Update the User model with validated data
+        instance = super().update(instance, validated_data)
+        # Handle authenticator changes
+        self._update_users_authenticators(authenticators, authenticator_uid, instance)
 
         # If we are updating a password we need to reset the session or the user will be logged out
         if validated_data.get('password', None) and self.context['request'].user.username == instance.username:
             update_session_auth_hash(self.context['request'], instance)
 
-        return return_value
+        return instance
 
+    @transaction.atomic
     def create(self, validated_data):
+        """
+        Create a new User instance and associate it with provided authenticators.
+        Wrapped in a database transaction for atomicity.
+        """
         # Remove the authenticators field since thats not a real field on the User model
         authenticators = validated_data.pop('authenticators', None)
         authenticator_uid = validated_data.pop('authenticator_uid', None)
 
-        if authenticators and not authenticator_uid:
-            raise ValidationError({'authenticator_uid': 'Must be set if authenticators are set'})
-
-        # Create the User model
+        # Create the User instance
         new_user = super().create(validated_data)
 
-        self.update_users_authenticators(authenticators, authenticator_uid, new_user)
+        # Associate authenticators with the new user
+        self._update_users_authenticators(authenticators, authenticator_uid, new_user)
 
         return new_user
 
@@ -258,4 +474,5 @@ class UserSerializer(CommonUserSerializer):
     def _get_related(self, obj) -> dict[str, str]:
         ret = super()._get_related(obj)
         ret['authenticators'] = get_relative_url('user-authenticators-list', kwargs={'pk': obj.pk})
+
         return ret
