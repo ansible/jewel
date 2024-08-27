@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict
 
 import requests
+from ansible_base.lib.cache.fallback_cache import PRIMARY_CACHE
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
 from ansible_base.lib.redis.client import get_redis_status
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
@@ -22,7 +23,11 @@ ServiceCheck = namedtuple('ServiceCheck', ['service_type', 'node_id', 'url', 'ti
 
 
 def check_redis(timeout: int = 4) -> Dict:
-    cache = getattr(settings, 'CACHES', {}).get('default')
+    if getattr(settings, 'CACHES', {}).get('default', {}).get('BACKEND', None) == 'ansible_base.lib.cache.fallback_cache.DABCacheWithFallback':
+        cache = getattr(settings, 'CACHES', {}).get(PRIMARY_CACHE)
+    else:
+        cache = getattr(settings, 'CACHES', {}).get('default')
+
     url = cache['LOCATION']
     kwargs = cache['OPTIONS'].get('CLIENT_CLASS_KWARGS', {})
     status = get_redis_status(url=url, timeout=timeout, **kwargs)
