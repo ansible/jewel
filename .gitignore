@@ -30,6 +30,9 @@ htmlcov
 # VSCode
 .vscode/
 
+# Ignore PyCharm project files
+.idea/
+
 # Editors
 *.sw[poj]
 *~
