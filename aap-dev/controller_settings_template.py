@@ -5,6 +5,9 @@ ANSIBLE_BASE_JWT_REDIRECT_TYPE= "awx"
 ALLOW_LOCAL_RESOURCE_MANAGEMENT = True  # Temporary: ATF test-suite needs this setting
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'}}
 
+# Enable reverse syncing
+RESOURCE_SERVER_SYNC_ENABLED = True
+
 # The following line will be replaced by the Makefile logic
 # GATEWAY_SERVICE_SECRET
 

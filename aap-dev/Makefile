@@ -2,7 +2,7 @@
 	dev-up dev-down \
 	gateway-up gateway-up-check gateway-down \
 	eda-server-up eda-server-down \
-	smoke help help/generate
+	smoke help help/generate .awx-settings-hack
 
 ADMIN_PASSWORD := admin
 SERVICE_DIR := ../services
@@ -13,11 +13,13 @@ TASK_CMD ?= $(shell command -v task || command -v go-task)
 # If you are running an old version, you might need docker-compose instead
 DOCKER_COMPOSE?=docker compose
 
-EDA_IMAGE_TAG?=aap-dev-eda
+# this is the default eda-server image, which maybe you already have built
+EDA_IMAGE_TAG?=localhost/aap-eda
 EDA_IMAGE_VERSION?=latest
 # NOTE: see README.md on how to have git ignore the dev_hacked_settings.py file
 EDA_ENV=EDA_IMAGE=$(EDA_IMAGE_TAG) EDA_IMAGE_VERSION=$(EDA_IMAGE_VERSION) EDA_ACTIVATION_WORKERS=1 EDA_DEFAULT_WORKERS=1 EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.dev_hacked_settings
-EDA_DOCKERFILE?=tools/docker/docker-compose-stage.yaml
+# the eda-server docker-compose-stage.yaml file does not allow customizing setting module
+EDA_DOCKERFILE?=tools/docker/docker-compose-dev.yaml
 EDA_REPO?=$(SERVICE_DIR)/eda-server
 # NOTE: the container name depends on which Dockerfile you use, default is for stage
 # for tools/docker/docker-compose-dev.yaml it is/was eda-eda-api-1
@@ -101,12 +103,15 @@ $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py:
 ## Bring up EDA instance
 eda-server-up: $(EDA_REPO)/.git/HEAD $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py
 	echo "Using $(TASK_CMD)"
-	cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build
 	cd $(EDA_REPO) && $(EDA_ENV) $(DOCKER_COMPOSE) --file $(EDA_DOCKERFILE) up --detach --quiet-pull
 
 ## Bring down EDA instance
 eda-server-down: $(EDA_REPO)/.git/HEAD
 	cd $(EDA_REPO) && $(EDA_ENV) $(DOCKER_COMPOSE) --file $(EDA_DOCKERFILE) down
+
+# eda-server requires using a local image so you have to build that
+dev-build:
+	cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build
 
 ## Bring up AAP services (Gateway + Controller + EDA) all at once
 dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack
@@ -114,8 +119,8 @@ dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack
 	make .awx-settings-hack
 	$(AAP_DEV_DIR)/awx-up-check.sh
 	$(AAP_DEV_DIR)/eda-server-up-check.sh
-	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true
-	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true --merge-users=true
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true --merge-users=true
 
 ## Bring down all AAP services
 dev-down: awx-down gateway-down eda-server-down;

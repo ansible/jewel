@@ -9,6 +9,9 @@ ALLOW_LOCAL_ASSIGNING_JWT_ROLES = False
 ALLOW_SHARED_RESOURCE_CUSTOM_ROLES = False
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'}}
 
+# Enable reverse syncing
+RESOURCE_SERVER_SYNC_ENABLED = True
+
 # The following line will be replaced by the Makefile logic
 # GATEWAY_SERVICE_SECRET
 

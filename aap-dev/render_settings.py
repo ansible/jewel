@@ -4,6 +4,13 @@
 import subprocess
 import sys
 import os
+import re
+
+
+def escape_ansi(line):
+    ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', line)
+
 
 service_options = ('controller', 'eda')
 
@@ -28,6 +35,9 @@ if '_' in key:
             continue  # strip ansii encodings
         key = sub_part
         break
+
+# Newline and ansi may still remain
+key = escape_ansi(key).strip()
 
 settings_path = os.path.join(os.path.dirname(__file__), f'{service}_settings_template.py')
 

@@ -6,9 +6,13 @@
 * dnf install go-task openssl
 
 ### Quick Start
-From the `aap-dev` directory, run:
+From the `aap-dev` directory, run these commands to get started.
+The build command, right now, will build the eda-server image
+because that requires a locally-built image.
+The AWX image may be pulled from ghcr.
 
 ```
+make dev-build
 make dev-up
 ```
 
