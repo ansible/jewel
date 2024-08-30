@@ -102,7 +102,7 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_test.txt
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
-        pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
+        pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
     allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
