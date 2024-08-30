@@ -1,17 +1,21 @@
 import logging
 
 from ansible_base.activitystream.models import AuditableModel
+from ansible_base.authentication.models import Authenticator
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.abstract_models.user import AbstractDABUser
 from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
+from ansible_base.resource_registry.models.service_identifier import service_id
 from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, UNUSABLE_PASSWORD_SUFFIX_LENGTH, get_hashers_by_algorithm, identify_hasher, make_password
-from django.db import models
+from django.db import models, transaction
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.managers.user import UserUnmanagedManager
 
 logger = logging.getLogger('aap.gateway.models.user')
+
+LEGACY_AUTHENTICATOR = "aap_gateway_api.authentication.authenticator_plugins.legacy_user"
 
 
 def password_is_hashed(password):
@@ -173,20 +177,82 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         """Temporary shim to satisfy ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor"""
         return self.is_platform_auditor
 
+    @property
+    def is_migrated(self):
+        return str(self.resource.service_id) == str(service_id())
+
 
 class MigratedUserMetadata(CommonModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="original_accounts")
     service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE)
-
     original_username = models.CharField(max_length=255)
 
     class Meta:
         unique_together = [('user', 'service')]
 
 
-class SocialMap(models.Model):
-    uid = models.CharField(max_length=256)
-    backend_type = models.CharField(max_length=256)
-    sso_server = models.CharField(max_length=256, null=True)
+class LegacyAuthType(models.TextChoices):
+    PASSWORD = "legacy_password", _("Local")
+    SSO = "legacy_sso", _("SSO")
 
-    migrated_user = models.ForeignKey(MigratedUserMetadata, on_delete=models.CASCADE, related_name="sso_backends")
+
+class MigratedAuthenticatorMetadata(CommonModel):
+    _authenticator_module = "aap_gateway_api.authentication.authenticator_plugins"
+
+    LegacyAuthTypes = LegacyAuthType
+
+    authenticator = models.OneToOneField(
+        Authenticator,
+        on_delete=models.CASCADE,
+        related_name="migrated_metadata",
+    )
+    type = models.CharField(max_length=32, choices=LegacyAuthType.choices)
+    django_backend = models.CharField(max_length=256, null=True)
+    sso_server = models.CharField(max_length=512, null=True)
+    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE)
+
+    def save(self, *args, **kwargs) -> None:
+        with transaction.atomic():
+            if self.sso_server:
+                self.sso_server = self.sso_server.rstrip("/")
+            authentictor, _ = Authenticator.objects.get_or_create(
+                name=self.get_authenticator_name(),
+                type=self._authenticator_module + "." + self.type,
+            )
+
+            self.authenticator = authentictor
+
+            return super().save()
+
+    def get_authenticator_name(self):
+        name = [
+            self.type,
+        ]
+        if self.django_backend:
+            name.append(self.django_backend)
+        if self.sso_server:
+            name.append(self.sso_server)
+        return f"{self.service.service_type}: " + "-".join(name)
+
+    @classmethod
+    def get_authenticator_for_auth_code(cls, validated_token) -> Authenticator:
+        service = validated_token["service_cluster"]
+        payload = validated_token["token_data"]["payload"]
+
+        if payload["sso_server"] is not None:
+            kwargs = {
+                "type": cls.LegacyAuthTypes.SSO,
+                "django_backend": payload["sso_backend"],
+                "sso_server": payload["sso_server"],
+            }
+        else:
+            kwargs = {
+                "type": cls.LegacyAuthTypes.PASSWORD,
+            }
+
+        authenticator_meta, _ = cls.objects.get_or_create(
+            service=service,
+            **kwargs,
+        )
+
+        return authenticator_meta

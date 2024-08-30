@@ -430,3 +430,9 @@ except PermissionError:
     raise ImportError(f"Unable to read {secret_key_file}")
 except Exception as e:
     raise ImportError(f"Unhandled exception when reading {secret_key_file}, ({e.__class__}): {e}")
+
+
+ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
+    "ansible_base.authentication.authenticator_plugins",
+    "aap_gateway_api.authentication.authenticator_plugins",
+]

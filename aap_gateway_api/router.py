@@ -72,3 +72,8 @@ router.register(
     views.AdditionalRouteViewSet,
     basename='route',
 )
+router.register(
+    r'legacy_auth',
+    views.LegacyAuthViewset,
+    basename='legacy_auth',
+)
