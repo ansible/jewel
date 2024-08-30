@@ -136,6 +136,9 @@ ANSIBLE_BASE_ORGANIZATION_MODEL = 'service_test_app.Organization'
 
 AUTHENTICATION_BACKENDS = (
     'social_core.backends.keycloak.KeycloakOAuth2',
+    'social_core.backends.saml.SAMLAuth',
+    'social_core.backends.open_id_connect.OpenIdConnectAuth',
+    'social_core.backends.keycloak.KeycloakOAuth2',
     'django.contrib.auth.backends.ModelBackend',
 )
 
@@ -147,7 +150,11 @@ ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "service_test_app.resources_api"
 SYSTEM_USERNAME = '_system'
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ['ansible_base.jwt_consumer.common.auth.JWTAuthentication'],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'ansible_base.jwt_consumer.common.auth.JWTAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_FILTER_BACKENDS': (
         'ansible_base.rest_filters.rest_framework.type_filter_backend.TypeFilterBackend',
         'ansible_base.rest_filters.rest_framework.field_lookup_backend.FieldLookupBackend',
@@ -160,6 +167,48 @@ REST_FRAMEWORK = {
 
 AUTH_USER_MODEL = 'service_test_app.User'
 ANSIBLE_BASE_JWT_KEY = os.environ.get("ANSIBLE_BASE_JWT_KEY")
+
+RESOURCE_SERVER = {"URL": "https://localhost", "SECRET_KEY": os.environ.get("SERVICE_TEST_APP_SECRET_KEY"), "VALIDATE_HTTPS": False}
+SERVICE_BACKED_SSO_AUTH_CODE_REDIRECT_PATH = "/api/gateway/v1/legacy_auth/"
+
+# Social auth backend settings
+# We don't need settings that actually work. We just care about the server URL
+
+# SAML
+SOCIAL_AUTH_SAML_ENABLED_IDPS = {
+    "KeycloakSAML": {
+        "url": "https://keycloak.example.com/auth/realms/saml/protocol/saml",
+        "entity_id": "https://keycloak.example.com/auth/realms/saml/protocol/saml",
+        "x509cert": "cert",
+        "attr_email": "email",
+        "attr_groups": "groups",
+        "attr_username": "username",
+        "attr_last_name": "last_name",
+        "attr_first_name": "first_name",
+        "attr_user_permanent_id": "name_id",
+    },
+    "Shibboleth": {
+        "url": "https://shibboleth.example.com/shib/idp",
+        "entity_id": "https://shibboleth.example.com/shib/idp/",
+        "x509cert": "cert",
+        "attr_email": "email",
+        "attr_groups": "groups",
+        "attr_username": "username",
+        "attr_last_name": "last_name",
+        "attr_first_name": "first_name",
+        "attr_user_permanent_id": "name_id",
+    },
+}
+
+# OIDC
+SOCIAL_AUTH_OIDC_AUTHORIZATION_URL = 'https://keycloak.example.com/auth/realms/oidc/protocol/openid-connect/auth'
+SOCIAL_AUTH_OIDC_KEY = '<client_id>'
+SOCIAL_AUTH_OIDC_SECRET = '<client_secret>'
+
+# Keycloak
+SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL = 'https://keycloak.example.com/auth/realms/oidc/protocol/openid-connect/auth/'
+
+ENABLE_SERVICE_BACKED_SSO = True
 
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)

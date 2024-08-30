@@ -15,7 +15,7 @@ class ValidatedToken(TypedDict):
     key: ServiceKey
 
 
-def validate_service_token(token) -> ValidatedToken:
+def validate_service_token(token, required_type=None) -> ValidatedToken:
     """
     Validates that the service token is formatted correctly and signed with a valid key.
 
@@ -67,6 +67,12 @@ def validate_service_token(token) -> ValidatedToken:
 
     except ServiceCluster.DoesNotExist:
         raise ValidationError(_("Token issuer %(iss)s does not exist.") % {'iss': unverified_service_id})
+
+    token_type = full_data["payload"].get("type", None)
+    if required_type != token_type:
+        raise ValidationError(
+            _("Expected token of type %(required_type)s, but got token of type %(token_type)s") % {"required_type": required_type, "token_type": token_type}
+        )
 
     # Check that the user requested in the "sub" claim exists.
     if "sub" in verified_payload:

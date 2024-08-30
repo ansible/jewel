@@ -85,12 +85,6 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
 
 
 @pytest.mark.django_db(transaction=True)
-def test_resource_client_with_system_user(migration_service, patched_resource_client, system_user):
-    client = patched_resource_client(service=migration_service, user=None)
-    assert client.user == system_user
-
-
-@pytest.mark.django_db(transaction=True)
 def test_migrate_no_merge(migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client):
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
@@ -205,7 +199,7 @@ def test_migrate_conflicting_user(
     original_data = renamed_user.original_accounts.get(service=migration_service.service_cluster)
     assert original_data.original_username == "hawkeye"
 
-    assert original_data.sso_backends.filter(backend_type="keycloak", uid="mr_hawk").exists()
+    assert renamed_user.authenticator_users.filter(uid="mr_hawk").exists()
 
     updated_resource = service_client.get_resource(str(renamed_user.resource.ansible_id)).json()
     assert updated_resource
@@ -264,8 +258,7 @@ def test_merge_users(
     assert updated_user.get('username') == 'hawkeye', updated_user
     assert updated_user.get('email') == 'hawkeye@secretbase.invalid', updated_user
 
-    original_data = User.objects.get(username="hawkeye").original_accounts.get(service=migration_service.service_cluster)
-    assert original_data.sso_backends.filter(backend_type="keycloak", uid="mr_hawk").exists()
+    assert User.objects.get(username="hawkeye").authenticator_users.filter(uid="mr_hawk").exists()
 
     # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
     assert not User.objects.filter(username="already_migrated").exists()

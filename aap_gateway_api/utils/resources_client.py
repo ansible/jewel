@@ -1,6 +1,8 @@
+import copy
 import logging
 import time
 from collections import namedtuple
+from typing import Callable
 
 from ansible_base.lib.utils.validation import to_python_boolean
 from ansible_base.resource_registry.rest_client import ResourceAPIClient as DABResourceAPIClient
@@ -33,6 +35,17 @@ class GWResourceAPIClient(DABResourceAPIClient):
         ServiceTypeChoices.EDA: "/v1/service-index/",
     }
 
+    def get_default_user(self):
+        # This isn't great. Ideally we'd use the _system user, but it's somewhat buggy at the moment.
+        # As a stopgap we'll load the first super user. If there aren't any, we'll just use the
+        # first user created.
+        # The actual user we use here doesn't actually matter from an RBAC perspective. We just need
+        # any account to generate an authentication token, since we can't make anonymous requests.
+        user = get_user_model().objects.filter(is_superuser=True).first()
+        if user is None:
+            return get_user_model().objects.first()
+        return user
+
     def get_url_for_service(self, service):
         http_port = service.http_port
         protocol = "https" if http_port.use_https else "http"
@@ -44,7 +57,7 @@ class GWResourceAPIClient(DABResourceAPIClient):
         self.base_url = self.get_url_for_service(service)
 
         if user is None:
-            user = get_user_model().all_objects.get(username=settings.SYSTEM_USERNAME)
+            user = self.get_default_user()
         self.user = user
         self.header_name = get_preference_value('proxy', 'gateway_token_name')
         self.service = service
@@ -64,9 +77,10 @@ class AllServicesClient(GWResourceAPIClient):
 
     def __init__(self, user=None, wait_for_response=True):
         self.wait_for_response = wait_for_response
+        self.callback = None
 
         if user is None:
-            user = get_user_model().objects.get(username=settings.SYSTEM_USERNAME)
+            user = self.get_default_user()
         self.user = user
         self.header_name = get_preference_value('proxy', 'gateway_token_name')
         self.read_timeout = get_preference_value('proxy', 'resource_client_request_timeout')
@@ -82,10 +96,21 @@ class AllServicesClient(GWResourceAPIClient):
 
         return kwargs
 
+    def with_callback(self, callback: Callable) -> GWResourceAPIClient:
+        cp = copy.deepcopy(self)
+        cp.callback = callback
+        return cp
+
     # This function should be async, but that currently isn't possible with the requests library. Some options to
     # consider here for the future are: 1. switch to something like aiohttp, 2. use async.to_thread and run each
     # request in a thread pool, 3. add a tasking system to gateway.
-    def _make_request(self, method: str, path: str, data: dict = None, params: dict = None) -> Response:
+    def _make_request(
+        self,
+        method: str,
+        path: str,
+        data: dict = None,
+        params: dict = None,
+    ) -> Response:
         from aap_gateway_api.models import ServiceAPIRoute
 
         responses = {}
@@ -99,5 +124,8 @@ class AllServicesClient(GWResourceAPIClient):
                 except Timeout:
                     logger.exception("resource client request timeout")
                     responses[service.pk] = None
+
+            if self.callback:
+                self.callback(service, responses[service.pk])
 
         return responses

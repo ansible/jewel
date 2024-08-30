@@ -44,3 +44,11 @@ class AapConfig(AppConfig):
             setup_func()
         else:
             logger.info("No fixture specified.")
+
+        if os.environ.get("SERVICE_TEST_APP_DEV_MODE", False):
+            logger.info("creating dev user")
+            from django.contrib.auth import get_user_model
+
+            u = get_user_model().objects.create(username="dev_admin", is_superuser=True)
+            u.set_password("admin")
+            u.save()

@@ -4,3 +4,4 @@ pytest
 pytest-xdist
 pytest-cov
 pytest-django
+pytest-subtests

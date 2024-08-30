@@ -16,7 +16,7 @@ from rest_framework.test import APIClient
 
 from aap_gateway_api.models import AdditionalRoute, Preference, ServiceAPIRoute, ServiceCluster, ServiceNode, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
-from aap_gateway_api.utils.resources_client import GWResourceAPIClient
+from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
 
 
 @pytest.fixture
@@ -349,6 +349,16 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
 
 
 class PatchedResourceClient(GWResourceAPIClient):
+    """
+    Patches the resources client so that traffic is routed directly to the test service,
+    rather than through envoy (which isn't available.)
+    """
+
+    def get_url_for_service(self, service):
+        return f"http://localhost:{service.service_port}/api/v1/service-index/"
+
+
+class PatchedAllServiceClient(AllServicesClient):
     """
     Patches the resources client so that traffic is routed directly to the test service,
     rather than through envoy (which isn't available.)

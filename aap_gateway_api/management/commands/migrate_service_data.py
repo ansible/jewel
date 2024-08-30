@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 
+from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -9,7 +10,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from requests.exceptions import HTTPError
 
-from aap_gateway_api.models import MigratedUserMetadata, ServiceAPIRoute, ServiceCluster, SocialMap
+from aap_gateway_api.models import MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceCluster
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
@@ -160,14 +161,37 @@ class Command(BaseCommand):
 
     def create_user_migration_entry(self, user, initial_data, additional_data):
         service_cluster = self.client.service.service_cluster
-        migrated_user = MigratedUserMetadata.objects.create(
+        MigratedUserMetadata.objects.create(
             user=user.content_object,
             service=service_cluster,
             original_username=initial_data["username"],
         )
 
         for social in additional_data["social_auth"]:
-            SocialMap.objects.create(migrated_user=migrated_user, **social)
+            authenticator_meta, _ = MigratedAuthenticatorMetadata.objects.get_or_create(
+                type=MigratedAuthenticatorMetadata.LegacyAuthTypes.SSO,
+                django_backend=social["backend_type"],
+                sso_server=social["sso_server"].rstrip("/"),
+                service=service_cluster,
+            )
+
+            AuthenticatorUser.objects.create(
+                user=user.content_object,
+                provider=authenticator_meta.authenticator,
+                uid=social["uid"],
+            )
+
+        if len(additional_data["social_auth"]) == 0:
+            authenticator_meta, _ = MigratedAuthenticatorMetadata.objects.get_or_create(
+                type=MigratedAuthenticatorMetadata.LegacyAuthTypes.PASSWORD,
+                service=service_cluster,
+            )
+
+            AuthenticatorUser.objects.create(
+                user=user.content_object,
+                provider=authenticator_meta.authenticator,
+                uid=initial_data["username"],
+            )
 
     def migrate_resource(self, resource_type_name):
         """
