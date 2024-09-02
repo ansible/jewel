@@ -10,7 +10,6 @@ for FILE in requirements.in requirements.txt ; do
 done
 requirements_in="$(readlink -f ./requirements.in)"
 requirements_txt="$(readlink -f ./requirements.txt)"
-requirements_git="$(readlink -f ./requirements_git.txt)"
 pip_compile="pip-compile --no-header --quiet -r --allow-unsafe"
 
 _cleanup() {
@@ -27,7 +26,7 @@ generate_requirements() {
 
   ${venv}/bin/python -m pip install -U 'pip' pip-tools
 
-  ${pip_compile} "${requirements_in}" "${requirements_git}" --output-file requirements.txt
+  ${pip_compile} "${requirements_in}" --output-file requirements.txt
 }
 
 main() {
@@ -54,7 +53,7 @@ main() {
       echo ""
       NEEDS_HELP=1
     ;;
-  esac
+  esac 
 
   if [[ "$NEEDS_HELP" == "1" ]] ; then
     echo "This script generates requirements.txt from requirements.in"
@@ -82,3 +81,4 @@ main() {
 
 # set EVAL=1 in case you want to source this script
 test "${EVAL:-0}" -eq "1" || main "${1:-}"
+

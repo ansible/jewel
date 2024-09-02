@@ -15,5 +15,5 @@ uwsgi
 xds-protos>=1.58
 PyYAML
 # Not directly imported but pinned per dependabot alerts
-urllib3 >= 1.26.18 # https://github.com/ansible/aap-gateway/security/dependabot/6; RPM build is 1.26.18
+urllib3 == 1.26.18 # https://github.com/ansible/aap-gateway/security/dependabot/6; edit: changed to 1.26.18 to fix build pipelines
 argon2-cffi
