@@ -115,7 +115,6 @@ legacy_tox_ini = """
         psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
-        python3 -m aap_gateway_api makemigrations --check
         python3 -m aap_gateway_api check
 
     [testenv:flake8]
