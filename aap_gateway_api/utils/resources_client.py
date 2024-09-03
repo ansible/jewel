@@ -121,8 +121,8 @@ class AllServicesClient(GWResourceAPIClient):
             else:
                 try:
                     responses[service.pk] = super()._make_request(method, path, data, params)
-                except Timeout:
-                    logger.exception("resource client request timeout")
+                except Timeout as e:
+                    logger.error(f"Resource client request timeout for {self.base_url} - {type(e).__name__}")
                     responses[service.pk] = None
 
             if self.callback:
