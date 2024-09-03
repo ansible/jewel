@@ -67,7 +67,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         logger.debug(f'GRPC process time for {self.request_id}: {self._get_ms_delta(self.start_time)}')
 
     def _return_authenticated(self, jwt, username):
-        logger.info(f"User {username} successfully authenticated for {self.request_id}")
+        logger.debug(f"User {username} successfully authenticated for {self.request_id}")
 
         # We are going to send the JWT downstream so we should remove the Authorization header so the service does not see it
         response = external_auth_pb2.OkHttpResponse(
@@ -117,7 +117,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
     def _handle_db_error(self, e):
         logger.warning(f"Database error. We think it's a connection error. Resetting the connection so it can be tried again. ({self.request_id})")
-        logger.debug(e, exc_info=True)
+        logger.error(e, exc_info=True)
         for conn in connections.all():
             conn.close_if_unusable_or_obsolete()
 
@@ -160,7 +160,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         if self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
             return self._return_no_authentication_required()
 
-        logger.info(f"Starting authentication for ({self.request_id}) {self.request_path}.")
+        logger.debug(f"Starting authentication for ({self.request_id}) {self.request_path}.")
         try:
             try:
                 user = drf_request.user
