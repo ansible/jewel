@@ -12,6 +12,10 @@ from aap_gateway_api.utils.resources_client import AllServicesClient, ResourceRe
 from aap_gateway_api.utils.views.permissions import DisallowWriteFromProxy
 
 
+class GatewayReadOnlyModelViewSet(viewsets.ReadOnlyModelViewSet, AnsibleBaseView):
+    permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
+
+
 class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 

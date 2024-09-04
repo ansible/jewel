@@ -215,12 +215,12 @@ class MigratedAuthenticatorMetadata(CommonModel):
         with transaction.atomic():
             if self.sso_server:
                 self.sso_server = self.sso_server.rstrip("/")
-            authentictor, _ = Authenticator.objects.get_or_create(
+            authenticator, _ = Authenticator.objects.get_or_create(
                 name=self.get_authenticator_name(),
                 type=self._authenticator_module + "." + self.type,
             )
 
-            self.authenticator = authentictor
+            self.authenticator = authenticator
 
             return super().save()
 

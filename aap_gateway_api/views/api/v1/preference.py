@@ -16,7 +16,7 @@ from aap_gateway_api.serializers import SettingPreferenceSerializer, SettingSect
 from aap_gateway_api.utils import get_default_value_by_preference, get_preference_sections, get_preference_value_by_preference
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView, GatewayModelViewSet
 
-logger = logging.getLogger('aap.gateway.views.api.preferences')
+logger = logging.getLogger('aap.gateway.views.api.v1.preference')
 
 
 def format_err_message(category_slug, preference_name, err_detail):
