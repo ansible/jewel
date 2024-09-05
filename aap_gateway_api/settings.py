@@ -226,6 +226,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'crum.CurrentRequestUserMiddleware',
+    'ansible_base.lib.middleware.logging.log_request.LogTracebackMiddleware',
     'ansible_base.lib.middleware.logging.LogRequestMiddleware',
 ]
 
