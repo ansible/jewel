@@ -77,7 +77,7 @@ class SettingSectionSerializer(serializers.Serializer):
                 style={"base_template": "textarea.html"} if registered_preference.field_type in long_string_fields else None,
                 read_only=read_only,
             )
-            for field_name in ['max_value', 'min_value']:
+            for field_name in ['max_value', 'min_value', 'label']:
                 if hasattr(registered_preference, field_name):
                     setattr(fields[registered_preference.name], field_name, getattr(registered_preference, field_name))
 

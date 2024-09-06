@@ -138,6 +138,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
+    label=_('Password minimum length'),
 )
 
 register(
@@ -150,6 +151,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
+    label=_('Password minimum numerical digits'),
 )
 
 register(
@@ -162,6 +164,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
+    label=_('Password minimum uppercase letters'),
 )
 
 register(
@@ -174,6 +177,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
+    label=_('Password minimum special characters'),
 )
 
 register(
@@ -184,6 +188,7 @@ register(
     preference_type="bool",
     help_text=_("Can a superuser account save an insecure password"),
     encrypted=False,
+    label=_('Allow system administrators to set insecure user passwords'),
 )
 
 register(
