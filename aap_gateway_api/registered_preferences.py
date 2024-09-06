@@ -133,9 +133,11 @@ register(
     preference_name="password_min_length",
     default=0,
     required=False,
-    preference_type="int",
+    preference_type="int_range",
     help_text=_("How long does a local password have to be"),
     encrypted=False,
+    min_value=0,
+    max_value=100,
 )
 
 register(
@@ -143,9 +145,11 @@ register(
     preference_name="password_min_digits",
     default=0,
     required=False,
-    preference_type="int",
+    preference_type="int_range",
     help_text=_("How many numerical characters need to be in a local password"),
     encrypted=False,
+    min_value=0,
+    max_value=100,
 )
 
 register(
@@ -153,9 +157,11 @@ register(
     preference_name="password_min_upper",
     default=0,
     required=False,
-    preference_type="int",
+    preference_type="int_range",
     help_text=_("How many upper case characters need to be in a local password"),
     encrypted=False,
+    min_value=0,
+    max_value=100,
 )
 
 register(
@@ -163,9 +169,11 @@ register(
     preference_name="password_min_special",
     default=0,
     required=False,
-    preference_type="int",
+    preference_type="int_range",
     help_text=_("How many special characters need to be in a local password"),
     encrypted=False,
+    min_value=0,
+    max_value=100,
 )
 
 register(
