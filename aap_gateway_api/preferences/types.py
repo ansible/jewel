@@ -19,7 +19,7 @@ class URLPreference(types.StringPreference):
             return value
 
         try:
-            validator = URLValidator(schemes=["https"])
+            validator = URLValidator(schemes=["https", "http"])
             validator(value)
         except ValidationError:
             raise ValidationError(_("%(value)s is not a valid URL") % {"value": value})
