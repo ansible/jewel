@@ -15,5 +15,5 @@ uwsgi
 xds-protos>=1.58
 PyYAML
 # Not directly imported but pinned per dependabot alerts
-urllib3 == 1.26.18 #  edit: changed to 1.26.18 to fix build pipelines
+urllib3>=1.26.19,<1.27
 argon2-cffi
