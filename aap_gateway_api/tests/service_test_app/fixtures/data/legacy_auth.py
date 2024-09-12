@@ -75,6 +75,11 @@ USERS = {
         "galaxy": Account(None, None, None, "pass2"),
         "eda": Account(None, None, None, "pass1"),
     },
+    "ldapuser1": {
+        "awx": Account(None, None, None, "pass3"),
+        "galaxy": Account(None, None, None, "pass2"),
+        "eda": Account(None, None, None, "pass1"),
+    },
     "conflict1": {
         "awx": Account(None, None, None, "pass3"),
         "galaxy": Account(None, None, None, "pass2"),
@@ -97,6 +102,10 @@ USERS = {
     "already_linked2": {
         "eda": Account(None, None, None, "pass3"),
         "galaxy": Account(None, None, None, "pass2"),
+    },
+    "already_linked_ext": {
+        "awx": Account(None, None, None, "pass3", username="awx_1_ldap"),
+        "galaxy": Account(None, None, None, "pass2", username="galaxy_1_radius"),
     },
     "different_username1": {
         "galaxy": Account(None, None, None, "pass2"),
@@ -123,6 +132,10 @@ USERS = {
         "awx": Account(None, None, None, "pass"),
         "galaxy": Account(kc, "disable_login", "7b6939d0-dee4-4c24-8dd0-42e8484a7d1b", None),
     },
+    "disable_login_ext": {
+        "awx": Account(None, None, None, "pass", username="awx_ldap"),
+        "galaxy": Account(None, None, None, "pass2"),
+    },
     "1fake_new_user": {
         "awx": Account(oidc_kc, "fake_new_user", "1b60016a-dbd7-4906-bca2-8aeb49e0441b", None),
     },
@@ -136,7 +149,8 @@ USERS = {
 
 for username in USERS:
     for service in USERS[username]:
-        USERS[username][service].username = username
+        if USERS[username][service].username is None:
+            USERS[username][service].username = username
 
 USER_SETS = {
     "controller_oidc": (("user1", "*"),),
@@ -146,6 +160,12 @@ USER_SETS = {
     "password_set_2": (("user5", "*"),),
     "password_set_3": (("user6", "*"),),
     "password_set_4": (("user7", "*"),),
+    "ldap_set_1": (("ldapuser1", "*"),),
+    "ldap_set_2": (
+        ("ldapuser2", "awx"),
+        ("ldapuser2", "galaxy"),
+    ),
+    "disable_login_ext": (("disable_login_ext", "*"),),
     "conflict_all1": (
         ("conflict1", "awx"),
         ("conflict2", "galaxy"),
@@ -164,6 +184,10 @@ USER_SETS = {
     "already_linked1": (
         ("already_linked1", "galaxy"),
         ("already_linked1", "awx"),
+    ),
+    "already_linked_ext": (
+        ("already_linked_ext", "galaxy"),
+        ("already_linked_ext", "awx"),
     ),
     "already_linked2": (("already_linked2", "galaxy"),),
     "already_linked3": (("already_linked2", "eda"),),

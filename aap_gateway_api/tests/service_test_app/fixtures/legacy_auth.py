@@ -11,7 +11,8 @@ def setup():
 
     for username in USERS:
         if user := USERS[username].get(service_type, None):
-            u = User.objects.create(username=username)
+            username_possibly_overridden = user.username if user.username is not None else username
+            u = User.objects.create(username=username_possibly_overridden)
             if user.backend:
                 social_auth_kwargs = {
                     "uid": user.get_uid(),

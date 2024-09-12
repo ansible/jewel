@@ -104,7 +104,7 @@ class Command(BaseCommand):
         try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:
-            raise CommandError(f"Username {user} does not exist")
+            raise CommandError(f"Username {username} does not exist")
 
         # TODO: switch user out for _system. Need to get more fine grained permissions in resources
         # api merged first.
@@ -119,7 +119,7 @@ class Command(BaseCommand):
             self.upstream_service_id = service_metadata["service_id"]
             upstream_service_type = service_type_map.get(service_metadata["service_type"])
             if upstream_service_type is None:
-                raise CommandError(f"Migrations are not allow for services of type {upstream_service_type}")
+                raise CommandError(f"Migrations are not allowed for services of type {service_metadata['service_type']}")
 
             if upstream_service_type != service_api.service_cluster.service_type:
                 raise CommandError(
@@ -197,13 +197,13 @@ class Command(BaseCommand):
         """
         Get a list of resources from the upstream service and add them to the Gateway.
         """
-        self.stdout.write("Migrating data for " + resource_type_name)
+        self.stdout.write(f"Migrating data for {resource_type_name}")
 
         resource_type = self.resource_types_to_migrate[resource_type_name]["type"]
         merge = self.resource_types_to_migrate[resource_type_name]["merge"]
         unique_fields = self.resource_types_to_migrate[resource_type_name]["unique_fields"]
 
-        # Perform a partial migration if it is enable for the resource type and merge is set
+        # Perform a partial migration if it is enabled for the resource type and merge is set
         # to false. This will result in the resource being copied to Gateway, but the service_id
         # being kept to the original service's.
         perform_partial_migration = self.resource_types_to_migrate[resource_type_name]["perform_partial_migration"] and not merge
@@ -229,6 +229,7 @@ class Command(BaseCommand):
             results = data['results']
             # As special case exclude the system user, since Gateway excludes this in its own resources
             if resource_type_name == 'shared.user':
+                # TODO: SYSTEM_USERNAME can theoretically vary by service, does this break if it's customized?
                 results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
             if len(results) == 0:
                 break

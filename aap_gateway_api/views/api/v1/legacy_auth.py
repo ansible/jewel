@@ -4,6 +4,7 @@ from django.contrib.auth import login
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
+from django.db.models import Q
 from django.shortcuts import redirect
 from django.utils.translation import gettext as _
 from rest_framework import serializers, viewsets
@@ -115,28 +116,50 @@ class LegacyAuthViewset(viewsets.ViewSet):
         user = data["user"]
         payload = data["token_data"]["payload"]
 
+        auth_backend_classification = None
+        if auth_type == "password":
+            auth_backend_classification = self._classify_backend(payload.get("auth_backend"))
+
         # add a migration entry for the user
+        # This case is supporting reverse-sync.
+        # The only other way a service user could be created in Gateway is via migrate_service_data
+        # which necessarily creates the MigratedUserMetadata row at the same time. But a reverse-synced
+        # user wouldn't have MigratedUserMetadata yet.
         if not user.original_accounts.exists():
             MigratedUserMetadata.objects.create(
                 user=user,
                 service=data["service_cluster"],
                 original_username=payload["username"],
+                backend_classification=auth_backend_classification,
             )
 
             authenticator_meta = MigratedAuthenticatorMetadata.get_authenticator_for_auth_code(data)
-
             AuthenticatorUser.objects.create(
                 user=user,
                 provider=authenticator_meta.authenticator,
                 uid=payload.get("uid", user.username),
             )
+        else:
+            # We already have the migrated user and their metadata, so we just need to update
+            # the backend classification if it's a password auth.
+            if auth_type == "password":
+                try:
+                    migrated_user_metadata = MigratedUserMetadata.objects.get(
+                        user=user,
+                        service=data["service_cluster"],
+                    )
+                except MigratedUserMetadata.DoesNotExist:
+                    # TODO: Is this unreachable? Prove it, I don't believe it.
+                    raise DRFValidationError(_("No migration metadata found for this user/service combination"))
+                migrated_user_metadata.backend_classification = auth_backend_classification
+                migrated_user_metadata.save(update_fields=["backend_classification"])
 
         session_user = self._get_user(self.request)
 
         if not session_user:
             self._authenticate_user(user)
         else:
-            self._link_account(session_user, user)
+            self._link_account(session_user, user, auth_type, auth_backend_classification)
 
     def _get_user(self, request):
         if request.user and not isinstance(request.user, AnonymousUser):
@@ -157,14 +180,27 @@ class LegacyAuthViewset(viewsets.ViewSet):
     def _migrate_account(self, user):
         migrate_account(user)
 
-    def _link_account(self, main_account, to_merge):
+    def _link_account(self, main_account, to_merge, auth_type, auth_backend_classification):
         if can_accounts_be_merged(main_account, to_merge):
             sso_type = MigratedAuthenticatorMetadata.LegacyAuthTypes.SSO
             main_account_has_sso = main_account.authenticator_users.filter(provider__migrated_metadata__type=sso_type).exists()
             to_merge_has_sso = to_merge.authenticator_users.filter(provider__migrated_metadata__type=sso_type).exists()
 
             if main_account_has_sso and to_merge_has_sso:
-                raise DRFValidationError(_("Only legacy SSO account can be linked to each AAP account."))
+                raise DRFValidationError(_("Only one legacy SSO account can be linked to each AAP account."))
+
+            if auth_type == "password" and auth_backend_classification != 'local':
+                # > External accounts may be linked to each other as long as they share the same type (LDAP, radius etc.) or to local accounts.
+                #
+                # So look for any that are not the same type as the one we're trying to link (and not local)
+                different_external_accounts = main_account.original_accounts.filter(
+                    ~Q(backend_classification=auth_backend_classification) & ~Q(backend_classification='local')
+                )
+
+                if different_external_accounts.exists():
+                    raise DRFValidationError(
+                        _("External accounts may only be linked to each other if they share the same type (LDAP, radius, etc.) or to local accounts.")
+                    )
 
             old_username = to_merge.username
             link_account(main_account, to_merge)
@@ -189,4 +225,41 @@ class LegacyAuthViewset(viewsets.ViewSet):
             if token_data["user"].authenticator_users.filter(provider__migrated_metadata__type=sso_type).exists():
                 raise DRFValidationError(_("This account has been configured to use SSO and cannot be used with a local username and password."))
 
+            # > Once a local account has been linked to an SSO or external account, the user may not use it to authenticate on the Gateway.
+            auth_backend = token_data["token_data"]["payload"].get("auth_backend")
+            if (
+                auth_backend is not None
+                and self._classify_backend(auth_backend) == 'local'
+                and
+                # auth_backend_classification is only set for password legacy auth, so if it exists, we know it's that.
+                # So we can just filter out 'local' to see if there's another external account linked to the user.
+                token_data["user"].original_accounts.filter(~Q(backend_classification='local') & Q(backend_classification__isnull=False)).exists()
+            ):
+                raise DRFValidationError(_("This account has been linked to an external account and cannot be used with a local username and password."))
+            else:
+                pass
+
         return True
+
+    def _classify_backend(self, auth_backend):
+        """
+        > External accounts may be linked to each other as long as they share the same type (LDAP, radius etc.) or to local accounts.
+
+        Thus, we need to know what kind of external account we're dealing with.
+        """
+        if auth_backend is None:
+            raise DRFValidationError(_("Could not determine service authentication backend for this account."))
+
+        if 'LDAPBackend' in auth_backend:
+            return 'ldap'
+
+        if 'RADIUSBackend' in auth_backend:
+            return 'radius'
+
+        if 'TACACSPlusBackend' in auth_backend:
+            return 'tacacs+'
+
+        if 'ModelBackend' in auth_backend:
+            return 'local'
+
+        return auth_backend

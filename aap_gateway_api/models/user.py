@@ -186,6 +186,7 @@ class MigratedUserMetadata(CommonModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="original_accounts")
     service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE)
     original_username = models.CharField(max_length=255)
+    backend_classification = models.CharField(max_length=255, null=True, default=None)
 
     class Meta:
         unique_together = [('user', 'service')]
