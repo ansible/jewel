@@ -336,6 +336,10 @@ class TestLegacyAuth:
 
         assert len(expected_authenticators) == MigratedAuthenticatorMetadata.objects.all().count()
 
+    def subtest_ldap_password_auth(self, client: AuthClient):
+        user_set = get_user_set("ldap_set_1")
+        assert client.auth_password(user_set["eda"], "eda").status_code == 200
+
     def subtest_disable_local_login_after_sso_merge(self, client: AuthClient):
         user_set = get_user_set("disable_login")
 
@@ -355,6 +359,46 @@ class TestLegacyAuth:
 
         # attempt to login with password
         assert client.auth_password(user_set["awx"], "controller").status_code == 400
+
+    def subtest_disable_local_login_after_ldap_merge(self, client: AuthClient):
+        user_set = get_user_set("disable_login_ext")
+
+        assert client.auth_password(user_set["galaxy"], "hub").status_code == 200
+        assert client.finalize().status_code == 200
+        assert client.reset().status_code == 200
+
+        # attempt login
+        resp = client.auth_password(user_set["galaxy"], "hub")
+        assert resp.status_code == 200
+        assert resp.data["is_authenticated"] is True
+
+        # set up LDAP
+        assert client.auth_password(user_set["awx"], "controller").status_code == 200
+        assert client.finalize().status_code == 200
+        assert client.reset().status_code == 200
+
+        # attempt to login with password
+        resp = client.auth_password(user_set["galaxy"], "hub")
+        assert resp.status_code == 400
+        assert 'linked to an external account' in resp.data[0]
+
+    def subtest_prevent_different_type_external(self, client: AuthClient):
+        user_set = get_user_set("already_linked_ext")
+
+        # Log in with LDAP
+        assert client.auth_password(user_set["awx"], "controller").status_code == 200
+        assert client.finalize().status_code == 200
+        assert client.reset().status_code == 200
+
+        # attempt login
+        resp = client.auth_password(user_set["awx"], "controller")
+        assert resp.status_code == 200
+        assert resp.data["is_authenticated"] is True
+
+        # Try to link Radius
+        resp = client.auth_password(user_set["galaxy"], "hub")
+        assert resp.status_code == 400
+        assert 'share the same type' in resp.data[0]
 
     def subtest_fail_link_two_sso_accounts(self, client: AuthClient):
         for user_set in ("two_sso_oidc", "two_sso_saml_kc", "two_sso_saml_ext"):

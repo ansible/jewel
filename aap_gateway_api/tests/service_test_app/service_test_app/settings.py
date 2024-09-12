@@ -139,6 +139,8 @@ AUTHENTICATION_BACKENDS = (
     'social_core.backends.saml.SAMLAuth',
     'social_core.backends.open_id_connect.OpenIdConnectAuth',
     'social_core.backends.keycloak.KeycloakOAuth2',
+    'service_test_app.backends.LDAPBackend',
+    'service_test_app.backends.RadiusBackend',
     'django.contrib.auth.backends.ModelBackend',
 )
 
