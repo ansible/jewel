@@ -113,6 +113,7 @@ DYNAMIC_PREFERENCES = {
 # are configured to run behind it for operations like syncing and migration.
 ENVOY_HOSTNAME = "localhost"
 ENVOY_VERIFY_HTTPS_CERTIFICATES = True
+ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = (2**20) * 200
 
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
@@ -365,6 +366,8 @@ if getenv("ENVOY_HOSTNAME", None) is not None:
     ENVOY_HOSTNAME = getenv("ENVOY_HOSTNAME")
 if getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES", None) is not None:
     ENVOY_VERIFY_HTTPS_CERTIFICATES = getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES")
+if getenv("ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES", None) is not None:
+    ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = getenv("ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES")
 
 if getenv('GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH', None) is not None:
     GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH = getenv('GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH')
