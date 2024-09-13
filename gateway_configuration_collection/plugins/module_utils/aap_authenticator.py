@@ -12,6 +12,19 @@ class AAPAuthenticator(AAPObject):
     def unique_field(self):
         return self.module.IDENTITY_FIELDS['http_ports']
 
+    def _get_authenticator(self, name_or_id):
+        params = {"name": name_or_id, "state": self.STATE_EXISTS}
+
+        fail_when_not_exists = not self.absent()
+
+        authenticator = AAPAuthenticator(module=self.module, params=params)
+        authenticator.manage(auto_exit=False, fail_when_not_exists=fail_when_not_exists)
+
+        return authenticator
+
+    def get_auto_migrate_to_authenticator(self):
+        self.auto_migrate_to_authenticator = self._get_authenticator(self.params.get('auto_migrate_to_authenticator'))
+
     def set_new_fields(self):
         # Create the data that gets sent for create and update
         self.set_name_field()
@@ -43,3 +56,9 @@ class AAPAuthenticator(AAPObject):
         order = self.module.params.get('order')
         if order is not None:
             self.new_fields['order'] = order
+
+        auto_migrate_users_to = self.module.params.get('auto_migrate_users_to')
+        if auto_migrate_users_to is not None:
+            authenticator = self._get_authenticator(auto_migrate_users_to)
+            authenticator_id = (authenticator.data or {}).get('id')
+            self.new_fields['auto_migrate_users_to'] = authenticator_id

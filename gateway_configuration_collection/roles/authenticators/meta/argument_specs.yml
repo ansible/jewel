@@ -50,7 +50,12 @@ argument_specs:
               required: false
               type: str
               description: Desired state of the resource.
-
+          auto_migrate_users_to:
+            type: str
+            description:
+              - Automatically move users from this authenticator to the target authenticator when a matching user logs in via the target authenticator.
+              - For this to work, the field used for the user ID on both authenticators needs to have the same value.
+              - This should only be used when migrating users between two authentication mechanisms that share the same user database.
 
       # Async variables
       gateway_configuration_authenticators_async_retries:
