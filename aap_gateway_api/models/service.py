@@ -3,6 +3,7 @@ from datetime import datetime
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from ansible_base.resource_registry.models import service_id
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -81,7 +82,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
                     ]
                 }
             ],
-            "per_connection_buffer_limit_bytes": 2**20 * 200,
+            "per_connection_buffer_limit_bytes": settings.ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES,
         }
 
         if self.use_https:
