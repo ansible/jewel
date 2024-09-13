@@ -35,6 +35,14 @@ class AuthenticatorUserMoveSerializer(serializers.Serializer):
         allow_null=True,
         help_text=_("An optional user to merge this account with"),
     )
+    new_uid = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text=_(
+            "Provide a new UID for the user. This value is used to link the users login with the local "
+            "AAP account and must match the user identifier from the new authentication provider."
+        ),
+    )
     merge_accounts_with_same_uid = serializers.BooleanField(
         help_text=_("If true, automatically merge accounts with the same uid. Mutually exclusive with merge_with_user"),
     )

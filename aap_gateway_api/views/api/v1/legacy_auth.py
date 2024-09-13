@@ -108,51 +108,53 @@ class LegacyAuthViewset(viewsets.ViewSet):
         # Check that the auth code is valid and load the user.
         try:
             data = validate_service_token(auth_code, required_type="auth_code")
+            user = data["user"]
+            payload = data["token_data"]["payload"]
+
+            auth_backend_classification = None
+            if auth_type == "password":
+                auth_backend_classification = self._classify_backend(payload.get("auth_backend"))
+
+            # add a migration entry for the user
+            # This case is supporting reverse-sync.
+            # The only other way a service user could be created in Gateway is via migrate_service_data
+            # which necessarily creates the MigratedUserMetadata row at the same time. But a reverse-synced
+            # user wouldn't have MigratedUserMetadata yet.
+            if not user.original_accounts.exists():
+                MigratedUserMetadata.objects.create(
+                    user=user,
+                    service=data["service_cluster"],
+                    original_username=payload["username"],
+                    backend_classification=auth_backend_classification,
+                )
+
+                authenticator_meta = MigratedAuthenticatorMetadata.get_authenticator_for_auth_code(data)
+                AuthenticatorUser.objects.create(
+                    user=user,
+                    provider=authenticator_meta.authenticator,
+                    uid=payload.get("uid", user.username),
+                )
+            else:
+                # We already have the migrated user and their metadata, so we just need to update
+                # the backend classification if it's a password auth.
+                if auth_type == "password":
+                    try:
+                        migrated_user_metadata = MigratedUserMetadata.objects.get(
+                            user=user,
+                            service=data["service_cluster"],
+                        )
+                    except MigratedUserMetadata.DoesNotExist:
+                        # TODO: Is this unreachable? Prove it, I don't believe it.
+                        raise DRFValidationError(_("No migration metadata found for this user/service combination"))
+                    migrated_user_metadata.backend_classification = auth_backend_classification
+                    migrated_user_metadata.save(update_fields=["backend_classification"])
+
             self._is_allowed_to_login(data, auth_type)
         except ValidationError as e:
-            # TODO: return something helpful here
             raise DRFValidationError(e.message)
 
         user = data["user"]
         payload = data["token_data"]["payload"]
-
-        auth_backend_classification = None
-        if auth_type == "password":
-            auth_backend_classification = self._classify_backend(payload.get("auth_backend"))
-
-        # add a migration entry for the user
-        # This case is supporting reverse-sync.
-        # The only other way a service user could be created in Gateway is via migrate_service_data
-        # which necessarily creates the MigratedUserMetadata row at the same time. But a reverse-synced
-        # user wouldn't have MigratedUserMetadata yet.
-        if not user.original_accounts.exists():
-            MigratedUserMetadata.objects.create(
-                user=user,
-                service=data["service_cluster"],
-                original_username=payload["username"],
-                backend_classification=auth_backend_classification,
-            )
-
-            authenticator_meta = MigratedAuthenticatorMetadata.get_authenticator_for_auth_code(data)
-            AuthenticatorUser.objects.create(
-                user=user,
-                provider=authenticator_meta.authenticator,
-                uid=payload.get("uid", user.username),
-            )
-        else:
-            # We already have the migrated user and their metadata, so we just need to update
-            # the backend classification if it's a password auth.
-            if auth_type == "password":
-                try:
-                    migrated_user_metadata = MigratedUserMetadata.objects.get(
-                        user=user,
-                        service=data["service_cluster"],
-                    )
-                except MigratedUserMetadata.DoesNotExist:
-                    # TODO: Is this unreachable? Prove it, I don't believe it.
-                    raise DRFValidationError(_("No migration metadata found for this user/service combination"))
-                migrated_user_metadata.backend_classification = auth_backend_classification
-                migrated_user_metadata.save(update_fields=["backend_classification"])
 
         session_user = self._get_user(self.request)
 
@@ -224,9 +226,13 @@ class LegacyAuthViewset(viewsets.ViewSet):
 
     def _is_allowed_to_login(self, token_data, auth_type):
         sso_type = MigratedAuthenticatorMetadata.LegacyAuthTypes.SSO
+        user = token_data["user"]
+
+        if not user.authenticator_users.filter(provider__category="legacy").exists():
+            raise DRFValidationError(_("This account is not configured to use legacy authentication."))
 
         if auth_type == "password":
-            if token_data["user"].authenticator_users.filter(provider__migrated_metadata__type=sso_type).exists():
+            if user.authenticator_users.filter(provider__migrated_metadata__type=sso_type).exists():
                 raise DRFValidationError(_("This account has been configured to use SSO and cannot be used with a local username and password."))
 
             # > Once a local account has been linked to an SSO or external account, the user may not use it to authenticate on the Gateway.

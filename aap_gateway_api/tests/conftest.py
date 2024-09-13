@@ -10,7 +10,7 @@ import pytest
 # If we pull in individual fixtures and then reuse them in the new fixtures they have linting errors
 #  around redefinition. Instead we will just import * here and noqa this one line instead of multiple places
 from ansible_base.lib.testing.fixtures import *  # noqa: F403, F401
-from ansible_base.lib.testing.util import copy_fixture  # noqa: F401
+from ansible_base.lib.testing.util import copy_fixture, delete_authenticator  # noqa: F401
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
 from rest_framework.test import APIClient
 
@@ -420,3 +420,25 @@ def platform_auditor_api_client(db, platform_auditor_user, local_authenticator):
     except AttributeError:
         # The test might have logged the user out already (e.g. to test the logout signal)
         pass
+
+
+@pytest.fixture
+def keycloak_authenticator(db):
+    from ansible_base.authentication.models import Authenticator
+
+    authenticator = Authenticator.objects.create(
+        name="Test Keycloak Authenticator",
+        enabled=True,
+        create_objects=True,
+        remove_users=True,
+        type="ansible_base.authentication.authenticator_plugins.keycloak",
+        configuration={
+            "ACCESS_TOKEN_URL": "asdf",
+            "AUTHORIZATION_URL": "asdf",
+            "KEY": "asdf",
+            "PUBLIC_KEY": "asdf",
+            "SECRET": "asdf",
+        },
+    )
+    yield authenticator
+    delete_authenticator(authenticator)
