@@ -8,6 +8,7 @@ from ansible_base.authentication.middleware import AuthenticatorBackendMiddlewar
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
 from ansible_base.lib.logging import thread_local as logging_thread_local
 from ansible_base.lib.middleware.logging import LogRequestMiddleware
+from django.conf import settings
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError, connections
@@ -19,6 +20,7 @@ from envoy.type.v3 import http_status_pb2
 from google.rpc import status_pb2
 from psycopg import OperationalError
 from rest_framework.exceptions import APIException, AuthenticationFailed, PermissionDenied
+from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
@@ -34,13 +36,15 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
     d_request.method = request.method
     d_request.path = request.path
 
-    # Set up stream for request body parsing
-    d_request._stream = BytesIO(request.raw_body)
-    d_request._read_started = False
-
     d_request.COOKIES = parse_cookie(request.headers.get("cookie", ""))
 
     d_request.META = {**{"HTTP_" + k.upper().replace("-", "_"): v for k, v in request.headers.items()}, "QUERY_STRING": request.query}
+
+    # If we have X-CSRFToken header, we can avoid processing a potentially very large request body for a POST token.
+    if d_request.method not in SAFE_METHODS and settings.CSRF_HEADER_NAME not in d_request.META:
+        # Set up stream for request body parsing
+        d_request._stream = BytesIO(request.raw_body)
+        d_request._read_started = False
 
     d_request.META["SERVER_NAME"] = request.host
     d_request.META.pop("HTTP_ORIGIN", None)  # Force Referer checking for CSRF

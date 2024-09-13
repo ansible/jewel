@@ -24,7 +24,7 @@ def external_auth_filter():
             "with_request_body": {
                 # Subtract 8KiB max GRPC header length: https://grpc.io/docs/guides/metadata/#be-aware
                 "max_request_bytes": settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH - 8192,
-                "allow_partial_message": False,
+                "allow_partial_message": True,
                 "pack_as_bytes": True,
             },
             "status_on_error": {"code": "BadGateway"},

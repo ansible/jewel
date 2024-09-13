@@ -81,6 +81,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
                     ]
                 }
             ],
+            "per_connection_buffer_limit_bytes": 2**20 * 200,
         }
 
         if self.use_https:
