@@ -275,4 +275,5 @@ register(
         "Existing tokens will not be deleted when this setting is toggled off."
     ),
     encrypted=False,
+    label=_('Allow external users to create OAuth2 tokens'),
 )
