@@ -134,14 +134,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ANSIBLE_BASE_TEAM_MODEL = 'service_test_app.Team'
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'service_test_app.Organization'
 
+
+SOCIAL_AUTH_PIPELINE = ('ansible_base.resource_registry.utils.service_backed_sso_pipeline.redirect_to_resource_server',)
+
+
 AUTHENTICATION_BACKENDS = (
-    'social_core.backends.keycloak.KeycloakOAuth2',
     'social_core.backends.saml.SAMLAuth',
     'social_core.backends.open_id_connect.OpenIdConnectAuth',
     'social_core.backends.keycloak.KeycloakOAuth2',
     'service_test_app.backends.LDAPBackend',
-    'service_test_app.backends.RadiusBackend',
+    'service_test_app.backends.RADIUSBackend',
     'django.contrib.auth.backends.ModelBackend',
+    # The "Migrated" classes are coppies of above that allow prefixed usernames
+    'ansible_base.lib.backends.prefixed_user_auth.PrefixedUserAuthBackend',
+    'service_test_app.backends.MigratedLDAPBackend',
+    'service_test_app.backends.MigratedRADIUSBackend',
+    'service_test_app.backends.MigratedKeycloakOAuth2',
+    'service_test_app.backends.MigratedSAMLAuth',
+    'service_test_app.backends.MigratedOpenIdConnectAuth',
 )
 
 
@@ -172,6 +182,9 @@ ANSIBLE_BASE_JWT_KEY = os.environ.get("ANSIBLE_BASE_JWT_KEY")
 
 RESOURCE_SERVER = {"URL": "https://localhost", "SECRET_KEY": os.environ.get("SERVICE_TEST_APP_SECRET_KEY"), "VALIDATE_HTTPS": False}
 SERVICE_BACKED_SSO_AUTH_CODE_REDIRECT_PATH = "/api/gateway/v1/legacy_auth/"
+
+_service_prefix = os.environ.get("RENAMED_USERNAME_PREFIX", "aap")
+RENAMED_USERNAME_PREFIX = f"{_service_prefix}_"
 
 # Social auth backend settings
 # We don't need settings that actually work. We just care about the server URL

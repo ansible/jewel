@@ -95,6 +95,36 @@ USERS = {
         "galaxy": Account(kc, "conflict_uid1", "4c37820d-5f71-44ba-bec2-796505d1272e", None),
         "eda": Account(None, None, None, "pass1"),
     },
+    "conflict1a": {
+        "awx": Account(None, None, None, "pass3"),
+        "galaxy": Account(None, None, None, "pass2"),
+        "eda": Account(None, None, None, "pass1"),
+    },
+    "conflict2a": {
+        "awx": Account(None, None, None, "pass3"),
+        "galaxy": Account(None, None, None, "pass2"),
+        "eda": Account(None, None, None, "pass1"),
+    },
+    "conflict3a": {
+        "awx": Account(oidc_kc, "conflict_uid1a", "4c37820d-5f71-44ba-bec2-796505d1272d", None),
+        "galaxy": Account(kc, "conflict_uid1a", "4c37820d-5f71-44ba-bec2-796505d1272d", None),
+        "eda": Account(None, None, None, "pass1"),
+    },
+    "conflict1b": {
+        "awx": Account(None, None, None, "pass3"),
+        "galaxy": Account(None, None, None, "pass2"),
+        "eda": Account(None, None, None, "pass1"),
+    },
+    "conflict2b": {
+        "awx": Account(None, None, None, "pass3"),
+        "galaxy": Account(None, None, None, "pass2"),
+        "eda": Account(None, None, None, "pass1"),
+    },
+    "conflict3b": {
+        "awx": Account(oidc_kc, "conflict_uid1b", "4c37820d-5f71-44ba-bec2-796505d1272c", None),
+        "galaxy": Account(kc, "conflict_uid1b", "4c37820d-5f71-44ba-bec2-796505d1272c", None),
+        "eda": Account(None, None, None, "pass1"),
+    },
     "already_linked1": {
         "awx": Account(None, None, None, "pass3"),
         "galaxy": Account(None, None, None, "pass2"),
@@ -171,15 +201,16 @@ USER_SETS = {
         ("conflict2", "galaxy"),
         ("conflict3", "eda"),
     ),
+    # Different usernames are used to have tests isolated, because they merge users
     "conflict_all2": (
-        ("conflict2", "awx"),
-        ("conflict3", "galaxy"),
-        ("conflict1", "eda"),
+        ("conflict2a", "awx"),
+        ("conflict3a", "galaxy"),
+        ("conflict1a", "eda"),
     ),
     "conflict_all3": (
-        ("conflict3", "awx"),
-        ("conflict1", "galaxy"),
-        ("conflict2", "eda"),
+        ("conflict3b", "awx"),
+        ("conflict1b", "galaxy"),
+        ("conflict2b", "eda"),
     ),
     "already_linked1": (
         ("already_linked1", "galaxy"),

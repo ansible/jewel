@@ -111,6 +111,7 @@ eda-server-down: $(EDA_REPO)/.git/HEAD
 
 # eda-server requires using a local image so you have to build that
 dev-build:
+	cd $(GW_DIR) && ADMIN_PASSWORD=$(ADMIN_PASSWORD) make docker-compose-build
 	cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build
 
 ## Bring up AAP services (Gateway + Controller + EDA) all at once
@@ -119,8 +120,8 @@ dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack
 	make .awx-settings-hack
 	$(AAP_DEV_DIR)/awx-up-check.sh
 	$(AAP_DEV_DIR)/eda-server-up-check.sh
-	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true --merge-users=true
 	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true --merge-users=true
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true --merge-users=true
 
 ## Bring down all AAP services
 dev-down: awx-down gateway-down eda-server-down;

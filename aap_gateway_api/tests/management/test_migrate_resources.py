@@ -6,6 +6,8 @@ from django.core.management import call_command
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
+SEP_CHAR = "_"
+
 
 @pytest.fixture
 def conflicting_org():
@@ -94,20 +96,20 @@ def test_migrate_no_merge(migration_service, admin_user, admin_api_client, confl
 
     # Check that the org with the conflicting name was prefixed with the api slug
     assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert Organization.objects.filter(name=migration_service.api_slug + ":" + conflicting_org.name).exists()
+    assert Organization.objects.filter(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name).exists()
 
     # Since orgs are not merged, team names should be the same.
     original_org_teams = list(conflicting_org.teams.all().values_list("name", flat=True))
     assert original_org_teams == [conflicting_team.name]
 
-    new_org = Organization.objects.get(name=migration_service.api_slug + ":" + conflicting_org.name)
+    new_org = Organization.objects.get(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name)
 
     new_org_teams = list(new_org.teams.all().values_list("name", flat=True))
     assert new_org_teams == [conflicting_team.name]
 
     # Check that the org was renamed on the services.
     updated_org = service_client.get_resource(str(new_org.resource.ansible_id)).json()
-    assert updated_org["name"] == migration_service.api_slug + ":" + conflicting_org.name
+    assert updated_org["name"] == migration_service.api_slug + SEP_CHAR + conflicting_org.name
 
 
 @pytest.mark.django_db(transaction=True)
@@ -121,17 +123,17 @@ def test_migrate_merge_orgs(
         api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
         merge_teams=False,
-        merge_organizations=True,  # , merge_users=False
+        merge_organizations=True,
     )
 
     _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
 
     # Check that only one organization exists
     assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert not Organization.objects.filter(name=service_api_route_controller.api_slug + ":" + conflicting_org.name).exists()
+    assert not Organization.objects.filter(name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_org.name).exists()
 
     assert Team.objects.filter(organization=conflicting_org, name=conflicting_team.name).exists()
-    assert Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + ":" + conflicting_team.name).exists()
+    assert Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_team.name).exists()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -148,10 +150,10 @@ def test_migrate_merge_orgs_and_teams(
 
     # Check that only one organization exists
     assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert not Organization.objects.filter(name=service_api_route_controller.api_slug + ":" + conflicting_org.name).exists()
+    assert not Organization.objects.filter(name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_org.name).exists()
 
     assert Team.objects.filter(organization=conflicting_org, name=conflicting_team.name).exists()
-    assert not Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + ":" + conflicting_team.name).exists()
+    assert not Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_team.name).exists()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -179,21 +181,26 @@ def test_migrate_conflicting_user(
         username=admin_user.username,
         merge_teams=True,
         merge_organizations=True,
-        merge_users=False,
     )
 
     pre_sync_resources = service_client.list_resources(
-        {"service_id": service_client.service.service_cluster.service_id, "content_type__resource_type__name": "shared.user"}
+        {
+            "service_id": service_client.service.service_cluster.service_id,
+            "content_type__resource_type__name": "shared.user",
+            "not__name": admin_user.username,  # admin user will be merged, and thus get the gateway service_id
+        }
     ).json()
+
+    assert len(pre_sync_resources['results']) > 0
 
     _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="natasha").exists()
     assert User.objects.filter(username="hawkeye").exists()
-    assert User.objects.filter(username=f'{service_client.service.api_slug}:hawkeye').exists()
+    assert User.objects.filter(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye').exists()
 
-    renamed_user = User.objects.get(username=f'{service_client.service.api_slug}:hawkeye')
+    renamed_user = User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye')
 
     assert renamed_user.original_accounts.count() == 1
     original_data = renamed_user.original_accounts.get(service=migration_service.service_cluster)
@@ -211,7 +218,11 @@ def test_migrate_conflicting_user(
     assert not User.objects.filter(username="already_migrated").exists()
 
     resources = service_client.list_resources(
-        {"service_id": service_client.service.service_cluster.service_id, "content_type__resource_type__name": "shared.user"}
+        {
+            "service_id": service_client.service.service_cluster.service_id,
+            "content_type__resource_type__name": "shared.user",
+            "not__name": admin_user.username,  # admin user will be merged, and thus get the gateway service_id
+        }
     ).json()
 
     # Check that the user's service ID's were not updated
@@ -240,25 +251,26 @@ def test_merge_users(
         username=admin_user.username,
         merge_teams=True,
         merge_organizations=True,
-        merge_users=True,
     )
     _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="hawkeye").exists()
-    assert User.objects.get(username="hawkeye").original_accounts.count() == 2
-    assert not User.objects.filter(username=f'{service_client.service.api_slug}:hawkeye').exists()
-    updated_resource = service_client.get_resource(str(u.resource.ansible_id)).json()
+    assert User.objects.get(username="hawkeye").original_accounts.count() == 1
+
+    conflict_user = User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye')
+    assert conflict_user.original_accounts.count() == 1
+    updated_resource = service_client.get_resource(str(conflict_user.resource.ansible_id)).json()
     assert updated_resource
 
-    # When merge_users=True, users should get fully migrated
-    assert updated_resource["is_partially_migrated"] is False
+    # Users always do oppionated merge_users=True behavior
+    # for any renamed user, we will set the partially migrated flag
+    assert updated_resource["is_partially_migrated"] is True
 
     updated_user = updated_resource['resource_data']
-    assert updated_user.get('username') == 'hawkeye', updated_user
-    assert updated_user.get('email') == 'hawkeye@secretbase.invalid', updated_user
+    assert updated_user.get('username') == f'{service_client.service.api_slug}{SEP_CHAR}hawkeye', updated_user
 
-    assert User.objects.get(username="hawkeye").authenticator_users.filter(uid="mr_hawk").exists()
+    assert User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye').authenticator_users.filter(uid="mr_hawk").exists()
 
     # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
     assert not User.objects.filter(username="already_migrated").exists()
@@ -277,18 +289,18 @@ def cmd(patched_resource_client):
 @pytest.mark.django_db
 def test_use_given_name_first_found(cmd):
     # assert that the first argument takes precedence when the name-like field is given in unique fields
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser'
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser'
 
     # If user bob exists that should not affect the result
     User.objects.create(username='bob')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser'
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser'
 
 
 @pytest.mark.django_db
 def test_use_given_name_iteration(cmd):
-    User.objects.create(username='controller:foouser')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser1'
+    User.objects.create(username='controller_foouser')
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser1'
 
-    User.objects.create(username='controller:foouser1')
-    User.objects.create(username='controller:foouser2')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller:foouser3'
+    User.objects.create(username='controller_foouser1')
+    User.objects.create(username='controller_foouser2')
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser3'
