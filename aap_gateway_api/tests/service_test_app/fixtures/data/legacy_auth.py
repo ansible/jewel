@@ -175,6 +175,15 @@ USERS = {
     "3fake_new_user": {
         "eda": Account(None, None, None, "pass1"),
     },
+    "manual_merge_password": {
+        "awx": Account(None, None, None, "pass"),
+        "galaxy": Account(None, None, None, "pass"),
+        "eda": Account(None, None, None, "pass"),
+    },
+    "manual_merge_sso": {
+        "awx": Account(oidc_kc, "manual_merge_sso", "4c2213a6-7a88-4bf7-a43b-b8e553374cc3", None),
+        "galaxy": Account(kc, "manual_merge_sso", "4c2213a6-7a88-4bf7-a43b-b8e553374cc3", None),
+    },
 }
 
 for username in USERS:
@@ -236,6 +245,8 @@ USER_SETS = {
         ("2fake_new_user", "galaxy"),
         ("3fake_new_user", "eda"),
     ),
+    "manual_merge_password": (("manual_merge_password", "*"),),
+    "manual_merge_sso": (("manual_merge_sso", "*"),),
 }
 
 

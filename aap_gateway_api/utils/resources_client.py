@@ -1,11 +1,11 @@
 import copy
 import logging
 import time
-from collections import namedtuple
 from typing import Callable
 
 from ansible_base.lib.utils.validation import to_python_boolean
 from ansible_base.resource_registry.rest_client import ResourceAPIClient as DABResourceAPIClient
+from ansible_base.resource_registry.rest_client import ResourceRequestBody as DABResourceRequestBody
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
@@ -15,7 +15,7 @@ from requests.models import Response as Response
 from aap_gateway_api.utils.jwt_token import create_signed_jwt
 from aap_gateway_api.utils.preferences import get_preference_value
 
-ResourceRequestBody = namedtuple("ResourceRequestBody", ["ansible_id", "service_id", "resource_type", "resource_data"], defaults=(None, None, None, None))
+ResourceRequestBody = DABResourceRequestBody
 
 logger = logging.getLogger('aap_gateway_api.utils.resource_api_client')
 

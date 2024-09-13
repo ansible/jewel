@@ -174,7 +174,6 @@ def test_authenticator_user_move_keep_memberships(
     assert RoleUserAssignment.objects.filter(user=user).count() == (1 if keep_memberships else 0)
 
 
-@pytest.mark.xfail
 def test_authenticator_user_move_merge_with_user(
     admin_api_client,
     user,
@@ -201,16 +200,9 @@ def test_authenticator_user_move_merge_with_user(
     random_user.refresh_from_db()
 
 
-@pytest.mark.xfail
-def test_authenticator_user_move_merge_accounts_with_same_uid(
-    admin_api_client,
-    user,
-    local_authenticator,
-    legacy_password_authenticator,
-    legacy_sso_authenticator,
-):
-    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=legacy_sso_authenticator)
-    ua, _ = AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=legacy_password_authenticator)
+def test_authenticator_user_move_merge_accounts_with_same_uid(admin_api_client, user, local_authenticator, legacy_password_authenticator, random_user):
+    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=local_authenticator)
+    ua, _ = AuthenticatorUser.objects.get_or_create(uid=user.username, user=random_user, provider=legacy_password_authenticator)
     assert AuthenticatorUser.objects.filter(uid=user.username).count() == 2
     url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
     payload = {
@@ -224,3 +216,59 @@ def test_authenticator_user_move_merge_accounts_with_same_uid(
     assert response.data["summary_fields"]["provider"]["id"] == local_authenticator.id
     user.refresh_from_db()
     assert AuthenticatorUser.objects.filter(uid=user.username).count() == 1
+
+
+def test_authenticator_user_merge_with_self(random_user, admin_api_client, user, local_authenticator, legacy_password_authenticator):
+    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=local_authenticator)
+    ua, _ = AuthenticatorUser.objects.get_or_create(uid=user.username, user=random_user, provider=legacy_password_authenticator)
+
+    url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
+    payload = {
+        "new_authenticator": local_authenticator.id,
+        "remove_other_authenticators": True,
+        "keep_memberships": True,
+        "merge_with_user": random_user.id,
+        "merge_accounts_with_same_uid": False,
+        "new_uid": "new_uid",
+    }
+    response = admin_api_client.post(url, data=payload)
+    assert "merge_with_user" in response.data
+    assert response.status_code == 400
+
+
+def test_authenticator_user_move_new_uid(random_user, admin_api_client, user, local_authenticator, legacy_password_authenticator):
+    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=local_authenticator)
+    ua, _ = AuthenticatorUser.objects.get_or_create(uid=user.username, user=random_user, provider=legacy_password_authenticator)
+
+    url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
+    payload = {
+        "new_authenticator": local_authenticator.id,
+        "remove_other_authenticators": True,
+        "keep_memberships": True,
+        "merge_with_user": user.id,
+        "merge_accounts_with_same_uid": False,
+        "new_uid": "new_uid",
+    }
+    response = admin_api_client.post(url, data=payload)
+    assert response.status_code == 200
+    assert AuthenticatorUser.objects.filter(uid="new_uid").count() == 1
+
+
+def test_authenticator_new_uid_after_merge(admin_api_client, user, local_authenticator, legacy_password_authenticator, random_user):
+    AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=local_authenticator)
+    ua, _ = AuthenticatorUser.objects.get_or_create(uid=user.username, user=random_user, provider=legacy_password_authenticator)
+    assert AuthenticatorUser.objects.filter(uid=user.username).count() == 2
+    url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
+    payload = {
+        "new_authenticator": local_authenticator.id,
+        "remove_other_authenticators": True,
+        "keep_memberships": True,
+        "merge_accounts_with_same_uid": True,
+        "new_uid": "new_uid",
+    }
+    response = admin_api_client.post(url, data=payload)
+    assert response.status_code == 200
+    assert response.data["summary_fields"]["provider"]["id"] == local_authenticator.id
+    user.refresh_from_db()
+    assert AuthenticatorUser.objects.filter(uid=user.username).count() == 0
+    assert AuthenticatorUser.objects.filter(uid="new_uid").count() == 1

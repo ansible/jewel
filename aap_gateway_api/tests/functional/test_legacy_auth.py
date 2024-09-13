@@ -4,6 +4,7 @@ from unittest.mock import patch
 import jwt
 import pytest
 import requests
+from ansible_base.authentication.models.authenticator_user import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
@@ -135,7 +136,7 @@ class TestLegacyAuth:
         eda.kill()
 
     @pytest.mark.django_db(transaction=True)
-    def test_all_legacy_auth(self, services, subtests):
+    def test_all_legacy_auth(self, services, subtests, local_authenticator, keycloak_authenticator, admin_client, unauthenticated_api_client):
         """
         All of the tests in this class will be run through this test. While this is not proper form
         for pytest, there are two reasons to do it this way:
@@ -148,6 +149,11 @@ class TestLegacyAuth:
            that we aren't creating any conflicts as users login and are migrated into the gateway.
         """
         awx_svc, eda_svc, galaxy_svc = services
+
+        self.local_authenticator = local_authenticator
+        self.keycloak_authenticator = keycloak_authenticator
+        self.admin_client = admin_client
+        self.unauthenticated_api_client = unauthenticated_api_client
 
         service_routes = {
             "awx": awx_svc,
@@ -438,6 +444,101 @@ class TestLegacyAuth:
 
         user_set = get_user_set("fake_new_user")
         self._test_merge_multiple_accounts(client, user_set, ("awx", "galaxy", "eda"), user_set["awx"].username, False, expect_initial_auth=True)
+
+    def subtest_manually_migrate_password_user(self, client: AuthClient):
+        user_set = get_user_set("manual_merge_password")
+        auth_users = AuthenticatorUser.objects.filter(uid="manual_merge_password")
+        assert auth_users.count() == 3
+
+        # Manually merge user via the authenticator user API
+        for ua in auth_users:
+            url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
+            payload = {
+                "new_authenticator": self.local_authenticator.id,
+                "merge_accounts_with_same_uid": True,
+            }
+            response = self.admin_client.post(url, data=payload)
+            assert response.status_code == 200
+
+        # Check that old authenticator users are gone
+        assert AuthenticatorUser.objects.filter(uid="manual_merge_password").count() == 1
+
+        # Check that service id is updated
+        user = User.objects.get(username="manual_merge_password")
+        assert str(user.resource.service_id) == str(service_id())
+
+        all_client = PatchedAllServiceClient()
+
+        def _assert_exists(service, response):
+            assert response.status_code == 200
+            assert response.json()["resource_data"]["username"] == "manual_merge_password"
+
+        # Check that the service ID has been updated in all the services
+        all_client.with_callback(_assert_exists).get_resource(str(user.resource.ansible_id))
+
+        user.set_password("new_pass")
+        user.save()
+
+        # Check that the user can login with the new password
+        url = get_relative_url("login")
+        next_url = get_relative_url("me-list")
+        data = {"username": "manual_merge_password", "password": "new_pass", "next": next_url}
+        response = self.unauthenticated_api_client.post(url, data, follow=True)
+        assert response.status_code == 200
+        assert response.data["results"][0]["username"] == "manual_merge_password"
+
+        # Check that you can no longer login with legacy auth
+        resp = client.auth_password(user_set["awx"], "controller")
+        assert resp.status_code == 400
+
+    def subtest_manually_migrate_sso_user(self, client: AuthClient):
+        user_set = get_user_set("manual_merge_sso")
+        auth_users = AuthenticatorUser.objects.filter(uid__in=["manual_merge_sso", "4c2213a6-7a88-4bf7-a43b-b8e553374cc3"])
+        assert auth_users.count() == 2
+
+        # Move first authenticator user
+        first_user = auth_users[0].user
+        url = get_relative_url("authenticator_user-move", kwargs={"pk": auth_users[0].pk})
+        payload = {
+            "new_authenticator": self.keycloak_authenticator.id,
+            "merge_accounts_with_same_uid": False,
+        }
+        response = self.admin_client.post(url, data=payload)
+        assert response.status_code == 200
+
+        # Move second authenticator user
+        url = get_relative_url("authenticator_user-move", kwargs={"pk": auth_users[1].pk})
+        payload = {
+            "new_authenticator": self.keycloak_authenticator.id,
+            "merge_accounts_with_same_uid": False,
+            "merge_with_user": first_user.pk,
+            "new_uid": "manual_merge_sso",
+        }
+        response = self.admin_client.post(url, data=payload)
+        assert response.status_code == 200
+
+        # Check that old authenticator users are gone
+        assert AuthenticatorUser.objects.filter(uid="manual_merge_sso").count() == 1
+
+        # Check that service id is updated
+        user = User.objects.get(username="manual_merge_sso")
+        assert str(user.resource.service_id) == str(service_id())
+
+        all_client = PatchedAllServiceClient()
+
+        def _assert_exists(service, response):
+            if service.service_cluster.service_type != "eda":
+                assert response.status_code == 200
+                assert response.json()["resource_data"]["username"] == "manual_merge_sso"
+            else:
+                assert response.status_code == 404
+
+        # Check that the service ID has been updated in all the services
+        all_client.with_callback(_assert_exists).get_resource(str(user.resource.ansible_id))
+
+        # Check that you can no longer login with legacy auth
+        resp = client.auth_sso(user_set["awx"], "awx")
+        assert resp.status_code == 400
 
     def _test_merge_multiple_accounts(
         self, client: AuthClient, user_set, order, expected_username, expect_rename, username_for="awx", expect_initial_auth=False

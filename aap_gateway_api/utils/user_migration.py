@@ -1,6 +1,7 @@
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
 from django.utils.translation import gettext as _
+from requests.exceptions import HTTPError
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from aap_gateway_api.models import ServiceAPIRoute
@@ -26,9 +27,13 @@ def can_accounts_be_merged(main_account, to_merge):
 
 
 def migrate_account(user):
+    if user.is_migrated:
+        return
+
     with transaction.atomic():
         acct_resource = user.resource
         acct_resource.service_id = service_id()
+        acct_resource.is_partially_migrated = False
         acct_resource.save()
 
         for original in user.original_accounts.all():
@@ -43,32 +48,44 @@ def migrate_account(user):
                     "last_name": user.last_name,
                     "email": user.email,
                 },
+                is_partially_migrated=False,
             )
+
             client.update_resource(acct_resource.ansible_id, data=body, partial=True)
 
 
-def link_account(main_account, to_merge):
+def link_account(main_account, to_merge, preserve_authenticators=True, services_to_merge=None):
+    if main_account.pk == to_merge.pk:
+        return
     with transaction.atomic():
         original_services = []
+        if services_to_merge:
+            original_services = services_to_merge
         for original in to_merge.original_accounts.all():
             original_services.append(ServiceAPIRoute.objects.get(service_cluster=original.service))
             original.user = main_account
             original.save()
 
-        for auth_user in to_merge.authenticator_users.all():
-            auth_user.user = main_account
-            auth_user.save()
+        if preserve_authenticators:
+            for auth_user in to_merge.authenticator_users.all():
+                auth_user.user = main_account
+                auth_user.save()
 
         to_merge_id = to_merge.resource.ansible_id
         to_merge.delete()
 
         for service in original_services:
-            client = GWResourceAPIClient(service=service)
+            client = GWResourceAPIClient(service=service, raise_if_bad_request=True)
 
             # clean up any references to the original account if they got created.
-            client.delete_resource(ansible_id=main_account.resource.ansible_id)
+            try:
+                client.delete_resource(ansible_id=main_account.resource.ansible_id)
+            except HTTPError as e:
+                if e.response.status_code != 404:
+                    raise
+
             client.update_resource(
                 to_merge_id,
-                data=ResourceRequestBody(ansible_id=main_account.resource.ansible_id),
+                data=ResourceRequestBody(ansible_id=main_account.resource.ansible_id, resource_data={"username": main_account.username}),
                 partial=True,
             )
