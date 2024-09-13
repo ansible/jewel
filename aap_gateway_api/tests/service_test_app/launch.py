@@ -7,7 +7,7 @@ import requests
 services = {"awx", "galaxy", "eda"}
 
 
-def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secret_key=None, save_std=True):
+def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secret_key=None, save_std=True, user_prefix='controller'):
     """
     This launches the service_test_app in a sub process.
 
@@ -24,6 +24,7 @@ def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secre
     # copy the env so that we get the correct tox python venv.
     env = os.environ.copy()
     env["SERVICE_TEST_APP_TYPE"] = service_type
+    env["RENAMED_USERNAME_PREFIX"] = user_prefix
 
     if not dev_mode:
         from aap_gateway_api.utils.preferences import get_preference_value

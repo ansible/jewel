@@ -27,6 +27,8 @@ DOWN_TO_UP = {
     "eda": "eda",
 }
 
+SEP_CHAR = "_"
+
 
 class AuthClient:
     def __init__(self, service_routes):
@@ -41,6 +43,9 @@ class AuthClient:
             f"http://localhost:{service_api.service_port}/sso/?username={account.username}&backend={account.backend.backend}",
             allow_redirects=False,
         )
+
+        if "Location" not in resp.headers:
+            raise RuntimeError(f'Response did not have location header, headers:\n{resp.headers}\nstatus_code:\n{resp.status_code}')
 
         # The gateway API isn't actually running on localhost so we'll intercept the redirect and handle it manually.
         redirect = resp.headers["Location"]
@@ -102,16 +107,22 @@ class TestLegacyAuth:
         eda_key = service_api_route_eda.service_cluster.generate_key()
         controller_key = service_api_route_controller.service_cluster.generate_key()
 
-        awx = launch_service("awx", service_api_route_controller.service_port, "legacy_auth", secret_key=controller_key.secret, save_std=False)
-        galaxy = launch_service("galaxy", service_api_route_hub.service_port, "legacy_auth", secret_key=hub_key.secret, save_std=False)
-        eda = launch_service("eda", service_api_route_eda.service_port, "legacy_auth", secret_key=eda_key.secret, save_std=False)
+        awx = launch_service(
+            "awx",
+            service_api_route_controller.service_port,
+            "legacy_auth",
+            secret_key=controller_key.secret,
+            save_std=False,
+            user_prefix=service_api_route_controller.api_slug,
+        )
+        galaxy = launch_service(
+            "galaxy", service_api_route_hub.service_port, "legacy_auth", secret_key=hub_key.secret, save_std=False, user_prefix=service_api_route_hub.api_slug
+        )
+        eda = launch_service(
+            "eda", service_api_route_eda.service_port, "legacy_auth", secret_key=eda_key.secret, save_std=False, user_prefix=service_api_route_eda.api_slug
+        )
 
-        cmd_kwargs = {
-            "username": admin_user.username,
-            "merge_teams": True,
-            "merge_organizations": True,
-            "merge_users": False,
-        }
+        cmd_kwargs = {"username": admin_user.username, "merge_teams": True, "merge_organizations": True}
 
         call_command("migrate_service_data", api_slug=service_api_route_controller.api_slug, **cmd_kwargs)
         call_command("migrate_service_data", api_slug=service_api_route_hub.api_slug, **cmd_kwargs)
@@ -171,12 +182,12 @@ class TestLegacyAuth:
 
     def subtest_merging_all_accounts_galaxy_first(self, client: AuthClient):
         user_set = get_user_set("password_set_3")
-        username = client.service_routes["galaxy"].api_slug + ":" + user_set["galaxy"].username
+        username = client.service_routes["galaxy"].api_slug + SEP_CHAR + user_set["galaxy"].username
         self._test_merge_multiple_accounts(client, user_set, ("galaxy", "awx", "eda"), username, True)
 
     def subtest_merging_all_accounts_eda_first(self, client: AuthClient):
         user_set = get_user_set("password_set_4")
-        username = client.service_routes["eda"].api_slug + ":" + user_set["eda"].username
+        username = client.service_routes["eda"].api_slug + SEP_CHAR + user_set["eda"].username
         self._test_merge_multiple_accounts(
             client,
             user_set,
@@ -191,7 +202,7 @@ class TestLegacyAuth:
 
     def subtest_merging_all_accounts_conflict_all_eda_first(self, client: AuthClient):
         user_set = get_user_set("conflict_all1")
-        username = client.service_routes["eda"].api_slug + ":" + user_set["eda"].username
+        username = client.service_routes["eda"].api_slug + SEP_CHAR + user_set["eda"].username
         self._test_merge_multiple_accounts(
             client,
             user_set,
@@ -206,7 +217,7 @@ class TestLegacyAuth:
 
     def subtest_merging_all_accounts_conflict_all_hub_first(self, client: AuthClient):
         user_set = get_user_set("conflict_all2")
-        username = client.service_routes["galaxy"].api_slug + ":" + user_set["galaxy"].username
+        username = client.service_routes["galaxy"].api_slug + SEP_CHAR + user_set["galaxy"].username
         self._test_merge_multiple_accounts(
             client,
             user_set,
@@ -468,12 +479,16 @@ class TestLegacyAuth:
         assert resp.data["results"][0]["username"] == expected_username
 
     def _assert_initial_auth(self, data, expect_username, expect_type, expect_rename=True, expect_initial_auth=False):
+        assert isinstance(data, dict), f'Response was not a dictionary:\n{data}'
+
         assert data["username"] == expect_username
         assert data["needs_rename"] is expect_rename
         assert data["is_authenticated"] is expect_initial_auth
         assert data["is_migrated"] is expect_initial_auth
 
     def _assert_linked_accounts(self, data, user_set, services):
+        assert isinstance(data, dict), f'Response was not a dictionary:\n{data}'
+
         ready = data["linked_accounts"]
         assert len(ready) == len(services)
 

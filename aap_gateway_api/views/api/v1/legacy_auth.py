@@ -199,7 +199,11 @@ class LegacyAuthViewset(viewsets.ViewSet):
 
                 if different_external_accounts.exists():
                     raise DRFValidationError(
-                        _("External accounts may only be linked to each other if they share the same type (LDAP, radius, etc.) or to local accounts.")
+                        _(
+                            "External accounts may only be linked to each other if they share the same type "
+                            "(LDAP, radius, etc.) or to local accounts. "
+                            f"Service Django auth backend: {auth_backend_classification}"
+                        )
                     )
 
             old_username = to_merge.username
@@ -236,8 +240,6 @@ class LegacyAuthViewset(viewsets.ViewSet):
                 token_data["user"].original_accounts.filter(~Q(backend_classification='local') & Q(backend_classification__isnull=False)).exists()
             ):
                 raise DRFValidationError(_("This account has been linked to an external account and cannot be used with a local username and password."))
-            else:
-                pass
 
         return True
 
@@ -260,6 +262,9 @@ class LegacyAuthViewset(viewsets.ViewSet):
             return 'tacacs+'
 
         if 'ModelBackend' in auth_backend:
+            return 'local'
+
+        if 'PrefixedUserAuthBackend' in auth_backend:
             return 'local'
 
         return auth_backend
