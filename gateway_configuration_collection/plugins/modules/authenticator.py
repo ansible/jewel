@@ -61,6 +61,12 @@ options:
       description:
       - The order in which an authenticator will be tried. This only pertains to username/password authenticators
       - defaults to 1 (by API)
+    auto_migrate_users_to:
+      type: str
+      description:
+        - Automatically move users from this authenticator to the target authenticator when a matching user logs in via the target authenticator.
+        - For this to work, the field used for the user ID on both authenticators needs to have the same value.
+        - This should only be used when migrating users between two authentication mechanisms that share the same user database.
 extends_documentation_fragment:
 - ansible.gateway_configuration.state
 - ansible.gateway_configuration.auth
@@ -86,6 +92,7 @@ def main():
         configuration=dict(type="dict", no_log=True),  # can contain secrets
         order=dict(type="int"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
+        auto_migrate_users_to=dict(type="str"),
     )
 
     # Create a module with spec

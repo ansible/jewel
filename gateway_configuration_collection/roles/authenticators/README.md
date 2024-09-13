@@ -36,6 +36,7 @@ Options for the `gateway_authenticators` variable:
 | `type`           |         N/A         |    no    | str  | The type of authentication service this is. Can be one of the modules: `ansible_base.authentication.authenticator_plugins.*` |
 | `order`          |  N/A (`1` by API)   |    no    | int  | The order in which an authenticator will be tried. This only pertains to username/password authenticators                    |
 | `state`          |      `present`      |    no    | str  | Desired state of the resource.                                                                                               |
+| `auto_migrate_users_to` |      N/A     |    no    | str  | Automatically move users from this authenticator to the target authenticator when a matching user logs in via the target authenticator.   |
 
 ** Unique value: **
 
@@ -71,7 +72,7 @@ Options for the `gateway_authenticators` variable:
 
 - Deletes 1 authenticator
 - Creates an AzureAD authenticator with configuration provided by the `ansible_base.authentication.authenticator_plugins.azuread` module
-  - configuration class can be found in https://github.com/ansible/django-ansible-base/tree/devel/ansible_base/authentication/authenticator_plugins 
+  - configuration class can be found in https://github.com/ansible/django-ansible-base/tree/devel/ansible_base/authentication/authenticator_plugins
 
 File name: `data/gateway_authenticators.yml`
 

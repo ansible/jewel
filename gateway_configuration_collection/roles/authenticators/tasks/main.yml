@@ -11,6 +11,7 @@
     type:                     "{{ __gateway_authenticators_item.type | default(omit) }}"
     order:                    "{{ __gateway_authenticators_item.order | default(omit) }}"
     state:                    "{{ __gateway_authenticators_item.state | default(gateway_state | default(omit, true)) }}"
+    auto_migrate_users_to:    "{{ __gateway_authenticators_item.auto_migrate_users_to | default(omit) }}"
 
     # Role Standard Options
     gateway_hostname:         "{{ gateway_hostname | default(omit, true) }}"
