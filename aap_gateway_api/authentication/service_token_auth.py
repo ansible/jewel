@@ -35,6 +35,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
 
     def is_user_authorized(self, request, user, service, token_data):
         resources_api = get_relative_url("service-index-root")
+        user_assignments = get_relative_url('roleuserassignment-list')
 
         # Allow services to authenticate to the resource registry, regardless of
         # whether or not they are authorized by the user to access the service.
@@ -50,6 +51,9 @@ class ServiceTokenAuthentication(BaseAuthentication):
             ]
 
             setattr(user, "resource_api_actions", allowed_actions)
+            return True
+
+        if request.path.startswith(user_assignments) and request.method == 'GET':
             return True
 
         return False
