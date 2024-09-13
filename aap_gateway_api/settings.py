@@ -113,7 +113,9 @@ DYNAMIC_PREFERENCES = {
 # are configured to run behind it for operations like syncing and migration.
 ENVOY_HOSTNAME = "localhost"
 ENVOY_VERIFY_HTTPS_CERTIFICATES = True
-ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = (2**20) * 200
+# Since envoy buffer limits are "soft limits", this needs to be comfortably higher than GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH;
+# how much higher depends on network throughput, 3 MiB higher is the absolute minimum I could set without error 413s.
+ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
 
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
