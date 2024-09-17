@@ -9,11 +9,18 @@ logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
 def create_preload_data(**kwargs) -> None:
     """
-    Run any function in this file whose name starts with 'create_'
+    Run functions in a given order to create pre-loaded data
     All functions in this code should take no arguments and be idempotent
     If they fail, an exception (of any type) should be raised
     If an exception is raised the message "Failed to <function name replace _ with ' '>" is outputted in the logs
     """
+
+    function_order = [
+        create_default_organization,
+        create_managed_roles,
+        set_system_user_password,
+        set_system_user_managed_flag,
+    ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
     verbosity = kwargs.get('verbosity', 1)
@@ -33,14 +40,17 @@ def create_preload_data(**kwargs) -> None:
     if verbosity > 0:
         logger.info("Building preloaded data")
 
-    for function in [create_default_organization, set_system_user_managed_flag, create_managed_roles]:
+    for function in function_order:
         name = function.__name__
         try:
             if verbosity > 1:
                 logger.info(f"Running {name}")
             created = function()
             if verbosity > 0 and created:
-                logger.debug(f"Created {' '.join(name.split('_')[1:])}")
+                action = 'Created'
+                if name.startswith('set'):
+                    action = 'Set'
+                logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
         except Exception as e:
             if verbosity in [0, 1]:
                 logger.error(f"Failed to {name.replace('_', ' ')} {e}")
@@ -56,11 +66,25 @@ def create_default_organization() -> bool:
     return created
 
 
-def set_system_user_managed_flag() -> None:
-    system_user = get_system_user()
-    system_user.managed = True
-    system_user.save()
-
-
 def create_managed_roles() -> None:
     permission_registry.create_managed_roles(global_apps)
+
+
+def set_system_user_password() -> bool:
+    # When the system user is created by a migration it can't call set_usable_password because is of class <__fake__.User>
+    system_user = get_system_user()
+    if system_user.has_usable_password:
+        system_user.set_unusable_password()
+        system_user.save()
+        return True
+    else:
+        return False
+
+
+def set_system_user_managed_flag() -> None:
+    system_user = get_system_user()
+    if system_user.managed:
+        return False
+    system_user.managed = True
+    system_user.save()
+    return True
