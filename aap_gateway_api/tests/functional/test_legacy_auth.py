@@ -4,7 +4,7 @@ from unittest.mock import patch
 import jwt
 import pytest
 import requests
-from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.authentication.models.authenticator_user import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
@@ -36,13 +36,6 @@ class AuthClient:
         self.client = APIClient()
         self.service_routes = service_routes
 
-    def normal_login(self, username, password):
-        url = get_relative_url("login")
-        next_url = get_relative_url("me-list")
-        data = {"username": username, "password": password, "next": next_url}
-        response = self.client.post(url, data, follow=True)
-        assert response.status_code == 200
-
     def auth_sso(self, account: Account, service):
         url = get_relative_url("legacy_auth-authenticate-sso")
         service_api = self.service_routes[service]
@@ -59,27 +52,25 @@ class AuthClient:
         redirect = resp.headers["Location"]
         auth_code = redirect.split("?auth_code=", maxsplit=1)[1]
 
-        self.client.get(f"{url}?auth_code={auth_code}", follow=True)
-        return self.current_state()
+        return self.client.get(f"{url}?auth_code={auth_code}", follow=True)
 
     def auth_password(self, account: Account, service_type):
-        url = get_relative_url(f"legacy_auth-{service_type}-password")
+        url = get_relative_url("legacy_auth-authenticate-password")
         return self.client.post(
             url,
             data={
                 "username": account.username,
                 "password": account.password,
+                "service_type": service_type,
             },
             follow=True,
         )
 
-    def finalize(self, new_username=None, new_password=None):
+    def finalize(self, new_username=None):
         url = get_relative_url("legacy_auth-finalize")
-        data = {"new_username": new_username, "aap_password": new_password}
+        data = {"new_username": new_username}
         if new_username is None:
             data.pop("new_username")
-        if new_password is None:
-            data.pop("aap_password")
         return self.client.post(url, data=data, format="json", follow=True)
 
     def reset(self):
@@ -103,23 +94,15 @@ class TestLegacyAuth:
             yield client
 
     @pytest.fixture
-    def patched_authenticator_all_resource_client(self):
-        with patch("aap_gateway_api.authentication.authenticator_plugins.legacy_external_password.AllServicesClient", PatchedAllServiceClient) as client:
-            yield client
-
-    @pytest.fixture
     def services(
         self,
         service_api_route_controller,
         service_api_route_eda,
         service_api_route_hub,
-        service_api_route_gateway,
         patched_resource_client,
         patched_legacy_auth_client,
         patched_utils_resource_client,
-        patched_authenticator_all_resource_client,
         admin_user,
-        local_authenticator,
     ):
         hub_key = service_api_route_hub.service_cluster.generate_key()
         eda_key = service_api_route_eda.service_cluster.generate_key()
@@ -178,18 +161,10 @@ class TestLegacyAuth:
             "galaxy": galaxy_svc,
         }
 
-        SINGLE_TEST = None
-        # Use this to run a single test. Just make sure you comment it out before commiting
-        # SINGLE_TEST = "subtest_manually_migrate_sso_user"
-
         for attr in dir(self):
             if attr.startswith("subtest"):
-                if SINGLE_TEST and attr != SINGLE_TEST:
-                    continue
                 with subtests.test(msg=attr):
                     getattr(self, attr)(AuthClient(service_routes))
-
-        assert SINGLE_TEST is None
 
     def subtest_merging_all_accounts_controller_oidc(self, client: AuthClient):
         user_set = get_user_set("controller_oidc")
@@ -205,16 +180,16 @@ class TestLegacyAuth:
 
     def subtest_merging_all_accounts_different_pass(self, client: AuthClient):
         user_set = get_user_set("password_set_1")
-        self._test_merge_multiple_accounts(client, user_set, ("awx", "galaxy", "eda"), user_set["awx"].username, False, expect_password=False)
+        self._test_merge_multiple_accounts(client, user_set, ("awx", "galaxy", "eda"), user_set["awx"].username, False)
 
     def subtest_merging_all_accounts_same_pass(self, client: AuthClient):
         user_set = get_user_set("password_set_2")
-        self._test_merge_multiple_accounts(client, user_set, ("awx", "galaxy", "eda"), user_set["awx"].username, False, expect_password=True)
+        self._test_merge_multiple_accounts(client, user_set, ("awx", "galaxy", "eda"), user_set["awx"].username, False)
 
     def subtest_merging_all_accounts_galaxy_first(self, client: AuthClient):
         user_set = get_user_set("password_set_3")
         username = client.service_routes["galaxy"].api_slug + SEP_CHAR + user_set["galaxy"].username
-        self._test_merge_multiple_accounts(client, user_set, ("galaxy", "awx", "eda"), username, True, expect_password=True)
+        self._test_merge_multiple_accounts(client, user_set, ("galaxy", "awx", "eda"), username, True)
 
     def subtest_merging_all_accounts_eda_first(self, client: AuthClient):
         user_set = get_user_set("password_set_4")
@@ -229,7 +204,6 @@ class TestLegacyAuth:
             ),
             username,
             True,
-            expect_password=True,
         )
 
     def subtest_merging_all_accounts_conflict_all_eda_first(self, client: AuthClient):
@@ -245,7 +219,6 @@ class TestLegacyAuth:
             ),
             username,
             True,
-            expect_password=True,
         )
 
     def subtest_merging_all_accounts_conflict_all_hub_first(self, client: AuthClient):
@@ -283,11 +256,18 @@ class TestLegacyAuth:
         user_set_2 = get_user_set("already_linked2")
         user_set_3 = get_user_set("already_linked3")
 
-        self._test_merge_multiple_accounts(client, user_set_1, ("awx", "galaxy"), user_set_1["awx"].username, False, expect_password=True)
+        self._test_merge_multiple_accounts(client, user_set_1, ("awx", "galaxy"), user_set_1["awx"].username, False)
 
         # Check that we can't link another hub account
         response = client.auth_password(user_set_2["galaxy"], service_type="hub")
         assert response.status_code == 400
+
+        # Reset the client session
+        resp = client.reset()
+        assert resp.status_code == 200
+
+        resp = client.current_state()
+        assert resp.data["username"] == ""
 
         # login with the EDA account
         resp = client.auth_password(user_set_3["eda"], "eda")
@@ -295,16 +275,16 @@ class TestLegacyAuth:
         new_username = user_set_3["eda"].username + "renamed"
 
         # Check that account renaming works
-        resp = client.finalize(new_username=new_username, new_password="pass")
+        assert client.finalize().status_code == 400
+        resp = client.finalize(new_username=new_username)
         self._assert_me_username(client, new_username)
-
-        client.reset()
 
         # login with our initial set of already migrated accounts to try and hook them up to the
         # new EDA account.
-        client.normal_login(user_set_3["eda"].username + "renamed", "pass")
-        resp = client.current_state()
+        resp = client.auth_password(user_set_1["galaxy"], "hub")
         data = resp.data
+
+        assert resp.status_code == 200
 
         # Check that all three accounts have been linked.
         combined_user_set = {**user_set_1, **user_set_3}
@@ -325,7 +305,6 @@ class TestLegacyAuth:
             user_set["galaxy"].username,
             False,
             username_for="galaxy",
-            expect_password=True,
         )
 
     def subtest_fail_invalid_password(self, client: AuthClient):
@@ -334,6 +313,11 @@ class TestLegacyAuth:
 
         bad_username = Account(None, None, None, "pass", username="IDoNotExist")
         assert client.auth_password(bad_username, "controller").status_code == 400
+
+    def subtest_invalid_service_type_password_auth(self, client: AuthClient):
+        user_set = get_user_set("password_set_3")
+        assert client.auth_password(user_set["eda"], "i am not a real service").status_code == 400
+        assert client.auth_password(user_set["eda"], "controller").status_code == 400
 
     def subtest_invalid_auth_code(self, client: AuthClient):
         user = User.objects.get(username="user1")
@@ -346,8 +330,7 @@ class TestLegacyAuth:
                 service.service_cluster.service_id,
                 user.resource.service_id,
             )
-            resp = client.client.get(url + "?auth_code=" + auth_code)
-            assert "auth_failed" in resp.headers["Location"]
+            assert client.client.get(url + "?auth_code=" + auth_code).status_code == 400
 
     def subtest_authenticators_are_created(self, client: AuthClient):
         services = client.service_routes
@@ -378,11 +361,13 @@ class TestLegacyAuth:
         user_set = get_user_set("disable_login")
 
         assert client.auth_password(user_set["awx"], "controller").status_code == 200
-        assert client.finalize(new_password="pass").status_code == 200
+        assert client.finalize().status_code == 200
         assert client.reset().status_code == 200
 
         # attempt login
-        client.normal_login(user_set["awx"].username, user_set["awx"].password)
+        resp = client.auth_password(user_set["awx"], "controller")
+        assert resp.status_code == 200
+        assert resp.data["is_authenticated"] is True
 
         # set up SSO
         assert client.auth_sso(user_set["galaxy"], "galaxy").status_code == 200
@@ -395,27 +380,24 @@ class TestLegacyAuth:
     def subtest_disable_local_login_after_ldap_merge(self, client: AuthClient):
         user_set = get_user_set("disable_login_ext")
 
-        resp = client.auth_password(user_set["galaxy"], "hub")
-        assert resp.status_code == 200
-        assert resp.data["allow_rename"] is True
-        assert client.finalize(new_password="pass").status_code == 200
+        assert client.auth_password(user_set["galaxy"], "hub").status_code == 200
+        assert client.finalize().status_code == 200
         assert client.reset().status_code == 200
 
-        self._assert_normal_login(user_set["galaxy"].username, "pass")
+        # attempt login
+        resp = client.auth_password(user_set["galaxy"], "hub")
+        assert resp.status_code == 200
+        assert resp.data["is_authenticated"] is True
 
         # set up LDAP
-        resp = client.auth_password(user_set["awx"], "controller")
-        assert resp.status_code == 200
-        assert resp.data["allow_rename"] is False
+        assert client.auth_password(user_set["awx"], "controller").status_code == 200
         assert client.finalize().status_code == 200
         assert client.reset().status_code == 200
 
         # attempt to login with password
         resp = client.auth_password(user_set["galaxy"], "hub")
         assert resp.status_code == 400
-        assert 'account is not configured' in resp.data[0]
-
-        self._assert_normal_login(user_set["awx"].username, user_set["awx"].password)
+        assert 'linked to an external account' in resp.data[0]
 
     def subtest_prevent_different_type_external(self, client: AuthClient):
         user_set = get_user_set("already_linked_ext")
@@ -423,22 +405,23 @@ class TestLegacyAuth:
         # Log in with LDAP
         assert client.auth_password(user_set["awx"], "controller").status_code == 200
         assert client.finalize().status_code == 200
+        assert client.reset().status_code == 200
 
         # attempt login
-        self._assert_normal_login(user_set["awx"].username, user_set["awx"].password)
+        resp = client.auth_password(user_set["awx"], "controller")
+        assert resp.status_code == 200
+        assert resp.data["is_authenticated"] is True
 
         # Try to link Radius
         resp = client.auth_password(user_set["galaxy"], "hub")
         assert resp.status_code == 400
         assert 'share the same type' in resp.data[0]
 
-        self._assert_normal_login(user_set["awx"].username, user_set["awx"].password)
-
     def subtest_fail_link_two_sso_accounts(self, client: AuthClient):
         for user_set in ("two_sso_oidc", "two_sso_saml_kc", "two_sso_saml_ext"):
             user_set = get_user_set(user_set)
-            assert len(client.auth_sso(user_set["galaxy"], "galaxy").data["linked_accounts"]) == 1
-            assert len(client.auth_sso(user_set["awx"], "awx").data["linked_accounts"]) == 1
+            assert client.auth_sso(user_set["galaxy"], "galaxy").status_code == 200
+            assert client.auth_sso(user_set["awx"], "awx").status_code == 400
             client.reset()
 
     def subtest_newly_created_account(self, client: AuthClient):
@@ -553,58 +536,15 @@ class TestLegacyAuth:
         # Check that the service ID has been updated in all the services
         all_client.with_callback(_assert_exists).get_resource(str(user.resource.ansible_id))
 
-        client.reset()
-
         # Check that you can no longer login with legacy auth
         resp = client.auth_sso(user_set["awx"], "awx")
-        assert "is_authenticated" not in resp.data
-
-    def subtest_ldap_login(self, client: AuthClient):
-        user_set = get_user_set("ldap_user_set1")
-        resp = client.auth_password(user_set["awx"], "controller")
-
-        assert resp.status_code == 200
-        self._assert_linked_accounts(resp.data, user_set, ["awx", "galaxy"])
-
-        client.finalize()
-
-        assert AuthenticatorUser.objects.filter(uid=user_set["awx"].username, provider__type__endswith="legacy_external_password").exists()
-
-        self._assert_normal_login(user_set["awx"].username, user_set["awx"].password)
-
-    def subtest_ldap_login_hub_first(self, client: AuthClient):
-        user_set = get_user_set("ldap_user_set2")
-        resp = client.auth_password(user_set["galaxy"], "hub")
-        assert resp.status_code == 200
-        self._assert_linked_accounts(resp.data, user_set, ["awx", "galaxy"])
-
-        client.finalize()
-
-        assert AuthenticatorUser.objects.filter(uid=user_set["galaxy"].username, provider__type__endswith="legacy_external_password").exists()
-
-        self._assert_normal_login(user_set["galaxy"].username, user_set["galaxy"].password)
-
-        url = get_relative_url("login")
-        next_url = get_relative_url("me-list")
-        data = {"username": user_set["galaxy"].username, "password": "wrong pass", "next": next_url}
-        client = APIClient()
-        assert client.post(url, data, follow=True).status_code == 401
+        assert resp.status_code == 400
 
     def _test_merge_multiple_accounts(
-        self,
-        client: AuthClient,
-        user_set,
-        order,
-        expected_username,
-        expect_rename,
-        username_for="awx",
-        expect_initial_auth=False,
-        expect_password=False,
+        self, client: AuthClient, user_set, order, expected_username, expect_rename, username_for="awx", expect_initial_auth=False
     ):
         first = order[0]
         authenticated_services = []
-
-        last_service = None
 
         for service in order:
             account = user_set[service]
@@ -613,24 +553,16 @@ class TestLegacyAuth:
             else:
                 data = client.auth_password(user_set[service], DOWN_TO_UP[service]).data
 
-            last_service = data
-
             if service == first:
                 self._assert_initial_auth(data, expected_username, service, expect_rename=expect_rename, expect_initial_auth=expect_initial_auth)
 
             authenticated_services.append(service)
             self._assert_linked_accounts(data, user_set, authenticated_services)
 
-        assert last_service["needs_aap_password"] is expect_password
+        self._assert_finalize(client, user_set[username_for].username, len(order))
 
-        new_pass = None
-        if expect_password:
-            new_pass = "password"
-
-        self._assert_finalize(client, user_set[username_for].username, len(order), new_password=new_pass)
-
-    def _assert_finalize(self, client, expected_username, expected_num_linked, new_username=None, new_password=None):
-        resp = client.finalize(new_username=new_username, new_password=new_password)
+    def _assert_finalize(self, client, expected_username, expected_num_linked, new_username=None):
+        resp = client.finalize(new_username=new_username)
         assert resp.status_code == 200
 
         data = resp.data
@@ -641,9 +573,6 @@ class TestLegacyAuth:
         assert data["is_migrated"] is True
 
         self._assert_me_username(client, expected_username)
-
-        if new_password:
-            self._assert_normal_login(expected_username, new_password)
 
     def _assert_me_username(self, client, expected_username):
         resp = client.client.get(get_relative_url("me-list"))
@@ -682,14 +611,3 @@ class TestLegacyAuth:
             "oidc_alt_key": None,
         }
         return jwt.encode(payload, "fake key", "HS256")
-
-    def _assert_normal_login(self, username, password):
-        url = get_relative_url("login")
-        next_url = get_relative_url("me-list")
-        data = {"username": username, "password": password, "next": next_url}
-
-        client = APIClient()
-
-        response = client.post(url, data, follow=True)
-        assert response.status_code == 200
-        assert response.data["results"][0]["username"] == username

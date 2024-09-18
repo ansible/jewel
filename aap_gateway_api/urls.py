@@ -13,8 +13,6 @@ logger = logging.getLogger('aap.gateway.urls')
 
 
 urlpatterns = [
-    # override ui_auth by putting it first.
-    path('api/gateway/v1/ui_auth/', views.CustomUIAuth.as_view(), name="ui_auth"),
     # Load base URLs first
     path('api/gateway/v1/', include(api_version_urls)),
     path('api/gateway/', include(api_urls)),

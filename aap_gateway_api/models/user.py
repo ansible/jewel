@@ -195,7 +195,6 @@ class MigratedUserMetadata(CommonModel):
 class LegacyAuthType(models.TextChoices):
     PASSWORD = "legacy_password", _("Local")
     SSO = "legacy_sso", _("SSO")
-    EXTERNAL_PASSWORD = "legacy_external_password", _("External Password")
 
 
 class MigratedAuthenticatorMetadata(CommonModel):
@@ -220,7 +219,6 @@ class MigratedAuthenticatorMetadata(CommonModel):
             authenticator, _ = Authenticator.objects.get_or_create(
                 name=self.get_authenticator_name(),
                 type=self._authenticator_module + "." + self.type,
-                defaults={"enabled": True},
             )
 
             self.authenticator = authenticator
@@ -246,7 +244,7 @@ class MigratedAuthenticatorMetadata(CommonModel):
             kwargs = {
                 "type": cls.LegacyAuthTypes.SSO,
                 "django_backend": payload["sso_backend"],
-                "sso_server": payload["sso_server"].strip("/"),
+                "sso_server": payload["sso_server"],
             }
         else:
             kwargs = {
