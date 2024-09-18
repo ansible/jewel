@@ -146,12 +146,12 @@ AUTHENTICATION_BACKENDS = (
     'service_test_app.backends.RADIUSBackend',
     'django.contrib.auth.backends.ModelBackend',
     # The "Migrated" classes are coppies of above that allow prefixed usernames
-    'ansible_base.lib.backends.prefixed_user_auth.PrefixedUserAuthBackend',
     'service_test_app.backends.MigratedLDAPBackend',
     'service_test_app.backends.MigratedRADIUSBackend',
     'service_test_app.backends.MigratedKeycloakOAuth2',
     'service_test_app.backends.MigratedSAMLAuth',
     'service_test_app.backends.MigratedOpenIdConnectAuth',
+    'ansible_base.lib.backends.prefixed_user_auth.PrefixedUserAuthBackend',
 )
 
 

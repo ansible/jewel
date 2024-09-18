@@ -277,3 +277,24 @@ register(
     encrypted=False,
     label=_('Allow external users to create OAuth2 tokens'),
 )
+
+
+register(
+    section="legacy_sso",
+    preference_name="CONTROLLER_SSO_URL",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("The URL that is used to kick off authentication for Controller SSO that was configured prior to AAP 2.5."),
+    encrypted=False,
+)
+
+register(
+    section="legacy_sso",
+    preference_name="AUTOMATION_HUB_SSO_URL",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("The URL that is used to kick off authentication for Automation Hub SSO that was configured prior to AAP 2.5."),
+    encrypted=False,
+)
