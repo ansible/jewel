@@ -13,5 +13,8 @@ class AuthenticatorPlugin(LegacyMixin, AbstractAuthenticatorPlugin):
     type = "legacy_password"
     category = "legacy"
 
-    def authenticate(self, request, username=None, password=None, service_type=None, **kwargs):
-        pass
+    # This authenticator doesn't actually do anything. It's just a placeholder
+    # that allows an admin to match up legacy users with newly configured authenticator
+    # plugins.
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        return None

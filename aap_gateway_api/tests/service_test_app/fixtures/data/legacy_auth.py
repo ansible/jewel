@@ -184,24 +184,6 @@ USERS = {
         "awx": Account(oidc_kc, "manual_merge_sso", "4c2213a6-7a88-4bf7-a43b-b8e553374cc3", None),
         "galaxy": Account(kc, "manual_merge_sso", "4c2213a6-7a88-4bf7-a43b-b8e553374cc3", None),
     },
-    "ldap_user_set1": {
-        "awx": Account(
-            None,
-            None,
-            None,
-            "pass",
-        ),
-        "galaxy": Account(None, None, None, "pass"),
-    },
-    "ldap_user_set2": {
-        "awx": Account(
-            None,
-            None,
-            None,
-            "pass",
-        ),
-        "galaxy": Account(None, None, None, "pass"),
-    },
 }
 
 for username in USERS:
@@ -265,8 +247,6 @@ USER_SETS = {
     ),
     "manual_merge_password": (("manual_merge_password", "*"),),
     "manual_merge_sso": (("manual_merge_sso", "*"),),
-    "ldap_user_set1": (("ldap_user_set1", "*"),),
-    "ldap_user_set2": (("ldap_user_set2", "*"),),
 }
 
 
