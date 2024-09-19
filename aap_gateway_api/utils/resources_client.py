@@ -73,11 +73,18 @@ class GWResourceAPIClient(DABResourceAPIClient):
 class AllServicesClient(GWResourceAPIClient):
     """
     Resources API client that allows the Gateway to make requests to all services at once.
+
+    args:
+        user: user to use for the request.
+        wait_for_responses: whether or not to wait for a response from the services
+        service_filter: kwargs to be passted to ServiceAPIRoute.objects.filter in case you don't
+            want to run the client on all of the services.
     """
 
-    def __init__(self, user=None, wait_for_response=True):
+    def __init__(self, user=None, wait_for_response=True, service_filter: dict = None):
         self.wait_for_response = wait_for_response
         self.callback = None
+        self.service_filter = service_filter
 
         if user is None:
             user = self.get_default_user()
@@ -114,7 +121,10 @@ class AllServicesClient(GWResourceAPIClient):
         from aap_gateway_api.models import ServiceAPIRoute
 
         responses = {}
-        for service in ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceTypeChoices.GATEWAY):
+        svc_qs = ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceTypeChoices.GATEWAY)
+        if self.service_filter:
+            svc_qs = svc_qs.filter(**self.service_filter)
+        for service in svc_qs:
             self.base_url = self.get_url_for_service(service)
             if self.wait_for_response:
                 responses[service.pk] = super()._make_request(method, path, data, params)
