@@ -1,9 +1,11 @@
-from ansible_base.authentication.models import AuthenticatorUser
-from ansible_base.lib.utils.response import get_relative_url
+import json
+
+import jwt
+from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from django.contrib.auth import login
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import redirect
 from django.utils.translation import gettext as _
@@ -13,12 +15,18 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
 
 from aap_gateway_api.models import MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, User
-from aap_gateway_api.serializers.legacy_auth import LegacyAuthSerializer, RenameAccountSerializer, UsernamePasswordSerializer
+from aap_gateway_api.models.service import ServiceCluster
+from aap_gateway_api.models.user import LegacyAuthType
+from aap_gateway_api.serializers.legacy_auth import FinalizeSerializer, LegacyAuthSerializer, UsernamePasswordSerializer
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
-from aap_gateway_api.utils.service_token import validate_service_token
+from aap_gateway_api.utils.service_token import ValidatedToken, validate_service_token
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
 UNMIGRATED_AUTH_SESSION_KEY = "partially_authed_user"
+LOCAL_AUTHENTICATOR = "ansible_base.authentication.authenticator_plugins.local"
+
+
+UI_SSO_REDIRECT = "/"
 
 
 class LegacyAuthViewset(viewsets.ViewSet):
@@ -26,54 +34,125 @@ class LegacyAuthViewset(viewsets.ViewSet):
     serializer_class = serializers.Serializer
 
     def list(self, request):
-        user = self._get_user(request)
-        if not user:
-            resp = LegacyAuthSerializer()
-        else:
-            resp = LegacyAuthSerializer(
-                user,
-                context={
-                    "request": request,
-                    "needs_rename": self._needs_rename(user),
-                },
-            )
-        return Response(resp.data)
+        return self._get_response(request)
 
-    @action(detail=False, methods=["POST"], serializer_class=RenameAccountSerializer)
+    @action(detail=False, methods=["POST"], serializer_class=FinalizeSerializer)
     def finalize(self, request):
         main_account = self._get_user(request)
 
         if not main_account:
-            return redirect(get_relative_url("legacy_auth-list"))
+            return self._get_response(request)
 
-        serializer = RenameAccountSerializer(data=request.data, context={'needs_rename': self._needs_rename(main_account)})
+        serializer = FinalizeSerializer(data=request.data, context={'needs_rename': self._needs_rename(main_account), 'user': main_account})
         serializer.is_valid(raise_exception=True)
 
         new_username = serializer.data.get("new_username", None)
+        aap_password = serializer.data.get("aap_password", None)
 
-        if new_username:
-            try:
-                main_account.username = new_username
+        with transaction.atomic():
+            if new_username:
+                try:
+                    main_account.username = new_username
+                    main_account.save()
+                except IntegrityError:
+                    raise DRFValidationError({"new_username": _("%(new_username)s has already been taken.") % {"new_username": new_username}})
+
+            if aap_password:
+                local_auth = Authenticator.objects.filter(type=LOCAL_AUTHENTICATOR).first()
+                if not local_auth:
+                    raise DRFValidationError(
+                        {"aap_password": _("This system is not configured to allow local authentication. Please link an external account before finalizing.")}
+                    )
+                main_account.authenticator_users.all().delete()
+                AuthenticatorUser.objects.create(provider=local_auth, uid=main_account.username, user=main_account)
+                main_account.set_password(aap_password)
                 main_account.save()
-            except IntegrityError:
-                raise DRFValidationError({"new_username": _("%(new_username)s has already been taken.") % {"new_username": new_username}})
 
-        self._migrate_account(main_account)
+            # if the user has an external password account
+            if main_account.original_accounts.exclude(backend_classification="local").exclude(backend_classification=None).exists():
+                authenticator, created = MigratedAuthenticatorMetadata.objects.get_or_create(
+                    type=LegacyAuthType.EXTERNAL_PASSWORD,
+                    service=ServiceCluster.objects.get(service_type=ServiceCluster.ServiceType.GATEWAY),
+                )
+
+                main_account.authenticator_users.all().delete()
+                AuthenticatorUser.objects.create(uid=main_account.username, user=main_account, provider=authenticator.authenticator)
+
+            self._migrate_account(main_account)
+
         self.request.session.flush()
         login(request, main_account)
-        return redirect(get_relative_url("legacy_auth-list"))
+        return self._get_response(request)
 
-    @action(detail=False, methods=["POST"], serializer_class=UsernamePasswordSerializer)
-    def authenticate_password(self, request):
+    # NOTE: We enable GET here for the convenience of the UI, so that it can load the CSRF token.
+    # Other than that, it doesn't actually do anything.
+    @action(detail=False, methods=["POST", "GET"], serializer_class=UsernamePasswordSerializer)
+    def controller_password(self, request):
+        return self._authenticate_password(request, "controller")
+
+    @action(detail=False, methods=["POST", "GET"], serializer_class=UsernamePasswordSerializer)
+    def hub_password(self, request):
+        return self._authenticate_password(request, "hub")
+
+    @action(detail=False, methods=["POST", "GET"], serializer_class=UsernamePasswordSerializer)
+    def eda_password(self, request):
+        return self._authenticate_password(request, "eda")
+
+    def _authenticate_password(self, request, service_type):
+        if request.method != "POST":
+            return Response()
+
         serializer = UsernamePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        auth_code = self._check_password(data["username"], data["password"], service_type)
+        jwt_token = self._handle_auth_code(auth_code, auth_type="password")
+
+        auth_backend_classification = self._classify_backend(jwt_token["token_data"]["payload"].get("auth_backend"))
+
+        # If the account is an LDAP account, we'll go ahead and try it on the other service that supports LDAP
+        # (either Hub or Controller). If the account is a valid LDAP account here, then we'll automatically
+        # link it and set it up to be able to login from the main password endpoint.
+        if auth_backend_classification == "ldap":
+            uno_reverse_card = {"hub": "controller", "controller": "hub"}
+            if service_type in uno_reverse_card:
+                try:
+                    auth_code = self._check_password(data["username"], data["password"], uno_reverse_card[service_type])
+                    # Sonar cloud is gonna yell at this because it's not verifying the signature. That's fine.
+                    # We just need to load the auth backend to check that the user is LDAP before we run the
+                    # actual token verification.
+                    if auth_backend := jwt.decode(auth_code, options={"verify_signature": False}).get("auth_backend"):
+                        if self._classify_backend(auth_backend) == "ldap":
+                            self._handle_auth_code(auth_code, auth_type="password")
+                except DRFValidationError:
+                    pass
+
+        return self._get_response(request)
+
+    @action(detail=False, methods=["GET"])
+    def authenticate_sso(self, request):
+        auth_code = request.GET.get("auth_code", None)
+
         try:
-            service = ServiceAPIRoute.objects.get(service_cluster__service_type=data["service_type"])
+            if auth_code is not None:
+                self._handle_auth_code(auth_code, auth_type="sso")
+        except DRFValidationError as e:
+            return redirect(UI_SSO_REDIRECT + f"?auth_failed={json.dumps(e.detail)}")
+
+        return redirect(UI_SSO_REDIRECT)
+
+    @action(detail=False, methods=["POST"])
+    def reset(self, request):
+        request.session.flush()
+        return self._get_response(request)
+
+    def _check_password(self, username, password, service_type) -> str:
+        try:
+            service = ServiceAPIRoute.objects.get(service_cluster__service_type=service_type)
         except ServiceAPIRoute.DoesNotExist:
             raise DRFValidationError(
-                {"service_type": _("Service type %(service_type)s does not exist.") % {"service_type": data['service_type']}},
+                {"service_type": _("Service type %(service_type)s does not exist.") % {"service_type": service_type}},
             )
 
         client = GWResourceAPIClient(
@@ -81,30 +160,13 @@ class LegacyAuthViewset(viewsets.ViewSet):
             raise_if_bad_request=False,
         )
 
-        response = client.validate_local_user(username=data["username"], password=data["password"])
+        response = client.validate_local_user(username=username, password=password)
         if response.status_code != 200:
             raise DRFValidationError(_("Invalid username or password."))
 
-        auth_code = response.json()["auth_code"]
-        self._handle_auth_code(auth_code, auth_type="password")
+        return response.json()["auth_code"]
 
-        return redirect(get_relative_url("legacy_auth-list"))
-
-    @action(detail=False, methods=["GET"])
-    def authenticate_sso(self, request):
-        auth_code = request.GET.get("auth_code", None)
-
-        if auth_code is not None:
-            self._handle_auth_code(auth_code, auth_type="sso")
-
-        return redirect(get_relative_url("legacy_auth-list"))
-
-    @action(detail=False, methods=["POST"])
-    def reset(self, request):
-        request.session.flush()
-        return redirect(get_relative_url("legacy_auth-list"))
-
-    def _handle_auth_code(self, auth_code, auth_type):
+    def _handle_auth_code(self, auth_code, auth_type) -> ValidatedToken:
         # Check that the auth code is valid and load the user.
         try:
             data = validate_service_token(auth_code, required_type="auth_code")
@@ -162,6 +224,8 @@ class LegacyAuthViewset(viewsets.ViewSet):
             self._authenticate_user(user)
         else:
             self._link_account(session_user, user, auth_type, auth_backend_classification)
+
+        return data
 
     def _get_user(self, request):
         if request.user and not isinstance(request.user, AnonymousUser):
@@ -255,8 +319,9 @@ class LegacyAuthViewset(viewsets.ViewSet):
 
         Thus, we need to know what kind of external account we're dealing with.
         """
+
         if auth_backend is None:
-            raise DRFValidationError(_("Could not determine service authentication backend for this account."))
+            return None
 
         if 'LDAPBackend' in auth_backend:
             return 'ldap'
@@ -274,3 +339,17 @@ class LegacyAuthViewset(viewsets.ViewSet):
             return 'local'
 
         return auth_backend
+
+    def _get_response(self, request):
+        user = self._get_user(request)
+        if not user:
+            resp = LegacyAuthSerializer()
+        else:
+            resp = LegacyAuthSerializer(
+                user,
+                context={
+                    "request": request,
+                    "needs_rename": self._needs_rename(user),
+                },
+            )
+        return Response(resp.data)
