@@ -85,6 +85,7 @@ class AAPModule(AnsibleModule):
         "applications": ["name", "organization"],
         "authenticators": "name",
         "authenticator_maps": ["name", "authenticator"],
+        "authenticator_users": "authenticator_user_id",
         "http_ports": "name",
         "routes": "name",
         "services": "name",
