@@ -12,12 +12,11 @@ def escape_ansi(line):
     return ansi_escape.sub('', line)
 
 
-service_options = ('controller', 'eda')
+service_options = ('controller', 'eda', 'galaxy')
+service = sys.argv[-1]
 
-if sys.argv[-1] in service_options:
-    service = sys.argv[-1]
-else:
-    service = service_options[0]
+if service not in service_options:
+    raise RuntimeError(f'Got service arg {service} which is not one of {service_options}')
 
 
 COMMAND = f'docker exec -it aap_gw_1 aap-gateway-manage generate_service_secret {service}'
@@ -39,10 +38,22 @@ if '_' in key:
 # Newline and ansi may still remain
 key = escape_ansi(key).strip()
 
-settings_path = os.path.join(os.path.dirname(__file__), f'{service}_settings_template.py')
+service_settings_path = os.path.join(os.path.dirname(__file__), f'settings_template_{service}.py')
 
-with open(settings_path, 'r') as f:
-    settings_content = f.read()
+service_settings_content = ''
+if os.path.exists(service_settings_path):
+    with open(service_settings_path, 'r') as f:
+        service_settings_content = f.read()
+
+
+common_settings_path = os.path.join(os.path.dirname(__file__), 'settings_template_common.py')
+
+
+with open(common_settings_path, 'r') as f:
+    common_settings_content = f.read()
+
+
+settings_content = '\n'.join([service_settings_content, common_settings_content])
 
 
 new_settings = settings_content.replace('# GATEWAY_SERVICE_SECRET', f'GATEWAY_SERVICE_SECRET = r"{key}"')

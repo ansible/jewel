@@ -1,12 +1,12 @@
-OPTIONAL_API_URLPATTERN_PREFIX = 'controller'
+# Common settings for all services
 ANSIBLE_BASE_JWT_KEY = 'https://aap-gw-proxy-1:9080/'
 ANSIBLE_BASE_JWT_VALIDATE_CERT = False
-ANSIBLE_BASE_JWT_REDIRECT_TYPE= "awx"
-ALLOW_LOCAL_RESOURCE_MANAGEMENT = True  # Temporary: ATF test-suite needs this setting
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'}}
 
-# Enable reverse syncing
+# Special and hopefully temporary event 2 settings
+ENABLE_SERVICE_BACKED_SSO = True
 RESOURCE_SERVER_SYNC_ENABLED = True
+ALLOW_LOCAL_RESOURCE_MANAGEMENT = True
 
 # The following line will be replaced by the Makefile logic
 # GATEWAY_SERVICE_SECRET

@@ -7,11 +7,11 @@
 
 ### Quick Start
 From the `aap-dev` directory, run these commands to get started.
-The build command, right now, will build the eda-server image
-because that requires a locally-built image.
+The build command will build the eda-server and Gateway dev images.
 The AWX image may be pulled from ghcr.
 
 ```
+docker pull ghcr.io/ansible/awx_devel:devel
 make dev-build
 make dev-up
 ```
@@ -23,9 +23,25 @@ https://localhost/api/controller/v2/                - AWX API (through Gateway p
 https://localhost/api/eda/v1/                       - EDA API (through Gateway proxy)
 http://localhost:8010/api/eda/                      - EDA API (direct access)
 https://localhost:8043/api/controller/v2/           - AWX API (direct access)
+http://localhost:5001/api/galaxy/_ui/v2/            - Hub API (direct access)
 ```
 
 Run `make dev-down` to bring it all down
+
+#### Resetting Volumes
+
+Because this runs multiple development environments, we hesitate to give any Makefile
+target to clean containers or volumes.
+To get a new database, you probably need to reset volumes in _both_ Gateway and the services
+because the `service_id` will persist a reference to a value in the old Gateway database.
+So resetting volumes may look like the following command, use at your own risk.
+
+```
+docker stop $(docker ps -aq); docker rm $(docker ps -aq); docker volume rm $(docker volume ls -q)
+```
+
+If it fails to set the Gateway superuser to admin/admin (corresponding to the `tsd.json`),
+you may need to `rm container-startup.yml` at the root of the Gateway repo.
 
 #### Bring Your Own Checkouts
 
@@ -33,7 +49,7 @@ By default, this will create new clones in the aap-gateway `services/` directory
 To use existing AWX and eda-server clones, customize the command like this:
 
 ```
-EDA_REPO=~/repos/eda-server AWX_REPO=~/repos/awx COMPOSE_TAG=devel make dev-up
+EDA_REPO=~/repos/eda-server HUB_REPO=~/repos/galaxy_ng AWX_REPO=~/repos/awx COMPOSE_TAG=devel make dev-up
 ```
 
 It is important you do not include a trailing slash (`/`) for the locations.

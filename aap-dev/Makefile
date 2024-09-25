@@ -2,7 +2,8 @@
 	dev-up dev-down \
 	gateway-up gateway-up-check gateway-down \
 	eda-server-up eda-server-down \
-	smoke help help/generate .awx-settings-hack
+	hub-server-up hup-server-down \
+	smoke help help/generate .awx-settings-hack .eda-settings-hack .hub-settings-hack
 
 ADMIN_PASSWORD := admin
 SERVICE_DIR := ../services
@@ -24,6 +25,10 @@ EDA_REPO?=$(SERVICE_DIR)/eda-server
 # NOTE: the container name depends on which Dockerfile you use, default is for stage
 # for tools/docker/docker-compose-dev.yaml it is/was eda-eda-api-1
 EDA_CONTAINER_NAME?=docker-eda-api-1
+
+HUB_CONTAINER_NAME?=galaxy_ng-api-1
+HUB_REPO?=$(SERVICE_DIR)/galaxy_ng
+HUB_DOCKERFILE=aap_compose_dev.yaml
 
 # If you over-ride the repo, make sure to NOT use a trailing slash, like AWX_REPO=~/repos/awx
 AWX_REPO?=$(SERVICE_DIR)/awx
@@ -95,13 +100,13 @@ $(EDA_REPO)/.git/HEAD: ;
 	$(AAP_DEV_DIR)/eda-server-up-check.sh
 	docker exec -it docker-eda-api-1 /app/venv/bin/python /app/src/src/aap_eda/manage.py shell -c 'from django.contrib.auth import get_user_model; u=get_user_model().objects.get(username="admin"); u.set_password("$(ADMIN_PASSWORD)"); u.save()'
 
-$(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py:
+.eda-settings-hack:
 	python3 render_settings.py eda > $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py
 
 # Explaining: the EDA go-task docker:build runs `docker compose build`, which respects EDA_IMAGE environment var
 # this env var is referenced in the docker-compose yaml, so it obviously works in docker compose up too
 ## Bring up EDA instance
-eda-server-up: $(EDA_REPO)/.git/HEAD $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py
+eda-server-up: $(EDA_REPO)/.git/HEAD .eda-settings-hack
 	echo "Using $(TASK_CMD)"
 	cd $(EDA_REPO) && $(EDA_ENV) $(DOCKER_COMPOSE) --file $(EDA_DOCKERFILE) up --detach --quiet-pull
 
@@ -113,19 +118,43 @@ eda-server-down: $(EDA_REPO)/.git/HEAD
 dev-build:
 	cd $(GW_DIR) && ADMIN_PASSWORD=$(ADMIN_PASSWORD) make docker-compose-build
 	cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build
+	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) build
 
 ## Bring up AAP services (Gateway + Controller + EDA) all at once
-dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack
+dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack hub-server-up
 	$(AAP_DEV_DIR)/gateway-up-check.sh
 	make .awx-settings-hack
+	make .hub-settings-hack
 	$(AAP_DEV_DIR)/awx-up-check.sh
 	$(AAP_DEV_DIR)/eda-server-up-check.sh
-	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true --merge-users=true
-	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true --merge-users=true
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=galaxy --username=admin --merge-organizations=true
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true
 
 ## Bring down all AAP services
-dev-down: awx-down gateway-down eda-server-down;
+dev-down: awx-down gateway-down eda-server-down hub-server-down;
 
 ## Run smoke tests
 smoke:
 	python3 $(AAP_DEV_DIR)/smoke.py
+
+#######################################################
+#	HUB
+#######################################################
+
+hub-server-up: $(HUB_REPO)/.git/HEAD
+	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) up --build --detach --quiet-pull
+
+.hub-settings-hack:
+	$(AAP_DEV_DIR)/hub-up-check.sh
+	rm -rf /tmp/hub_settings.py
+	python3 render_settings.py galaxy > /tmp/hub_settings.py
+	docker cp /tmp/hub_settings.py $(HUB_CONTAINER_NAME):/etc/pulp/settings.local.py
+
+$(HUB_REPO)/.git/HEAD: ;
+	cd $(SERVICE_DIR) && git clone https://github.com/ansible/galaxy_ng.git
+
+hub-server-down:
+	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) down && docker volume rm var_lib_pulp
+
+
