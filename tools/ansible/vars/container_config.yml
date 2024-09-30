@@ -14,7 +14,7 @@ docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default=
 container_engine: docker
 gateway_image: 'quay.io/ansible/aap-gateway:devel'
 gateway_host_address: host-gateway
-gateway_services: ['hub', 'controller', 'eda']
+gateway_services: "{{ enabled_services is defined | ternary(enabled_services, ['hub', 'controller', 'eda']) }}"
 gateway_container_name: aap_gw_1
 
 enabled_containers:
