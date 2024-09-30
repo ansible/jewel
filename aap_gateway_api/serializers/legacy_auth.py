@@ -126,7 +126,7 @@ class FinalizeSerializer(serializers.Serializer):
 
         if username and not can_user_change_username(user):
             raise serializers.ValidationError(
-                {"new_username": _("This account is using an external authentication provider that does not all users to change their username.")}
+                {"new_username": _("This account is using an external authentication provider that does not allow users to change their username.")}
             )
 
         return data
