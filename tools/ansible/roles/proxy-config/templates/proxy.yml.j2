@@ -8,12 +8,18 @@ gateway_http_ports:   # Http port where the proxy will be listening, these ports
 gateway_service_clusters:  # Service clusters (1 per type)
   - name: gateway # -- name of cluster, used by [gateway_service_nodes | gateway_services | gateway_routes]/service_cluster
     service_type: gateway # -- type of cluster (allowed values: gateway/controller/eda/hub)
+{% if 'controller' in gateway_services %}
   - name: controller
     service_type: controller
+{% endif %}
+{% if 'hub'  in gateway_services %}
   - name: hub
     service_type: hub
+{% endif %}
+{% if 'eda' in gateway_services %}
   - name: eda
     service_type: eda
+{% endif %}
 
 gateway_service_nodes:   # Nodes of service clusters
 {% for i in range(gateway_node_count|int) %}
@@ -22,15 +28,21 @@ gateway_service_nodes:   # Nodes of service clusters
     service_cluster: gateway                     # -- belonging service cluster
     address: "gateway{{ container_id  }}"        # -- hostname or IP of the service
 {% endfor %}
+{% if 'controller' in gateway_services %}
   - name: Controller Node
     service_cluster: controller
     address: "{{ gateway_host_address }}"
+{% endif %}
+{% if 'hub' in gateway_services %}
   - name: Hub Node
     service_cluster: hub
     address: "{{ gateway_host_address }}"
+{% endif %}
+{% if 'eda' in gateway_services %}
   - name: EDA Node
     service_cluster: eda
     address: "{{ gateway_host_address }}"
+{% endif %}
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     # It configures proxy requests
@@ -90,6 +102,7 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
 {% endif %}
 {% endfor %}
 
+{% if 'hub' in gateway_services %}
 gateway_routes:
     # It configures proxy requests
     # - from https://<gateway url>:9080/v2/...
@@ -153,3 +166,4 @@ gateway_routes:
     gateway_path: '/extensions'
     description: 'pulp container extensions'
     enable_gateway_auth: true
+{% endif %}
