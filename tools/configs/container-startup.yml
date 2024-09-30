@@ -7,6 +7,13 @@ gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 'localhost'
 
+# What services are enabled in your local environment
+# Note: If you have a service specified but its not functional the UI will be broken
+enabled_services:
+  - 'hub'
+  - 'controller'
+  - 'eda'
+
 ### Redis
 ### Note: If you change the redis settings, please remove tools/generated/redis_cluster and let it rebuild
 # redis_type: # Possible options: standalone (default), sentinel, cluster
