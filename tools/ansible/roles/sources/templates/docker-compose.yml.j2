@@ -1,6 +1,5 @@
 #jinja2: lstrip_blocks: True
 ---
-version: '2.1'
 services:
 {% for i in range(gateway_node_count|int) %}
   {% set container_id = loop.index %}
@@ -211,7 +210,7 @@ services:
     image: {{ keycloak_image }}:{{ keycloak_image_version }}
     container_name: aap_gw_keycloak_1
     hostname: keycloak
-    user: "${UID}"
+    user: "${UID:-1000}"
     ports:
       - "{{ keycloak_exposed_port }}:8443"
     environment:
@@ -234,7 +233,7 @@ services:
     image: bitnami/openldap:{{ ldap_image_version }}
     container_name: aap_gw_ldap_1
     hostname: ldap
-    user: "${UID}"
+    user: "${UID:-1000}"
     ports:
       - "{{ ldap_exposed_ldap_port }}:1389"
       - "{{ ldap_exposed_ldaps_port }}:1636"
