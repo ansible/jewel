@@ -1,5 +1,5 @@
 # Additional libraries to install for testing purposes
-fakeredis
+fakeredis==2.24.1  # version 2.25.0 caused all tests to start failing due to missing parameters to the connection method
 pytest
 pytest-xdist
 pytest-cov
