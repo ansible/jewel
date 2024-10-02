@@ -37,7 +37,6 @@ options:
       description: If a user does not meet this rule should we revoke the permission
     map_type:
       type: str
-      default: "team"
       description:
       - What does the map work on, a team, a user flag or is this an allow rule
       choices: ["allow", "is_superuser", "team", "organization", "role"]
@@ -101,7 +100,7 @@ def main():
         authenticator=dict(type="str", required=True),
         new_authenticator=dict(type="str"),
         revoke=dict(type="bool", default=False),
-        map_type=dict(type="str", choices=["allow", "is_superuser", "team", "organization", "role"], default="team"),
+        map_type=dict(type="str", choices=["allow", "is_superuser", "team", "organization", "role"]),
         team=dict(type="str"),
         role=dict(type="str"),
         organization=dict(type="str"),
@@ -110,10 +109,8 @@ def main():
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 
-    required_if = [("map_type", "team", ("team", "organization")), ("map_type", "organization", ("organization",))]
-
     # Create a module with spec
-    module = AAPModule(argument_spec=argument_spec, supports_check_mode=True, required_if=required_if)
+    module = AAPModule(argument_spec=argument_spec, supports_check_mode=True)
 
     AAPAuthenticatorMap(module).manage()
 
