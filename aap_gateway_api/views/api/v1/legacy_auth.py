@@ -53,6 +53,8 @@ class LegacyAuthViewset(viewsets.ViewSet):
             if new_username:
                 try:
                     main_account.username = new_username
+                    # We're in an atomic block above, so we don't risk uid getting out of sync here.
+                    main_account.update_local_authenticator_uid_from_username()
                     main_account.save()
                 except IntegrityError:
                     raise DRFValidationError({"new_username": _("%(new_username)s has already been taken.") % {"new_username": new_username}})

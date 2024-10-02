@@ -398,15 +398,10 @@ class UserSerializer(CommonUserSerializer):
 
         if old_username != new_username:
             # Handle username change, updating related authenticator information
-            for authenticator_user in instance.authenticator_users.all():
-                auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
-                new_username = determine_username_from_uid(new_username, authenticator_user.provider)
-                if auth_type == 'local':
-                    # For local auth, update both username and uid
-                    authenticator_user.uid = new_username
-                    authenticator_user.save()
-
             validated_data['username'] = new_username
+            instance.username = new_username
+            # We're in @transaction.atomic, so we don't risk uid getting out of sync here.
+            instance.update_local_authenticator_uid_from_username()
 
         # Remove the authenticators field since thats not a real field on the User model
         authenticators = validated_data.pop('authenticators', None)
