@@ -1,7 +1,9 @@
 import logging
 
 from ansible_base.activitystream.models import AuditableModel
+from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_plugin
 from ansible_base.authentication.models import Authenticator
+from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.abstract_models.user import AbstractDABUser
 from ansible_base.lib.utils.models import user_summary_fields
@@ -180,6 +182,18 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
     @property
     def is_migrated(self):
         return str(self.resource.service_id) == str(service_id())
+
+    def update_local_authenticator_uid_from_username(self):
+        """
+        Ensure local authenticator(s) attached to the user have a uid corresponding
+        to the username.
+        """
+        for authenticator_user in self.authenticator_users.all():
+            auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
+            if auth_type == 'local':
+                username = determine_username_from_uid(self.username, authenticator_user.provider)
+                authenticator_user.uid = username
+                authenticator_user.save()
 
 
 class MigratedUserMetadata(CommonModel):

@@ -693,3 +693,14 @@ class TestLegacyAuth:
         response = client.post(url, data, follow=True)
         assert response.status_code == 200
         assert response.data["results"][0]["username"] == username
+
+    def test_finalize_rename_updates_local_uid(self, local_authenticator, user, user_api_client):
+        au = AuthenticatorUser.objects.get(user=user, provider=local_authenticator)
+        assert au.uid == user.username
+        url = get_relative_url("legacy_auth-finalize")
+        data = {"new_username": "definitely_not_user"}
+        response = user_api_client.post(url, data=data)
+        assert response.status_code == 200
+        au.refresh_from_db()
+        user.refresh_from_db()
+        assert au.uid == user.username
