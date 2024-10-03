@@ -22,7 +22,7 @@ class AuthenticatorUserViewSet(GatewayReadOnlyModelViewSet):
     """
 
     model = AuthenticatorUser
-    queryset = AuthenticatorUser.objects.all()
+    queryset = AuthenticatorUser.objects.all().order_by('id')
     serializer_class = AuthenticatorUserSerializer
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 
@@ -59,6 +59,8 @@ class AuthenticatorUserViewSet(GatewayReadOnlyModelViewSet):
                 account_with_same_uid = AuthenticatorUser.objects.get(uid=instance.uid, provider=new_authenticator)
                 new_user = account_with_same_uid.user
                 if serializer.validated_data.get('merge_accounts_with_same_uid'):
+                    if new_user.pk == instance.user.pk:
+                        raise ValidationError({"merge_accounts_with_same_uid": _("User has already been merged with user {}.").format(instance.user.username)})
                     plugin.move_authenticator_user_to(new_user, instance)
                 else:
                     raise ValidationError(

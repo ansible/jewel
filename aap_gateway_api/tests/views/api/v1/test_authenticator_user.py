@@ -214,7 +214,22 @@ def test_authenticator_user_move_merge_accounts_with_same_uid(admin_api_client, 
     response = admin_api_client.post(url, data=payload)
     assert response.status_code == 200
     assert response.data["summary_fields"]["provider"]["id"] == local_authenticator.id
-    user.refresh_from_db()
+    assert AuthenticatorUser.objects.filter(uid=user.username).count() == 1
+
+
+def test_authenticator_user_move_merge_accounts_with_same_uid_but_same_user(admin_api_client, user, legacy_password_authenticator):
+    ua, _ = AuthenticatorUser.objects.get_or_create(uid=user.username, user=user, provider=legacy_password_authenticator)
+    assert AuthenticatorUser.objects.filter(uid=user.username).count() == 1
+    url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
+    payload = {
+        "new_authenticator": ua.pk,
+        "remove_other_authenticators": True,
+        "keep_memberships": True,
+        "merge_accounts_with_same_uid": True,
+    }
+    response = admin_api_client.post(url, data=payload)
+    assert "merge_accounts_with_same_uid" in response.data
+    assert response.status_code == 400
     assert AuthenticatorUser.objects.filter(uid=user.username).count() == 1
 
 
