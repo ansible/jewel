@@ -11,7 +11,14 @@
     gateway_configuration_users_secure_logging: false
 
   collections:
-  - ansible.platform
+    - ansible.platform
+
+  module_defaults:
+    group/ansible.platform.gateway:
+      gateway_hostname: "{{ gateway_hostname }}"
+      gateway_username: "{{ gateway_username }}"
+      gateway_password: "{{ gateway_password }}"
+      gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
   tasks:
     - name: Add settings
       ansible.platform.settings:
@@ -21,19 +28,20 @@
         gateway_username: "{{ gateway_username }}"
         gateway_password: "{{ gateway_password }}"
         gateway_validate_certs: false
-        #    - include_tasks: integration/targets/settings_test/tasks/main.yml
-        #    - include_tasks: integration/targets/users_test/tasks/main.yml
-        #    - include_tasks: integration/targets/organizations_test/tasks/main.yml
-        #    - include_tasks: integration/targets/teams_test/tasks/main.yml
-        #    - include_tasks: integration/targets/authenticators_test/tasks/main.yml
-        #    - include_tasks: integration/targets/authenticator_maps_test/tasks/main.yml
-        #    - include_tasks: integration/targets/applications_test/tasks/main.yml
-        #    - include_tasks: integration/targets/service_clusters_test/tasks/main.yml
-        #    - include_tasks: integration/targets/service_nodes_test/tasks/main.yml
-        #    - include_tasks: integration/targets/service_keys_test/tasks/main.yml
-        #    - include_tasks: integration/targets/http_ports_test/tasks/main.yml
-        #    - include_tasks: integration/targets/services_test/tasks/main.yml
-        #    - include_tasks: integration/targets/routes_test/tasks/main.yml
-        #    - include_tasks: integration/targets/role_user_assignments_test/tasks/main.yml
-        #    - include_tasks: integration/targets/lookup_test/tasks/main.yml
+
+#    - include_tasks: integration/targets/settings_test/tasks/main.yml
+#    - include_tasks: integration/targets/users_test/tasks/main.yml
+#    - include_tasks: integration/targets/organizations_test/tasks/main.yml
+#    - include_tasks: integration/targets/teams_test/tasks/main.yml
+#    - include_tasks: integration/targets/authenticators_test/tasks/main.yml
+#    - include_tasks: integration/targets/authenticator_maps_test/tasks/main.yml
+#    - include_tasks: integration/targets/applications_test/tasks/main.yml
+#    - include_tasks: integration/targets/service_clusters_test/tasks/main.yml
+#    - include_tasks: integration/targets/service_nodes_test/tasks/main.yml
+#    - include_tasks: integration/targets/service_keys_test/tasks/main.yml
+#    - include_tasks: integration/targets/http_ports_test/tasks/main.yml
+#    - include_tasks: integration/targets/services_test/tasks/main.yml
+#    - include_tasks: integration/targets/routes_test/tasks/main.yml
+#    - include_tasks: integration/targets/role_user_assignments_test/tasks/main.yml
+#    - include_tasks: integration/targets/lookup_test/tasks/main.yml
 ...
