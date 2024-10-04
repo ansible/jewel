@@ -5,6 +5,7 @@ action_groups:
   - application
   - authenticator
   - authenticator_map
+  - authenticator_user
   - http_port
   - organization
   - role_user_assignment
