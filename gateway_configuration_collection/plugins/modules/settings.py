@@ -12,12 +12,11 @@ __metaclass__ = type
 
 DOCUMENTATION = """
 ---
-module: user
+module: settings
 author: Red Hat Contributor (@User)
 short_description: Modify automation platform gateway settings.
 description:
-    - Modify automation platform gateway settings. See
-      U(https://www.ansible.com/tower) for an overview.
+    - Modify automation platform gateway settings.
 options:
     settings:
       description:

@@ -11,8 +11,8 @@ __metaclass__ = type
 
 DOCUMENTATION = """
 ---
-module: organization
-author: Red Hat
+module: team
+author: Red Hat (@RedHatOfficial)
 short_description: Configure a gateway team.
 description:
     - Configure an automation platform gateway team.

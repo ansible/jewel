@@ -65,7 +65,7 @@ failed_modules = []
 def test_meta_runtime():
     meta_filename = 'meta/runtime.yml'
 
-    print("\n" "=======================\n" "meta/runtime.yml check:\n" "-----------------------")
+    print("\n=======================\nmeta/runtime.yml check:\n-----------------------")
 
     with open('{0}/{1}'.format(base_dir, meta_filename), 'r') as f:
         meta_data_string = f.read()
@@ -102,7 +102,6 @@ def test_meta_runtime():
 
 def cause_error(module_name, msg):
     global return_value
-    global failed_modules
     return_value = 255
     try:
         failed_modules.index(module_name)
@@ -381,7 +380,7 @@ for module in sorted(option_comparison):
 test_meta_runtime()
 
 if return_value == 255:
-    print("=======================\n" "Summary: Failed modules\n" "-----------------------")
+    print("=======================\nSummary: Failed modules\n-----------------------")
     for module_name in failed_modules:
         print(f"- {module_name}")
 

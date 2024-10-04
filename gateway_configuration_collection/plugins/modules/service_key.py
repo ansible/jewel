@@ -91,7 +91,7 @@ def main():
         service_cluster=dict(type="str"),
         algorithm=dict(type="str", choices=["HS256", "HS384", "HS512"]),
         secret=dict(type="str", no_log=True),
-        secret_length=dict(type="int"),
+        secret_length=dict(type="int", no_log=False),
         mark_previous_inactive=dict(type="bool"),
         state=dict(type="str", choices=["present", "absent", "exists", "enforced"], default="present"),
     )

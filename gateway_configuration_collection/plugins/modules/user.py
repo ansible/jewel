@@ -48,6 +48,7 @@ options:
       description:
         - List of organizations IDs to associate with the user
       type: list
+      elements: str
     update_secrets:
       description:
         - C(true) will always change password if user specifies password, even if API gives $encrypted$ for password.
@@ -58,6 +59,7 @@ options:
       description:
         - A list of authenticators to associate the user with
       type: list
+      elements: str
     authenticator_uid:
       description:
         - The UID to associate with this users authenticators
@@ -108,10 +110,10 @@ def main():
         email=dict(),
         is_superuser=dict(type="bool", aliases=["superuser"]),
         password=dict(no_log=True),
-        organizations=dict(type="list"),
+        organizations=dict(type="list", elements='str'),
         update_secrets=dict(type="bool", default=True, no_log=False),
-        authenticators=dict(type="list"),
-        authenticator_users=dict(),
+        authenticators=dict(type="list", elements='str'),
+        authenticator_uid=dict(),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
 

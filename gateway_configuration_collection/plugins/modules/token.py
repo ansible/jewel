@@ -13,7 +13,7 @@ __metaclass__ = type
 
 DOCUMENTATION = """
 ---
-module: aap_token
+module: token
 author: "John Westcott IV (@john-westcott-iv), Red Hat Contributor (@User)"
 short_description: create, update, or destroy automation platform gateway tokens.
 description:
@@ -134,7 +134,7 @@ def main():
         description=dict(),
         application=dict(),
         scope=dict(choices=['read', 'write']),
-        existing_token=dict(type='dict'),
+        existing_token=dict(type='dict', no_log=False),
         existing_token_id=dict(),
         state=dict(choices=['present', 'absent'], default='present'),
     )

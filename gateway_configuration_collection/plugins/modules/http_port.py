@@ -62,9 +62,9 @@ EXAMPLES = """
 
 - name: Update http port
   ansible.platform.http_port:
-  name: "Port for APIs"
-  number: 80
-  use_https: false
+    name: "Port for APIs"
+    number: 80
+    use_https: false
 ...
 """
 
