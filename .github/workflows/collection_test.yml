@@ -1,0 +1,36 @@
+---
+name: collection integration test
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci_standalone:
+    name: collection integration test
+    runs-on: ubuntu-latest
+    env:
+      HEADLESS: "yes"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Checkout DAB branch if needed
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/scripts/get_dab_for_pr.py
+
+      - name: Build the image
+        run: make docker-compose-build
+
+      - name: Spin up the dev env
+        run: |
+          ansible-playbook -v tools/ansible/smoke-test-no-services.yml \
+            -e repo_root=$(pwd) \
+            -e gateway_vars=$(readlink -f container-startup.yml)
+
+      - name: Cleanup services
+        run: make cleanup-services
+
+      - name: Perform integration tests
+        run: make collection-test
