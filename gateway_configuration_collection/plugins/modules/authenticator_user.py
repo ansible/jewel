@@ -21,6 +21,8 @@ options:
       description:
         - The authenticator user id of the user for which you want to update
           authenticators.
+      required: True
+      type: str
     authenticator:
       description:
         - The primary key of the authenticator to move the user to. The value
@@ -72,7 +74,7 @@ options:
       type: str
 
 extends_documentation_fragment:
-- ansible.gateway_configuration.auth
+- ansible.platform.auth
 """
 
 

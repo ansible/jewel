@@ -15,7 +15,7 @@ author: Martin Slemr (@slemrmartin)
 short_description: Configure a gateway service.
 description:
     - Configure an automation platform gateway service.
-    - Their gateway API paths have prefixes: / in case of gateway, /api/ otherwise
+    - Their gateway API paths have prefixes of either / in case of gateway or /api/ otherwise
 options:
     name:
       required: true
@@ -32,7 +32,6 @@ options:
       - URL slug for the gateway API path for the Controller, Hub and EDA services
       - Gateway API route requires value "gateway", but the slug is not used
       type: str
-      default: ''
     http_port:
       description:
       - Name or ID referencing the Http Port

@@ -55,9 +55,8 @@ EXAMPLES = """
 
 - name: Delete service node
   ansible.platform.service_node:
-    name: "Controller - Node 2"
-    state: absent
     name: 3  # ID can be used
+    state: absent
 
 - name: Update service node's cluster
   ansible.platform.service_node:
