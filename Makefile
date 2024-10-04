@@ -258,6 +258,12 @@ collection-test: collection-install
 	cd /tmp/collections/ansible_collections/ansible/platform && \
 	  ansible-test integration --venv --requirements --coverage
 
+## Run the collection sanity tests
+collection-sanity: collection-install
+	cd /tmp/collections/ansible_collections/ansible/platform && \
+	ansible-test sanity
+
+
 ## Run the collections test-completness check
 collection-test-completeness:
 	./gateway_configuration_collection/tests/test_completeness.py
