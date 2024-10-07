@@ -71,8 +71,8 @@ You can check if you are running rootless with the following command:
 $ docker context ls
 
 NAME            DESCRIPTION                               DOCKER ENDPOINT                                   ERROR
-default *       Current DOCKER_HOST based configuration   unix:///var/run/docker.sock                       
-rootless        Rootless mode                             unix:///run/user/1000/docker.sock  
+default *       Current DOCKER_HOST based configuration   unix:///var/run/docker.sock
+rootless        Rootless mode                             unix:///run/user/1000/docker.sock
 ```
 
 Switch to default context with
@@ -133,6 +133,8 @@ awx-down: ...
 gateway-down: ...
     -docker-compose ...
 ```
+
+Target `dev-down`, which brings everything down, works around the issue described above by disconnecting running containers from shared mesh network first and then invoking targets to bring down individual components.
 
 Applying `controller_settings_template.py` is hacky. I'd imagine the dev env code here will grow and do a LOT of settings overriding so we need a better pattern here.
 

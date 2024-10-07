@@ -3,6 +3,7 @@
 	gateway-up gateway-up-check gateway-down \
 	eda-server-up eda-server-down \
 	hub-server-up hup-server-down \
+	disconnect-service-mesh-network \
 	smoke help help/generate .awx-settings-hack .eda-settings-hack .hub-settings-hack
 
 ADMIN_PASSWORD := admin
@@ -131,8 +132,12 @@ dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack hub-ser
 	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=galaxy --username=admin --merge-organizations=true
 	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true
 
+## Remove all running containers from "service-mesh" network
+disconnect-service-mesh-network:
+	$(shell for c in $$(docker network inspect -f '{{ range $$key, $$value := .Containers }}{{ printf "%s\n" .Name }}{{ end }}' service-mesh); do docker network disconnect service-mesh $$c; done)
+
 ## Bring down all AAP services
-dev-down: awx-down gateway-down eda-server-down hub-server-down;
+dev-down: disconnect-service-mesh-network awx-down gateway-down eda-server-down hub-server-down;
 
 ## Run smoke tests
 smoke:
