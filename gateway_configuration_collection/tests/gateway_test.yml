@@ -13,12 +13,6 @@
   collections:
     - ansible.platform
 
-  module_defaults:
-    group/ansible.platform.gateway:
-      gateway_hostname: "{{ gateway_hostname }}"
-      gateway_username: "{{ gateway_username }}"
-      gateway_password: "{{ gateway_password }}"
-      gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
   tasks:
     - name: Add settings
       ansible.platform.settings:
