@@ -6,37 +6,26 @@
     service_types: []
     services_info: []
     service_keys: []
+  module_defaults:
+    group/ansible.platform.gateway:
+      gateway_hostname: "{{ gateway_host }}"
+      gateway_username: "{{ gateway_admin_username }}"
+      gateway_password: "{{ gateway_admin_password }}"
+      gateway_validate_certs: False
+
   tasks:
-    - name: GET service clusters from the API
-      uri:
-        url: "{{ gateway_host }}/api/gateway/v1/service_clusters/?format=json"
-        method: GET
-        headers:
-          Content-Type: "application/json"
-        user: "{{ gateway_admin_username }}"
-        password: "{{ gateway_admin_password }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: 200
-      register: result_clusters
+    - name: Get service clusters from the API
+      set_fact:
+        result_clusters: "{{ lookup('ansible.platform.gateway_api', 'service_clusters', host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=False) }}"
 
     - name: GET services from the API
-      uri:
-        url: "{{ gateway_host }}/api/gateway/v1/services/?format=json"
-        method: GET
-        headers:
-          Content-Type: "application/json"
-        user: "{{ gateway_admin_username }}"
-        password: "{{ gateway_admin_password }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: 200
-      register: result_services
+      set_fact:
+        result_services: "{{ lookup('ansible.platform.gateway_api', 'services', host=gateway_host, username=gateway_admin_username, password=gateway_admin_password, verify_ssl=False) }}"
 
     - name: Collect service types
       set_fact:
         service_types: "{{ service_types + [item.service_type] }}"
-      loop: "{{ result_clusters.json.results }}"
+      loop: "{{ result_clusters }}"
 
     - name: Print the list of service types
       debug:
@@ -44,48 +33,52 @@
 
     - name: Print the number of services retrieved
       debug:
-        msg: "Number of services: {{ result_services.json.count }}"
+        msg: "Number of services: {{ result_services | count }}"
 
     - name: Collect service info based on service type
       set_fact:
         services_info: "{{ services_info + [{'id': item.summary_fields.service_cluster.id, 'name': item.name}] }}"
-      loop: "{{ result_services.json.results }}"
+      loop: "{{ result_services }}"
 
     - name: Print details of each service
       debug:
         msg: "{{ item }}"
-      loop: "{{ result_services.json.results }}"
+      loop: "{{ result_services }}"
 
     - name: Print the list of service IDs and names
       debug:
         msg: "Services Info: {{ services_info }}"
 
-    - name: POST to the service key endpoint for each service
-      uri:
-        url: "{{ gateway_host }}/api/gateway/v1/service_keys/"
-        method: POST
-        headers:
-          Content-Type: "application/json"
-        user: "{{ gateway_admin_username }}"
-        password: "{{ gateway_admin_password }}"
-        force_basic_auth: yes
-        body: "{{ {'service_cluster': item.id, 'mark_previous_inactive': true} | to_json }}"
-        body_format: json
-        validate_certs: no
-        status_code: 201
+    - name: Create the service key endpoint for each service
+      ansible.platform.service_key:
+        name: "{{ item.name }} - {{ now() }}"
+        service_cluster: "{{ item.id }}"
+        mark_previous_inactive: true
       register: post_results
       loop: "{{ services_info }}"
       loop_control:
         index_var: loop_index
 
+    - debug: var=post_results
+
     - name: Collect service keys
       set_fact:
-        service_keys: "{{ service_keys + [{'name': services_info[loop_index].name, 'key': post_results.results[loop_index].json.secret}] }}"
+        service_keys: "{{ service_keys + [key_info] }}"
+      vars:
+        key_info:
+          name: "{{ services_info[loop_index].name }}"
+          key: "{{ post_results.results[loop_index].secret }}"
+          key_name: "{{ post_results.results[loop_index].name }}"
       loop: "{{ services_info }}"
       loop_control:
         index_var: loop_index
 
     - name: Print the service keys for each service
       debug:
-        msg: "Service: {{ item.name }}, Key: {{ item.key }}"
+        msg:
+          - "Service: {{ item.name }}"
+          - "Key name: {{ item.key_name }}"
+          - "Key: {{ item.key }}"
       loop: "{{ service_keys }}"
+      loop_control:
+        label: "{{ item.name }}"
