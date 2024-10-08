@@ -98,7 +98,7 @@ def main():
 
     # Create a module with spec
     module = AAPModule(argument_spec=argument_spec, supports_check_mode=True)
-    AAPServiceKey(module).manage()
+    AAPServiceKey(module).manage(json_output_fields=['secret'])
 
 
 if __name__ == "__main__":
