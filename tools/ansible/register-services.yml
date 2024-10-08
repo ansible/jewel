@@ -6,19 +6,70 @@
     gateway_username: "{{ gateway_admin_username }}"
     gateway_password: "{{ gateway_admin_password }}"
     gateway_hostname: "{{ gateway_host }}"
-  pre_tasks:
-  - name: Check if API is available and returning status 200
-    uri:
-      url: "{{ gateway_hostname }}/api/"
-      validate_certs: "{{ gateway_validate_certs|default(False) }}"
-    register: result
-    until: "result.status == 200"
-    retries: 10
-    delay: 5
-  roles:
-    - {role: http_ports, when: gateway_http_ports is defined}
-    - {role: service_clusters, when: gateway_service_clusters is defined}
-    - {role: service_nodes, when: gateway_service_nodes is defined}
-    - {role: services, when: gateway_services is defined}
-    - {role: routes, when: gateway_routes is defined}
+    gateway_validate_certs: False
+    gateway_state: present
+  module_defaults:
+    group/ansible.platform.gateway:
+      gateway_username: "{{ gateway_username }}"
+      gateway_password: "{{ gateway_password }}"
+      gateway_hostname: "{{ gateway_hostname }}"
+      gateway_validate_certs: "{{ gateway_validate_certs }}"
+      state: "{{ gateway_state }}"
+
+  tasks:
+    - name: Check if API is available and returning status 200
+      uri:
+        url: "{{ gateway_hostname }}/api/"
+        validate_certs: "{{ gateway_validate_certs|default(False) }}"
+      register: result
+      until: "result.status == 200"
+      retries: 10
+      delay: 5
+
+    - name: Manage HTTP ports
+      ansible.platform.http_port:
+         is_api_port: "{{ item.is_api_port }}"
+         name: "{{ item.name }}"
+         number: "{{ item.number }}"
+         use_https: "{{ item.use_https}}"
+      loop: "{{ gateway_http_ports | default([]) }}"
+    
+    - name: Manage service_clusters
+      ansible.platform.service_cluster:
+        name: "{{ item.name }}"
+        service_type: "{{ item.service_type }}"
+      loop: "{{ gateway_service_clusters | default([]) }}"
+
+    - name: Manage service_nodes
+      ansible.platform.service_node:
+        name: "{{ item.name }}"
+        service_cluster: "{{ item.service_cluster }}"
+        address: "{{ item.address }}"
+      loop: "{{ gateway_service_nodes | default([]) }}"
+
+    - name: Manage services
+      ansible.platform.service:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        api_slug: "{{ item.api_slug }}"
+        http_port: "{{ item.http_port }}"
+        service_cluster: "{{ item.service_cluster }}"
+        is_service_https: "{{ item.is_service_https | default(False) }}"
+        service_path: "{{ item.service_path }}"
+        service_port: "{{ item.service_port }}"
+        order: "{{ item.order }}"
+      loop: "{{ gateway_services | default([]) }}"
+
+    - name: Manage routes
+      ansible.platform.route:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        gateway_path: "{{ item.gateway_path }}"
+        http_port: "{{ item.http_port }}"
+        service_cluster: "{{ item.service_cluster }}"
+        is_service_https: "{{ item.is_service_https | default(False) }}"
+        service_path: "{{ item.service_path }}"
+        service_port: "{{ item.service_port }}"
+        enable_gateway_auth: "{{ item.enable_gateway_auth }}"
+      loop: "{{ gateway_routes | default([]) }}"
 ...
