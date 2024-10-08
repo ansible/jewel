@@ -35,6 +35,10 @@ jobs:
       - name: Perform integration tests
         run: make collection-test
 
+      - name: Dump the container logs on failure
+        run: docker compose -f tools/generated/docker-compose.yml logs
+        if: failure()
+
   sanity:
     name: gateway collection sanity
     runs-on: ubuntu-latest
