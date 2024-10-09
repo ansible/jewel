@@ -24,8 +24,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tools/scripts/get_dab_for_pr.py
 
+      - name: Install python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
       - name: Upgrade ansible-core
-        run: python3 -m pip install --upgrade ansible-core
+        run: pip3.11 install --upgrade ansible-core
 
       - name: Start the dev environment
         run: COMPOSE_UP_OPTS='-d' make docker-compose
