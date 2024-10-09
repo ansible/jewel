@@ -74,7 +74,7 @@ extends_documentation_fragment:
 EXAMPLES = """
 - name: Create route
   ansible.platform_collection.route:
-  - name: Controller API
+    name: Controller API
     description: Proxy to the Controller
     http_port: 1                                # ID of http_port
     gateway_path: '/config/controller/'
@@ -85,17 +85,17 @@ EXAMPLES = """
 
 - name: Update route
   ansible.platform_collection.route:
-  - name: 1                                     # ID of route
+    name: 1                                     # ID of route
     gateway_path: '/controller-config/'
 
 - name: Check route
   ansible.platform_collection.route:
-  - name: Controller API
+    name: Controller API
     state: exists
 
 - name: Delete route
   ansible.platform_collection.route:
-  - name: Controller API
+    name: Controller API
     state: absent
 ...
 """

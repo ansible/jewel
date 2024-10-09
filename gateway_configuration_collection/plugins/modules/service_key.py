@@ -70,7 +70,7 @@ EXAMPLES = """
   ansible.platform.service_key:
     name: Automation Controller Service Key
     new_name: New Automation Controller Service Key
-    is_active: True
+    is_active: true
     service_cluster: Automation Controller
     algorithm: HS256
     secret: mysecret1

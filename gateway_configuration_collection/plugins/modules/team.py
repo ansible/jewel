@@ -43,19 +43,19 @@ extends_documentation_fragment:
 EXAMPLES = """
 - name: Create Team
   ansible.platform.team:
-  - name: Gateway Developers
+    name: Gateway Developers
     description: AAP Gateway Developers Team
     organization: Ansible Product Development
 
 - name: Update Team
   ansible.platform.team:
-  - name: Gateway Developers
+    name: Gateway Developers
     organization: "1"
     new_organization: "Red Hat Ansible"
 
 - name: Delete Team
   ansible.platform.team:
-  - name: Gateway Developers
+    name: Gateway Developers
     organization: "Red Hat Ansible"
     state: absent
 """
