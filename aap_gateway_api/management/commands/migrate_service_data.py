@@ -164,7 +164,7 @@ class Command(BaseCommand):
             authenticator_meta, _ = MigratedAuthenticatorMetadata.objects.get_or_create(
                 type=MigratedAuthenticatorMetadata.LegacyAuthTypes.SSO,
                 django_backend=social["backend_type"],
-                sso_server=social["sso_server"].rstrip("/"),
+                sso_server=social["sso_server"].rstrip("/") if social["sso_server"] else None,
                 service=service_cluster,
             )
 
