@@ -10,9 +10,6 @@
     gateway_validate_certs: false
     gateway_configuration_users_secure_logging: false
 
-  collections:
-    - ansible.platform
-
   tasks:
     - name: Add settings
       ansible.platform.settings:

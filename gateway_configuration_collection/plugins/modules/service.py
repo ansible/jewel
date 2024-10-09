@@ -78,7 +78,7 @@ extends_documentation_fragment:
 EXAMPLES = """
 - name: Create service
   ansible.platform.service:
-  - name: Hub API
+    name: Hub API
     description: Proxy to the Automation Hub
     api_slug: "hub"
     http_port: "Port 8080"
@@ -90,17 +90,17 @@ EXAMPLES = """
 
 - name: Update service
   ansible.platform.service:
-  - name: Hub API
+    name: Hub API
     service_path: '/api/v2/'
 
 - name: Check service
   ansible.platform.service:
-  - name: Gateway API
+    name: Gateway API
     state: exists
 
 - name: Delete service
   ansible.platform.service:
-  - name: Gateway API
+    name: Gateway API
     state: absent
 ...
 """

@@ -77,7 +77,9 @@ EXAMPLES = """
 
 - name: Report the usernames of all users with admin privs
   debug:
-    msg: "Admin users: {{ query('ansible.platform.gateway_api', 'users', query_params={ 'is_superuser': true }) | map(attribute='username') | join(', ') }}"  # noqa
+    msg: "Admin users: {{ admins }}"
+  vars:
+    admins: "{{ query('ansible.platform.gateway_api', 'users', query_params={ 'is_superuser': true }) | map(attribute='username') | join(', ') }}"
 
 - name: debug all organizations in a loop  # use query to return a list
   debug:

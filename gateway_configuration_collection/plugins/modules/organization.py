@@ -36,16 +36,16 @@ extends_documentation_fragment:
 EXAMPLES = """
 - name: Create Organization
   ansible.platform.organization:
-  - name: Ansible Product Development
+    name: Ansible Product Development
     description: Organization for ansible developers
 
 - name: Update Organization
   ansible.platform.organization:
-  - name: Ansible Product Development
+    name: Ansible Product Development
 
 - name: Delete Organization
   ansible.platform.organization:
-  - name: Ansible Product Development
+    name: Ansible Product Development
     state: absent
 """
 
