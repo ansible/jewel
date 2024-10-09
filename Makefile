@@ -18,7 +18,8 @@ export ANSIBLE_CONFIG
 .PHONY: PYTHON_VERSION clean \
 	check lint check_black check_flake8 check_isort \
 	docker-compose plumb update_django_ansible_base_hash \
-	collection-install collection-test
+	collection-install collection-test collection-docs \
+	collection-lint collection-sanity  collection-test-completeness
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -263,7 +264,26 @@ collection-sanity: collection-install
 	cd /tmp/collections/ansible_collections/ansible/platform && \
 	ansible-test sanity
 
-
 ## Run the collections test-completness check
 collection-test-completeness:
 	./gateway_configuration_collection/tests/test_completeness.py
+
+## Run the collections docs check
+collection-docs: collection-install
+	@RC=0 ; \
+	for file_name in $$(ls gateway_configuration_collection/plugins/modules/*.py) ; do \
+            module=$$(echo $${file_name} | sed 's:^.*/::' | sed 's:\..*::') ; \
+            ansible-doc -M gateway_configuration_collection/plugins/modules $${module} 1> /dev/null ; \
+            RC=$$(( RC + $$? )) ; \
+	done ; \
+	for file_name in $$(ls gateway_configuration_collection/plugins/lookup/*.py) ; do \
+            module=$$(echo $${file_name} | sed 's:^.*/::' | sed 's:\..*::') ; \
+            ansible-doc -M gateway_configuration_collection/plugins/lookup -t lookup $${module} 1> /dev/null ; \
+            RC=$$(( RC + $$? )) ; \
+	done ; \
+	if [[ $$RC -eq 0 ]] ; then echo "Doc Passed" ; else echo "Docs Failed" ; fi ; \
+	exit $$RC
+
+## Run the collection lint check
+collection-lint: collection-install
+	ansible-lint gateway_configuration_collection

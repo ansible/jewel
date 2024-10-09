@@ -108,3 +108,49 @@ jobs:
 
       - name: Perform completeness tests
         run: make collection-test-completeness
+
+  docs:
+    name: Check module doc strings
+    runs-on: ubuntu-latest
+    env:
+      HEADLESS: "yes"
+    steps:
+      - name: Install python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install requirements
+        run: pip3.11 install --upgrade ansible
+
+      - uses: actions/checkout@v3
+
+      - name: Run ansible-doc
+        run: make collection-docs
+
+      - name: Get ansible-doc version
+        run: ansible-doc --version
+        if: failure()
+
+  lint:
+    name: Lint module
+    runs-on: ubuntu-latest
+    env:
+      HEADLESS: "yes"
+    steps:
+      - name: Install python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install requirements
+        run: pip3.11 install --upgrade ansible-lint
+
+      - uses: actions/checkout@v3
+
+      - name: Run ansible-lint
+        run: make collection-lint
+
+      - name: Get ansible-lint version
+        run: ansible-lint --version
+        if: failure()
