@@ -11,6 +11,10 @@
     gateway_configuration_users_secure_logging: false
 
   tasks:
+    - name: Include role for settings
+      ansible.builtin.include_vars:
+        file: integration/targets/setup_gateway/defaults/main.yml
+
     - name: Add settings
       ansible.platform.settings:
         settings:
