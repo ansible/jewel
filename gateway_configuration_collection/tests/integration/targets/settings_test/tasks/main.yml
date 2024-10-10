@@ -2,12 +2,6 @@
 - name: Get current settings
   ansible.builtin.set_fact:
     current_settings: "{{ lookup('ansible.platform.gateway_api', 'settings/all', **connection_info) }}"
-  vars:
-    connection_info:
-      host: "{{ gateway_hostname }}"
-      username: "{{ gateway_username }}"
-      password: "{{ gateway_password }}"
-      verify_ssl: "{{ gateway_validate_certs }}"
 
 - name: Run Tests
   module_defaults:
