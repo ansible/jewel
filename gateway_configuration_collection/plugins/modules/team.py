@@ -58,6 +58,7 @@ EXAMPLES = """
     name: Gateway Developers
     organization: "Red Hat Ansible"
     state: absent
+...
 """
 
 from ..module_utils.aap_module import AAPModule  # noqa

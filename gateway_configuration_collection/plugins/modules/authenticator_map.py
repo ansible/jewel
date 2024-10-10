@@ -75,6 +75,19 @@ extends_documentation_fragment:
 """
 
 EXAMPLES = """
+- name: Add an authenticator map to an existing authenticator
+  ansible.platform.authenticator_map:
+    name: "Always add users to org 1"
+    authenticator: "{{ some_authenticator.name }}"
+    revoke: false
+    map_type: organization
+    role: Organization Member
+    organization: "Organization 1"
+    triggers:
+      always: {}
+      never: {}
+    order: 10
+...
 """
 
 from ..module_utils.aap_authenticator_map import AAPAuthenticatorMap  # noqa

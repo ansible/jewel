@@ -63,6 +63,7 @@ EXAMPLES = '''
     object_id: 1
     user: bob
     state: present
+...
 '''
 
 from ..module_utils.aap_module import AAPModule

@@ -2,7 +2,7 @@
 # Support for this feature was first added in ansible-core 2.12.
 # Use of this file is optional.
 # If used, this file must be placed in "tests/config.yml" relative to the base of the collection.
-
+---
 modules:
   # Configuration for modules/module_utils.
   # These settings do not apply to other content in the collection.
@@ -39,3 +39,4 @@ modules:
   # These settings only apply to modules/module_utils.
   # It is not possible to declare supported Python versions for controller-only code.
   # All Python versions supported by the controller must be supported by controller-only code.
+...
