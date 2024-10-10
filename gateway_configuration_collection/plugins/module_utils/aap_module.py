@@ -706,14 +706,17 @@ class AAPModule(AnsibleModule):
         for field in field_set:
             new_field = new.get(field, None)
             old_field = old.get(field, None)
-            if old_field != new_field:
-                if self.update_secrets or (not self.fields_could_be_same(old_field, new_field)):
-                    return True  # Something doesn't match, or something might not match
+            if old_field == new_field:
+                # This is a short circuit and protects us in the case of both being None
+                continue
             elif self.has_encrypted_values(new_field) or field not in new:
                 if self.update_secrets or (not self.fields_could_be_same(old_field, new_field)):
                     # case of 'field not in new' - user password write-only field that API will not display
                     self._encrypted_changed_warning(field, old, warning=warning)
                     return True
+            else:
+                if self.update_secrets or (not self.fields_could_be_same(old_field, new_field)):
+                    return True  # Something doesn't match, or something might not match
         return False
 
     @staticmethod
