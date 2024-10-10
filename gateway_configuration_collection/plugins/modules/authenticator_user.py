@@ -101,6 +101,7 @@ EXAMPLES = """
     authenticator_user_id: 4
     authenticator: 1
     state: exists
+...
 """
 
 from ..module_utils.aap_authenticator_users import AAPAuthenticatorUserMove  # noqa

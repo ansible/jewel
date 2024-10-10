@@ -10,3 +10,4 @@
   until: server_ping is not failed
   retries: 30
   delay: 2
+...

@@ -73,6 +73,16 @@ extends_documentation_fragment:
 """
 
 EXAMPLES = """
+- name: Create an authenticator
+  ansible.paltform.authenticator:
+    name: "My GitHub Authenticator"
+    type: 'ansible_base.authentication.authenticator_plugins.github'
+    enabled: true
+    configuration:
+      CALLBACK_URL: "https://example.com"
+      KEY: "github-oauth2-key"
+      SECRET: "github-oauth2-secret"
+...
 """
 
 

@@ -47,6 +47,7 @@ EXAMPLES = """
   ansible.platform.organization:
     name: Ansible Product Development
     state: absent
+...
 """
 
 from ..module_utils.aap_module import AAPModule

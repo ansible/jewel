@@ -65,6 +65,14 @@ notes:
   - If the query is not filtered properly this can cause a performance impact.
 """
 
+RETURN = """
+_raw:
+  description:
+    - Response from the API
+  type: dict
+  returned: on successful request
+"""
+
 EXAMPLES = """
 - name: Load the UI settings
   set_fact:
@@ -106,14 +114,7 @@ EXAMPLES = """
             query_params={ 'name__startswith' : 'foo', },
         ) | map(attribute='name') | list }}
   register: group_creation
-"""
-
-RETURN = """
-_raw:
-  description:
-    - Response from the API
-  type: dict
-  returned: on successful request
+...
 """
 
 from ansible.errors import AnsibleError  # noqa

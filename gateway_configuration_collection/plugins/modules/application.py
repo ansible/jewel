@@ -106,6 +106,7 @@ EXAMPLES = '''
     client_type: confidential
     redirect_uris:
       - http://example.com/api/gateway/v1/
+...
 '''
 
 from ..module_utils.aap_application import AAPApplication
