@@ -287,4 +287,4 @@ collection-docs: collection-install
 ## Run the collection lint check
 collection-lint: collection-install
 	# ansible-lint gets its settings from gateway_configuration_collection/.ansible-lint
-	cd gateway_configuration_collection && ansible-lint .
+	cd gateway_configuration_collection && ansible-lint
