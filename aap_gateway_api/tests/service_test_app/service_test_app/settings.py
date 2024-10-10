@@ -227,3 +227,5 @@ ENABLE_SERVICE_BACKED_SSO = True
 
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)
+
+RESOURCE_SERVER_SYNC_ENABLED = False
