@@ -77,7 +77,7 @@ def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secre
                 print(str(stdout, encoding='utf-8'))
             if stderr:
                 print(str(stderr, encoding='utf-8'))
-            raise Exception("service_test_app failed to come online")
+            raise Exception(f"service_test_app for service {service_type} on port {port} failed to come online")
         count += 1
         time.sleep(0.5)
 
