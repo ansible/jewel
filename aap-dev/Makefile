@@ -2,7 +2,7 @@
 	dev-up dev-down \
 	gateway-up gateway-up-check gateway-down \
 	eda-server-up eda-server-down \
-	hub-server-up hup-server-down \
+	hub-server-up hub-server-down \
 	disconnect-service-mesh-network \
 	smoke help help/generate .awx-settings-hack .eda-settings-hack .hub-settings-hack
 
