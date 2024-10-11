@@ -29,7 +29,7 @@ EDA_CONTAINER_NAME?=docker-eda-api-1
 
 HUB_CONTAINER_NAME?=galaxy_ng-api-1
 HUB_REPO?=$(SERVICE_DIR)/galaxy_ng
-HUB_DOCKERFILE=aap_compose_dev.yaml
+HUB_DOCKERFILE=dev/compose/aap.yaml
 
 # If you over-ride the repo, make sure to NOT use a trailing slash, like AWX_REPO=~/repos/awx
 AWX_REPO?=$(SERVICE_DIR)/awx
