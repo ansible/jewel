@@ -340,6 +340,10 @@ ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'org_member': {},
 }
 
+# This should not make a behavioral difference, but telling DAB that we do not
+# want to sync resources back to another server will silence some error logs we do not want
+RESOURCE_SERVER_SYNC_ENABLED = False
+
 # Set the maximum number of secrets that can be active for a service cluster at any given time.
 MAX_ACTIVE_KEYS_PER_SERVICE = 2
 
