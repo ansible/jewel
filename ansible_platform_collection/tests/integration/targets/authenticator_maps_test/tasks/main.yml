@@ -6,8 +6,6 @@
 
 - name: Preset vars
   ansible.builtin.set_fact:
-    gateway_configuration_authenticator_maps_secure_logging: false
-    gateway_configuration_authenticators_secure_logging: false
     name_prefix: "GW-Collection-Test-AuthenticatorMaps-{{ test_id }}"
 
 - name: Run Test

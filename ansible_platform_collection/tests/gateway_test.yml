@@ -8,7 +8,6 @@
     gateway_username: "{{ gateway_admin_user | default('admin') }}"
     gateway_password: "{{ gateway_admin_password | default('admin') }}"
     gateway_validate_certs: false
-    gateway_configuration_users_secure_logging: false
 
   tasks:
     - name: Include role for settings

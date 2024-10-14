@@ -437,7 +437,7 @@ class ServiceAPIRoute(Route, AuditableModel):
     def save(self, *args, **kwargs):
         self.http_port = HTTPPort.objects.get(is_api_port=True)
         # gateway_path is part of unique key + read only, which means it's repeated in
-        # GatewayConfiguration collection::AAPService
+        # ansible.platform.service collection module
         # Note: when this code is changed, AAPService has to be changed too
         if self.api_slug == 'gateway':
             self.gateway_path = '/'

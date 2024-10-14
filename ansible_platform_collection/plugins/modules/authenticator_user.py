@@ -80,7 +80,7 @@ extends_documentation_fragment:
 
 EXAMPLES = """
 - name: Move authenticator users to a new authenticator and merge with another user
-  ansible.gateway_configuration.authenticator_user:
+  ansible.platform.authenticator_user:
     authenticator_user_id: 9
     authenticator: 2
     new_uid: jdoe
@@ -88,7 +88,7 @@ EXAMPLES = """
     state: present
 
 - name: Merge user with same uid, remove other authenticators and keep memberships
-  ansible.gateway_configuration.authenticator_user:
+  ansible.platform.authenticator_user:
     authenticator_user_id: 4
     authenticator: 1
     merge_accounts_with_same_uid: true
@@ -97,7 +97,7 @@ EXAMPLES = """
     state: present
 
 - name: Check if authenticator user exists
-  ansible.gateway_configuration.authenticator_user:
+  ansible.platform.authenticator_user:
     authenticator_user_id: 4
     authenticator: 1
     state: exists

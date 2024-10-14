@@ -6,7 +6,6 @@
 
 - name: Preset vars
   ansible.builtin.set_fact:
-    gateway_configuration_authenticators_secure_logging: false
     name_prefix: "GW-Collection-Test-Authenticators-{{ test_id }}"
 
 - name: Run Test

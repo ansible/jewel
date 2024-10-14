@@ -28,7 +28,7 @@ extends_documentation_fragment: ansible.platform.auth
 
 EXAMPLES = """
 - name: Make changes to the settings in automation platform gateway
-  settings:
+  ansible.platform.settings:
     settings:
       gateway_token_name: X-DAB-JW-TOKEN
       gateway_access_token_expiration: 600

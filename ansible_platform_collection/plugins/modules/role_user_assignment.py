@@ -58,7 +58,7 @@ extends_documentation_fragment:
 
 EXAMPLES = '''
 - name: Give Bob organization admin role for org 1
-  role_user_assignment:
+  ansible.platform.role_user_assignment:
     role_definition: Organization Admin
     object_id: 1
     user: bob
