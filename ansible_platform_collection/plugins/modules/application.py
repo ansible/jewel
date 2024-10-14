@@ -88,7 +88,7 @@ extends_documentation_fragment: ansible.platform.auth
 
 EXAMPLES = '''
 - name: Add Foo application
-  application:
+  ansible.platform.application:
     name: "Foo"
     description: "Foo bar application"
     organization: "test"
@@ -97,7 +97,7 @@ EXAMPLES = '''
     client_type: public
 
 - name: Add Foo application
-  application:
+  ansible.platform.application:
     name: "Foo"
     description: "Foo bar application"
     organization: "test"

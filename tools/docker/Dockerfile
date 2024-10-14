@@ -88,7 +88,7 @@ RUN for dir in \
 ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 ADD aap_gateway_api /opt/aap_gateway/src/aap_gateway_api/
-ADD gateway_configuration_collection /opt/aap_gateway/src/gateway_configuration_collection/
+ADD ansible_platform_collection /opt/aap_gateway/src/ansible_platform_collection/
 ENV PATH=/opt/aap_gateway/venv/bin:$PATH
 ENV PYTHONPATH=/opt/aap_gateway/src
 

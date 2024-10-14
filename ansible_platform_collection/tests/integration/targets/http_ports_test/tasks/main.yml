@@ -4,10 +4,6 @@
     test_id: "{{ lookup('password', '/dev/null chars=ascii_letters length=16') }}"
   when: test_id is not defined
 
-- name: Preset vars
-  ansible.builtin.set_fact:
-    gateway_configuration_http_ports_secure_logging: false
-
 - name: Run Test
   module_defaults:
     group/ansible.platform.gateway:

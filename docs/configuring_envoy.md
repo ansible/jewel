@@ -6,7 +6,7 @@ There are four core items in the Gateway proxy configuration. These are:
 
 This defines the ports that envoy will listen for traffic on (such as 80 and 443)
 
-- Role: `ansible.gateway_configuration.http_ports`
+- Module: `ansible.platform.http_ports`
 - API Endpoint: `/api/gateway/v1/http_ports/`
 - Django Model: `aap_gateway_api.models.service.HTTPPort`
 
@@ -21,7 +21,7 @@ Fields:
 
 Clusters are a logical grouping of nodes that represent a specific service. As of AAP 2.5, this includes Gateway, Controller, EDA and Hub.
 
-- Role: `ansible.gateway_configuration.service_clusters`
+- Module: `ansible.platform.service_clusters`
 - API Endpoint: `/api/gateway/v1/service_clusters/`
 - Django Model: `aap_gateway_api.models.service.ServiceCluster`
 
@@ -35,7 +35,7 @@ Fields:
 
 Nodes represent an individual server, VM, container within a service cluster where the one of the services is running.
 
-- Role: `ansible.gateway_configuration.service_nodes`
+- Module: `ansible.platform.service_nodes`
 - API Endpoint: `/api/gateway/v1/service_nodes/`
 - Django Model: `aap_gateway_api.models.service.ServiceNode`
 
@@ -134,7 +134,7 @@ This route is identical to the previous example, except we are also selecting th
 
 Service API Routes: these are routes that live on the `/api/` base path. They must all be served from the same HTTP Port, which is tagged with the `is_api_port` flag. The path for these routes must follow the `/api/<service_slug/` pattern.
 
-- Role: `ansible.gateway_configuration.services`
+- Module: `ansible.platform.services`
 - API Endpoint: `/api/gateway/v1/services/`
 - Django Model: `aap_gateway_api.models.service.ServiceAPIRoute`
 
@@ -146,7 +146,7 @@ Fields:
 
 Additional routes encompass every other potential API route in Gateway. This includes things like the container registry in Hub, static files and eda webhooks. They can be served from the API port, or any other configured port. The main requirement with these routes is that they cannot be served from the `/api` path on the API port.
 
-- Role: `ansible.gateway_configuration.routes`
+- Module: `ansible.platform.routes`
 - API Endpoint: `/api/gateway/v1/routes/`
 - Django Model: `aap_gateway_api.models.service.AdditionalRoute`
 

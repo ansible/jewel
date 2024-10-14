@@ -74,7 +74,7 @@ extends_documentation_fragment:
 
 EXAMPLES = """
 - name: Create an authenticator
-  ansible.paltform.authenticator:
+  ansible.platform.authenticator:
     name: "My GitHub Authenticator"
     type: 'ansible_base.authentication.authenticator_plugins.github'
     enabled: true

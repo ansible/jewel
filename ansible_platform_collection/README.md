@@ -9,7 +9,7 @@ This collection contains modules that can be used to automate the creation of re
 
 This collection supports python versions >=3.11 and requires an ansible-core version of >=2.16.0. 
 
-It is also requires an existing install of Ansible Automation Platform version 2.5.0 as a target. 
+It is also requires an existing install of Ansible Automation Platform as a target. 
 
 
 ## Installation
@@ -35,10 +35,10 @@ To upgrade the collection to the latest available version, run the following com
 ansible-galaxy collection install ansible.platform --upgrade
 ```
 
-You can also install a specific version of the collection, for example, if you need to downgrade when something is broken in the latest version (please report an issue in this repository). Use the following syntax to install version 1.0.0:
+You can also install a specific version of the collection, for example, if you need to downgrade when something is broken in the latest version (please report an issue in this repository). Use the following syntax to install version 2.5.0:
 
 ```
-ansible-galaxy collection install ansible.platform:==1.0.0
+ansible-galaxy collection install ansible.platform:==2.5.0
 ```
 
 See [using Ansible collections](https://docs.ansible.com/ansible/devel/user_guide/collections_using.html) for more details.
@@ -52,9 +52,9 @@ Adding services (Controller, Event Driven Automation, Automation) can also be do
 
 ## Testing
 
-This collection is tested using the infra.platform_configuration collection integrated into our integrations tests which can be called via `ansible-test integration`. 
+This collection is tested using integration tests which can be called via `ansible-test integration`. If you wish to run the tests manually, we recommend using the parent Makefile via `make collection-test`. It will require a running version of Ansible Automation Platform.
 
-It is tested against Ansible Automation Platform verison 2.5.0. 
+The collection is tested against current version of Ansible Automation Platform.
 
 
 ## Support
@@ -73,7 +73,7 @@ Please refer to Ansible Automation Platform Documentation for further documentat
 
 ## License Information
 
-[GPLv3](https://github.com/ansible/aap-gateway/gateway_configuration_collection/COPYING)
+[GPLv3](https://github.com/ansible/aap-gateway/ansible_platform_collection/COPYING)
 
 ## Authors
 
@@ -81,4 +81,5 @@ Please refer to Ansible Automation Platform Documentation for further documentat
 [Martin Slemr](https://github.com/slemrmartin)
 [Jake Jackson](https://github.com/thedboubl3j)
 [Brennan Paciorek](https://github.com/brennanpaciorek)
-
+[John Westcott](https://github.com/john-westcott-iv)
+[Jessica Steurer](https://github.com/jay-steurer)

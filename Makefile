@@ -249,7 +249,7 @@ plumb:
 
 ## Install the collection locally on your machine
 collection-install:
-	ansible-galaxy collection install gateway_configuration_collection --force
+	ansible-galaxy collection install ansible_platform_collection --force
 
 ## Run the collection tests
 collection-test: collection-install
@@ -266,19 +266,19 @@ collection-sanity: collection-install
 
 ## Run the collections test-completness check
 collection-test-completeness:
-	./gateway_configuration_collection/tests/test_completeness.py
+	./ansible_platform_collection/tests/test_completeness.py
 
 ## Run the collections docs check
 collection-docs: collection-install
 	@RC=0 ; \
-	for file_name in $$(ls gateway_configuration_collection/plugins/modules/*.py) ; do \
+	for file_name in $$(ls ansible_platform_collection/plugins/modules/*.py) ; do \
             module=$$(echo $${file_name} | sed 's:^.*/::' | sed 's:\..*::') ; \
-            ansible-doc -M gateway_configuration_collection/plugins/modules $${module} 1> /dev/null ; \
+            ansible-doc -M ansible_platform_collection/plugins/modules $${module} 1> /dev/null ; \
             RC=$$(( RC + $$? )) ; \
 	done ; \
-	for file_name in $$(ls gateway_configuration_collection/plugins/lookup/*.py) ; do \
+	for file_name in $$(ls ansible_platform_collection/plugins/lookup/*.py) ; do \
             module=$$(echo $${file_name} | sed 's:^.*/::' | sed 's:\..*::') ; \
-            ansible-doc -M gateway_configuration_collection/plugins/lookup -t lookup $${module} 1> /dev/null ; \
+            ansible-doc -M ansible_platform_collection/plugins/lookup -t lookup $${module} 1> /dev/null ; \
             RC=$$(( RC + $$? )) ; \
 	done ; \
 	if [[ $$RC -eq 0 ]] ; then echo "Doc Passed" ; else echo "Docs Failed" ; fi ; \
@@ -286,5 +286,5 @@ collection-docs: collection-install
 
 ## Run the collection lint check
 collection-lint: collection-install
-	# ansible-lint gets its settings from gateway_configuration_collection/.ansible-lint
-	cd gateway_configuration_collection && ansible-lint
+	# ansible-lint gets its settings from ansible_platform_collection/.ansible-lint
+	cd ansible_platform_collection && ansible-lint

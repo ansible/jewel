@@ -10,7 +10,7 @@ authors:
 license_file: COPYING
 tags:
   - gateway
-  - gateway_configuration
+  - gateway_platform
   - automation_platform
   - infrastructure
 dependencies: {}

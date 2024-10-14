@@ -58,7 +58,7 @@ jobs:
         uses: ansible-community/ansible-test-gh-action@release/v1
         with:
           ansible-core-version: ${{ matrix.ansible }}
-          collection-root: gateway_configuration_collection
+          collection-root: ansible_platform_collection
           testing-type: sanity
           target-python-version: 3.11
 

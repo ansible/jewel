@@ -71,7 +71,7 @@ exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base', 'aap-d
 # somewhat different convention here because DOCUMENTATION, EXAMPLES, and
 # RETRUN module variables contain documentation.
 per-file-ignores = """
-    gateway_configuration_collection/plugins/modules/*:E402
+    ansible_platform_collection/plugins/modules/*:E402
 """
 
 [tool.pytest.ini_options]
