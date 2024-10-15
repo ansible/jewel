@@ -27,7 +27,7 @@ from rest_framework.test import APIClient
 # It will show every endpoint in /admin, which clutters test results.
 DEBUG_WARNINGS = False
 
-EXCLUDED_ENDPOINTS = set(["/api/gateway/v1/docs/", "/api/gateway/v1/docs/redoc", "/api/gateway/v1/docs/schema"])
+EXCLUDED_ENDPOINTS = set(["/api/gateway/v1/docs/", "/api/gateway/v1/docs/redoc", "/api/gateway/v1/docs/schema", "/api/gateway/v1/logout/"])
 CSRF_PROTECTED_METHODS = set(("DELETE", "POST", "PUT"))
 
 

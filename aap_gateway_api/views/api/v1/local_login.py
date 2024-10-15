@@ -60,7 +60,7 @@ class LoggedLoginView(views.LoginView):
             return ret
 
 
-@method_decorator(require_http_methods(["POST"]), name="dispatch")
+@method_decorator(require_http_methods(["POST", "GET"]), name="dispatch")
 class LoggedLogoutView(views.LogoutView):
 
     success_url_allowed_hosts = settings.LOGOUT_ALLOWED_HOSTS

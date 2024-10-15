@@ -101,4 +101,4 @@ def test_logout_view_with_get(logger, unauthenticated_api_client, admin_user, lo
     # log out and assert error response code
     url = get_relative_url("logout")
     response = unauthenticated_api_client.get(url)
-    assert response.status_code == 405
+    assert response.status_code == 302
