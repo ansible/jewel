@@ -9,7 +9,7 @@ This collection contains modules that can be used to automate the creation of re
 
 This collection supports python versions >=3.11 and requires an ansible-core version of >=2.16.0. 
 
-It is also requires an existing install of Ansible Automation Platform as a target. 
+It also requires an existing install of Ansible Automation Platform as a target. 
 
 
 ## Installation
