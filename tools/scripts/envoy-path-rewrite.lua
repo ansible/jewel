@@ -3,7 +3,6 @@ function envoy_on_response(handle)
     -- in Location headers and in the request body.
     -- ex: translates /service-path/galaxy/ to /gateway-path/hub/ in service response bodies
     handle:logDebug("Running lua script to rewrite response body.")
-    
     -- Ignore this script if the response is an upgrade response to prevent websockets from breaking
     local status_code = handle:headers():get(":status")
     if status_code == "101" then
@@ -11,11 +10,17 @@ function envoy_on_response(handle)
     end
 
     local location = handle:headers():get("Location")
+
+    -- If the location contains __gateway_no_rewrite__=1 (e.g. as a GET param),
+    -- then do not rewrite the location header.
+    if location and string.match(location, "__gateway_no_rewrite__=1") then
+        return
+    end
+
     local prefix_rewrite = handle:metadata():get("prefix")
     local prefix = handle:metadata():get("prefix_rewrite")
 
     if location then
-        
         local new_location = string.gsub(location, prefix, prefix_rewrite)
         handle:headers():replace("Location", new_location)
     end
