@@ -27,7 +27,8 @@ EDA_REPO?=$(SERVICE_DIR)/eda-server
 # for tools/docker/docker-compose-dev.yaml it is/was eda-eda-api-1
 EDA_CONTAINER_NAME?=docker-eda-api-1
 
-HUB_CONTAINER_NAME?=galaxy_ng-api-1
+HUB_PROJECT_NAME?=galaxy_ng
+HUB_CONTAINER_NAME?=$(HUB_PROJECT_NAME)-api-1
 HUB_REPO?=$(SERVICE_DIR)/galaxy_ng
 HUB_DOCKERFILE=dev/compose/aap.yaml
 
@@ -148,7 +149,7 @@ smoke:
 #######################################################
 
 hub-server-up: $(HUB_REPO)/.git/HEAD
-	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) up --build --detach --quiet-pull
+	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) --project-name $(HUB_PROJECT_NAME) up --build --detach --quiet-pull
 
 .hub-settings-hack:
 	$(AAP_DEV_DIR)/hub-up-check.sh
@@ -160,6 +161,6 @@ $(HUB_REPO)/.git/HEAD: ;
 	cd $(SERVICE_DIR) && git clone https://github.com/ansible/galaxy_ng.git
 
 hub-server-down:
-	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) down && docker volume rm var_lib_pulp
+	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) --project-name $(HUB_PROJECT_NAME) down && docker volume rm var_lib_pulp
 
 
