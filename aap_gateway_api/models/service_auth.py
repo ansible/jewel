@@ -47,12 +47,14 @@ class ServiceKey(UniqueNamedCommonModel):
         max_length=10,
         choices=JWTAlgorithm.choices,
         default=JWTAlgorithm.HS256,
+        help_text=_("The algorithm used to generate the service key"),
     )
 
-    secret = prevent_search(models.TextField(editable=False))
+    secret = prevent_search(models.TextField(editable=False, help_text=_("The secret, will only be plain text on generation, afterwards it will be encrypted")))
     service_cluster = models.ForeignKey(
         "ServiceCluster",
         on_delete=models.CASCADE,
         related_name="service_keys",
+        help_text=_("The service cluster this key is for"),
     )
-    is_active = models.BooleanField(default=True, null=False)
+    is_active = models.BooleanField(default=True, null=False, help_text=_("Is this service key active"))

@@ -64,6 +64,9 @@ check_flake8:
 check_isort:
 	tox -e isort -- --check $(CHECK_SYNTAX_FILES)
 
+check_help_text:
+	export GATEWAY_SECRET_KEY_FILE=tools/configs/dev_secret_key; python -m aap_gateway_api help_text_check --applications aap_gateway_api --ignore-file ./.help_text_check.ignore
+
 
 # HELP related targets
 # --------------------------------------

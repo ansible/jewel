@@ -48,7 +48,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         default=False, help_text=_("If true, this port will be used to serve the Ansible service APIs. Only one port can be the API port.")
     )
 
-    envoy_listener_name = models.CharField(max_length=255)
+    envoy_listener_name = models.CharField(max_length=255, help_text=_("The envoy configuration listener name for this port"))
 
     def __str__(self):
         protocol = "https" if self.use_https else "http"
@@ -270,7 +270,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     service_path = models.CharField(max_length=255, blank=False, help_text=_("URL path on the Ansible service cluster to route traffic to."))
     gateway_path = models.CharField(max_length=255, blank=False, help_text=_("Path on the gateway to listen to traffic on."))
 
-    description = models.CharField(max_length=255, blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True, help_text=_('A description of this route.'))
 
     # Some routes, such as EDA webhooks, have their own authentication and my not need
     # gateway authentication tokens.
@@ -282,7 +282,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     # they should point to the same cluster (which is a combination of ServiceCluster and Route). To avoid
     # creating a duplicate cluster with the same address/port combo, we're going to save a name for the
     # cluster in the db to identify the ServiceCluster/port combo.
-    envoy_cluster_name = models.CharField(max_length=255, null=False)
+    envoy_cluster_name = models.CharField(max_length=255, null=False, help_text=_("The name of the envoy cluster this route belongs to"))
 
     # The order of the routes
     order = models.IntegerField(
@@ -429,7 +429,7 @@ class ServiceAPIRoute(Route, AuditableModel):
 
     router_basename = 'service'
 
-    api_slug = models.SlugField(max_length=20)
+    api_slug = models.SlugField(max_length=20, help_text=_("An internally generated API slug for this Service API Route"))
 
     class Meta:
         models.UniqueConstraint("service_cluster", name="one_service_api_per_service")

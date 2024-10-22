@@ -2,8 +2,9 @@ import logging
 
 DEBUG = True
 
-# This line is a hack to define LOGGING in this file so flake8 doesn't complain
+# These lines are a hack to define LOGGING in this file so flake8 doesn't complain
 LOGGING = {} if not LOGGING else LOGGING  # noqa: F821
+INSTALLED_APPS = [] if not INSTALLED_APPS else INSTALLED_APPS  # noqa: F821
 
 # show colored logs in the dev environment
 try:
@@ -40,3 +41,5 @@ except ImportError as e:
 
 
 LOGGING['loggers']['aap']['level'] = "DEBUG"
+
+INSTALLED_APPS.append('ansible_base.help_text_check')
