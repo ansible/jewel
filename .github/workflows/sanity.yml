@@ -1,0 +1,37 @@
+---
+name: Sanity
+env:
+  LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
+on:
+  pull_request:
+  push:
+jobs:
+  help_text:
+    name: Help Text Check
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+      contents: read
+    strategy:
+      fail-fast: false
+    env:
+      HEADLESS: "yes"
+    steps:
+      - name: Install make
+        run: sudo apt install make
+
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Checkout DAB branch if needed
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/scripts/get_dab_for_pr.py
+
+      - name: Build the dev environment
+        run: make docker-compose-build
+
+      - name: Run help text check
+        run: docker compose -f tools/generated/docker-compose.yml run gateway1 aap-gateway-manage help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore

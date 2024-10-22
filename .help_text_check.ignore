@@ -1,0 +1,13 @@
+aap_gateway_api.ServiceAPIRoute.route_ptr  # The pointer to a Route object
+aap_gateway_api.AdditionalRoute.route_ptr  # The pointer to a Route object
+
+aap_gateway_api.Preference.name            # Inherited from preference library
+aap_gateway_api.Preference.raw_value       # Inherited from preference library
+aap_gateway_api.Preference.section         # Inherited from preference library
+
+aap_gateway_api.User.date_joined           # Inherited from Djangos AbstractUser
+aap_gateway_api.User.email                 # Inherited from Djangos AbstractUser
+aap_gateway_api.User.first_name            # Inherited from Djangos AbstractUser
+aap_gateway_api.User.last_login            # Inherited from Djangos AbstractUser
+aap_gateway_api.User.last_name             # Inherited from Djangos AbstractUser
+aap_gateway_api.User.password              # Inherited from Djangos AbstractUser

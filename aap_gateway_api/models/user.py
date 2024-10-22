@@ -197,10 +197,14 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
 
 class MigratedUserMetadata(CommonModel):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="original_accounts")
-    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE)
-    original_username = models.CharField(max_length=255)
-    backend_classification = models.CharField(max_length=255, null=True, default=None)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="original_accounts", help_text=_("The gateway user this migrated user is associated with")
+    )
+    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE, help_text=_("The service cluster this user was migrated from"))
+    original_username = models.CharField(max_length=255, help_text=_("The original username used by the service cluster for this user"))
+    backend_classification = models.CharField(
+        max_length=255, null=True, default=None, help_text=_("The category of authentication the user used in the service cluster")
+    )
 
     class Meta:
         unique_together = [('user', 'service')]
@@ -218,14 +222,12 @@ class MigratedAuthenticatorMetadata(CommonModel):
     LegacyAuthTypes = LegacyAuthType
 
     authenticator = models.OneToOneField(
-        Authenticator,
-        on_delete=models.CASCADE,
-        related_name="migrated_metadata",
+        Authenticator, on_delete=models.CASCADE, related_name="migrated_metadata", help_text=_("The authenticator this user is related to")
     )
-    type = models.CharField(max_length=32, choices=LegacyAuthType.choices)
-    django_backend = models.CharField(max_length=256, null=True)
-    sso_server = models.CharField(max_length=512, null=True)
-    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE)
+    type = models.CharField(max_length=32, choices=LegacyAuthType.choices, help_text=_("The type of legacy auth this user is from i.e. SSO, Local, etc"))
+    django_backend = models.CharField(max_length=256, null=True, help_text=_("The legacy backend type this user is associated with"))
+    sso_server = models.CharField(max_length=512, null=True, help_text=_("The URL of the SSO server, if this user is tied to an the SSO type"))
+    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE, help_text=_("The service cluster this user came from"))
 
     def save(self, *args, **kwargs) -> None:
         with transaction.atomic():
