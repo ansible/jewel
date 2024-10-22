@@ -11,6 +11,7 @@ protobuf>=4.21
 psycopg
 pyjwt
 requests
+sqlparse>=0.5.0 # https://github.com/ansible/aap-gateway/security/dependabot/16
 uwsgi
 xds-protos>=1.58
 PyYAML
