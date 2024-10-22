@@ -1,5 +1,5 @@
 cryptography >= 41.0.6 # Required by django 
-Django>=4.2.7,<4.3.0
+Django>=4.2.16,<4.3.0 #   pinned to use version productization has available already
 djangorestframework
 django-crum
 django-dynamic-preferences
