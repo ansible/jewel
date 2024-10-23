@@ -62,6 +62,17 @@ in your eda-server directory add it to the local exclude file.
 echo src/aap_eda/settings/dev_hacked_settings.py > .git/info/exclude
 ```
 
+#### Skipping a Service
+
+The Makefile is intended to respect the special "skip" codeword for the repo location.
+For example, the following would bring up the controller service with Gateway, and only that.
+
+```
+EDA_REPO=skip HUB_REPO=skip AWX_REPO=~/repos/awx COMPOSE_TAG=devel make dev-up
+```
+
+Note: your `tsd.json` file will contain creds to services not in use.
+
 ### How to check if rootless docker
 
 Right now the only well worn path is NOT rootless docker!
