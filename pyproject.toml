@@ -110,13 +110,16 @@ legacy_tox_ini = """
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
+        DATABASE_ENGINE = django.db.backends.dummy
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
+        -r{toxinidir}/requirements/requirements_test.txt
         psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check
+        python3 -m aap_gateway_api makemigrations --check
 
     [testenv:flake8]
     deps =
