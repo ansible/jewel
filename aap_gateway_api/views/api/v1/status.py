@@ -143,8 +143,8 @@ class StatusView(AnsibleBaseView):
         # So we will construct our response object here and pass that around
 
         # Get some settings
-        timeout = get_preference_value('proxy', 'status_endpoint_backend_timeout_seconds', 4)
-        verify = get_preference_value('proxy', 'status_endpoint_backend_verify', True)
+        timeout = get_preference_value('proxy', 'status_endpoint_backend_timeout_seconds')
+        verify = get_preference_value('proxy', 'status_endpoint_backend_verify')
 
         # Start response object
         current_time = datetime.now()
@@ -172,7 +172,8 @@ class StatusView(AnsibleBaseView):
                 processes.append(service_check)
 
         with ThreadPoolExecutor() as executor:
-            results = executor.map(check_node, processes, timeout=timeout)
+            # no need for timeout for executor, all requests have their own  timeouts
+            results = executor.map(check_node, processes)
 
             for result in results:
                 status = result['status']

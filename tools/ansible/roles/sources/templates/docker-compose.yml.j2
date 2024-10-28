@@ -43,6 +43,8 @@ services:
     networks:
       - dbnet
       - service-mesh
+    extra_hosts:
+      host-gateway: host-gateway
     ports:
       - "{{ exposed_port }}:8000"
       - "{{ container_id }}4444:4444"
@@ -75,7 +77,7 @@ services:
     hostname: {{ name }}
     image: quay.io/fedora/redis-6:{{ redis_container_version }}
     entrypoint: ["redis-server"]
-    command: 
+    command:
       - /usr/local/etc/redis/redis.conf
 {% if container_id == 1 %}
     ports:
@@ -107,7 +109,7 @@ services:
     hostname: {{ name }}
     image: quay.io/fedora/redis-6:{{ redis_container_version }}
     entrypoint: ["redis-server"]
-    command: 
+    command:
       - /usr/local/etc/redis/redis.replica.conf
     ports:
       - "{{ redis_exposed_port + container_id}}:{{ redis_exposed_port }}"
@@ -135,7 +137,7 @@ services:
     hostname: {{ name }}
     image: quay.io/fedora/redis-6:{{ redis_container_version }}
     entrypoint: ["redis-server"]
-    command: 
+    command:
       - /usr/local/etc/sentinel/sentinel.conf
       - --sentinel
     ports:
@@ -198,7 +200,7 @@ services:
       - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
     extra_hosts:
-      host-gateway: "host-gateway"
+      host-gateway: host-gateway
     networks:
       - dbnet
       - service-mesh
