@@ -357,6 +357,8 @@ include(optional(getenv('GATEWAY_SETTINGS_FILE', '/etc/ansible-automation-platfo
 
 
 # Finally, environment variables always override last
+if getenv("DATABASE_ENGINE", None) is not None:
+    DATABASES["default"]["ENGINE"] = getenv("DATABASE_ENGINE")
 if getenv("DATABASE_NAME", None) is not None:
     DATABASES["default"]["NAME"] = getenv("DATABASE_NAME")
 if getenv("DATABASE_USER", None) is not None:
