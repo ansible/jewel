@@ -83,7 +83,7 @@ def test_encrypted_preference(register_preference):
 @pytest.mark.parametrize(
     "preference_type, default, value, err_substring",
     [
-        # NOTE: If you add cases to this matrix, add them in functional/test_settings.py, too.
+        # NOTE: If you add cases to this matrix, add them in views/api/v1/test_settings.py, too.
         ("string", "foo", 1234, "Cannot serialize, value 1234 is not a string"),  # In the API this gets coerced and works
         ("string", "foo", True, "Cannot serialize, value True is not a string"),  # In the API this gets coerced and works
         ("bool", False, "true", "true is not a boolean"),

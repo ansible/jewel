@@ -3,7 +3,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from django.test import override_settings
 
 from aap_gateway_api.models import User
-from aap_gateway_api.tests.functional.rbac.conftest import api_get_and_assert
+from aap_gateway_api.tests.views.api.v1.conftest import api_get_and_assert
 
 
 def test_organization_list_permissions(user_api_client, user, user_factory, organization_factory):

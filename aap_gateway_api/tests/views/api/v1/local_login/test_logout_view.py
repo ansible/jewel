@@ -25,7 +25,7 @@ class TestLogoutView:
         assert response.url == "/api/"
 
     # Following Rick Elrod's conclusion after also trying really hard.
-    # See aap_gateway_api/tests/functional/authentication/test_logged_basic_auth.py
+    # See aap_gateway_api/tests/authentication/test_logged_basic_auth.py
     # The aap_gateway_api/views/api/v1/local_login.LoggedLogoutView has already been loaded and initialised.
     # ---------------------------------------------------------------------------------------------------
     # There is really no better way to do this. I tried. Really hard.
