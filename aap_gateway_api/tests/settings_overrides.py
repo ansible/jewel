@@ -8,7 +8,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": "aap_gateway_api/tests/db.sqlite3",
         "TEST": {
-            "NAME": "aap_gateway_api/tests/db_test.sqlite3",
+            "NAME": "aap_gateway_api/tests/test_dbs/db_test.sqlite3",
         },
     }
 }

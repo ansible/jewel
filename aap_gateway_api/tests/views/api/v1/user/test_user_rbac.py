@@ -7,7 +7,7 @@ from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from ansible_base.rbac.policies import visible_users
 
 from aap_gateway_api.models.user import User
-from aap_gateway_api.tests.functional.rbac.conftest import associate_users
+from aap_gateway_api.tests.views.api.v1.conftest import associate_users
 from aap_gateway_api.utils.rbac import get_platform_auditor_role
 
 

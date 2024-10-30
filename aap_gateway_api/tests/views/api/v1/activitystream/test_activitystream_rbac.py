@@ -1,7 +1,7 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 
-from aap_gateway_api.tests.functional.rbac.conftest import TestPermissionsBase
+from aap_gateway_api.tests.views.api.v1.conftest import TestPermissionsBase
 
 
 @pytest.mark.django_db

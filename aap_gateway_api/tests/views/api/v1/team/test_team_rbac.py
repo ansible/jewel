@@ -3,7 +3,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleUserAssignment
 
 from aap_gateway_api.models import User
-from aap_gateway_api.tests.functional.rbac.conftest import api_get_and_assert
+from aap_gateway_api.tests.views.api.v1.conftest import api_get_and_assert
 
 
 def associate_logged_user(teams, organizations, user):
