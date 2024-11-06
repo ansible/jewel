@@ -22,6 +22,4 @@ body:
       options:
         - label: Proxy
         - label: API
-        - label: Service Lib
         - label: Other
-

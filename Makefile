@@ -4,8 +4,6 @@ SHELL=/bin/bash
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
 RM ?= /bin/rm
-SERVICE_LIB_DIR ?= service_lib
-SERVICE_LIB_DIST ?= $(SERVICE_LIB_DIR)/dist
 UID := $(shell id -u)
 TOX_ARGS ?= ""
 DOCKER_COMPOSE ?= docker compose
@@ -19,7 +17,6 @@ export ANSIBLE_CONFIG
 
 .PHONY: PYTHON_VERSION clean \
 	check lint check_black check_flake8 check_isort \
-	build_service_lib test_service_lib \
 	docker-compose plumb update_django_ansible_base_hash \
 	collection-install collection-test
 
@@ -39,7 +36,6 @@ clean:
 	@-find . -type f -regex ".*\.py[co]$$" -print0 | xargs -0 $(RM) -f
 	@-find . -type d -name "__pycache__" -print0 \
 			 -o -type d -name ".pytest_cache" -print0 | xargs -0 $(RM) -rf
-	@-$(RM) --preserve-root=all -rf $(SERVICE_LIB_DIST)/* || $(RM) -rf $(SERVICE_LIB_DIST)/*
 
 # Test targets
 # -------------------------------------
