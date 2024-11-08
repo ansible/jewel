@@ -14,6 +14,7 @@ class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Team
     serializer_class = TeamSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
+    deprecated = True
 
     def get_queryset(self):
         try:
@@ -27,6 +28,7 @@ class UserOrganizationViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Organization
     serializer_class = OrganizationSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
+    deprecated = True
 
     def get_queryset(self):
         try:
