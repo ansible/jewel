@@ -53,23 +53,30 @@ class AAPModule(AnsibleModule):
     AUTH_ARGSPEC = dict(
         gateway_hostname=dict(
             required=False,
-            fallback=(env_fallback, ["GATEWAY_HOSTNAME"]),
+            aliases=["aap_hostname"],
+            fallback=(env_fallback, ["GATEWAY_HOSTNAME", "AAP_HOSTNAME"]),
         ),
-        gateway_username=dict(required=False, fallback=(env_fallback, ["GATEWAY_USERNAME"])),
-        gateway_password=dict(no_log=True, required=False, fallback=(env_fallback, ["GATEWAY_PASSWORD"])),
+        gateway_username=dict(required=False, aliases=["aap_username"], fallback=(env_fallback, ["GATEWAY_USERNAME", "AAP_USERNAME"])),
+        gateway_password=dict(no_log=True, required=False, aliases=["aap_password"], fallback=(env_fallback, ["GATEWAY_PASSWORD", "AAP_PASSWORD"])),
         gateway_validate_certs=dict(
-            aliases=["validate_certs"],
+            aliases=["validate_certs", "aap_validate_certs"],
             type="bool",
             required=False,
-            fallback=(env_fallback, ["GATEWAY_VERIFY_SSL"]),
+            fallback=(env_fallback, ["GATEWAY_VERIFY_SSL", "AAP_VALIDATE_CERTS"]),
         ),
         gateway_token=dict(
             type="raw",
+            aliases=["aap_token"],
             no_log=True,
             required=False,
-            fallback=(env_fallback, ["GATEWAY_API_TOKEN"]),
+            fallback=(env_fallback, ["GATEWAY_API_TOKEN", 'AAP_TOKEN']),
         ),
-        gateway_request_timeout=dict(aliases=["request_timeout"], type="float", required=False, fallback=(env_fallback, ["GATEWAY_REQUEST_TIMEOUT"])),
+        gateway_request_timeout=dict(
+            aliases=["request_timeout", "aap_request_timeout"],
+            type="float",
+            required=False,
+            fallback=(env_fallback, ["GATEWAY_REQUEST_TIMEOUT", "AAP_REQUEST_TIMEOUT"]),
+        ),
     )
     ENCRYPTED_STRING = "$encrypted$"
     product_name = "automation platform gateway"
