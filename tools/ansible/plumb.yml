@@ -1,5 +1,5 @@
 ---
-    
+
 
 - name: Plumb gateway for enabled side containers
   hosts: localhost
@@ -20,7 +20,20 @@
     retries: 10
     delay: 5
   tasks:
-    - include_role:
+    - name: Update proxy preferences via API call
+      uri:
+        method: "PUT"
+        url: "{{ gateway_host }}/api/gateway/v1/settings/{{ item.section }}/"
+        body_format: json
+        body: "{{ item.preferences | to_json }}"
+        user: "{{ gateway_admin_username }}"
+        password: "{{ gateway_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        status_code: 200
+      loop: "{{ gateway_preferences }}"
+    - name: Additional roles
+      include_role:
         name: "{{ outer_item.key }}"
         tasks_from: plumb
       loop_control:
