@@ -21,17 +21,9 @@
     delay: 5
   tasks:
     - name: Update proxy preferences via API call
-      uri:
-        method: "PUT"
-        url: "{{ gateway_host }}/api/gateway/v1/settings/{{ item.section }}/"
-        body_format: json
-        body: "{{ item.preferences | to_json }}"
-        user: "{{ gateway_admin_username }}"
-        password: "{{ gateway_admin_password }}"
-        force_basic_auth: true
-        validate_certs: false
-        status_code: 200
-      loop: "{{ gateway_preferences }}"
+      ansible.platform.settings:
+        settings: "{{ gateway_preferences }}"
+
     - name: Additional roles
       include_role:
         name: "{{ outer_item.key }}"
