@@ -30,7 +30,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
                 return None
 
         except ValidationError:
-            logger.info("Invalid token.")
+            logger.exception("Invalid token.")
             return None
 
     def is_user_authorized(self, request, user, service, token_data):
