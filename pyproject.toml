@@ -100,10 +100,12 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
         -r{toxinidir}/requirements/requirements_test.txt
+        django-debug-toolbar  # Required to install for unit tests
         psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
-        pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
+        pytest --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
+        #pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
     allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh

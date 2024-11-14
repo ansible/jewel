@@ -1,4 +1,6 @@
 import logging
+import sys
+from os import getenv
 
 DEBUG = True
 
@@ -43,3 +45,31 @@ except ImportError as e:
 LOGGING['loggers']['aap']['level'] = "DEBUG"
 
 INSTALLED_APPS.append('ansible_base.help_text_check')
+
+ENABLE_DJANGO_DEBUG_TOOLBAR = False
+if "test" not in sys.argv and getenv('DJANGO_DEBUG_TOOL_BAR', False):
+    print("")
+    print(" >>>>>>>> Enabling Django Debug Toolbar! <<<<<<<< ")
+    print("")
+
+    ENABLE_DJANGO_DEBUG_TOOLBAR = True
+
+    try:
+        INSTALLED_APPS  # noqa: F821
+    except NameError:
+        INSTALLED_APPS = []
+    INSTALLED_APPS.append("debug_toolbar")
+
+    try:
+        MIDDLEWARE  # noqa: F821
+    except NameError:
+        MIDDLEWARE = []
+    MIDDLEWARE = [
+        "debug_toolbar.middleware.DebugToolbarMiddleware",
+        *MIDDLEWARE,
+    ]
+
+    DEBUG_TOOLBAR_CONFIG = {
+        'ENABLE_STACKTRACES': True,
+        "SHOW_TOOLBAR_CALLBACK": lambda req: True,
+    }
