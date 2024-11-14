@@ -6,6 +6,7 @@ gateway_validate_certs: False
 gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 'localhost'
+# enable_django_debug_toolbar: True
 
 # What services are enabled in your local environment
 # Note: If you have a service specified but its not functional the UI will be broken

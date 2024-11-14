@@ -33,6 +33,7 @@ services:
       - CACHE_KEY_PREFIX={{ cache_key_prefix }}
       - ENVOY_HOSTNAME=proxy
       - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
+      - DJANGO_DEBUG_TOOL_BAR={{ ddt_enabled }}
     links:
       - db
 {% for i in range(redis_node_count|int) %}

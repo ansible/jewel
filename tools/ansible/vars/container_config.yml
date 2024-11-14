@@ -17,6 +17,8 @@ gateway_host_address: host-gateway
 gateway_services: "{{ enabled_services is defined | ternary(enabled_services, ['hub', 'controller', 'eda']) }}"
 gateway_container_name: aap_gw_1
 
+ddt_enabled: "{{ enable_django_debug_toolbar | default(False) }}"
+
 enabled_containers:
   keycloak: "{{ keycloak_enabled | default(False) }}"
   ldap: "{{ ldap_enabled | default(False) }}"

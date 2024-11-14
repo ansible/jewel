@@ -2,6 +2,7 @@ import logging
 
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
 
@@ -50,3 +51,8 @@ urlpatterns = [
     path('api/gateway/v1/', include(router.urls)),
     path('api/gateway/v1/', include(resource_api_urls)),
 ]
+
+if getattr(settings, 'ENABLE_DJANGO_DEBUG_TOOLBAR', False):
+    from debug_toolbar.toolbar import debug_toolbar_urls
+
+    urlpatterns.extend(debug_toolbar_urls())

@@ -1,4 +1,5 @@
 build
+django-debug-toolbar
 ipython # Used in shell_plus
 remote-pdb # The debugger setup with Python's breakpoint()
 tox # Used for unit tests
