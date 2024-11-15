@@ -129,6 +129,36 @@
         that:
           - delete is changed
 
+    - name: Add API http port
+      ansible.platform.http_port:
+        name: "Port 44301"
+        number: 44301
+        use_https: true
+        is_api_port: true
+        state: present
+      register: http_port5
+
+    - name: Remove API http port
+      ansible.platform.http_port:
+        name: "Port 44301"
+        state: absent
+      ignore_errors: true
+      register: http_port5_remove_result
+
+    - name: Try to make it not an API port
+      ansible.platform.http_port:
+        name: "Port 44301"
+        is_api_port: false
+      ignore_errors: true
+      register: http_port5_not_api_result
+
+    - name: API Port assertions
+      ansible.builtin.assert:
+        that:
+          - http_port5 is changed
+          - http_port5_remove_result is failed
+          - http_port5_not_api_result is failed
+
   always:
     # Always Cleanup
     - name: Delete http ports
@@ -141,4 +171,8 @@
         - "http_port2"
         - "http_port3"
         - "http_port4"
+        # API port cannot be deleted via API, so we leave it.
+        # If this ever becomes a problem in the future, add a task here to
+        # delete it using manage.py.
+        # - "http_port5"
 ...

@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 
@@ -19,6 +21,63 @@ def test_http_port_api_port_unique_via_api(admin_api_client, http_api_port_facto
     }
     response = admin_api_client.post(url, data=data)
     assert response.status_code == 400
+
+
+def test_http_port_api_port_cannot_be_deleted(admin_api_client, http_api_port_factory):
+    """
+    We can not delete the API port (via proxy or otherwise).
+    """
+
+    port = http_api_port_factory()
+    assert port.is_api_port
+    url = get_relative_url('http_port-detail', kwargs={'pk': port.pk})
+    # Via proxy, we hit the block on all dangerous operations
+    with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+        response = admin_api_client.delete(url)
+        assert response.status_code == 403
+    # Direct, we fallback to the view blocking this operation.
+    response = admin_api_client.delete(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    'factory, success_expected',
+    [
+        ('http_port_factory', False),
+        ('http_api_port_factory', True),
+    ],
+)
+def test_service_api_route_validate_http_port(request, full_service_hierarchy_controller, admin_api_client, factory, success_expected):
+    url = get_relative_url('service-list')
+    fixture = request.getfixturevalue(factory)
+    port = fixture()
+    data = {
+        'name': 'test service',
+        'api_slug': 'test-service',
+        'service_cluster': full_service_hierarchy_controller.service_cluster.pk,
+        'service_port': 31337,
+        'service_path': '/test',
+        'gateway_path': '/test',
+        'http_port': port.pk,
+    }
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == (201 if success_expected else 400)
+    if not success_expected:
+        assert 'API HTTP port must be used' in response.data['http_port'][0]
+
+
+def test_http_port_api_port_cannot_become_regular_port(admin_api_client, http_api_port_factory):
+    """
+    We can not change the API port to a regular port.
+    """
+
+    port = http_api_port_factory()
+    assert port.is_api_port
+    url = get_relative_url('http_port-detail', kwargs={'pk': port.pk})
+    response = admin_api_client.patch(url, data={'is_api_port': False})
+    assert response.status_code == 400
+    assert "changed to a non-API port" in response.data['is_api_port'][0]
 
 
 def test_http_port_api_port_detail(admin_api_client, http_api_port_factory):
@@ -140,13 +199,6 @@ def test_http_port_delete_nonexistent(admin_api_client):
     url = get_relative_url('http_port-detail', kwargs={'pk': 1337})
     response = admin_api_client.delete(url)
     assert response.status_code == 404
-
-
-def test_http_port_delete_api_port(admin_api_client, http_api_port_factory):
-    http_api_port = http_api_port_factory()
-    url = get_relative_url('http_port-detail', kwargs={'pk': http_api_port.pk})
-    response = admin_api_client.delete(url)
-    assert response.status_code == 204
 
 
 def test_http_port_delete_api_port_unauthenticated(unauthenticated_api_client, http_api_port_factory):

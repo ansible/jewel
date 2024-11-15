@@ -1,3 +1,7 @@
+from django.utils.translation import gettext as _
+from rest_framework import status
+from rest_framework.response import Response
+
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 from aap_gateway_api.serializers import (
     AdditionalRouteSerializer,
@@ -48,6 +52,15 @@ class HTTPPortViewSet(ProxyUnsafeGatewayModelViewSet):
     def object_write_unsafe(self, request, obj: HTTPPort) -> bool:
         # reject all requests to modify the API port
         return bool(obj.is_api_port)
+
+    def destroy(self, request, pk=None):
+        instance = self.get_object()
+
+        # The API port cannot be deleted
+        if instance.is_api_port:
+            return Response({'detail': _('Cannot delete the API port')}, status=status.HTTP_403_FORBIDDEN)
+
+        return super().destroy(instance)
 
 
 class ServiceClusterViewSet(ProxyUnsafeGatewayModelViewSet):
