@@ -13,7 +13,7 @@ from oauthlib.common import generate_token
 )
 def test_ensure_oauth2_application_tokens_authenticate(token, expected, oauth2_admin_access_token, admin_user, unauthenticated_api_client):
     url = get_relative_url("user-detail", kwargs={"pk": admin_user.pk})
-    token = oauth2_admin_access_token.token if token == 'fixture' else generate_token()
+    token = oauth2_admin_access_token[1] if token == 'fixture' else generate_token()
     response = unauthenticated_api_client.get(
         url,
         headers={'Authorization': f'Bearer {token}'},
