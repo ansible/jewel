@@ -164,7 +164,7 @@ def field_map(
             "pk": admin_user.pk,
         },
         "tokens": {
-            "pk": oauth2_admin_access_token.pk,
+            "pk": oauth2_admin_access_token[0].pk,
         },
         "teams": {
             "pk": team.pk,
@@ -177,7 +177,7 @@ def field_map(
         "authenticator_maps": {
             "pk": authenticator_map_factory(authenticator=authenticator).pk,
         },
-        "applications": {"pk": oauth2_admin_access_token.application.pk},
+        "applications": {"pk": oauth2_admin_access_token[0].application.pk},
         "activitystream": {"pk": Entry.objects.first().pk},
         "service-index": {
             "ansible_id": str(Resource.objects.first().ansible_id),

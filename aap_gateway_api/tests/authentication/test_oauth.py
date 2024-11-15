@@ -14,8 +14,8 @@ from ansible_base.lib.utils.response import get_relative_url
 def test_oauth_pat_scope_adherence(
     unauthenticated_api_client, oauth2_admin_access_token, organization, scope, post_status, patch_status, delete_status, get_status
 ):
-    oauth2_admin_access_token.scope = scope
-    oauth2_admin_access_token.save()
+    oauth2_admin_access_token[0].scope = scope
+    oauth2_admin_access_token[0].save()
 
     client = unauthenticated_api_client
 
@@ -23,7 +23,7 @@ def test_oauth_pat_scope_adherence(
     response = client.post(
         url,
         data={"name": "test_oauth_pat_scope_adherence"},
-        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token.token}",
+        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token[1]}",
     )
     assert response.status_code == post_status, response.data
 
@@ -31,18 +31,18 @@ def test_oauth_pat_scope_adherence(
     response = client.patch(
         url,
         data={"name": "another name"},
-        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token.token}",
+        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token[1]}",
     )
     assert response.status_code == patch_status, response.data
 
     response = client.get(
         url,
-        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token.token}",
+        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token[1]}",
     )
     assert response.status_code == get_status, response.data
 
     response = client.delete(
         url,
-        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token.token}",
+        HTTP_AUTHORIZATION=f"Bearer {oauth2_admin_access_token[1]}",
     )
     assert response.status_code == delete_status, response.data
