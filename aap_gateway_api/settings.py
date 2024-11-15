@@ -356,7 +356,6 @@ include(optional('settings_dev.py'), scope=locals())
 # environment, defaulting to /etc/ansible-automation-platform/gateway/settings.py.
 include(optional(getenv('GATEWAY_SETTINGS_FILE', '/etc/ansible-automation-platform/gateway/settings.py')), scope=locals())
 
-
 # Finally, environment variables always override last
 if getenv("DATABASE_ENGINE", None) is not None:
     DATABASES["default"]["ENGINE"] = getenv("DATABASE_ENGINE")
