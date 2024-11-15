@@ -298,3 +298,76 @@ register(
     help_text=_("The URL that is used to kick off authentication for Automation Hub SSO that was configured prior to AAP 2.5."),
     encrypted=False,
 )
+
+register(
+    section="analytics",
+    preference_name="INSIGHTS_TRACKING_STATE",
+    default=True,
+    required=True,
+    preference_type="bool",
+    help_text=_("Enables the service to gather data on automation and send it to Automation Analytics."),
+    encrypted=False,
+)
+
+register(
+    section="analytics",
+    preference_name="RED_HAT_CONSOLE_URL",
+    default='https://console.redhat.com',
+    required=False,
+    preference_type="url",
+    help_text=_("This setting is used to to configure the upload URL for data collection for Automation Analytics."),
+    encrypted=False,
+)
+
+register(
+    section="analytics",
+    preference_name="REDHAT_USERNAME",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("This username is used to send data to Automation Analytics/"),
+    encrypted=False,
+)
+
+register(
+    section="analytics",
+    preference_name="REDHAT_PASSWORD",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("This password is used to send data to Automation Analytics.'"),
+    encrypted=True,
+)
+
+register(
+    section="analytics",
+    preference_name="SUBSCRIPTIONS_USERNAME",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("This username is used to retrieve subscription and content information."),
+    encrypted=False,
+)
+
+register(
+    section="analytics",
+    preference_name="SUBSCRIPTIONS_PASSWORD",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("This password is used to retrieve subscription and content information.'"),
+    encrypted=True,
+)
+
+register(
+    section="analytics",
+    preference_name="AUTOMATION_ANALYTICS_GATHER_INTERVAL",
+    required=False,
+    default=14400,  # every 4 hours
+    min_value=1800,  # every 30 minutes
+    # There was no max value specified in AWX but our validator max is 100 by default so we need one
+    max_value=30000000000,  # approx 1,000 years
+    preference_type="int_range",
+    help_text=_("The maximum number of items allowed on a list page"),
+    encrypted=False,
+)
