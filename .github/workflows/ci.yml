@@ -23,6 +23,14 @@ jobs:
             python-version: "3.11"
             sonar: false
             junit-xml-upload: false
+          - env: check-migrations
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
+          - env: check-oauth2-permissions
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
           - env: py311
             python-version: "3.11"
             sonar: true
