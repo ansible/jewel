@@ -23,6 +23,17 @@ class HTTPPortSerializer(NamedCommonModelSerializer):
         model = HTTPPort
         fields = NamedCommonModelSerializer.Meta.fields + ['number', 'use_https', 'is_api_port']
 
+    def validate_is_api_port(self, value):
+        """
+        Prevent changing is_api_port from True to False, which would cause the
+        proxy to become inoperable. This is normally prevented by DisallowWriteFromProxy
+        but is added here as another layer of protection in case someone manages to directly
+        access Gateway.
+        """
+        if self.instance and self.instance.is_api_port and not value:
+            raise serializers.ValidationError(_("The API port cannot be changed to a non-API port"))
+        return value
+
 
 class ServiceClusterSerializer(NamedCommonModelSerializer):
     class Meta:
@@ -64,6 +75,14 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
 
     def validate_node_tags(self, value):
         return _validate_tags_field(value)
+
+    def validate_http_port(self, value):
+        """
+        A given http_port must be an API port.
+        """
+        if not (value and value.is_api_port):
+            raise serializers.ValidationError(_("An API HTTP port must be used with API routes"))
+        return value
 
 
 class ServiceNodeSerializer(NamedCommonModelSerializer):

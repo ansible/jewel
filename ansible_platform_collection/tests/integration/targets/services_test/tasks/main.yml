@@ -43,6 +43,10 @@
       when: existing_http_api_port | length == 0
       register: new_http_api_port
 
+    - name: Get the API port id (existing or just created)
+      ansible.builtin.set_fact:
+        api_port_id: "{{ new_http_api_port.id if new_http_api_port is not skipped else existing_http_api_port.id }}"
+
     - name: Create an HTTP Port
       ansible.platform.http_port:
         name: "{{ name_prefix }}-Http_Port"
@@ -69,7 +73,7 @@
       ansible.platform.service:
         name: "{{ name_prefix }}-Automation Hub API"
         description: "Proxy to the Automation Hub"
-        http_port: "{{ port1.id }}"
+        http_port: "{{ api_port_id }}"
         api_slug: hub
         service_cluster: "{{ hub_sc.id }}"
         service_path: '/api/hub/'
@@ -86,7 +90,7 @@
       ansible.platform.service:
         name: "{{ hub_service.name }}"
         description: "Proxy to the Automation Hub"
-        http_port: "{{ port1.name }}"
+        http_port: "{{ api_port_id }}"
         api_slug: hub
         service_cluster: "{{ hub_sc.id }}"
         service_path: '/api/hub/'
@@ -104,7 +108,7 @@
         name: "{{ name_prefix }}-Controller API"
         description: Proxy to the Controller
         api_slug: controller
-        http_port: "{{ port1.name }}"
+        http_port: "{{ api_port_id }}"
         service_cluster: "{{ controller_sc.name }}"
         is_service_https: true
         service_path: '/api/'
@@ -131,7 +135,7 @@
     - name: Change the API version for controller
       ansible.platform.service:
         name: "{{ controller_service.name }}"
-        http_port: "{{ port1.name }}"
+        http_port: "{{ api_port_id }}"
         service_cluster: "{{ controller_sc.id }}"
         is_service_https: true
         service_path: '/api/v3/'
