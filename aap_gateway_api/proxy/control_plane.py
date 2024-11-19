@@ -161,6 +161,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         self.request_path = request.attributes.request.http.path
 
         # /static endpoints and any requests to the gateway api do not require any JWT authentication
+        # This should never trigger if enable_gateway_auth is set to False on the gateway service.
         if self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
             return self._return_no_authentication_required()
 

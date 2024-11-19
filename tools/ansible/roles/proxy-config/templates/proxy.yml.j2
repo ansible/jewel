@@ -57,6 +57,7 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_path: '/'                 # -- path on the gateway API
     service_port: 8000                # -- port on the gateway API
     order: 100
+    enable_gateway_auth: False        # -- Gateway should not use itself for authentication
 
 {% for service in gateway_services %}
 {% if service == 'hub' %}
