@@ -52,26 +52,37 @@ user.save()
 EOF
 }
 
-until database_ready
-do
+until database_ready; do
     echo "$(timestamp) Waiting until the database is ready..."
     sleep 5
 done
+echo ${timestamp} Database is ready for connections
 
-${GATEWAY_MANAGE} migrate --noinput
-${GATEWAY_MANAGE} collectstatic --noinput
+if [ ${CONTAINER_NUMBER} -eq 1 ] ; then
+    # If multiple services are starting up we only want migrations and user creation to run on the first node
+    echo ${timestamp} Running migrations since I am container ${CONTAINER_NUMBER}
+    ${GATEWAY_MANAGE} migrate --noinput
+    export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
+    if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
+        echo "$(timestamp) $output"
+    else
+        # Make sure the password is set as required
+        update_user_password
+    fi
+    echo "$(timestamp) >>>>>>>> Admin password: ${DJANGO_SUPERUSER_PASSWORD}"
 
-export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
-if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
-    echo "$(timestamp) $output"
 else
-    # Make sure the password is set as required
-    update_user_password
+    # Other containers need to wait until node 1 has competed migrations
+    until [ $(${GATEWAY_MANAGE} showmigrations | grep '\[ \]' | wc -l) == 0 ]; do
+        echo "${timestamp} Waiting for all migrations to be applied by node 1"
+        sleep 3
+    done
 fi
-echo "$(timestamp) >>>>>>>> Admin password: ${DJANGO_SUPERUSER_PASSWORD}"
 
+${GATEWAY_MANAGE} collectstatic --noinput
 ${GATEWAY_MANAGE} authenticators --initialize
 if [ $? != 0 ] ; then
     exit 255
 fi
+
 exec supervisord -n

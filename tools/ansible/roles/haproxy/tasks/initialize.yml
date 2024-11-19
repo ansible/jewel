@@ -1,0 +1,8 @@
+---
+- name: Generate the haproxy certificate file
+  copy:
+    content: "{{ cert }}\n{{ key }}"
+    dest: "{{ sources_dest }}/haproxy.pem"
+  vars:
+    cert: "{{ lookup('file', sources_dest +'/gateway.crt' )}}"
+    key: "{{ lookup('file', sources_dest +'/gateway.key' )}}"

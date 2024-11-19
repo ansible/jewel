@@ -1,0 +1,32 @@
+global
+  log stdout format raw local0 debug
+
+defaults
+  mode http
+  timeout client 10s
+  timeout connect 5s
+  timeout server 10s
+  timeout http-request 10s
+  log global
+  option httpchk
+  option tcp-check
+
+resolvers docker_resolver
+  nameserver dns 127.0.0.11:53
+
+frontend stats
+  bind *:8404
+  stats enable
+  stats uri /
+  stats refresh 10s
+
+frontend aap_frontend
+  bind :8443 ssl crt /usr/local/etc/haproxy/haproxy.pem
+  default_backend gateway_proxy_servers
+
+backend gateway_proxy_servers
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+  #server aap-gw-proxy-{{ container_id }} aap-gw-proxy-{{ container_id }}:9080 ssl verify none check inter 5000 fall 15 rise 1 resolvers docker_resolver resolve-prefer ipv4
+  server proxy{{ container_id }} proxy{{ container_id }}:9080 ssl verify none resolvers docker_resolver resolve-prefer ipv4
+{% endfor %}
