@@ -24,6 +24,7 @@ enabled_containers:
   ldap: "{{ ldap_enabled | default(False) }}"
   tacacs: "{{ tacacs_enabled | default(False) }}"
   radius: "{{ radius_enabled | default(False) }}"
+  haproxy: "{{ haproxy_enabled | default(False) }}"
 
 # Redis settings
 redis_mode_options:
@@ -75,3 +76,6 @@ redis_username: gateway1
 redis_password: redis_password
 redis_sentinel_username: redis_sentinel_username
 redis_sentinel_password: redis_sentinel_password
+
+# HAProxy
+proxy_container_version: latest

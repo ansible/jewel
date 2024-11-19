@@ -31,6 +31,7 @@
     - docker-compose.yml
     - docker-compose-stage.yml
     - Dockerfile
+    - haproxy.cfg
 
 - name: Initialize Redis
   include_tasks:

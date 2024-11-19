@@ -184,10 +184,12 @@ endif
 ## Build the API container
 tools/generated/.has_built_api: $(API_TARGETS)
 	mkdir -p django-ansible-base/requirements
+	$(eval GATEWAY_NODE_COUNT=$(shell grep 'gateway_node_count' container-startup.yml | sed 's:[^0-9]::g')) \
+	$(eval GATEWAY_NODES=$(shell seq 1 ${GATEWAY_NODE_COUNT} | sed 's:^:gateway:g' | xargs)) \
 	$(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
-	    gateway1
+	    ${GATEWAY_NODES}
 	touch $@
 
 ## Internal target for target tools/generated/.django_ansible_base_head
