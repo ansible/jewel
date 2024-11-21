@@ -31,9 +31,6 @@ RUN for dir in \
 
 RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
 
-# See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
-RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
-
 COPY requirements/requirements.txt /tmp/requirements.txt
 COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
 COPY requirements/requirements_git.txt /tmp/requirements_git.txt
