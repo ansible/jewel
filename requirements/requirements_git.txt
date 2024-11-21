@@ -1,1 +1,1 @@
-django-ansible-base @ git+https://github.com/ansible/django-ansible-base@devel#egg=django-ansible-base[activitystream,api_documentation,authentication,redis_client,rest_filters,rbac,oauth2_provider]
+django-ansible-base @ git+https://github.com/ansible/django-ansible-base@devel#egg=django-ansible-base[activitystream,api-documentation,authentication,redis-client,rest-filters,rbac,oauth2-provider]

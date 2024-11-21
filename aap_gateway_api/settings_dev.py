@@ -48,10 +48,6 @@ INSTALLED_APPS.append('ansible_base.help_text_check')
 
 ENABLE_DJANGO_DEBUG_TOOLBAR = False
 if "test" not in sys.argv and getenv('DJANGO_DEBUG_TOOL_BAR', False):
-    print("")
-    print(" >>>>>>>> Enabling Django Debug Toolbar! <<<<<<<< ")
-    print("")
-
     ENABLE_DJANGO_DEBUG_TOOLBAR = True
 
     try:
