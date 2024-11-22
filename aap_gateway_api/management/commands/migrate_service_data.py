@@ -54,7 +54,7 @@ class Command(BaseCommand):
                 " escalation of privileges, as users and resources who are in Org A in service A, will also end up in Org A on service "
                 "B, even if they weren't before."
             ),
-            default=False,
+            default=True,
         )
 
     def handle(self, *args, **options):
