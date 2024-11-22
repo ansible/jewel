@@ -19,7 +19,7 @@ register(
     default=600,
     required=True,
     preference_type="int",
-    help_text=_("How long the access tokens are valid for"),
+    help_text=_("How long the access tokens are valid for."),
     encrypted=False,
 )
 
@@ -29,7 +29,7 @@ register(
     default=2,
     required=True,
     preference_type="int",
-    help_text=_("The number of seconds before a JWT token's expiration to revoke it from the cache"),
+    help_text=_("The number of seconds before a JWT token's expiration to revoke it from the cache."),
     encrypted=False,
 )
 
@@ -39,7 +39,7 @@ register(
     default=True,
     required=True,
     preference_type="bool",
-    help_text=_("Enable basic auth to the gateway API"),
+    help_text=_("Enable basic auth to the gateway API."),
     encrypted=False,
 )
 
@@ -49,7 +49,7 @@ register(
     default='https://localhost:9080',
     required=True,
     preference_type="url",
-    help_text=_("URL to the gateway proxy layer"),
+    help_text=_("The URL to the gateway proxy layer."),
     encrypted=False,
 )
 
@@ -59,7 +59,7 @@ register(
     default=False,
     required=True,
     preference_type="bool",
-    help_text=_("Ignore certificate to the gateway proxy layer"),
+    help_text=_("Ignore certificate to the gateway proxy layer."),
     encrypted=False,
 )
 
@@ -71,7 +71,7 @@ register(
     default=default_keypair.private,
     required=True,
     preference_type="pem_private_key",
-    help_text=_("JWT private key"),
+    help_text=_("The JWT private key."),
     encrypted=True,
     on_update=lambda preference, old, new: update_jwt_public_key(new),
 )
@@ -82,7 +82,7 @@ register(
     default=default_keypair.public,
     required=False,
     preference_type="longstring",
-    help_text=_("JWT public key (read-only)"),
+    help_text=_("The JWT public key (read-only)."),
     encrypted=False,
     read_only=True,
 )
@@ -93,7 +93,7 @@ register(
     default=5,
     required=True,
     preference_type="int",
-    help_text=_("Timeout (in seconds) for the status endpoint to wait when trying to connect to a backend."),
+    help_text=_("The timeout (in seconds) for the status endpoint to wait when trying to connect to a backend."),
     encrypted=False,
 )
 
@@ -113,7 +113,7 @@ register(
     default=2.0,
     required=True,
     preference_type="float_range",
-    help_text=_("Timeout (in seconds) before the resource client will drop requests after forming connections."),
+    help_text=_("The timeout (in seconds) before the resource client will drop requests after forming connections."),
     encrypted=False,
     min_value=0.0,
 )
@@ -124,7 +124,7 @@ register(
     default=30,
     required=True,
     preference_type="int",
-    help_text=_("Timeout (in seconds) before the proxy will report a timeout and generate a 504."),
+    help_text=_("The timeout (in seconds) before the proxy will report a timeout and generate a 504."),
     encrypted=False,
 )
 
@@ -134,7 +134,7 @@ register(
     default=0,
     required=False,
     preference_type="int_range",
-    help_text=_("How long does a local password have to be"),
+    help_text=_("How long does a local password have to be."),
     encrypted=False,
     min_value=0,
     max_value=100,
@@ -147,7 +147,7 @@ register(
     default=0,
     required=False,
     preference_type="int_range",
-    help_text=_("How many numerical characters need to be in a local password"),
+    help_text=_("How many numerical characters need to be in a local password."),
     encrypted=False,
     min_value=0,
     max_value=100,
@@ -160,7 +160,7 @@ register(
     default=0,
     required=False,
     preference_type="int_range",
-    help_text=_("How many upper case characters need to be in a local password"),
+    help_text=_("How many upper case characters need to be in a local password."),
     encrypted=False,
     min_value=0,
     max_value=100,
@@ -173,7 +173,7 @@ register(
     default=0,
     required=False,
     preference_type="int_range",
-    help_text=_("How many special characters need to be in a local password"),
+    help_text=_("How many special characters need to be in a local password."),
     encrypted=False,
     min_value=0,
     max_value=100,
@@ -186,7 +186,7 @@ register(
     default=False,
     required=False,
     preference_type="bool",
-    help_text=_("Can a superuser account save an insecure password"),
+    help_text=_("Can a superuser account save an insecure password."),
     encrypted=False,
     label=_('Allow system administrators to set insecure user passwords'),
 )
@@ -197,7 +197,7 @@ register(
     default=False,
     required=False,
     preference_type="bool",
-    help_text=_("Enabling this setting will tell social auth to use the full email as username instead of the full name"),
+    help_text=_("Enabling this setting will tell social auth to use the full email as username instead of the full name."),
     encrypted=False,
 )
 
@@ -207,7 +207,7 @@ register(
     default='',
     required=False,
     preference_type="url",
-    help_text=_("URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
+    help_text=_("The URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
     encrypted=False,
 )
 
@@ -217,7 +217,7 @@ register(
     default="",
     required=False,
     preference_type="longstring",
-    help_text=_("Provide a specific information (such as a legal notice or a disclaimer) to a text box in the login modal"),
+    help_text=_("Provide specific information (such as a legal notice or a disclaimer) to a text box in the login modal."),
     encrypted=False,
 )
 
@@ -227,7 +227,7 @@ register(
     required=False,
     default="",
     preference_type="image",
-    help_text=_("Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)"),
+    help_text=_("Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)."),
     encrypted=False,
 )
 
@@ -237,7 +237,7 @@ register(
     required=False,
     default=15 * 60,
     preference_type="int_range",
-    help_text=_("Time in seconds before a session expires"),
+    help_text=_("The time in seconds before a session expires."),
     # We are copying this over directly from AWX to match their settings
     min_value=60,
     max_value=30000000000,  # approx 1,000 years, higher values give OverflowError
@@ -249,7 +249,7 @@ register(
     required=False,
     default=50,
     preference_type="int",
-    help_text=_("The default number of items to show on a list page"),
+    help_text=_("The default number of items to show on a list page."),
     encrypted=False,
 )
 
@@ -259,7 +259,7 @@ register(
     required=False,
     default=200,
     preference_type="int",
-    help_text=_("The maximum number of items allowed on a list page"),
+    help_text=_("The maximum number of items allowed on a list page."),
     encrypted=False,
 )
 
