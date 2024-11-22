@@ -38,7 +38,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         ]
 
     number = models.IntegerField(
-        blank=False, unique=True, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("Port number to listen on.")
+        blank=False, unique=True, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("The port number to listen on.")
     )
 
     use_https = models.BooleanField(default=True, help_text=_("Secure this port with HTTPS."))
@@ -48,7 +48,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         default=False, help_text=_("If true, this port will be used to serve the Ansible service APIs. Only one port can be the API port.")
     )
 
-    envoy_listener_name = models.CharField(max_length=255, help_text=_("The envoy configuration listener name for this port"))
+    envoy_listener_name = models.CharField(max_length=255, help_text=_("The envoy configuration listener name for this port."))
 
     def __str__(self):
         protocol = "https" if self.use_https else "http"
@@ -113,7 +113,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
         ),
     )
 
-    service_id = models.UUIDField(unique=True, help_text="The unique service ID, provided by the service.", null=True, editable=False)
+    service_id = models.UUIDField(unique=True, help_text="The unique service ID provided by the service.", null=True, editable=False)
 
     outlier_detection_enabled = models.BooleanField(
         default=True,
@@ -122,7 +122,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
 
     outlier_detection_consecutive_5xx = models.PositiveIntegerField(
         default=5,
-        help_text=_("Number of consecutive 5xx responses to consider a node unhealthy."),
+        help_text=_("The number of consecutive 5xx responses to consider a node unhealthy."),
     )
 
     outlier_detection_interval_seconds = models.PositiveIntegerField(
@@ -218,15 +218,15 @@ class ServiceNode(UniqueNamedCommonModel, AuditableModel):
         models.UniqueConstraint("address", name="one_address_per_gateway")
 
     service_cluster = models.ForeignKey(
-        ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text=_("Ansible service cluster that this node belongs to.")
+        ServiceCluster, related_name='nodes', on_delete=models.CASCADE, help_text=_("The Ansible service cluster that this node belongs to.")
     )
-    address = models.CharField(max_length=255, help_text=_("Network address to route traffic for this service to."))
+    address = models.CharField(max_length=255, help_text=_("The network address to route traffic for this service to."))
     tags = models.CharField(
         max_length=255,
         blank=True,
         null=False,
         default="",
-        help_text=_("Comma-separated. Used to assign roles to a node, to be selective about which routes point to it."),
+        help_text=_("A comma-separated list of roles to assign to a node; to be selective about which routes point to it."),
     )
 
     def tags_list(self):
@@ -258,17 +258,17 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         unique_together = ('http_port', 'gateway_path')
 
     http_port = models.ForeignKey(
-        HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text=_("Port on the gateway to listen to traffic on.")
+        HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text=_("The port on the gateway to listen to traffic on.")
     )
-    service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text=_("Ansible service to route traffic to."))
+    service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text=_("The Ansible service to route traffic to."))
 
     service_port = models.IntegerField(
-        blank=False, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("Port on the service cluster to route traffic to.")
+        blank=False, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("The port on the service cluster to route traffic to.")
     )
     is_service_https = models.BooleanField(help_text=_("Set this to true if the service cluster requires HTTPS."))
 
-    service_path = models.CharField(max_length=255, blank=False, help_text=_("URL path on the Ansible service cluster to route traffic to."))
-    gateway_path = models.CharField(max_length=255, blank=False, help_text=_("Path on the gateway to listen to traffic on."))
+    service_path = models.CharField(max_length=255, blank=False, help_text=_("The URL path on the Ansible service cluster to route traffic to."))
+    gateway_path = models.CharField(max_length=255, blank=False, help_text=_("The path on the gateway to listen to traffic on."))
 
     description = models.CharField(max_length=255, blank=True, null=True, help_text=_('A description of this route.'))
 
@@ -282,13 +282,13 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     # they should point to the same cluster (which is a combination of ServiceCluster and Route). To avoid
     # creating a duplicate cluster with the same address/port combo, we're going to save a name for the
     # cluster in the db to identify the ServiceCluster/port combo.
-    envoy_cluster_name = models.CharField(max_length=255, null=False, help_text=_("The name of the envoy cluster this route belongs to"))
+    envoy_cluster_name = models.CharField(max_length=255, null=False, help_text=_("The name of the envoy cluster this route belongs to."))
 
     # The order of the routes
     order = models.IntegerField(
         default=50,
         validators=[MaxValueValidator(100), MinValueValidator(0)],
-        help_text=_("The order to apply the routes in lower numbers are first. Items with the same value have no guaranteed order"),
+        help_text=_("The order to apply the routes in; lower numbers are first. Items with the same value have no guaranteed order"),
     )
 
     node_tags = models.CharField(
@@ -296,10 +296,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         blank=True,
         null=False,
         default="",
-        help_text=_(
-            "Comma-separated. Allows for being selective about which nodes in the service cluster receive traffic from this route. "
-            "Leave blank to select all nodes."
-        ),
+        help_text=_("A comma-separated list of nodes in the service cluster to receive traffic from this route.  Leave blank to select all nodes."),
     )
 
     def node_tags_list(self):
@@ -429,7 +426,7 @@ class ServiceAPIRoute(Route, AuditableModel):
 
     router_basename = 'service'
 
-    api_slug = models.SlugField(max_length=20, help_text=_("An internally generated API slug for this Service API Route"))
+    api_slug = models.SlugField(max_length=20, help_text=_("An internally generated API slug for this Service API Route."))
 
     class Meta:
         models.UniqueConstraint("service_cluster", name="one_service_api_per_service")
