@@ -16,6 +16,8 @@ def test_jwt_token_org_ends_up_in_jwt_if_only_team_associated(admin_user, team, 
     jwt_token = create_signed_jwt(admin_user)
     decoded = decode_signed_jwt(jwt_token)
     assert len(decoded['objects']['organization']) == 1
+    assert decoded['sub'] == str(admin_user.resource.ansible_id)
+    assert decoded['service_id'] == str(admin_user.resource.service_id)
 
 
 def test_jwt_token_encode_decode(admin_user, set_preference, rsa_keypair, organization, team):
