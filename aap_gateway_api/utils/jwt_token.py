@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import jwt
 from ansible_base.rbac.models import RoleDefinition
-from ansible_base.resource_registry.models import Resource
+from ansible_base.resource_registry.models import Resource, service_id
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.contenttypes.models import ContentType
@@ -26,6 +26,7 @@ def create_signed_jwt(user, resource_api_actions=None):
         "exp": int(due_date.timestamp()),
         "aud": "ansible-services",
         "sub": str(user.resource.ansible_id),
+        "service_id": str(user.resource.service_id),
         "user_data": {
             "username": user.username,
             "first_name": user.first_name,
@@ -68,6 +69,7 @@ def create_signed_jwt(user, resource_api_actions=None):
         "exp": int(due_date.timestamp()),
         "aud": "ansible-services",
         "sub": str(user.resource.ansible_id),
+        "service_id": str(service_id()),
         "user_data": {
             "username": user.username,
             "first_name": user.first_name,
