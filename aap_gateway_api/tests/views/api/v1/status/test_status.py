@@ -1,4 +1,5 @@
 import time
+from typing import List
 from unittest import mock
 
 import pytest
@@ -43,8 +44,9 @@ def test_status_no_services(admin_api_client):
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
         # Remove redis from services
-        del response.data["services"]['redis']
-        assert response.data["services"] == {}
+        redis = get_service_by_type(response.data, "redis")
+        response.data["services"].remove(redis)
+        assert response.data["services"] == []
 
 
 @pytest.mark.parametrize(
@@ -68,10 +70,10 @@ def test_status_route_with_no_nodes(admin_api_client, additional_route_controlle
         url = get_relative_url("status-view")
         response = admin_api_client.get(url)
         assert response.status_code == 200
-        # The status ends up being degraded because we neither have good nor bad nodes in the service
-        assert response.data["status"] == STATUS_DEGRADED
-        assert 'controller' in response.data["services"]
-        assert response.data["services"]["controller"] == {'status': STATUS_DEGRADED, 'nodes': {}}
+        # The status ends up being good because the redis is good
+        assert response.data["status"] == STATUS_GOOD
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is None
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -82,11 +84,12 @@ def test_status_full_hierarchy_with_500(get, admin_api_client, full_service_hier
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["status"] == STATUS_FAILED
-        assert 'controller' in response.data["services"]
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
-        assert response.data["services"]["controller"]['nodes'][node_id]["status"] == STATUS_FAILED
-        assert response.data["services"]["controller"]['nodes'][node_id]["response_code"] == 500
-        assert response.data["services"]["controller"]['nodes'][node_id]["body"] == "test"
+        assert controller['nodes'][node_id]["status"] == STATUS_FAILED
+        assert controller['nodes'][node_id]["response_code"] == 500
+        assert controller['nodes'][node_id]["body"] == "test"
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -97,10 +100,11 @@ def test_status_full_hierarchy_with_200(get, admin_api_client, full_service_hier
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        assert 'controller' in response.data["services"]
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
-        assert response.data["services"]["controller"]['nodes'][node_id]["status"] == STATUS_GOOD
-        assert response.data["services"]["controller"]['nodes'][node_id]["response"] == {"test": "test"}
+        assert controller['nodes'][node_id]["status"] == STATUS_GOOD
+        assert controller['nodes'][node_id]["response"] == {"test": "test"}
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -111,10 +115,11 @@ def test_status_full_hierarchy_with_exception(get, admin_api_client, full_servic
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["status"] == STATUS_FAILED
-        assert 'controller' in response.data["services"]
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
-        assert response.data["services"]["controller"]['nodes'][node_id]["status"] == STATUS_FAILED
-        assert response.data["services"]["controller"]['nodes'][node_id]["exception"] == "test"
+        assert controller['nodes'][node_id]["status"] == STATUS_FAILED
+        assert controller['nodes'][node_id]["exception"] == "test"
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -137,11 +142,12 @@ def test_status_two_routes_same_service_cluster(get, admin_api_client, full_serv
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        assert response.data["status"] == STATUS_GOOD, response.data
-        assert 'controller' in response.data["services"]
+        assert response.data["status"] == STATUS_GOOD
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
-        assert response.data["services"]["controller"]['nodes'][node_id]["status"] == STATUS_GOOD
-        assert response.data["services"]["controller"]['nodes'][node_id]["response"] == {"test": "test"}
+        assert controller['nodes'][node_id]["status"] == STATUS_GOOD
+        assert controller['nodes'][node_id]["response"] == {"test": "test"}
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -168,8 +174,8 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
 
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        assert 'controller' in response.data["services"]
-        controller = response.data["services"]["controller"]
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
 
         assert len(controller['nodes']) == 3
 
@@ -197,18 +203,51 @@ def test_status_two_hierarchies(get, admin_api_client, full_service_hierarchy_co
 
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        assert "controller" in response.data["services"]
-        assert "hub" in response.data["services"]
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
+        hub = get_service_by_type(response.data, "hub")
+        assert hub is not None
 
         node_id_controller = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
-        assert response.data["services"]["controller"]['status'] == STATUS_GOOD
-        assert response.data["services"]["controller"]['nodes'][node_id_controller]["status"] == STATUS_GOOD
-        assert response.data["services"]["controller"]['nodes'][node_id_controller]["response"] == {"test": "test"}
+        assert controller['status'] == STATUS_GOOD
+        assert controller['nodes'][node_id_controller]["status"] == STATUS_GOOD
+        assert controller['nodes'][node_id_controller]["response"] == {"test": "test"}
 
         node_id_hub = f"{full_service_hierarchy_hub.service_node.address}:{full_service_hierarchy_hub.route.service_port}"
-        assert response.data["services"]["hub"]['status'] == STATUS_GOOD
-        assert response.data["services"]["hub"]['nodes'][node_id_hub]["status"] == STATUS_GOOD
-        assert response.data["services"]["hub"]['nodes'][node_id_hub]["response"] == {"test": "test"}
+        assert hub['status'] == STATUS_GOOD
+        assert hub['nodes'][node_id_hub]["status"] == STATUS_GOOD
+        assert hub['nodes'][node_id_hub]["response"] == {"test": "test"}
+
+
+@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
+def test_status_two_hierarchies_services_formatted_with_keys_via_query_param(
+    get, admin_api_client, full_service_hierarchy_controller, full_service_hierarchy_hub
+):
+    """
+    Test that the status endpoint can handle multiple complete service hierarchies.
+    """
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+
+    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
+        url = get_relative_url("status-view")
+        response = admin_api_client.get(url, data={"service_keys": "True"})
+
+        assert response.status_code == 200
+        assert response.data["status"] == STATUS_GOOD
+        controller = response.data["services"]["controller"]
+        assert controller is not None
+        hub = response.data["services"]["hub"]
+        assert hub is not None
+
+        node_id_controller = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
+        assert controller['status'] == STATUS_GOOD
+        assert controller['nodes'][node_id_controller]["status"] == STATUS_GOOD
+        assert controller['nodes'][node_id_controller]["response"] == {"test": "test"}
+
+        node_id_hub = f"{full_service_hierarchy_hub.service_node.address}:{full_service_hierarchy_hub.route.service_port}"
+        assert hub['status'] == STATUS_GOOD
+        assert hub['nodes'][node_id_hub]["status"] == STATUS_GOOD
+        assert hub['nodes'][node_id_hub]["response"] == {"test": "test"}
 
 
 @pytest.mark.parametrize(
@@ -234,8 +273,12 @@ def test_status_redis_and_node_status_expectations(get, admin_api_client, full_s
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        assert response.data["services"]["controller"]['status'] == node_status
-        assert response.data["services"]["redis"]['status'] == redis_status['status']
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
+        assert controller['status'] == node_status
+        redis = get_service_by_type(response.data, "redis")
+        assert redis is not None
+        assert redis['status'] == redis_status['status']
         assert response.data["status"] == expected_status
 
 
@@ -244,13 +287,17 @@ def test_service_responds_with_invalid_status(get, admin_api_client, expected_lo
     get.return_value = mock.Mock(status_code=200, json=lambda: {"status": STATUS_GOOD})
 
     with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value={'mode': 'testing', 'status': 'gibberish'}):
-        with expected_log('aap_gateway_api.views.api.v1.status.logger', 'error', 'Got an unknown status for redis: gibberish'):
+        with expected_log('aap_gateway_api.views.api.v1.status.logger', 'error', 'Got an unknown status for service redis: gibberish'):
             url = get_relative_url("status-view")
             response = admin_api_client.get(url)
 
             assert response.status_code == 200
-            assert response.data["services"]["controller"]['status'] == STATUS_GOOD
-            assert response.data["services"]["redis"]['status'] == 'gibberish'
+            controller = get_service_by_type(response.data, "controller")
+            assert controller is not None
+            assert controller['status'] == STATUS_GOOD
+            redis = get_service_by_type(response.data, "redis")
+            assert redis is not None
+            assert redis['response']['status'] == 'gibberish'
             assert response.data["status"] == STATUS_FAILED
 
 
@@ -293,9 +340,11 @@ def test_ensure_cluster_nodes_is_removed_from_clustered_redis(admin_api_client):
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        assert response.data["services"]["redis"]['status'] == STATUS_GOOD
-        assert 'nodes' in response.data["services"]["redis"]
-        assert 'cluster_nodes' not in response.data["services"]["redis"]
+        redis = get_service_by_type(response.data, "redis")
+        assert redis is not None
+        assert redis['response']['status'] == STATUS_GOOD
+        assert 'nodes' in redis
+        assert 'cluster_nodes' not in redis['response']
         assert response.data["status"] == STATUS_GOOD
 
 
@@ -323,7 +372,9 @@ def test_multiple_nodes_get_truncated(get, admin_api_client, full_service_hierar
 
         assert response.status_code == 200
         # The cluster will appear as 3 nodes but there are really only 2 of them
-        assert len(response.data["services"]["controller"]['nodes']) == 2
+        controller = get_service_by_type(response.data, "controller")
+        assert controller is not None
+        assert len(controller['nodes']) == 2
 
 
 @pytest.mark.parametrize(
@@ -364,8 +415,12 @@ def test_eda_status_gets_degraded_if_redis_down(get, redis_status, eda_node_stat
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        assert response.data["services"]["eda"]['status'] == expected_eda_status
-        assert response.data["services"]["redis"]['status'] == redis_status['status']
+        eda = get_service_by_type(response.data, "eda")
+        assert eda is not None
+        assert eda['status'] == expected_eda_status
+        redis = get_service_by_type(response.data, "redis")
+        assert redis is not None
+        assert redis['status'] == redis_status['status']
 
 
 def slow_response(*args, **kwargs):
@@ -398,3 +453,7 @@ def test_that_get_requests_are_async(get, admin_api_client, full_service_hierarc
         # We have 3 nodes will all take 3 seconds but they should run all at the same time.
         # So we want to make sure that we took > 3 second but < 9 (3 node * 3 seconds)
         assert total_time > 3 and total_time < 9, f"Total time was {total_time} and should have been < 9\n{response.data}"
+
+
+def get_service_by_type(data: List, type: str):
+    return next((s for s in data["services"] if s["service_type"] == type), None)
