@@ -59,13 +59,17 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             http_router_filter(),
         ]
 
+        routes = []
+        for route in self.routes.all().order_by('order'):
+            routes.extend(route.get_xds_route_config())
+
         cfg = {
             "name": self.envoy_listener_name,
             "address": {"socket_address": {"address": "0.0.0.0", "port_value": self.number}},
             "filter_chains": [
                 {
                     "filters": [
-                        network_manager_filter(http_filters=http_filters, routes=[r.get_xds_route_config() for r in self.routes.all().order_by('order')]),
+                        network_manager_filter(http_filters=http_filters, routes=routes),
                     ]
                 }
             ],

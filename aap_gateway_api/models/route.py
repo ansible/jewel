@@ -2,6 +2,7 @@ from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.urls import reverse
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.models.http_port import HTTPPort
@@ -166,6 +167,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         return cfg
 
     def get_xds_route_config(self):
+        if not self.gateway_path or not self.service_path or not self.envoy_cluster_name:
+            return []
+
+        returned_routes = self.get_xds_login_logout_routes()
+
         cfg = {
             "match": {"prefix": self.gateway_path},
             "route": {
@@ -191,4 +197,59 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 "disabled": True,
             }
 
-        return cfg
+        returned_routes.append(cfg)
+
+        return returned_routes
+
+    def get_xds_login_logout_routes(self) -> list:
+        returned_routes = []
+
+        # If we are a ServiceAPIRoute, reroute login requests to the gateway instead of the service
+        if not self.enable_gateway_auth:
+            return returned_routes
+
+        envoy_cluster_name = None
+        try:
+            sc = ServiceCluster.objects.get(service_type="gateway")
+            gw_route = Route.objects.get(service_cluster=sc)
+            envoy_cluster_name = gw_route.envoy_cluster_name
+        except ServiceCluster.DoesNotExist:
+            return returned_routes
+        except Route.DoesNotExist:
+            return returned_routes
+
+        # Determine the login/logout URLs for this cluster type
+        service_login_url = self.service_cluster.get_login_path(self.gateway_path)
+        service_logout_url = self.service_cluster.get_logout_path(self.gateway_path)
+
+        if service_login_url is not None:
+            login_url = reverse('login')
+            returned_routes.append(
+                {
+                    "match": {"prefix": service_login_url},
+                    "route": {
+                        "prefix_rewrite": login_url,
+                        "cluster": envoy_cluster_name,
+                    },
+                    'metadata': {},
+                    'typed_per_filter_config': {},
+                },
+            )
+
+        if service_logout_url is not None:
+            # Get gateways login url
+            logout_url = reverse('logout')
+
+            returned_routes.append(
+                {
+                    "match": {"prefix": service_logout_url},
+                    "route": {
+                        "prefix_rewrite": logout_url,
+                        "cluster": envoy_cluster_name,
+                    },
+                    'metadata': {},
+                    'typed_per_filter_config': {},
+                },
+            )
+
+        return returned_routes

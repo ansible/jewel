@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
@@ -120,3 +121,25 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
 
     def delete_inactive_keys(self):
         self.service_keys.filter(is_active=False).delete()
+
+    def get_login_path(self, url_prefix: str) -> Optional[str]:
+        url_prefix = url_prefix.rstrip('/')
+        if self.service_type == 'controller':
+            return f"{url_prefix}/login/"
+        elif self.service_type == 'eda':
+            return f"{url_prefix}/v1/auth/session/login/"
+        elif self.service_type == 'hub':
+            return '/auth/login'
+        else:
+            return None
+
+    def get_logout_path(self, url_prefix: str) -> Optional[str]:
+        url_prefix = url_prefix.rstrip('/')
+        if self.service_type == 'controller':
+            return f"{url_prefix}/logout/"
+        elif self.service_type == 'eda':
+            return f"{url_prefix}/v1/auth/session/logout/"
+        elif self.service_type == 'hub':
+            return '/auth/logout'
+        else:
+            return None
