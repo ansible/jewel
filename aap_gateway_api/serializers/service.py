@@ -3,7 +3,7 @@ from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
-from aap_gateway_api.models.service import API_PREFIX
+from aap_gateway_api.models.route import API_PREFIX
 
 
 def _validate_tags_field(value):

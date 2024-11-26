@@ -1,7 +1,7 @@
 import yaml
 from django.core.management.base import BaseCommand, CommandError
 
-from aap_gateway_api.models.service import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
+from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
 
 SERVICES = ["gateway", "hub", "controller", "eda"]
 
