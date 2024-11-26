@@ -8,7 +8,7 @@ This defines the ports that envoy will listen for traffic on (such as 80 and 443
 
 - Module: `ansible.platform.http_ports`
 - API Endpoint: `/api/gateway/v1/http_ports/`
-- Django Model: `aap_gateway_api.models.service.HTTPPort`
+- Django Model: `aap_gateway_api.models.HTTPPort`
 
 Fields:
 
@@ -23,7 +23,7 @@ Clusters are a logical grouping of nodes that represent a specific service.
 
 - Module: `ansible.platform.service_clusters`
 - API Endpoint: `/api/gateway/v1/service_clusters/`
-- Django Model: `aap_gateway_api.models.service.ServiceCluster`
+- Django Model: `aap_gateway_api.models.ServiceCluster`
 
 Fields:
 
@@ -37,7 +37,7 @@ Nodes represent an individual server, VM, container within a service cluster whe
 
 - Module: `ansible.platform.service_nodes`
 - API Endpoint: `/api/gateway/v1/service_nodes/`
-- Django Model: `aap_gateway_api.models.service.ServiceNode`
+- Django Model: `aap_gateway_api.models.ServiceNode`
 
 Fields:
 
@@ -136,7 +136,7 @@ Service API Routes: these are routes that live on the `/api/` base path. They mu
 
 - Module: `ansible.platform.services`
 - API Endpoint: `/api/gateway/v1/services/`
-- Django Model: `aap_gateway_api.models.service.ServiceAPIRoute`
+- Django Model: `aap_gateway_api.models.ServiceAPIRoute`
 
 Fields:
 
@@ -148,7 +148,7 @@ Additional routes encompass every other potential API route in the gateway. This
 
 - Module: `ansible.platform.routes`
 - API Endpoint: `/api/gateway/v1/routes/`
-- Django Model: `aap_gateway_api.models.service.AdditionalRoute`
+- Django Model: `aap_gateway_api.models.AdditionalRoute`
 
 ## Putting it All together
 

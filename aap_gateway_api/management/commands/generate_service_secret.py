@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from aap_gateway_api.models.service import ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
 
 
 class Command(BaseCommand):

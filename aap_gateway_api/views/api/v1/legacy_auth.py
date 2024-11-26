@@ -14,8 +14,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
 
-from aap_gateway_api.models import MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, User
-from aap_gateway_api.models.service import ServiceCluster
+from aap_gateway_api.models import MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceCluster, User
 from aap_gateway_api.models.user import LegacyAuthType
 from aap_gateway_api.serializers.legacy_auth import FinalizeSerializer, LegacyAuthSerializer, UsernamePasswordSerializer
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient

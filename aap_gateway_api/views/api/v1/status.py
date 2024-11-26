@@ -17,7 +17,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
-from aap_gateway_api.models.service import SERVICE_PING_PAGES
+from aap_gateway_api.models.route import SERVICE_PING_PAGES
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
