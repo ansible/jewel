@@ -4,6 +4,7 @@ djangorestframework
 django-crum
 django-dynamic-preferences
 django-extensions
+django-flags
 django-split-settings
 grpcio
 grpcio-tools
