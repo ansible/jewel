@@ -1,5 +1,9 @@
+# Internal variable
+# Hostname comes from tools/ansible/roles/sources/templates/docker-compose.yml.j2
+GATEWAY_DEV_PROXY_HOST = "https://proxy1:9080"
+
 # Common settings for all services
-ANSIBLE_BASE_JWT_KEY = 'https://aap-gw-proxy-1:9080/'
+ANSIBLE_BASE_JWT_KEY = GATEWAY_DEV_PROXY_HOST
 ANSIBLE_BASE_JWT_VALIDATE_CERT = False
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'}}
 
@@ -12,7 +16,7 @@ ALLOW_LOCAL_RESOURCE_MANAGEMENT = True
 # GATEWAY_SERVICE_SECRET
 
 RESOURCE_SERVER = {
-    'URL': "https://aap-gw-proxy-1:9080",
+    'URL': GATEWAY_DEV_PROXY_HOST,
     'SECRET_KEY': GATEWAY_SERVICE_SECRET,
     'VALIDATE_HTTPS': False,
 }
