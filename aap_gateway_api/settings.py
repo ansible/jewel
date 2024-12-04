@@ -117,6 +117,28 @@ ENVOY_VERIFY_HTTPS_CERTIFICATES = True
 # how much higher depends on network throughput, 3 MiB higher is the absolute minimum I could set without error 413s.
 ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
 
+# Feature flags configuration.
+# The feature condition allows defining dependencies between features.
+# Note: Requires aap_gateway_api.feature_flags.conditions to be imported.
+# Format: flag_name: [list of conditions]
+FLAGS = {}
+
+# Phase 2: Database-driven Feature Flags
+# Uncomment the settings below when Gateway synchronization is mature enough
+# to support feature flags synchronization across all services
+#
+# FLAG_SOURCES = (
+#     'flags.sources.DatabaseFlagsSource',
+# )
+#
+# class FlagState(models.Model):
+#     name = models.CharField(max_length=100, unique=True)
+#     active = models.BooleanField(default=False)
+#     description = models.TextField(blank=True)
+#     version = models.CharField(max_length=50, blank=True)
+#     deprecated = models.BooleanField(default=False)
+#     restart_required = models.BooleanField(default=False)
+
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
 GATEWAY_CERT_FILE = '/etc/ansible-automation-platform/gateway/gateway.crt'
@@ -140,6 +162,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'dynamic_preferences',
     'django_extensions',
+    'flags',
     'rest_framework',
     'aap_gateway_api',
     'ansible_base.activitystream',
