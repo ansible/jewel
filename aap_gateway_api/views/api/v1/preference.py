@@ -48,6 +48,7 @@ class SettingSectionView(AnsibleBaseView):
 
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
     metadata_class = SettingsPreferenceMetadata
+    allow_service_token = True
 
     def get_serializer(self, *args, **kwargs):
         if not hasattr(self, 'serializer'):

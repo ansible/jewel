@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
+from unittest import mock
 
 import jwt
 import pytest
@@ -248,3 +249,52 @@ def test_service_key_api(user_api_client, admin_api_client, service_cluster_eda)
 
     resp = admin_api_client.delete(detail)
     assert resp.status_code == 204
+
+
+def test_bad_path_info(expected_log):
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = [('testing')]
+
+    request = mock.Mock()
+    request.path = '/junk'
+
+    with expected_log('aap_gateway_api.authentication.service_token_auth.logger', 'error', 'Invalid tuple in authorized_paths'):
+        token_auth.is_user_authorized(request, None, None, None)
+
+
+def test_failed_lookup(expected_log):
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = [('junk', {}, [])]
+
+    request = mock.Mock()
+    request.path = '/junk'
+
+    with expected_log('aap_gateway_api.authentication.service_token_auth.logger', 'warning', 'Unable to get relative url for'):
+        token_auth.is_user_authorized(request, None, None, None)
+
+
+@pytest.mark.parametrize(
+    "allowed_methods,call_method,expected_result",
+    [
+        ([], 'GET', False),
+        (['get'], 'GET', True),
+        (['get', 'POST', 'head'], 'delete', False),
+        (['get', 'POST', 'head'], 'HEAD', True),
+    ],
+)
+def test_validate_methods(allowed_methods, call_method, expected_result):
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = [('junk', {}, allowed_methods)]
+
+    request = mock.Mock()
+    request.path = '/junk'
+    request.method = call_method
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', side_effect=['/resource_api', '/junk']):
+        assert token_auth.is_user_authorized(request, None, None, None) == expected_result
