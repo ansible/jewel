@@ -35,8 +35,8 @@ def validate_service_token(token, required_type=None) -> ValidatedToken:
             options={"verify_signature": False},
             required=["iss", "exp"],
         )["iss"]
-    except jwt.exceptions.PyJWTError:
-        raise ValidationError(_("Token is not valid a valid JWT."))
+    except jwt.exceptions.PyJWTError as pje:
+        raise ValidationError(_("Token is not a valid JWT: %(exception)s") % {"exception": pje})
 
     try:
         service_cluster = ServiceCluster.objects.get(service_id=unverified_service_id)
