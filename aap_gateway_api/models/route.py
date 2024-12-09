@@ -161,7 +161,15 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         if self.is_service_https:
             cfg["transport_socket"] = {
                 "name": "envoy.transport_sockets.tls",
-                "typed_config": {"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext"},
+                "typed_config": {
+                    "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
+                    "common_tls_context": {
+                        "tls_params": {
+                            "tls_maximum_protocol_version": "TLSv1_3",
+                            "tls_minimum_protocol_version": "TLSv1_2",
+                        },
+                    },
+                },
             }
 
         return cfg
