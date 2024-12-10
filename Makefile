@@ -15,7 +15,7 @@ UNAME_S := $(shell uname -s)
 ANSIBLE_CONFIG ?= tools/ansible/ansible.cfg
 export ANSIBLE_CONFIG
 
-.PHONY: PYTHON_VERSION clean \
+.PHONY: PYTHON_VERSION clean git_hooks_config \
 	check lint check_black check_flake8 check_isort \
 	docker-compose plumb update_django_ansible_base_hash \
 	collection-install collection-test collection-docs \
@@ -25,12 +25,9 @@ export ANSIBLE_CONFIG
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
 
-## Install the pre-commit hook in the approprate .git directory structure
-.git/hooks/pre-commit:
-	@echo "if [ -x pre-commit.sh ]; then" > .git/hooks/pre-commit
-	@echo "    ./pre-commit.sh;" >> .git/hooks/pre-commit
-	@echo "fi" >> .git/hooks/pre-commit
-	@chmod +x .git/hooks/pre-commit
+## Set the local git configuration(specific to this repo) to look for hooks in .githooks folder
+git_hooks_config:
+	git config set --local core.hooksPath .githooks
 
 ## Zero out all of the temp and build files
 clean:
@@ -121,7 +118,7 @@ migrate-service-data:
 
 
 ## Start docker containers without additional playbooks
-docker-compose-basic: tools/generated/sources docker-compose-build .git/hooks/pre-commit
+docker-compose-basic: tools/generated/sources docker-compose-build git_hooks_config
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Start the docker container + plumb the sidecar containers and register services' proxy
@@ -131,7 +128,7 @@ docker-compose: docker-compose-detached register-services plumb
 	fi
 
 ## Start the docker container in detached mode, wait for finish
-docker-compose-detached: tools/generated/sources docker-compose-build .git/hooks/pre-commit
+docker-compose-detached: tools/generated/sources docker-compose-build git_hooks_config
 	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
