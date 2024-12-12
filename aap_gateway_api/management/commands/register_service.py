@@ -1,9 +1,7 @@
 import yaml
 from django.core.management.base import BaseCommand, CommandError
 
-from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
-
-SERVICES = ["gateway", "hub", "controller", "eda"]
+from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType
 
 
 class Command(BaseCommand):
@@ -34,14 +32,15 @@ class Command(BaseCommand):
         services = config.get("services", {})
         for name in services:
             cfg = services[name]
-            service_type = cfg["type"]
+            service_type_name = cfg["type"]
             enable_gateway_auth = cfg.get("enable_gateway_auth", True)
+            service_type = ServiceType.objects.filter(name=service_type_name).first()
 
-            if service_type not in SERVICES:
-                raise CommandError(f"{service_type} is not allowed.")
+            if service_type is None:
+                raise CommandError(f"{service_type_name} is not allowed.  Allowed values: {list(ServiceType.objects.values_list('name', flat=True))}")
 
             self.stdout.write(f'Creating cluster for {service_type}')
-            service, _ = ServiceCluster.objects.get_or_create(name=service_type, service_type=service_type)
+            service, _ = ServiceCluster.objects.get_or_create(name=service_type.name, service_type=service_type)
 
             api_route, _ = ServiceAPIRoute.objects.update_or_create(
                 service_cluster=service,

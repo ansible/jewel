@@ -12,6 +12,7 @@ from django.db import models
 from requests.exceptions import Timeout
 from requests.models import Response as Response
 
+from aap_gateway_api.models import DefaultServiceType
 from aap_gateway_api.utils.jwt_token import create_signed_jwt
 from aap_gateway_api.utils.preferences import get_preference_value
 
@@ -20,20 +21,7 @@ ResourceRequestBody = DABResourceRequestBody
 logger = logging.getLogger('aap_gateway_api.utils.resource_api_client')
 
 
-class ServiceTypeChoices(models.TextChoices):
-    HUB = "hub", "hub"
-    CONTROLLER = "controller", "controller"
-    EDA = "eda", "eda"
-    GATEWAY = "gateway", "gateway"
-
-
 class GWResourceAPIClient(DABResourceAPIClient):
-
-    service_paths = {
-        ServiceTypeChoices.HUB: "/service-index/",
-        ServiceTypeChoices.CONTROLLER: "/v2/service-index/",
-        ServiceTypeChoices.EDA: "/v1/service-index/",
-    }
 
     def get_default_user(self):
         # This isn't great. Ideally we'd use the _system user, but it's somewhat buggy at the moment.
@@ -50,7 +38,7 @@ class GWResourceAPIClient(DABResourceAPIClient):
         http_port = service.http_port
         protocol = "https" if http_port.use_https else "http"
         port = http_port.number
-        path = f"/{service.gateway_path.strip('/')}/{self.service_paths[service.service_cluster.service_type].strip('/')}/"
+        path = f"/{service.gateway_path.strip('/')}/{service.service_cluster.service_type.service_index_path.strip('/')}/"
         return f"{protocol}://{settings.ENVOY_HOSTNAME}:{port}{path}"
 
     def __init__(self, service: models.Model, user=None, raise_if_bad_request: bool = False):
@@ -121,7 +109,7 @@ class AllServicesClient(GWResourceAPIClient):
         from aap_gateway_api.models import ServiceAPIRoute
 
         responses = {}
-        svc_qs = ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceTypeChoices.GATEWAY)
+        svc_qs = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
         if self.service_filter:
             svc_qs = svc_qs.filter(**self.service_filter)
         for service in svc_qs:

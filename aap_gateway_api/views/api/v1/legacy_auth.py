@@ -14,7 +14,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
 
-from aap_gateway_api.models import MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceCluster, User
+from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceCluster, User
 from aap_gateway_api.models.user import LegacyAuthType
 from aap_gateway_api.serializers.legacy_auth import FinalizeSerializer, LegacyAuthSerializer, UsernamePasswordSerializer
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
@@ -73,7 +73,7 @@ class LegacyAuthViewset(viewsets.ViewSet):
             if main_account.original_accounts.exclude(backend_classification="local").exclude(backend_classification=None).exists():
                 authenticator, created = MigratedAuthenticatorMetadata.objects.get_or_create(
                     type=LegacyAuthType.EXTERNAL_PASSWORD,
-                    service=ServiceCluster.objects.get(service_type=ServiceCluster.ServiceType.GATEWAY),
+                    service=ServiceCluster.get_cluster_by_type(service_type=DefaultServiceType.GATEWAY.value),
                 )
 
                 main_account.authenticator_users.all().delete()
@@ -150,7 +150,7 @@ class LegacyAuthViewset(viewsets.ViewSet):
 
     def _check_password(self, username, password, service_type) -> str:
         try:
-            service = ServiceAPIRoute.objects.get(service_cluster__service_type=service_type)
+            service = ServiceAPIRoute.objects.get(service_cluster__service_type__name=service_type)
         except ServiceAPIRoute.DoesNotExist:
             raise DRFValidationError(
                 {"service_type": _("Service type %(service_type)s does not exist.") % {"service_type": service_type}},

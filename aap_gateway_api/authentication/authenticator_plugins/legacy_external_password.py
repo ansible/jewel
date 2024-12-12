@@ -4,7 +4,7 @@ from ansible_base.authentication.authenticator_plugins.base import AbstractAuthe
 from ansible_base.authentication.models import AuthenticatorUser
 from django.core.exceptions import ValidationError
 
-from aap_gateway_api.models import ServiceCluster
+from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.utils.resources_client import AllServicesClient
 from aap_gateway_api.utils.service_token import validate_service_token
 
@@ -27,7 +27,7 @@ class AuthenticatorPlugin(AbstractAuthenticatorPlugin):
             return
 
         user_services = user.original_accounts.exclude(
-            service__service_type=ServiceCluster.ServiceType.EDA,
+            service__service_type__name=DefaultServiceType.EDA.value,
         ).values_list("service", flat=True)
 
         client = AllServicesClient(wait_for_response=True, service_filter={"service_cluster__pk__in": user_services})

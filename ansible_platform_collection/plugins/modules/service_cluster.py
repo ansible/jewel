@@ -25,11 +25,10 @@ options:
       type: str
       description: Setting this option will change the existing name (looked up via the name field)
     service_type:
-      description:
-        - Type of the AAP service
-        - Required when creating new Service Cluster
-      choices: ["hub", "controller", "eda", "gateway"]
-      type: str
+        description:
+          - Service Type for this cluster - name or ID
+          - Required when creating new Service Cluster
+        type: str
     outlier_detection_enabled:
       type: bool
       description: If true, outlier detection will be used to determine if a node is unhealthy and should be ejected from the cluster.
@@ -95,7 +94,7 @@ def main():
     argument_spec = dict(
         name=dict(required=True, type='str'),
         new_name=dict(type='str'),
-        service_type=dict(type="str", choices=["hub", "controller", "eda", "gateway"]),
+        service_type=dict(type="str"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
         outlier_detection_enabled=dict(type='bool'),
         outlier_detection_consecutive_5xx=dict(type='int'),

@@ -1,13 +1,13 @@
 from django.core.management.base import BaseCommand
 
-from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models import DefaultServiceType, ServiceAPIRoute
 
 
 class Command(BaseCommand):
     help = "Generate a new secret key for a service."
 
     def add_arguments(self, parser):
-        services = ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceCluster.ServiceType.GATEWAY).values_list("api_slug", flat=True)
+        services = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value).values_list("api_slug", flat=True)
         parser.add_argument(
             "api-slug",
             type=str,

@@ -14,7 +14,7 @@ from ansible_base.lib.testing.util import copy_fixture, delete_authenticator  # 
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import AdditionalRoute, Preference, ServiceAPIRoute, ServiceCluster, ServiceNode, User
+from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, Preference, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
 
@@ -258,10 +258,16 @@ ServiceHierarchy = namedtuple("ServiceHierarchy", ["service_cluster", "service_n
 #   - service_node_<service_type>
 #   - additional_route_<service_type>
 #   - service_api_route_<service_type>
-for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
+for name in [x.value for x in DefaultServiceType]:
 
-    def _service_cluster(shortname=shortname):
-        cluster = ServiceCluster.objects.create(name=shortname, service_type=shortname)
+    def _service_type(name=name):
+        st, _ = ServiceType.objects.get_or_create(name=name)
+        yield st
+        # Don't delete these
+
+    def _service_cluster(name=name):
+        st, _ = ServiceType.objects.get_or_create(name=name)
+        cluster = ServiceCluster.objects.create(name=name, service_type=st)
         yield cluster
         cluster.delete()
 
@@ -304,13 +310,13 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         # Conflicts may still occur if the developer has any ports greater than 10,000
         # open on their machine.
         port_prefixes = {
-            ServiceCluster.ServiceType.CONTROLLER: 1,
-            ServiceCluster.ServiceType.EDA: 2,
-            ServiceCluster.ServiceType.HUB: 3,
-            ServiceCluster.ServiceType.GATEWAY: 4,
+            DefaultServiceType.CONTROLLER: 1,
+            DefaultServiceType.EDA: 2,
+            DefaultServiceType.HUB: 3,
+            DefaultServiceType.GATEWAY: 4,
         }
 
-        port_prefix = port_prefixes[service_cluster.service_type]
+        port_prefix = port_prefixes[service_cluster.service_type.name]
 
         if pytest_worker := os.environ.get("PYTEST_XDIST_WORKER"):
             worker_num = re.sub("[^0-9]", "", pytest_worker).rjust(4, "0")
@@ -341,6 +347,7 @@ for shortname, name in dict(ServiceCluster.ServiceType.choices).items():
         route.save()
         yield ServiceHierarchy(service_cluster, service_node, route)
 
+    globals()[f"service_type_{name}"] = pytest.fixture(_service_type)
     globals()[f"service_cluster_{name}"] = pytest.fixture(_service_cluster)
     globals()[f"service_node_{name}"] = pytest.fixture(_service_node)
     globals()[f"additional_route_{name}"] = pytest.fixture(_route)

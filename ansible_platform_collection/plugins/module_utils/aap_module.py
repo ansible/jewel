@@ -99,6 +99,7 @@ class AAPModule(AnsibleModule):
         "service_clusters": "name",
         "service_keys": "name",
         "service_nodes": "name",
+        "service_types": "name",
         "organizations": "name",
         "teams": ["name", "organization"],
         "users": "username",

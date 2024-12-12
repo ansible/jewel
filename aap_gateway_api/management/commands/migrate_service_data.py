@@ -10,19 +10,11 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from requests.exceptions import HTTPError
 
-from aap_gateway_api.models import MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceType
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
 User = get_user_model()
-
-
-service_type_map = {
-    # "aap": ServiceCluster.ServiceType.GATEWAY,
-    "awx": ServiceCluster.ServiceType.CONTROLLER,
-    "galaxy": ServiceCluster.ServiceType.HUB,
-    "eda": ServiceCluster.ServiceType.EDA,
-}
 
 
 class Command(BaseCommand):
@@ -32,7 +24,7 @@ class Command(BaseCommand):
     The exception is that the provided --username, which will be merged."""
 
     def add_arguments(self, parser):
-        services = ServiceAPIRoute.objects.exclude(service_cluster__service_type=ServiceCluster.ServiceType.GATEWAY).values_list("api_slug", flat=True)
+        services = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value).values_list("api_slug", flat=True)
 
         parser.add_argument("--api-slug", type=str, help="API slug for the ServiceAPIRoute that you wish to migrate.", choices=services, required=True)
         parser.add_argument("--username", type=str, help="Username for the AAP Gateway user to use on the request. Must be an admin user.", required=True)
@@ -110,14 +102,21 @@ class Command(BaseCommand):
             service_metadata = self.client.get_service_metadata().json()
 
             self.upstream_service_id = service_metadata["service_id"]
-            upstream_service_type = service_type_map.get(service_metadata["service_type"])
+            # Preserve coersion of awx -> controller and galaxy -> hub
+            if service_metadata["service_type"].casefold() == "awx".casefold():
+                service_type_name = DefaultServiceType.CONTROLLER.value
+            elif service_metadata["service_type"].casefold() == "galaxy".casefold():
+                service_type_name = DefaultServiceType.HUB.value
+            else:
+                service_type_name = service_metadata["service_type"]
+            upstream_service_type = ServiceType.objects.filter(name=service_type_name).first()
             if upstream_service_type is None:
                 raise CommandError(f"Migrations are not allowed for services of type {service_metadata['service_type']}")
 
-            if upstream_service_type != service_api.service_cluster.service_type:
+            if upstream_service_type.name != service_api.service_cluster.service_type.name:
                 raise CommandError(
-                    f"Service type mismatch: Service {self.service_slug} is configured as type {service_api.service_cluster.service_type},"
-                    f" but the server is reporting type {upstream_service_type}"
+                    f"Service type mismatch: Service {self.service_slug} is configured as type {service_api.service_cluster.service_type.name},"
+                    f" but the server is reporting type {upstream_service_type.name}"
                 )
 
             service_api.service_cluster.service_id = self.upstream_service_id

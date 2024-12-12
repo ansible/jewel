@@ -2,7 +2,7 @@ from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from django.utils.translation import gettext as _
 from rest_framework import serializers
 
-from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode
+from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType
 from aap_gateway_api.models.route import API_PREFIX
 
 
@@ -51,6 +51,17 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
             'health_check_interval_seconds',
             'health_check_unhealthy_threshold',
             'health_check_healthy_threshold',
+        ]
+
+
+class ServiceTypeSerializer(NamedCommonModelSerializer):
+    class Meta:
+        model = ServiceType
+        fields = NamedCommonModelSerializer.Meta.fields + [
+            'login_path',
+            'logout_path',
+            'ping_url',
+            'service_index_path',
         ]
 
 

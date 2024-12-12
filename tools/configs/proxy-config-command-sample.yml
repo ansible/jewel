@@ -41,3 +41,4 @@ services:
     order: 3
     nodes:
       - address: "localhost"
+

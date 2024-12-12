@@ -37,6 +37,21 @@
           - __http_port_create_result.results[0] is changed
           - __http_port_create_result.results[1] is changed
 
+    - name: Create Service Types
+      ansible.platform.service_type:
+        name: "{{ item.name }}"
+        ping_url: "/api/ping/"
+        login_path: "/api/login/"
+        logout_path: "/api/logout/"
+        service_index_path: "/api/service-index/"
+      loop: "{{ gateway_service_types }}"
+      vars:
+        gateway_service_types:
+          - name: "{{ test_id }}gateway"
+          - name: "{{ test_id }}hub"
+          - name: "{{ test_id }}controller"
+      register: __service_types_create_result
+
     ### Create Service Clusters ###
     - name: Create Service Clusters if necessary
       ansible.platform.service_cluster:
@@ -47,11 +62,11 @@
       vars:
         gateway_service_clusters:
           - name: "{{ test_id }}gateway"
-            service_type: "gateway"
+            service_type: "{{ __service_types_create_result.results[0].id }}"
           - name: "{{ test_id }}hub"
-            service_type: "hub"
+            service_type: "{{ __service_types_create_result.results[1].id }}"
           - name: "{{ test_id }}controller"
-            service_type: "controller"
+            service_type: "{{ __service_types_create_result.results[2].id }}"
 
     ### Create Routes ###
     - name: Create Routes
@@ -274,6 +289,18 @@
       loop: "{{ gateway_service_clusters }}"
       vars:
         gateway_service_clusters:
+          - name: "{{ test_id }}gateway"
+          - name: "{{ test_id }}controller"
+          - name: "{{ test_id }}hub"
+
+    ### Delete Service Types ###
+    - name: Delete Service Types
+      ansible.platform.service_type:
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ gateway_service_types }}"
+      vars:
+        gateway_service_types:
           - name: "{{ test_id }}gateway"
           - name: "{{ test_id }}controller"
           - name: "{{ test_id }}hub"

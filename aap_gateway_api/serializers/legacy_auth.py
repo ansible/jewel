@@ -8,7 +8,7 @@ LEGACY_PASSWORD = "aap_gateway_api.authentication.authenticator_plugins.legacy_p
 
 
 class LinkedAccountSerializer(serializers.ModelSerializer):
-    service_type = serializers.CharField(source="service.service_type")
+    service_type = serializers.CharField(source="service.service_type.name")
     gateway_username = serializers.CharField(source="user.username")
     ansible_id = serializers.CharField(source="user.resource.ansible_id")
 

@@ -9,14 +9,11 @@ router.register(
     views.UserViewSet,
     related_views={},
 )
-
-
 router.register(
     r'service_keys',
     views.ServiceKeyViewSet,
     basename='service_key',
 )
-
 router.register(
     r'organizations',
     views.OrganizationViewSet,
@@ -50,6 +47,14 @@ router.register(
     basename='service_node',
 )
 router.register(
+    r'service_types',
+    views.ServiceTypeViewSet,
+    basename='service_type',
+    related_views={
+        'clusters': (views.ServiceClusterViewSet, 'clusters'),
+    },
+)
+router.register(
     r'http_ports',
     views.HTTPPortViewSet,
     basename='http_port',
@@ -65,6 +70,7 @@ router.register(
         'routes': (views.AdditionalRouteViewSet, 'routes'),
         'nodes': (views.ServiceNodeViewSet, 'nodes'),
         'service_keys': (views.ServiceKeyViewSet, 'service_keys'),
+        'service_types': (views.ServiceTypeViewSet, 'service_types'),
     },
 )
 router.register(
