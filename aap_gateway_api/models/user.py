@@ -251,7 +251,7 @@ class MigratedAuthenticatorMetadata(CommonModel):
             name.append(self.django_backend)
         if self.sso_server:
             name.append(self.sso_server)
-        return f"{self.service.service_type}: " + "-".join(name)
+        return f"{self.service.service_type.name}: " + "-".join(name)
 
     @classmethod
     def get_authenticator_for_auth_code(cls, validated_token) -> Authenticator:

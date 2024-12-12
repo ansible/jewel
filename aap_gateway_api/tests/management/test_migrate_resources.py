@@ -114,7 +114,13 @@ def test_migrate_no_merge(migration_service, admin_user, admin_api_client, confl
 
 @pytest.mark.django_db(transaction=True)
 def test_migrate_merge_orgs(
-    migration_service, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team, patched_resource_client
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    admin_api_client,
+    conflicting_org,
+    conflicting_team,
+    patched_resource_client,
 ):
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
@@ -138,7 +144,13 @@ def test_migrate_merge_orgs(
 
 @pytest.mark.django_db(transaction=True)
 def test_migrate_merge_orgs_and_teams(
-    migration_service, admin_user, service_api_route_controller, admin_api_client, conflicting_org, conflicting_team, patched_resource_client
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    admin_api_client,
+    conflicting_org,
+    conflicting_team,
+    patched_resource_client,
 ):
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 

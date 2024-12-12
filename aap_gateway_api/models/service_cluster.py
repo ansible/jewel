@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
@@ -7,7 +7,7 @@ from ansible_base.resource_registry.models import service_id
 from django.db import models
 from django.utils.translation import gettext as _
 
-from aap_gateway_api.utils.resources_client import ServiceTypeChoices
+from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType
 
 
 class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
@@ -17,16 +17,8 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
 
     router_basename = 'service_cluster'
 
-    ServiceType = ServiceTypeChoices
-
-    service_type = models.CharField(
-        # We can remove this if/when we add support for multiple services of each type.
-        unique=True,
-        max_length=11,
-        choices=ServiceType.choices,
-        help_text=_(
-            "The type of service for this cluster.",
-        ),
+    service_type = models.ForeignKey(
+        ServiceType, related_name='clusters', on_delete=models.CASCADE, help_text=_("The Ansible service type of this service cluster.")
     )
 
     service_id = models.UUIDField(unique=True, help_text="The unique service ID provided by the service.", null=True, editable=False)
@@ -84,15 +76,15 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     def summary_fields(self):
         response = {}
         response['id'] = self.id
-        response['service_type'] = self.get_service_type_display()
+        response['service_type'] = self.service_type.id
         return response
 
     def __str__(self):
-        return self.get_service_type_display()
+        return self.service_type.name
 
     def save(self, *args, **kwargs):
         # Set the service id for the gateway.
-        if self.service_type == ServiceCluster.ServiceType.GATEWAY and not self.service_id:
+        if self.service_type.name == DefaultServiceType.GATEWAY and not self.service_id:
             self.service_id = service_id()
         return super().save(*args, **kwargs)
 
@@ -124,22 +116,25 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
 
     def get_login_path(self, url_prefix: str) -> Optional[str]:
         url_prefix = url_prefix.rstrip('/')
-        if self.service_type == 'controller':
-            return f"{url_prefix}/login/"
-        elif self.service_type == 'eda':
-            return f"{url_prefix}/v1/auth/session/login/"
-        elif self.service_type == 'hub':
-            return '/auth/login'
+        if self.service_type.name in [DefaultServiceType.CONTROLLER, DefaultServiceType.EDA]:
+            return f"{url_prefix}{self.service_type.login_path}"
+        elif self.service_type.name in [DefaultServiceType.HUB]:
+            return f"{self.service_type.login_path}"
         else:
             return None
 
     def get_logout_path(self, url_prefix: str) -> Optional[str]:
         url_prefix = url_prefix.rstrip('/')
-        if self.service_type == 'controller':
-            return f"{url_prefix}/logout/"
-        elif self.service_type == 'eda':
-            return f"{url_prefix}/v1/auth/session/logout/"
-        elif self.service_type == 'hub':
-            return '/auth/logout'
+        if self.service_type.name in [DefaultServiceType.CONTROLLER, DefaultServiceType.EDA]:
+            return f"{url_prefix}{self.service_type.logout_path}"
+        elif self.service_type.name in [DefaultServiceType.HUB]:
+            return f"{self.service_type.logout_path}"
         else:
             return None
+
+    @staticmethod
+    def get_cluster_by_type(service_type: Union[ServiceType, str]):
+        if isinstance(service_type, ServiceType):
+            return ServiceCluster.objects.filter(service_type=service_type).first()
+        else:
+            return ServiceCluster.objects.filter(service_type__name=service_type).first()

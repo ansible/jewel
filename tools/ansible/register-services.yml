@@ -34,6 +34,15 @@
          use_https: "{{ item.use_https}}"
       loop: "{{ gateway_http_ports | default([]) }}"
     
+    - name: Manage service_types
+      ansible.platform.service_type:
+        name: "{{ item.name }}"
+        ping_url: "{{ item.ping_url | default(omit) }}"
+        login_path: "{{ item.login_path | default(omit) }}"
+        logout_path: "{{ item.logout_path | default(omit) }}"
+        service_index_path: "{{ item.service_index_path | default(omit) }}"
+      loop: "{{ gateway_service_types | default([]) }}"
+
     - name: Manage service_clusters
       ansible.platform.service_cluster:
         name: "{{ item.name }}"

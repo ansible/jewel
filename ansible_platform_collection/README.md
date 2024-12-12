@@ -83,3 +83,4 @@ Please refer to Ansible Automation Platform Documentation for further documentat
 [Brennan Paciorek](https://github.com/brennanpaciorek)
 [John Westcott](https://github.com/john-westcott-iv)
 [Jessica Steurer](https://github.com/jay-steurer)
+[Bryan Havenstein](https://github.com/bhavenst)

@@ -10,7 +10,7 @@ from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import MigratedAuthenticatorMetadata, User
+from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMetadata, User
 from aap_gateway_api.tests.conftest import PatchedAllServiceClient, PatchedResourceClient
 from aap_gateway_api.tests.service_test_app.fixtures.data.legacy_auth import Account, get_user_set
 from aap_gateway_api.tests.service_test_app.launch import launch_service
@@ -544,7 +544,7 @@ class TestLegacyAuth:
         all_client = PatchedAllServiceClient()
 
         def _assert_exists(service, response):
-            if service.service_cluster.service_type != "eda":
+            if service.service_cluster.service_type.name != DefaultServiceType.EDA:
                 assert response.status_code == 200
                 assert response.json()["resource_data"]["username"] == "manual_merge_sso"
             else:

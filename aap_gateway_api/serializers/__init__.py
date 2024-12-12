@@ -8,6 +8,7 @@ from aap_gateway_api.serializers.service import (  # noqa: 401
     ServiceAPIRouteSerializer,
     ServiceClusterSerializer,
     ServiceNodeSerializer,
+    ServiceTypeSerializer,
 )
 from aap_gateway_api.serializers.service_auth import ServiceKeySerializer  # noqa: 401
 from aap_gateway_api.serializers.team import TeamSerializer  # noqa: 401

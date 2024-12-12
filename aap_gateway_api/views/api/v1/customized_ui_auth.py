@@ -2,15 +2,15 @@ from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.views.ui_auth import UIAuth, generate_ui_auth_data
 from rest_framework.response import Response
 
-from aap_gateway_api.models import ServiceAPIRoute
+from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
 from aap_gateway_api.utils.preferences import get_preference_value
 
 
-def get_default_hostname_for_service(service_type):
-    try:
-        api = ServiceAPIRoute.objects.get(service_cluster__service_type=service_type)
-    except ServiceAPIRoute.DoesNotExist:
+def get_default_hostname_for_service(service_type_name):
+    service_cluster = ServiceCluster.get_cluster_by_type(service_type=service_type_name)
+    if service_cluster is None:
         return ""
+    api = ServiceAPIRoute.objects.get(service_cluster=service_cluster.pk)
     proto = "https" if api.is_service_https else "http"
     if api.service_port in (443, 80):
         port = ""

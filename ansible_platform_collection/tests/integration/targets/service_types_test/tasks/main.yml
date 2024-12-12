@@ -1,0 +1,158 @@
+---
+- name: Generate a test ID
+  ansible.builtin.set_fact:
+    test_id: "{{ lookup('password', '/dev/null chars=ascii_letters length=16') }}"
+  when: test_id is not defined
+
+- name: Run Test
+  module_defaults:
+    group/ansible.platform.gateway:
+      gateway_hostname: "{{ gateway_hostname }}"
+      gateway_username: "{{ gateway_username }}"
+      gateway_password: "{{ gateway_password }}"
+      gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
+
+  block:
+    - name: Create dummy Service Type
+      ansible.platform.service_type:
+        name: dummy
+        ping_url: "/api/ping/"
+        login_path: "/api/login/"
+        logout_path: "/api/logout/"
+        service_index_path: "/api/service-index/"
+      register: dummy_st
+
+    - name: Assert that we created the controller service cluster
+      ansible.builtin.assert:
+        that:
+          - dummy_st is changed
+
+    - name: Recreate dummy Service Type
+      ansible.platform.service_type:
+        name: dummy
+        ping_url: "/api/ping/"
+        login_path: "/api/login/"
+        logout_path: "/api/logout/"
+        service_index_path: "/api/service-index/"
+      register: recreated_dummy_st
+
+    - name: Assert that recreate does not change the system
+      ansible.builtin.assert:
+        that:
+          - recreated_dummy_st is not changed
+
+    - name: Create dummy service cluster using dummy type
+      ansible.platform.service_cluster:
+        name: dummy
+        service_type: dummy
+        health_check_interval_seconds: 1162
+      register: dummy_sc
+
+    - name: Assert that we created the dummy service cluster
+      ansible.builtin.assert:
+        that:
+          - dummy_sc is changed
+
+    - name: Assert that exists works
+      ansible.platform.service_type:
+        name: dummy
+        state: exists
+      register: exists_dummy_st
+
+    - name: Assert that exists does not change the system
+      ansible.builtin.assert:
+        that:
+          - exists_dummy_st is not changed
+
+    - name: Assert exists works with parameters
+      ansible.platform.service_type:
+        name: dummy
+        ping_url: "/api/ping/"
+        state: exists
+      register: exists_dummy_st
+
+    - name: Assert that exists does not change the system
+      ansible.builtin.assert:
+        that:
+          - exists_dummy_st is not changed
+
+    - name: Rename a service type
+      ansible.platform.service_type:
+        name: dummy
+        new_name: bigger_dummy
+      register: renamed_dummy_st
+
+    - name: Assert that we can rename a service type
+      ansible.builtin.assert:
+        that:
+          - renamed_dummy_st is changed
+          - renamed_dummy_st.id == dummy_st.id
+
+    - name: Assert that new name exists
+      ansible.platform.service_type:
+        name: bigger_dummy
+        state: exists
+      register: exists_bigger_dummy_st
+
+    - name: Change an attribute
+      ansible.platform.service_type:
+        name: bigger_dummy
+        service_index_path: "/api/v1/service-index/"
+      register: changed_service_index_st
+
+    - name: Assert that we can change a service type attribute
+      ansible.builtin.assert:
+        that:
+          - changed_service_index_st is changed
+          - changed_service_index_st.id == dummy_st.id
+
+    - name: Delete a non-existent service type
+      ansible.platform.service_type:
+        name: nonexistent
+        state: absent
+      register: delete_nonexistent_st
+
+    - name: Assert that the deletion of a non-existent does not change the system
+      ansible.builtin.assert:
+        that:
+          - delete_nonexistent_st is not changed
+
+    - name: Delete a real service type
+      ansible.platform.service_type:
+        name: bigger_dummy
+        state: absent
+      register: delete_bigger_dummy_st
+
+    - name: Assert that deletion of a real service type changes the system
+      ansible.builtin.assert:
+        that:
+          - delete_bigger_dummy_st is changed
+
+    - name: Absent check service cluster using deleted type
+      ansible.platform.service_cluster:
+        name: dummy
+        state: absent
+      register: exists_dummy_sc
+
+    - name: Assert that service cluster using deleted type is gone
+      ansible.builtin.assert:
+        that:
+          - exists_dummy_sc is not changed
+
+  always:
+    # Always Cleanup
+    - name: Delete Service Cluster
+      ansible.platform.service_cluster:
+        name: dummy
+        state: absent
+
+    - name: Delete Service Type bigger_dummy
+      ansible.platform.service_type:
+        name: bigger_dummy
+        state: absent
+
+    - name: Delete Service Type dummy
+      ansible.platform.service_type:
+        name: dummy
+        state: absent
+...

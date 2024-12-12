@@ -17,7 +17,6 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
-from aap_gateway_api.models.route import SERVICE_PING_PAGES
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
@@ -141,19 +140,20 @@ def get_services(timeout: int = 10, verify: bool = True) -> List[ServiceCheck]:
 
     routes = Route.objects.filter(enable_gateway_auth=True)
     for route in routes:
-        service_type = route.service_cluster.get_service_type_display()
+        service_name = route.service_cluster.name
+        service_type = route.service_cluster.service_type
         service_port = route.service_port
         service_nodes = ServiceNode.objects.filter(service_cluster=route.service_cluster)
         for node in service_nodes:
             node_id = f'{node.address}:{service_port}'
-            if next((True for check in processes if check.service_type == service_type and check.node_id == node_id), False):
+            if next((True for check in processes if check.service_type == service_name and check.node_id == node_id), False):
                 continue
             else:
                 processes.append(
                     ServiceCheck(
-                        service_type=service_type,
+                        service_type=service_name,
                         node_id=node_id,
-                        url=f"{'https' if route.is_service_https else 'http'}://{node.address}:{service_port}{SERVICE_PING_PAGES[service_type]}",
+                        url=f"{'https' if route.is_service_https else 'http'}://{node.address}:{service_port}{service_type.ping_url}",
                         timeout=timeout,
                         verify=verify,
                         response=None,

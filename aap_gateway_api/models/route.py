@@ -7,14 +7,10 @@ from django.utils.translation import gettext as _
 
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
+from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
 
 API_PREFIX = "/api/"
-
-# This is a list of API endpoints across supported services that Envoy will ping to determine if a node is healthy.
-# This is also used by aap_gateway_api.views.api.v1.status
-# TODO: This should move somewhere, but not sure where yet.
-SERVICE_PING_PAGES = {"gateway": "/api/gateway/v1/ping/", "hub": "/pulp/api/v3/status/", "controller": "/api/v2/ping/", "eda": "/api/eda/v1/status/"}
 
 
 class Route(UniqueNamedCommonModel, AuditableModel):
@@ -153,7 +149,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     "unhealthy_threshold": self.service_cluster.health_check_unhealthy_threshold,
                     "healthy_threshold": self.service_cluster.health_check_healthy_threshold,
                     "http_health_check": {
-                        "path": SERVICE_PING_PAGES[self.service_cluster.service_type],
+                        "path": self.service_cluster.service_type.ping_url,
                     },
                 }
             ]
@@ -218,7 +214,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         envoy_cluster_name = None
         try:
-            sc = ServiceCluster.objects.get(service_type="gateway")
+            sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
             gw_route = Route.objects.get(service_cluster=sc)
             envoy_cluster_name = gw_route.envoy_cluster_name
         except ServiceCluster.DoesNotExist:

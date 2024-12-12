@@ -5,6 +5,12 @@ gateway_http_ports:   # Http port where the proxy will be listening, these ports
     use_https: true   # -- http/https flag
     is_api_port: true # -- if true, port is used for gateway_services. Only one can be true
 
+gateway_service_types:  # Service types
+  - name: gateway  # Always exists, no details needed
+  - name: controller
+  - name: hub
+  - name: eda
+
 gateway_service_clusters:  # Service clusters (1 per type)
   - name: gateway # -- name of cluster, used by [gateway_service_nodes | gateway_services | gateway_routes]/service_cluster
     service_type: gateway # -- type of cluster (allowed values: gateway/controller/eda/hub)
@@ -100,6 +106,7 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_path: '/api/eda/'
     service_port: 8010
     order: 3
+
 {% endif %}
 {% endfor %}
 

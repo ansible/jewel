@@ -49,7 +49,7 @@ def test_register_service_yaml_success(service_config):
 
     for service_type, params in service_config['services'].items():
         assert f"Creating cluster for {service_type}" in out.getvalue()
-        sc = ServiceCluster.objects.get(service_type=service_type)
+        sc = ServiceCluster.get_cluster_by_type(service_type=service_type)
         assert ServiceAPIRoute.objects.filter(service_cluster=sc, name=f"{service_type} api").exists()
         for instance in params['nodes']:
             assert ServiceNode.objects.filter(service_cluster=sc, **instance).exists()

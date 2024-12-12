@@ -1,6 +1,6 @@
 import pytest
 
-from aap_gateway_api.models import AdditionalRoute, ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType
 
 
 class TestRoute:
@@ -12,7 +12,8 @@ class TestRoute:
         assert len(routes) == 0
 
         # Now fail because of a missing gateway route
-        ServiceCluster.objects.create(service_type="gateway")
+        st = ServiceType.objects.get(name=DefaultServiceType.GATEWAY.value)
+        ServiceCluster.objects.create(service_type=st)
         routes = route.get_xds_login_logout_routes()
         assert len(routes) == 0
 

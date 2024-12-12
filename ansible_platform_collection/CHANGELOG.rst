@@ -28,3 +28,4 @@ Removed the `required_if` condition from `authenticator_map` module.
 Added the `secret` field to the output of `secret_key` module.
 Fixed the parameter `authenticator_uid` on the `user` module.
 Fixed a broken doc fragment in the `authenticator_user` module.
+

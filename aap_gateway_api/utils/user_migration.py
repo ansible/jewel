@@ -20,7 +20,7 @@ def can_accounts_be_merged(main_account, to_merge):
                     "Account %(username)s has already been linked to an account from "
                     "%(service_type)s. Only one migrated account from each service may be linked."
                 )
-                % {"service_type": original_account.service.service_type, "username": main_account.username}
+                % {"service_type": original_account.service.service_type.name, "username": main_account.username}
             )
 
     return True
