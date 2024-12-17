@@ -57,7 +57,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
                 "manifest",  # resource type manifest like /v1/service-index/resource-types/shared.user/manifest/
                 "create",
                 "update",
-                "delete",
+                "destroy",
             ]
 
             setattr(user, "resource_api_actions", allowed_actions)
