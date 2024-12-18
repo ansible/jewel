@@ -18,6 +18,7 @@ logger = logging.getLogger('aap.gateway.serializers.preferences')
 
 
 class SettingSectionListSerializer(serializers.Serializer):
+    # This is the serializer for the list of categories (/api/gateway/v1/settings)
     """Serialize list of settings category"""
 
     url = serializers.CharField(read_only=True)
@@ -25,6 +26,7 @@ class SettingSectionListSerializer(serializers.Serializer):
 
 
 class SettingSectionSerializer(serializers.Serializer):
+    # This is the serializer for a given category (like /api/gateway/v1/settings/all)
     def __init__(self, category_slug=None, *args, **kwargs):
         if category_slug == 'all':
             self.category_slug = None
@@ -168,6 +170,7 @@ class SettingSectionSerializer(serializers.Serializer):
 
 
 class SettingPreferenceSerializer(serializers.ModelSerializer):
+    # This is the serializer for a specific preference (like /api/gateway/v1/settings/all/jwt_private_key)
     value = serializers.SerializerMethodField()
 
     class Meta:
