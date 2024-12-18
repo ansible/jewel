@@ -2,6 +2,7 @@ import logging
 from collections import OrderedDict
 
 from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.authentication.models.authenticator import Authenticator
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -312,5 +313,19 @@ class Command(BaseCommand):
                     # Connect legacy authentication for users, but do not connect any for the superuser
                     if user_partial_migration:
                         self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
+                    elif resource_type_name == "shared.user" and resource["name"] == self.client.user.username:
+                        service_type = self.client.service.service_cluster.service_type
+                        if service_type != "controller" and not self.client.user.has_usable_password():
+                            authenticator, _ = Authenticator.objects.get_or_create(
+                                type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+                                defaults={"enabled": True, "name": "controller admin password"},
+                            )
+
+                            if not self.client.user.authenticator_users.filter(provider=authenticator).exists():
+                                AuthenticatorUser.objects.create(
+                                    user=self.client.user,
+                                    provider=authenticator,
+                                    uid=self.client.user.username,
+                                )
 
                     self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)

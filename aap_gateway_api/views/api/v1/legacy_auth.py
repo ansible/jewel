@@ -18,7 +18,7 @@ from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMeta
 from aap_gateway_api.models.user import LegacyAuthType
 from aap_gateway_api.serializers.legacy_auth import FinalizeSerializer, LegacyAuthSerializer, UsernamePasswordSerializer
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
-from aap_gateway_api.utils.service_token import ValidatedToken, validate_service_token
+from aap_gateway_api.utils.service_token import ValidatedToken, classify_backend, validate_service_token
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
 UNMIGRATED_AUTH_SESSION_KEY = "partially_authed_user"
@@ -110,7 +110,7 @@ class LegacyAuthViewset(viewsets.ViewSet):
         auth_code = self._check_password(data["username"], data["password"], service_type)
         jwt_token = self._handle_auth_code(auth_code, auth_type="password")
 
-        auth_backend_classification = self._classify_backend(jwt_token["token_data"]["payload"].get("auth_backend"))
+        auth_backend_classification = classify_backend(jwt_token["token_data"]["payload"].get("auth_backend"))
 
         # If the account is an LDAP account, we'll go ahead and try it on the other service that supports LDAP
         # (either Hub or Controller). If the account is a valid LDAP account here, then we'll automatically
@@ -124,7 +124,7 @@ class LegacyAuthViewset(viewsets.ViewSet):
                     # We just need to load the auth backend to check that the user is LDAP before we run the
                     # actual token verification.
                     if auth_backend := jwt.decode(auth_code, options={"verify_signature": False}).get("auth_backend"):
-                        if self._classify_backend(auth_backend) == "ldap":
+                        if classify_backend(auth_backend) == "ldap":
                             self._handle_auth_code(auth_code, auth_type="password")
                 except DRFValidationError:
                     pass
@@ -176,7 +176,7 @@ class LegacyAuthViewset(viewsets.ViewSet):
 
             auth_backend_classification = None
             if auth_type == "password":
-                auth_backend_classification = self._classify_backend(payload.get("auth_backend"))
+                auth_backend_classification = classify_backend(payload.get("auth_backend"))
 
             # add a migration entry for the user
             # This case is supporting reverse-sync.
@@ -304,7 +304,7 @@ class LegacyAuthViewset(viewsets.ViewSet):
             auth_backend = token_data["token_data"]["payload"].get("auth_backend")
             if (
                 auth_backend is not None
-                and self._classify_backend(auth_backend) == 'local'
+                and classify_backend(auth_backend) == 'local'
                 and
                 # auth_backend_classification is only set for password legacy auth, so if it exists, we know it's that.
                 # So we can just filter out 'local' to see if there's another external account linked to the user.
@@ -313,33 +313,6 @@ class LegacyAuthViewset(viewsets.ViewSet):
                 raise DRFValidationError(_("This account has been linked to an external account and cannot be used with a local username and password."))
 
         return True
-
-    def _classify_backend(self, auth_backend):
-        """
-        > External accounts may be linked to each other as long as they share the same type (LDAP, radius etc.) or to local accounts.
-
-        Thus, we need to know what kind of external account we're dealing with.
-        """
-
-        if auth_backend is None:
-            return None
-
-        if 'LDAPBackend' in auth_backend:
-            return 'ldap'
-
-        if 'RADIUSBackend' in auth_backend:
-            return 'radius'
-
-        if 'TACACSPlusBackend' in auth_backend:
-            return 'tacacs+'
-
-        if 'ModelBackend' in auth_backend:
-            return 'local'
-
-        if 'PrefixedUserAuthBackend' in auth_backend:
-            return 'local'
-
-        return auth_backend
 
     def _get_response(self, request):
         user = self._get_user(request)

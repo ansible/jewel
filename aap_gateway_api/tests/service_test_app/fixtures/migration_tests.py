@@ -65,3 +65,7 @@ def setup():
     r = Resource.get_resource_for_object(u)
     r.is_partially_migrated = True
     r.save()
+
+    u = User.objects.create(username="admin", is_superuser=True)
+    u.set_password("controller_admin_pass")
+    u.save()

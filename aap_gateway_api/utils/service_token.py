@@ -91,3 +91,32 @@ def validate_service_token(token, required_type=None) -> ValidatedToken:
             "key": valid_key,
         }
     )
+
+
+def classify_backend(auth_backend):
+    """
+    > External accounts may be linked to each other as long as they share the same type (LDAP, radius etc.) or to local accounts.
+
+    Thus, we need to know what kind of external account we're dealing with.
+    """
+
+    if auth_backend is None:
+        return None
+
+    if 'LDAPBackend' in auth_backend:
+        return 'ldap'
+
+    if 'RADIUSBackend' in auth_backend:
+        return 'radius'
+
+    if 'TACACSPlusBackend' in auth_backend:
+        return 'tacacs+'
+
+    # this also covers the AWXModelBackend
+    if 'ModelBackend' in auth_backend:
+        return 'local'
+
+    if 'PrefixedUserAuthBackend' in auth_backend:
+        return 'local'
+
+    return auth_backend
