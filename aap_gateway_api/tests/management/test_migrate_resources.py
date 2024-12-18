@@ -1,9 +1,14 @@
+from unittest.mock import patch
+
 import pytest
+from ansible_base.authentication.models import Authenticator
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
+from rest_framework.test import APIClient
 
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Team, User
+from aap_gateway_api.tests.conftest import PatchedResourceClient
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 SEP_CHAR = "_"
@@ -25,7 +30,13 @@ def conflicting_team(conflicting_org):
 
 @pytest.fixture
 def migration_service(patched_resource_client, service_api_route_controller):
-    proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture="migration_tests")
+    controller_key = service_api_route_controller.service_cluster.generate_key()
+    proc = launch_service(
+        "awx",
+        service_api_route_controller.service_port,
+        setup_fixture="migration_tests",
+        secret_key=controller_key.secret,
+    )
     yield service_api_route_controller
     proc.kill()
     stdout, stderr = proc.communicate()
@@ -316,3 +327,107 @@ def test_use_given_name_iteration(cmd):
     User.objects.create(username='controller_foouser1')
     User.objects.create(username='controller_foouser2')
     assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser3'
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migrated_admin_password(
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    admin_api_client,
+    patched_resource_client,
+):
+    admin_user.set_password(None)
+    admin_user.save()
+    admin_user.authenticator_users.all().delete()
+
+    assert admin_user.username == "admin"
+
+    call_command(
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=True,
+        merge_organizations=True,
+    )
+
+    assert admin_user.authenticator_users.filter(
+        provider__type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+    ).exists()
+
+    url = get_relative_url("login")
+    next_url = get_relative_url("me-list")
+
+    with patch("aap_gateway_api.authentication.authenticator_plugins.controller_admin.GWResourceAPIClient", PatchedResourceClient):
+        client = APIClient()
+        data = {"username": "admin", "password": "invalid_password", "next": next_url}
+        response = client.post(url, data, follow=True)
+        assert response.status_code == 401
+
+        client = APIClient()
+        data = {"username": "admin", "password": "controller_admin_pass", "next": next_url}
+        response = client.post(url, data, follow=True)
+        assert response.status_code == 200
+        assert response.data["results"][0]["username"] == "admin"
+
+        assert not admin_user.authenticator_users.filter(
+            provider__type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+        ).exists()
+
+        assert not Authenticator.objects.filter(
+            type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+        ).exists()
+
+        # make sure we can login with the new password
+        client = APIClient()
+        data = {"username": "admin", "password": "controller_admin_pass", "next": next_url}
+        response = client.post(url, data, follow=True)
+        assert response.status_code == 200
+        assert response.data["results"][0]["username"] == "admin"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_admin_user_already_set_migrated_admin_password(
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    admin_api_client,
+    patched_resource_client,
+):
+    admin_user.set_password("admin")
+    admin_user.save()
+
+    assert admin_user.username == "admin"
+
+    call_command(
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=True,
+        merge_organizations=True,
+    )
+
+    assert not admin_user.authenticator_users.filter(
+        provider__type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+    ).exists()
+
+    assert not Authenticator.objects.filter(
+        type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+    ).exists()
+
+    url = get_relative_url("login")
+    next_url = get_relative_url("me-list")
+
+    with patch("aap_gateway_api.authentication.authenticator_plugins.controller_admin.GWResourceAPIClient", PatchedResourceClient):
+        data = {"username": "admin", "password": "admin", "next": next_url}
+
+        client = APIClient()
+        response = client.post(url, data, follow=True)
+        assert response.status_code == 200
+        assert response.data["results"][0]["username"] == "admin"
+
+        data = {"username": "admin", "password": "controller_admin_pass", "next": next_url}
+
+        client = APIClient()
+        response = client.post(url, data, follow=True)
+        assert response.status_code == 401
