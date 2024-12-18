@@ -16,6 +16,7 @@ def create_preload_data(**kwargs) -> None:
     """
 
     function_order = [
+        set_jwt_key_pair,
         create_default_organization,
         create_managed_roles,
         set_system_user_password,
@@ -56,6 +57,22 @@ def create_preload_data(**kwargs) -> None:
                 logger.error(f"Failed to {name.replace('_', ' ')} {e}")
             elif verbosity > 1:
                 logger.exception(f"Failed to {name.replace('_', ' ')}")
+
+
+def set_jwt_key_pair() -> bool:
+    from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
+
+    # If the jwt_private_key is not set, we need to add one for the gateway to be usable
+    if get_preference_value(section='proxy', name='jwt_private_key', encrypted=False) != '':
+        return False
+
+    from aap_gateway_api.utils.jwt_token import generate_jwt_keypair
+
+    key_pair = generate_jwt_keypair()
+    update_preference_value(section='proxy', name='jwt_private_key', value=key_pair.private, validate=True)
+    # Since we are validating, this should auto-update the public key as well
+
+    return True
 
 
 def create_default_organization() -> bool:

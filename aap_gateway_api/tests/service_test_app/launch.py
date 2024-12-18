@@ -29,6 +29,16 @@ def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secre
     if not dev_mode:
         from aap_gateway_api.utils.preferences import get_preference_value
 
+        public_key = get_preference_value("proxy", "jwt_public_key", encrypted=False)
+        if public_key == '':
+            # Sometimes, if a test is wrapped in a transaction it may have an empty key, so we need to add one
+            from aap_gateway_api.utils.jwt_token import generate_jwt_keypair
+            from aap_gateway_api.utils.preferences import update_preference_value
+
+            key_pair = generate_jwt_keypair()
+            update_preference_value("proxy", "jwt_private_key", key_pair.private)
+            update_preference_value("proxy", "jwt_public_key", key_pair.public)
+
         env["ANSIBLE_BASE_JWT_KEY"] = get_preference_value("proxy", "jwt_public_key", encrypted=False)
     else:
         env["SERVICE_TEST_APP_DEV_MODE"] = "true"

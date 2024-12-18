@@ -1,7 +1,7 @@
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.utils import register
-from aap_gateway_api.utils.jwt_token import generate_jwt_keypair, update_jwt_public_key
+from aap_gateway_api.utils.jwt_token import update_jwt_public_key
 
 register(
     section="proxy",
@@ -63,12 +63,10 @@ register(
     encrypted=False,
 )
 
-default_keypair = generate_jwt_keypair()
-
 register(
     section="proxy",
     preference_name="jwt_private_key",
-    default=default_keypair.private,
+    default='',
     required=True,
     preference_type="pem_private_key",
     help_text=_("The JWT private key."),
@@ -79,7 +77,7 @@ register(
 register(
     section="proxy",
     preference_name="jwt_public_key",
-    default=default_keypair.public,
+    default='',
     required=False,
     preference_type="longstring",
     help_text=_("The JWT public key (read-only)."),
