@@ -660,6 +660,22 @@ class TestUserUpdateRollbackScenario:
         self._test_rollback(admin_api_client, user, payload, initial_values)
 
 
+@pytest.fixture(scope="function")
+def local_user_bad_uid(admin_api_client, local_authenticator, randname):
+    url = get_relative_url('user-list')
+    username = randname("testuser")
+    other_username = randname("testuser")
+    payload = {'username': username, 'password': 'password', 'authenticator_uid': other_username, 'authenticators': [local_authenticator.id]}
+    response = admin_api_client.post(url, payload)
+    assert response.status_code == status.HTTP_201_CREATED
+
+    created_user = User.objects.get(id=response.data["id"])
+
+    yield created_user
+
+    created_user.delete()
+
+
 @pytest.mark.django_db
 class TestUserCrossFieldValidation:
     def test_no_authenticators_no_uid(self, admin_api_client, admin_user):
@@ -667,6 +683,23 @@ class TestUserCrossFieldValidation:
         payload = {'username': 'testuser', 'password': 'password'}
         response = admin_api_client.patch(url, payload)
         assert response.status_code == status.HTTP_200_OK
+
+    def test_local_authenticator_bad_uid(self, admin_api_client, local_user_bad_uid, local_authenticator):
+        """
+        Test updating another local authenticator user's authenticator_uid, make sure it coerces back to username
+        """
+        # Test created user authenticator_uid correct
+        authenticator_uid = AuthenticatorUser.objects.get(user=local_user_bad_uid, provider=local_authenticator).uid
+        assert authenticator_uid == local_user_bad_uid.username, "User authenticator_uid is not corrected on creation for local authenticator users"
+
+        # Test update of the other user
+        url = get_relative_url('user-detail', kwargs={'pk': local_user_bad_uid.id})
+        payload = {'authenticator_uid': 'different_uid'}
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_200_OK
+        assert (
+            response.data["authenticator_uid"] == local_user_bad_uid.username
+        ), "User authenticator_uid is not corrected on update for local authenticator users"
 
     def test_uid_without_authenticators(self, admin_api_client, admin_user):
         url = get_relative_url('user-detail', kwargs={'pk': admin_user.id})
