@@ -318,7 +318,22 @@ class UserSerializer(CommonUserSerializer):
         for add_authenticator_id in authenticators_to_add:
             authenticator = Authenticator.objects.get(id=add_authenticator_id)
             logger.info(f"Adding authenticator {authenticator.name} with UID {authenticator_uid} for user {user_instance.username}")
-            AuthenticatorUser.objects.create(uid=authenticator_uid, user=user_instance, provider=authenticator)
+
+            auth_type = get_authenticator_plugin(authenticator.type).type
+            username = user_instance.username
+
+            if auth_type == 'local':
+                # For local authenticators, UID must match the username
+                new_uid = username
+                if username != authenticator_uid:
+                    logger.info(
+                        f"Creating new user {username} with authenticator_uid {username} for the local authenticator {authenticator.name}; "
+                        "uid must match username for local authenticator users"
+                    )
+            else:
+                new_uid = authenticator_uid
+
+            AuthenticatorUser.objects.create(uid=new_uid, user=user_instance, provider=authenticator)
 
         logger.info(f"Added authenticators: {authenticators_to_add}")
 
@@ -341,9 +356,9 @@ class UserSerializer(CommonUserSerializer):
                 # For local authenticators, UID must match the username
                 new_uid = new_username
                 if new_username != authenticator_uid:
-                    logger.warning(
-                        f"We had to convert authenticator_uid to {new_username} for user {new_username} "
-                        f"for the local authenticator on {authenticator_user.provider.name}"
+                    logger.info(
+                        f"Setting authenticator_uid to {new_username} for user {new_username} "
+                        f"for the local authenticator {authenticator_user.provider.name}; uid must match username for local authenticator users."
                     )
             else:
                 new_uid = authenticator_uid
