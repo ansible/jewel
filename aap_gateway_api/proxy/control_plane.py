@@ -3,6 +3,7 @@ import logging
 import time
 import uuid
 from io import BytesIO
+from typing import Optional
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
@@ -11,7 +12,7 @@ from ansible_base.lib.middleware.logging import LogRequestMiddleware
 from django.conf import settings
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.db import DatabaseError, connections
+from django.db import DatabaseError, close_old_connections, connection
 from django.http import HttpRequest, parse_cookie
 from django.views.csrf import csrf_failure
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
@@ -100,30 +101,50 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         self._log_process_time()
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
-    def _return_bad_csrf(self, request, error: APIException):
-        reason = str(error.detail)
-        logger.error(f"CSRF verification failure for {self.request_id} - {reason}")
-
-        if "application/json" in request.META.get("HTTP_ACCEPT", ""):
-            body = json.dumps(dict(details=reason))
+    def _return_no_auth_with_reason(self, reason, html_body=None):
+        if "application/json" in self.drf_request.META.get("HTTP_ACCEPT", ""):
+            response_body = json.dumps(dict(details=reason))
             content_type = "application/json"
         else:
-            body = csrf_failure(request, reason).content
-            content_type = "text/html"
+            # If we specified an html_body use that, otherwise just return a text body
+            if html_body:
+                response_body = html_body
+                content_type = "text/html"
+            else:
+                response_body = reason
+                content_type = "text/plain"
 
-        # strip trusted proxy header, client makes no use of it.
+        # Inject the content-type header for this response
         self.headers = [HeaderValueOption(header=HeaderValue(key='content-type', value=content_type))]
 
-        response = external_auth_pb2.DeniedHttpResponse(status=http_status_pb2.HttpStatus(code=403), headers=self.headers, body=body)
-        status = status_pb2.Status(code=7, message=str(error.detail))
+        response = external_auth_pb2.DeniedHttpResponse(status=http_status_pb2.HttpStatus(code=403), headers=self.headers, body=response_body)
+        status = status_pb2.Status(code=7, message=str(reason))
 
         return external_auth_pb2.CheckResponse(status=status, denied_response=response)
 
-    def _handle_db_error(self, e):
-        logger.warning(f"Database error. We think it's a connection error. Resetting the connection so it can be tried again. ({self.request_id})")
-        logger.error(e, exc_info=True)
-        for conn in connections.all():
-            conn.close_if_unusable_or_obsolete()
+    def _return_bad_csrf(self, error: APIException):
+        reason = str(error.detail)
+        logger.error(f"CSRF verification failure for {self.request_id} - {reason}")
+        return self._return_no_auth_with_reason(reason=reason, html_body=csrf_failure(self.drf_request, reason).content)
+
+    def _can_read_from_db(self, initial_call: bool = True) -> Optional[external_auth_pb2.CheckResponse]:
+        # This is overkill if we have CONN_HEALTH_CHECK=True in the settings
+        # But just incase we will also do our own detection
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                result = cursor.fetchone()
+                # Access the first item just incase we need to this returned by the driver in order for the connection test to complete
+                result[0]
+            return None
+        except (DatabaseError, OperationalError) as e:
+            if initial_call:
+                logger.warning("Database error. We think it's a connection error. Resetting the connection so it can be tried again.")
+                close_old_connections()
+                return self._can_read_from_db(initial_call=False)
+            else:
+                logger.error(f"Failed to read from database! {e}")
+                return self._return_no_auth_with_reason(f'Unable to connect to database: {e}')
 
     def Check(self, request, context):
         self.start_time = time.time()
@@ -142,13 +163,15 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
         try:
             # Do this ASAP (as soon as we validate the request_id) so that we can log the request_id in the logs.
-            drf_request = get_drf_request(request.attributes.request.http)
-        except (DatabaseError, OperationalError) as e:
-            self._handle_db_error(e)
+            self.drf_request = get_drf_request(request.attributes.request.http)
         except Exception as e:
             # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
             logger.exception(e)
             raise
+
+        connection_response = self._can_read_from_db()
+        if connection_response is not None:
+            return connection_response
 
         self.headers = []
         try:
@@ -168,7 +191,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         logger.debug(f"Starting authentication for ({self.request_id}) {self.request_path}.")
         try:
             try:
-                user = drf_request.user
+                user = self.drf_request.user
             except AuthenticationFailed:
                 # Rest framework will raise this exception if the user/pass combo is invalid.
                 # If this is the case we want to fall though and _return_not_authenticated so that the Authorization header will be sent to the backend.
@@ -188,10 +211,8 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 
             return self._return_authenticated(jwt, user.username)
 
-        except (DatabaseError, OperationalError) as e:
-            self._handle_db_error(e)
         except PermissionDenied as e:
-            return self._return_bad_csrf(drf_request, e)
+            return self._return_bad_csrf(e)
         except Exception as e:
             # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
             logger.exception(e)
