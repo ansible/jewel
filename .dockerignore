@@ -1,7 +1,9 @@
-.git
-.github
-.cache
-.ipython
-.gitignore
-.venv
-venv
+aap-dev
+**/.git
+**/.github
+**/.cache
+**/.ipython
+**/.gitignore
+**/.venv
+**/venv
+**/.tox
