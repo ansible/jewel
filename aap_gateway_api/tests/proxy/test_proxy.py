@@ -132,3 +132,39 @@ class TestExternalAuth:
 
         # assert permission denied
         assert response.status.code == 7
+
+    def test_check_bad_db(self, ext_auth):
+        from django.db import DatabaseError
+
+        request = Request()
+
+        mock_cursor_item = mock.MagicMock()
+        mock_cursor_item.execute.side_effect = DatabaseError('DB_error')
+        mock_cursor = mock.MagicMock()
+        mock_cursor.__enter__.return_value = mock_cursor_item
+
+        with mock.patch("django.db.connection.cursor", return_value=mock_cursor):
+            response = ext_auth.Check(request, None)
+
+        # assert permission denied
+        assert response.status.code == 7
+
+    @pytest.mark.parametrize(
+        "accept_type,body,expected_type",
+        [
+            ("application/json", None, "application/json"),
+            ("application/yaml", None, "text/plain"),
+            ("application/yaml", "<h2>Testing</h2>", "text/html"),
+        ],
+    )
+    def test__return_no_auth_with_reason(self, accept_type, body, expected_type, ext_auth):
+        request = Request(header_diff={"ACCEPT": accept_type})
+        from aap_gateway_api.proxy.control_plane import get_drf_request
+
+        ext_auth.drf_request = get_drf_request(request.attributes.request.http)
+        response = ext_auth._return_no_auth_with_reason("Testing", html_body=body)
+
+        assert response.status.code == 7
+        for header in response.denied_response.headers:
+            if header.header.key == 'content-type':
+                assert expected_type == header.header.value
