@@ -4,6 +4,8 @@ from ansible_base.lib.utils.models import get_system_user
 from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
 
+from aap_gateway_api.models import ServiceType
+
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
 
@@ -21,6 +23,7 @@ def create_preload_data(**kwargs) -> None:
         create_managed_roles,
         set_system_user_password,
         set_system_user_managed_flag,
+        add_console_service_type,
     ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
@@ -105,3 +108,11 @@ def set_system_user_managed_flag() -> None:
     system_user.managed = True
     system_user.save()
     return True
+
+
+def add_console_service_type() -> None:
+    # Add console.redhat.com service type
+    console_type = {
+        "name": "console",
+    }
+    ServiceType.objects.get_or_create(**console_type)

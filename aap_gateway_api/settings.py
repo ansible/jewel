@@ -81,6 +81,9 @@ CACHES = {
 
 CLUSTER_HOST_ID = socket.gethostname()
 
+# Status endpoint for console.redhat.com
+CRC_STATUS_URL = "https://status.redhat.com/api/v2/summary.json"
+
 # Disallow sending csrf cookies over insecure connections
 CSRF_COOKIE_SECURE = True
 CSRF_TRUSTED_ORIGINS = []

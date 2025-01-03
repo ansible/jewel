@@ -10,6 +10,7 @@ gateway_service_types:  # Service types
   - name: controller
   - name: hub
   - name: eda
+  - name: console
 
 gateway_service_clusters:  # Service clusters (1 per type)
   - name: gateway # -- name of cluster, used by [gateway_service_nodes | gateway_services | gateway_routes]/service_cluster
@@ -25,6 +26,10 @@ gateway_service_clusters:  # Service clusters (1 per type)
 {% if 'eda' in gateway_services %}
   - name: eda
     service_type: eda
+{% endif %}
+{% if 'console' in gateway_services %}
+  - name: console
+    service_type: console
 {% endif %}
 
 gateway_service_nodes:   # Nodes of service clusters
@@ -48,6 +53,11 @@ gateway_service_nodes:   # Nodes of service clusters
   - name: EDA Node
     service_cluster: eda
     address: "{{ gateway_host_address }}"
+{% endif %}
+{% if 'console' in gateway_services %}
+  - name: console
+    service_cluster: console
+    address: "console.stage.redhat.com"
 {% endif %}
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)
@@ -173,5 +183,17 @@ gateway_routes:
     service_path: '/extensions'
     gateway_path: '/extensions'
     description: 'pulp container extensions'
+    enable_gateway_auth: true
+{% endif %}
+
+{% if 'console' in gateway_services %}
+  - name: Red Hat Hybrid Cloud Console
+    http_port: API Port
+    service_cluster: console
+    service_port: 443
+    is_service_https: true
+    service_path: '/api/'
+    gateway_path: '/external-proxy/crc/'
+    description: 'console.redhat.com'
     enable_gateway_auth: true
 {% endif %}

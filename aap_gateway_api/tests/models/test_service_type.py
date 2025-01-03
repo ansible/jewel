@@ -8,7 +8,7 @@ from aap_gateway_api.models import DefaultServiceType, ServiceType
     [x.value for x in DefaultServiceType],
 )
 @pytest.mark.django_db
-def test_all_service_types_exist(service_type):
+def test_default_service_types_exist(service_type):
     st = ServiceType.objects.filter(name=service_type).first()
     assert st is not None
 
@@ -23,6 +23,6 @@ def test_all_service_types_exist(service_type):
     ],
 )
 @pytest.mark.django_db
-def test_service_cluster_logout_url(service_type, expected_path):
+def test_default_service_clusters_logout_url(service_type, expected_path):
     st = ServiceType.objects.get(name=service_type.value)
     assert st.logout_path == expected_path
