@@ -21,7 +21,9 @@ from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
 logger = logging.getLogger('aap.gateway.views.api.v1.status')
-ServiceCheck = namedtuple('ServiceCheck', ['service_type', 'node_id', 'url', 'timeout', 'verify', 'response'])
+ServiceCheck = namedtuple('ServiceCheck', ['service_name', 'service_type', 'node_id', 'url', 'timeout', 'verify', 'response'])
+
+CONSOLE_SERVICE = "console.redhat.com"
 
 
 def check_redis(timeout: int = 4) -> Dict:
@@ -37,12 +39,37 @@ def check_redis(timeout: int = 4) -> Dict:
     return status
 
 
+def check_console(timeout: int = 4) -> Dict:
+    result = {"name": CONSOLE_SERVICE, "status": STATUS_FAILED}
+    if not hasattr(settings, 'CRC_STATUS_URL') or not settings.CRC_STATUS_URL:
+        logger.error("Console service defined, but CRC_STATUS_URL not set!")
+        result["body"] = "CRC_STATUS_URL not set"
+        return result
+    try:
+        response = requests.get(settings.CRC_STATUS_URL, timeout=timeout)
+        result['response_code'] = response.status_code
+        if response.status_code != 200:
+            result['status'] = STATUS_FAILED
+            result['body'] = response.text
+            return result
+
+        response_json = response.json()
+        console_status = next(status for status in response_json["components"] if status["name"] == CONSOLE_SERVICE)
+        result["status"] = STATUS_GOOD if console_status["status"] == "operational" else console_status["status"]
+    except Exception as e:
+        result['status'] = STATUS_FAILED
+        result['exception'] = f'{e}'
+    return result
+
+
 def check_node(server_data: ServiceCheck) -> ServiceCheck:
-    service, node, url, timeout, verify, _ = server_data
+    service, service_type, node, url, timeout, verify, _ = server_data
     response: Dict
     if service == 'redis':
         status = check_redis(timeout)
         response = {'status': status["status"], 'url': "", 'response': status}
+    elif service_type == 'console':
+        response = check_console(timeout)
     else:
         node_status = {'url': url}
         try:
@@ -59,7 +86,7 @@ def check_node(server_data: ServiceCheck) -> ServiceCheck:
             node_status['exception'] = f'{e}'
         response = node_status
 
-    return ServiceCheck(service_type=service, node_id=node, url=url, timeout=timeout, verify=verify, response=response)
+    return ServiceCheck(service_name=service, service_type=service_type, node_id=node, url=url, timeout=timeout, verify=verify, response=response)
 
 
 def process_statuses(response: Dict) -> Dict:
@@ -68,7 +95,7 @@ def process_statuses(response: Dict) -> Dict:
     bad_services = 0
     degraded_services = 0
     for service in response['services']:
-        service_name = service['service_type']
+        service_name = service['service_name']
 
         # If we don't know the status for the service than try to get it from the nodes
         if service['status'] == 'Unknown':
@@ -119,8 +146,8 @@ def process_statuses(response: Dict) -> Dict:
             bad_services = bad_services + 1
 
     # Special check, if the service is EDA and redis is "down" EDA needs to be DEGRADED
-    eda = next((s for s in response['services'] if s['service_type'] == 'eda'), None)
-    redis = next((s for s in response['services'] if s['service_type'] == 'redis'), None)
+    eda = next((s for s in response['services'] if s['service_name'] == 'eda'), None)
+    redis = next((s for s in response['services'] if s['service_name'] == 'redis'), None)
     if eda and redis and eda['status'] != STATUS_FAILED and redis['status'] == STATUS_FAILED:
         eda['status'] = STATUS_DEGRADED
 
@@ -146,19 +173,25 @@ def get_services(timeout: int = 10, verify: bool = True) -> List[ServiceCheck]:
         service_nodes = ServiceNode.objects.filter(service_cluster=route.service_cluster)
         for node in service_nodes:
             node_id = f'{node.address}:{service_port}'
-            if next((True for check in processes if check.service_type == service_name and check.node_id == node_id), False):
+            if next((True for check in processes if check.service_name == service_name and check.node_id == node_id), False):
                 continue
-            else:
-                processes.append(
-                    ServiceCheck(
-                        service_type=service_name,
-                        node_id=node_id,
-                        url=f"{'https' if route.is_service_https else 'http'}://{node.address}:{service_port}{service_type.ping_url}",
-                        timeout=timeout,
-                        verify=verify,
-                        response=None,
-                    )
+
+            url = f"{'https' if route.is_service_https else 'http'}://{node.address}:{service_port}"
+            # ping_url is nullable
+            if service_type.ping_url:
+                url = f"{url}{service_type.ping_url}"
+
+            processes.append(
+                ServiceCheck(
+                    service_name=service_name,
+                    service_type=service_type.name,
+                    node_id=node_id,
+                    url=url,
+                    timeout=timeout,
+                    verify=verify,
+                    response=None,
                 )
+            )
     return processes
 
 
@@ -167,11 +200,11 @@ def create_response(service_checks_with_results: Iterator[ServiceCheck]) -> Dict
     response = {"time": datetime.now(), "status": STATUS_GOOD, "services": []}
 
     for result in service_checks_with_results:
-        service = result.service_type
+        service = result.service_name
         # find a service to add node to, create one if none exists
-        current_service = next((s for s in response['services'] if s['service_type'] == service), None)
+        current_service = next((s for s in response['services'] if s['service_name'] == service), None)
         if current_service is None:
-            current_service = {'service_type': service, 'status': 'Unknown', 'nodes': {}}
+            current_service = {'service_name': service, 'status': 'Unknown', 'nodes': {}}
             response['services'].append(current_service)
         # special handling for redis, pulling up the status from response and cluster_nodes into nodes
         if service == 'redis':
@@ -189,9 +222,9 @@ def create_response(service_checks_with_results: Iterator[ServiceCheck]) -> Dict
 def services_to_dict(services: List[Dict]) -> Dict:
     new_services = {}
     for service in services:
-        service_type = service['service_type']
-        del service['service_type']
-        new_services[service_type] = service
+        service_name = service['service_name']
+        del service['service_name']
+        new_services[service_name] = service
     return new_services
 
 
@@ -228,7 +261,7 @@ class StatusView(AnsibleBaseView):
         processes = get_services(timeout=timeout, verify=verify)
 
         # Add redis service check
-        processes.append(ServiceCheck(service_type='redis', node_id='redis', url='', timeout=timeout, verify=verify, response=None))
+        processes.append(ServiceCheck(service_name='redis', service_type='redis', node_id='redis', url='', timeout=timeout, verify=verify, response=None))
 
         results: Iterator[ServiceCheck]
         with ThreadPoolExecutor() as executor:

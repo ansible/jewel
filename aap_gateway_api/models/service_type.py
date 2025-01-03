@@ -13,7 +13,7 @@ class ServiceType(UniqueNamedCommonModel, AuditableModel):
 
     router_basename = 'service_type'
 
-    ping_url = models.CharField(max_length=255, blank=False, null=False, help_text=_("URL to the ping/status page of the service, ex. /pulp/api/v3/status/"))
+    ping_url = models.CharField(max_length=255, blank=False, null=True, help_text=_("URL to the ping/status page of the service, ex. /pulp/api/v3/status/"))
 
     login_path = models.CharField(max_length=255, blank=False, null=True, help_text=_("API path to login for service, ex. /v1/auth/session/login/"))
 

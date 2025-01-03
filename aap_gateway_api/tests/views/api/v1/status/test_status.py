@@ -5,8 +5,11 @@ from unittest import mock
 import pytest
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
 from ansible_base.lib.utils.response import get_relative_url
+from django.conf import settings
+from django.test import override_settings
 
-from aap_gateway_api.models import ServiceNode
+from aap_gateway_api.models import HTTPPort, Route, ServiceCluster, ServiceNode, ServiceType
+from aap_gateway_api.views.api.v1.status import check_console
 
 _REDIS_GOOD = {'mode': 'testing', 'status': STATUS_GOOD}
 _REDIS_FAILED = {'mode': 'testing', 'status': STATUS_FAILED}
@@ -44,7 +47,7 @@ def test_status_no_services(admin_api_client):
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
         # Remove redis from services
-        redis = get_service_by_type(response.data, "redis")
+        redis = get_service_by_name(response.data, "redis")
         response.data["services"].remove(redis)
         assert response.data["services"] == []
 
@@ -72,7 +75,7 @@ def test_status_route_with_no_nodes(admin_api_client, additional_route_controlle
         assert response.status_code == 200
         # The status ends up being good because the redis is good
         assert response.data["status"] == STATUS_GOOD
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is None
 
 
@@ -84,7 +87,7 @@ def test_status_full_hierarchy_with_500(get, admin_api_client, full_service_hier
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["status"] == STATUS_FAILED
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['nodes'][node_id]["status"] == STATUS_FAILED
@@ -100,7 +103,7 @@ def test_status_full_hierarchy_with_200(get, admin_api_client, full_service_hier
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['nodes'][node_id]["status"] == STATUS_GOOD
@@ -115,7 +118,7 @@ def test_status_full_hierarchy_with_exception(get, admin_api_client, full_servic
         response = admin_api_client.get(url)
         assert response.status_code == 200
         assert response.data["status"] == STATUS_FAILED
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['nodes'][node_id]["status"] == STATUS_FAILED
@@ -143,7 +146,7 @@ def test_status_two_routes_same_service_cluster(get, admin_api_client, full_serv
 
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['nodes'][node_id]["status"] == STATUS_GOOD
@@ -174,7 +177,7 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
 
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
 
         assert len(controller['nodes']) == 3
@@ -203,9 +206,9 @@ def test_status_two_hierarchies(get, admin_api_client, full_service_hierarchy_co
 
         assert response.status_code == 200
         assert response.data["status"] == STATUS_GOOD
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
-        hub = get_service_by_type(response.data, "hub")
+        hub = get_service_by_name(response.data, "hub")
         assert hub is not None
 
         node_id_controller = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
@@ -273,10 +276,10 @@ def test_status_redis_and_node_status_expectations(get, admin_api_client, full_s
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
         assert controller['status'] == node_status
-        redis = get_service_by_type(response.data, "redis")
+        redis = get_service_by_name(response.data, "redis")
         assert redis is not None
         assert redis['status'] == redis_status['status']
         assert response.data["status"] == expected_status
@@ -292,10 +295,10 @@ def test_service_responds_with_invalid_status(get, admin_api_client, expected_lo
             response = admin_api_client.get(url)
 
             assert response.status_code == 200
-            controller = get_service_by_type(response.data, "controller")
+            controller = get_service_by_name(response.data, "controller")
             assert controller is not None
             assert controller['status'] == STATUS_GOOD
-            redis = get_service_by_type(response.data, "redis")
+            redis = get_service_by_name(response.data, "redis")
             assert redis is not None
             assert redis['response']['status'] == 'gibberish'
             assert response.data["status"] == STATUS_FAILED
@@ -340,7 +343,7 @@ def test_ensure_cluster_nodes_is_removed_from_clustered_redis(admin_api_client):
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        redis = get_service_by_type(response.data, "redis")
+        redis = get_service_by_name(response.data, "redis")
         assert redis is not None
         assert redis['response']['status'] == STATUS_GOOD
         assert 'nodes' in redis
@@ -372,7 +375,7 @@ def test_multiple_nodes_get_truncated(get, admin_api_client, full_service_hierar
 
         assert response.status_code == 200
         # The cluster will appear as 3 nodes but there are really only 2 of them
-        controller = get_service_by_type(response.data, "controller")
+        controller = get_service_by_name(response.data, "controller")
         assert controller is not None
         assert len(controller['nodes']) == 2
 
@@ -415,10 +418,10 @@ def test_eda_status_gets_degraded_if_redis_down(get, redis_status, eda_node_stat
         response = admin_api_client.get(url)
 
         assert response.status_code == 200
-        eda = get_service_by_type(response.data, "eda")
+        eda = get_service_by_name(response.data, "eda")
         assert eda is not None
         assert eda['status'] == expected_eda_status
-        redis = get_service_by_type(response.data, "redis")
+        redis = get_service_by_name(response.data, "redis")
         assert redis is not None
         assert redis['status'] == redis_status['status']
 
@@ -455,5 +458,86 @@ def test_that_get_requests_are_async(get, admin_api_client, full_service_hierarc
         assert total_time > 3 and total_time < 9, f"Total time was {total_time} and should have been < 9\n{response.data}"
 
 
-def get_service_by_type(data: List, type: str):
-    return next((s for s in data["services"] if s["service_type"] == type), None)
+@pytest.mark.parametrize(
+    "console_return, side_effect, expected_status",
+    [
+        (mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "operational"}]}), None, STATUS_GOOD),
+        (mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "failed"}]}), None, STATUS_FAILED),
+        (mock.Mock(status_code=200, json=lambda: {"components": [{"name": "random", "status": "operational"}]}), None, STATUS_FAILED),
+        (mock.Mock(status_code=200, json=lambda: {}), None, STATUS_FAILED),
+        (None, Exception('Something went wrong'), STATUS_FAILED),
+        (mock.Mock(status_code=400, json=lambda: {"status": "Bad request"}), None, STATUS_FAILED),
+    ],
+)
+@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
+def test_console_status(get, console_return, side_effect, expected_status):
+
+    get.return_value = console_return
+    get.side_effect = side_effect
+
+    resp = check_console()
+
+    assert resp["status"] == expected_status
+
+    if isinstance(side_effect, Exception):
+        assert resp["exception"] == str(side_effect)
+    else:
+        assert resp["status"] == expected_status
+        assert resp["response_code"] == console_return.status_code
+
+
+@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
+def test_status_includes_console(get, admin_api_client):
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "operational"}]})
+    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get(name="console"))
+    ServiceNode.objects.create(name="Console", service_cluster=sc)
+    port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
+    Route.objects.create(name="Console", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")
+
+    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
+        url = get_relative_url("status-view")
+        response = admin_api_client.get(url)
+
+        status = get_service_by_name(response.data, "Console")
+        assert status is not None
+        assert status["status"] == STATUS_GOOD
+
+
+@override_settings()
+def test_missing_console_url(admin_api_client):
+    del settings.CRC_STATUS_URL
+
+    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get(name="console"))
+    ServiceNode.objects.create(name="Console", service_cluster=sc)
+    port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
+    Route.objects.create(name="Console", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")
+
+    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
+        url = get_relative_url("status-view")
+
+        response = admin_api_client.get(url)
+        status = get_service_by_name(response.data, "Console")
+        assert 'nodes' in status
+        node = next(iter(status['nodes'].values()))
+        assert 'CRC_STATUS_URL not set' in node['body']
+
+
+@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
+def test_null_ping_url(get, admin_api_client):
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"components": [{"name": "Pingless", "status": "good"}]})
+
+    sc = ServiceCluster.objects.create(name="Pingless", service_type=ServiceType.objects.create(name="Pingless"))
+    ServiceNode.objects.create(name="Pingless", service_cluster=sc, address='pingless.com')
+    port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
+    Route.objects.create(name="Pingless", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")
+
+    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
+        url = get_relative_url("status-view")
+
+        admin_api_client.get(url)
+
+    get.assert_called_once_with('https://pingless.com:443', verify=mock.ANY, timeout=mock.ANY)
+
+
+def get_service_by_name(data: List, name: str):
+    return next((s for s in data["services"] if s["service_name"] == name), None)

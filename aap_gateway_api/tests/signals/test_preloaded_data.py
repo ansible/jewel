@@ -2,8 +2,8 @@ from unittest import mock
 
 import pytest
 
-from aap_gateway_api.models import Organization
-from aap_gateway_api.signals.preloaded_data import create_default_organization, create_preload_data
+from aap_gateway_api.models import Organization, ServiceType
+from aap_gateway_api.signals.preloaded_data import add_console_service_type, create_default_organization, create_preload_data
 
 
 class TestCreatePreloadedData:
@@ -53,3 +53,22 @@ class TestCreatePreloadedData:
         with mock.patch('aap_gateway_api.signals.preloaded_data.create_default_organization', mock_function):
             with expected_log('aap_gateway_api.signals.preloaded_data.logger', log_level, 'Failed to'):
                 create_preload_data(verbosity=verbosity, plan=[('0000', False)])
+
+    @pytest.mark.django_db
+    def test_console_st(self):
+        console_type = ServiceType.objects.get(name="console")
+        assert console_type is not None
+        console_type.delete()
+
+        with pytest.raises(ServiceType.DoesNotExist):
+            ServiceType.objects.get(name="console")
+
+        add_console_service_type()
+
+        console_type = ServiceType.objects.get(name="console")
+
+        assert console_type.name == "console"
+        assert console_type.ping_url is None
+        assert console_type.service_index_path is None
+        assert console_type.login_path is None
+        assert console_type.logout_path is None

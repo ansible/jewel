@@ -1,6 +1,6 @@
 from ansible_base.lib.utils.response import get_relative_url
 
-from aap_gateway_api.models import ServiceCluster, ServiceType
+from aap_gateway_api.models import DefaultServiceType, ServiceCluster, ServiceType
 
 
 def test_service_type_detail_controller(admin_api_client, service_type_controller):
@@ -12,19 +12,24 @@ def test_service_type_detail_controller(admin_api_client, service_type_controlle
     assert response.data["ping_url"] == "/api/v2/ping/"
 
 
-def test_service_type_list(admin_api_client, service_type_controller, service_type_hub, service_type_gateway, service_type_eda):
+def test_service_type_list(admin_api_client, request):
     url = get_relative_url("service_type-list")
     response = admin_api_client.get(url)
     assert response.status_code == 200
-    assert len(response.data["results"]) == 4
-    assert response.data["results"][0]["name"] == "gateway"
-    assert response.data["results"][0]["id"] == service_type_gateway.pk
-    assert response.data["results"][1]["name"] == "controller"
-    assert response.data["results"][1]["id"] == service_type_controller.pk
-    assert response.data["results"][2]["name"] == "hub"
-    assert response.data["results"][2]["id"] == service_type_hub.pk
-    assert response.data["results"][3]["name"] == "eda"
-    assert response.data["results"][3]["id"] == service_type_eda.pk
+    st_count = len(response.data["results"])
+    assert st_count >= len(DefaultServiceType)  # There can be more than the core services
+
+    found_types = {}
+    for t in response.data["results"]:
+        found_types[t["name"]] = t["id"]
+
+    for fixture in request.fixturenames:
+        if fixture.startswith('service_type'):
+            # Find all service_type_<whatever> fixtures and make sure we find an entry for
+            # each one (matching <whatever> portion above)
+            fixture_type = fixture.split('_')[-1]
+            assert fixture_type in found_types
+            assert request.getfixturevalue(fixture).pk == found_types[fixture_type]
 
 
 def test_service_type_create(admin_api_client):
