@@ -47,6 +47,7 @@
       ansible.platform.service_cluster:
         name: "{{ item.name }}"
         service_type: "{{ item.service_type }}"
+        health_checks_enabled: "{{ item.health_checks_enabled | default(True) }}"
       loop: "{{ gateway_service_clusters | default([]) }}"
 
     - name: Manage service_nodes

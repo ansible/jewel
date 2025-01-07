@@ -30,6 +30,7 @@ gateway_service_clusters:  # Service clusters (1 per type)
 {% if 'console' in gateway_services %}
   - name: console
     service_type: console
+    health_checks_enabled: False
 {% endif %}
 
 gateway_service_nodes:   # Nodes of service clusters
