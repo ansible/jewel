@@ -315,7 +315,7 @@ class Command(BaseCommand):
                         self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
                     elif resource_type_name == "shared.user" and resource["name"] == self.client.user.username:
                         service_type = self.client.service.service_cluster.service_type
-                        if service_type != "controller" and not self.client.user.has_usable_password():
+                        if str(service_type) == "controller" and not self.client.user.has_usable_password():
                             authenticator, _ = Authenticator.objects.get_or_create(
                                 type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
                                 defaults={"enabled": True, "name": "controller admin password"},
