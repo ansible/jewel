@@ -59,7 +59,7 @@
 
     - name: Create Automation Hub Service Type
       ansible.platform.service_type:
-        name: "{{ test_id}}hub"
+        name: "{{ test_id }}hub"
         ping_url: "/api/ping/"
         login_path: "/api/login/"
         logout_path: "/api/logout/"

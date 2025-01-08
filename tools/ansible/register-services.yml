@@ -68,6 +68,7 @@
         service_path: "{{ item.service_path }}"
         service_port: "{{ item.service_port }}"
         order: "{{ item.order }}"
+        is_internal_route: "{{ item.is_internal_route | default(omit) }}"
       loop: "{{ gateway_services | default([]) }}"
 
     - name: Manage routes
@@ -81,5 +82,6 @@
         service_path: "{{ item.service_path }}"
         service_port: "{{ item.service_port }}"
         enable_gateway_auth: "{{ item.enable_gateway_auth }}"
+        is_internal_route: "{{ item.is_internal_route | default(omit) }}"
       loop: "{{ gateway_routes | default([]) }}"
 ...

@@ -56,7 +56,7 @@ request_headers = {
 
 
 class Request:
-    def __init__(self, method="GET", host="localhost", path="/", header_diff={}, body="", query=""):
+    def __init__(self, method="GET", host="localhost", path="/", header_diff={}, body="", query="", is_internal_route="f"):
         self.method = method
         self.host = host
         self.path = path
@@ -69,6 +69,9 @@ class Request:
         self.attributes = self
         self.request = self
         self.http = self
+        self.context_extensions = {
+            "is_internal_route": is_internal_route,
+        }
 
 
 @pytest.mark.parametrize(
@@ -168,3 +171,31 @@ class TestExternalAuth:
         for header in response.denied_response.headers:
             if header.header.key == 'content-type':
                 assert expected_type == header.header.value
+
+    def test_check_internal_route_unauthenticated(self, ext_auth):
+        request = Request(is_internal_route="t")
+        response = ext_auth.Check(request, None)
+
+        # assert permission denied
+        assert response.status.code == 16
+        assert response.denied_response.status.code == 401
+        assert "internal" in response.status.message
+
+    @pytest.mark.parametrize(
+        "auth,expected_return_code,expected_http_status_code,return_message_string",
+        [
+            ("NotServiceTokenAuthentication", 16, 401, "internal"),
+            ("ServiceTokenAuthentication", 0, 200, None),
+        ],
+    )
+    def test_check_internal_route_authenticated(self, auth, expected_return_code, expected_http_status_code, return_message_string, ext_auth, admin_user):
+        request = Request(is_internal_route="t")
+        response = None
+        with mock.patch("aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate", return_value=(admin_user, auth)):
+            response = ext_auth.Check(request, None)
+
+        # assert permission denied
+        assert response.status.code == expected_return_code
+        if return_message_string:
+            assert response.denied_response.status.code == expected_http_status_code
+            assert return_message_string in response.status.message

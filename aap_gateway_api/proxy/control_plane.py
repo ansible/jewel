@@ -64,6 +64,9 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
 
 
 class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
+    def is_route_internal(self, request) -> bool:
+        return request.attributes.context_extensions["is_internal_route"] == "t"
+
     def _get_ms_delta(self, start_time):
         delta_ms = (time.time() - start_time) * 1000
         return f'{delta_ms:.0f} (ms)'
@@ -101,7 +104,7 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         self._log_process_time()
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
-    def _return_no_auth_with_reason(self, reason, html_body=None):
+    def _return_no_auth_with_reason(self, reason, html_body=None, code=7, http_status_code=403):
         if "application/json" in self.drf_request.META.get("HTTP_ACCEPT", ""):
             response_body = json.dumps(dict(details=reason))
             content_type = "application/json"
@@ -117,8 +120,8 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         # Inject the content-type header for this response
         self.headers = [HeaderValueOption(header=HeaderValue(key='content-type', value=content_type))]
 
-        response = external_auth_pb2.DeniedHttpResponse(status=http_status_pb2.HttpStatus(code=403), headers=self.headers, body=response_body)
-        status = status_pb2.Status(code=7, message=str(reason))
+        response = external_auth_pb2.DeniedHttpResponse(status=http_status_pb2.HttpStatus(code=http_status_code), headers=self.headers, body=response_body)
+        status = status_pb2.Status(code=code, message=str(reason))
 
         return external_auth_pb2.CheckResponse(status=status, denied_response=response)
 
@@ -145,6 +148,39 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             else:
                 logger.error(f"Failed to read from database! {e}")
                 return self._return_no_auth_with_reason(f'Unable to connect to database: {e}')
+
+    def get_jwt_for_user(self, user):
+        if jwt := JWTSessionCache.get(user.pk):
+            logger.debug(f"Loading cached JWT token for {user.username} ({self.request_id})")
+        else:
+            logger.debug(f"Issuing new JWT token for {user.username} ({self.request_id})")
+            jwt_start = time.time()
+            jwt = create_signed_jwt(user)
+            logger.debug(f"GRPC took {self._get_ms_delta(jwt_start)} to create a signed JWT ({self.request_id})")
+            JWTSessionCache.set(user.pk, jwt)
+
+        return jwt
+
+    def try_authenticate_request(self):
+        try:
+            user = self.drf_request.user
+        except AuthenticationFailed:
+            # Rest framework will raise this exception if the user/pass combo is invalid.
+            # If this is the case we want to fall though and _return_not_authenticated so that the Authorization header will be sent to the backend.
+            user = None
+
+        if self.is_internal_route:
+            if self.drf_request.auth != "ServiceTokenAuthentication":
+                return self._return_no_auth_with_reason("User is not authorized to reach internal route", code=16, http_status_code=401)
+            elif self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
+                return self._return_no_authentication_required()
+
+        if not user or not user.pk:
+            return self._return_not_authenticated()
+
+        jwt = self.get_jwt_for_user(user)
+
+        return self._return_authenticated(jwt, user.username)
 
     def Check(self, request, context):
         self.start_time = time.time()
@@ -182,35 +218,17 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             logger.exception("Failed to generate x-trusted-proxy")
 
         self.request_path = request.attributes.request.http.path
+        self.is_internal_route = self.is_route_internal(request)
 
         # /static endpoints and any requests to the gateway api do not require any JWT authentication
         # This should never trigger if enable_gateway_auth is set to False on the gateway service.
-        if self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
+        if not self.is_internal_route and (self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/')):
             return self._return_no_authentication_required()
 
+        # Try to authenticate request: The try block should either return a CheckResponse or raise an error to be handled here.
         logger.debug(f"Starting authentication for ({self.request_id}) {self.request_path}.")
         try:
-            try:
-                user = self.drf_request.user
-            except AuthenticationFailed:
-                # Rest framework will raise this exception if the user/pass combo is invalid.
-                # If this is the case we want to fall though and _return_not_authenticated so that the Authorization header will be sent to the backend.
-                user = None
-
-            if not user or not user.pk:
-                return self._return_not_authenticated()
-
-            if jwt := JWTSessionCache.get(user.pk):
-                logger.debug(f"Loading cached JWT token for {user.username} ({self.request_id})")
-            else:
-                logger.debug(f"Issuing new JWT token for {user.username} ({self.request_id})")
-                jwt_start = time.time()
-                jwt = create_signed_jwt(user)
-                logger.debug(f"GRPC took {self._get_ms_delta(jwt_start)} to create a signed JWT ({self.request_id})")
-                JWTSessionCache.set(user.pk, jwt)
-
-            return self._return_authenticated(jwt, user.username)
-
+            return self.try_authenticate_request()
         except PermissionDenied as e:
             return self._return_bad_csrf(e)
         except Exception as e:

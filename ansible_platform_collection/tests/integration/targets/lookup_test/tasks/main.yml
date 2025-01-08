@@ -66,8 +66,8 @@
     - name: Use lookup plugin to query created objects
       ansible.builtin.set_fact:
         _org2: "{{ lookup(plugin_name, 'organizations', query_params={'description': org2_description}, **connection_info) }}"
-        _users: "{{ query(plugin_name, 'users', query_params={ 'username__startswith': name_prefix, 'order_by': 'username' }, **connection_info) }}"
-        _admins: "{{ query(plugin_name, 'organizations/' + (org1.id|string) + '/admins/', query_params=admins_query, **connection_info) }} "
+        _users: "{{ query(plugin_name, 'users', query_params={'username__startswith': name_prefix, 'order_by': 'username'}, **connection_info) }}"
+        _admins: "{{ query(plugin_name, 'organizations/' + (org1.id | string) + '/admins/', query_params=admins_query, **connection_info) }} "
       vars:
         admins_query:
           username__startswith: "{{ name_prefix }}"
@@ -98,7 +98,7 @@
 
     - name: Expect One - Get 0
       ansible.builtin.set_fact:
-        _users: "{{ lookup(plugin_name, 'users', query_params={'username': name_prefix + '-NonExisting-1'}, expect_one=true, **connection_info)}}"
+        _users: "{{ lookup(plugin_name, 'users', query_params={'username': name_prefix + '-NonExisting-1'}, expect_one=true, **connection_info) }}"
       ignore_errors: true
       register: expect_one
 
@@ -110,7 +110,7 @@
 
     - name: Expect One - Get 3
       ansible.builtin.set_fact:
-        _users: "{{ lookup(plugin_name, 'users', query_params={'username__startswith': name_prefix}, expect_one=true, **connection_info)}}"
+        _users: "{{ lookup(plugin_name, 'users', query_params={'username__startswith': name_prefix}, expect_one=true, **connection_info) }}"
       ignore_errors: true
       register: expect_one
 
