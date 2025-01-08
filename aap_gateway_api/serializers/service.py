@@ -1,6 +1,7 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from django.utils.translation import gettext as _
 from rest_framework import serializers
+from rest_framework.exceptions import ErrorDetail
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType
 from aap_gateway_api.models.route import API_PREFIX
@@ -65,6 +66,11 @@ class ServiceTypeSerializer(NamedCommonModelSerializer):
         ]
 
 
+def _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_route, errors):
+    if not enable_gateway_auth and is_internal_route:
+        errors.setdefault('is_internal_route', []).append(ErrorDetail(_("Internal routes require gateway auth to be enabled"), code='required'))
+
+
 class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
     class Meta:
         model = ServiceAPIRoute
@@ -73,6 +79,7 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
             'service_cluster',
             'service_port',
             'is_service_https',
+            'is_internal_route',
             'service_path',
             'gateway_path',
             'description',
@@ -83,6 +90,25 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
         ]
 
         read_only_fields = ('gateway_path',)
+
+    def validate(self, data):
+        """
+        Perform cross-field validation for enable_gateway_auth and is_internal_route flags,
+        is_internal_route cannot be set without gateway auth enabled.
+
+        Raises ValidationError if any validation fails.
+        """
+        enable_gateway_auth = data.get('enable_gateway_auth')
+        is_internal_route = data.get('is_internal_route')
+
+        errors = {}
+
+        _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_route, errors)
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return data
 
     def validate_node_tags(self, value):
         return _validate_tags_field(value)
@@ -115,6 +141,7 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
             'service_cluster',
             'service_port',
             'is_service_https',
+            'is_internal_route',
             'service_path',
             'gateway_path',
             'description',
@@ -126,9 +153,19 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
         return _validate_tags_field(value)
 
     def validate(self, attrs):
+        enable_gateway_auth = attrs.get('enable_gateway_auth')
+        is_internal_route = attrs.get('is_internal_route')
+
+        errors = {}
+
+        _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_route, errors)
+
         if attrs.get("http_port") and attrs["http_port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):
-            raise serializers.ValidationError(
-                {'gateway_path': _("Custom routes on the API port cannot start with '{API_PREFIX}'".format(API_PREFIX=API_PREFIX))}
+            errors.setdefault('gateway_path', []).append(
+                ErrorDetail(_("Custom routes on the API port cannot start with '{API_PREFIX}'".format(API_PREFIX=API_PREFIX)), code='required')
             )
+
+        if errors:
+            raise serializers.ValidationError(errors)
 
         return attrs

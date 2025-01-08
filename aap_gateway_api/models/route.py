@@ -5,6 +5,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
+from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
@@ -55,6 +56,10 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     # Some routes, such as EDA webhooks, have their own authentication and my not need
     # gateway authentication tokens.
     enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the AAP gateway will not insert a gateway token into the proxied request."))
+    # Some Routes should only be accessible to other gateway services, this flag indicates this
+    is_internal_route = models.BooleanField(
+        default=False, help_text=_("If true, the AAP gateway will only allow other AAP services to access this route. Requires gateway auth to be enabled.")
+    )
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every
@@ -78,6 +83,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         default="",
         help_text=_("A comma-separated list of nodes in the service cluster to receive traffic from this route.  Leave blank to select all nodes."),
     )
+
+    def is_internal_route_string(self):
+        return "t" if self.is_internal_route else "f"
 
     def node_tags_list(self):
         return [tag.strip() for tag in self.node_tags.split(",")] if self.node_tags else []
@@ -183,7 +191,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 "cluster": self.envoy_cluster_name,
                 "timeout": f"{get_preference_value('proxy', 'request_timeout')}s",
             },
-            "metadata": {},
+            "metadata": {
+                "typed_filter_metadata": {},
+            },
             "typed_per_filter_config": {},
         }
 
@@ -196,9 +206,19 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             }
 
         if not self.enable_gateway_auth:
-            cfg["typed_per_filter_config"]["envoy.filters.http.ext_authz"] = {
-                "@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute",
-                "disabled": True,
+            cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                "@type": EXT_AUTH_PER_ROUTE,
+                "disabled": not self.enable_gateway_auth,
+            }
+        else:
+            cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                "@type": EXT_AUTH_PER_ROUTE,
+                "check_settings": {
+                    # map<string, string> to be sent to auth server per route
+                    "context_extensions": {
+                        "is_internal_route": self.is_internal_route_string(),
+                    },
+                },
             }
 
         returned_routes.append(cfg)
@@ -236,7 +256,16 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                         "cluster": envoy_cluster_name,
                     },
                     'metadata': {},
-                    'typed_per_filter_config': {},
+                    'typed_per_filter_config': {
+                        EXT_AUTH_FILTER: {
+                            "@type": EXT_AUTH_PER_ROUTE,
+                            "check_settings": {
+                                "context_extensions": {
+                                    "is_internal_route": self.is_internal_route_string(),
+                                },
+                            },
+                        },
+                    },
                 },
             )
 
@@ -252,7 +281,16 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                         "cluster": envoy_cluster_name,
                     },
                     'metadata': {},
-                    'typed_per_filter_config': {},
+                    'typed_per_filter_config': {
+                        EXT_AUTH_FILTER: {
+                            "@type": EXT_AUTH_PER_ROUTE,
+                            "check_settings": {
+                                "context_extensions": {
+                                    "is_internal_route": self.is_internal_route_string(),
+                                },
+                            },
+                        },
+                    },
                 },
             )
 

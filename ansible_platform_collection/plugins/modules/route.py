@@ -50,6 +50,11 @@ options:
     enable_gateway_auth:
       description: If false, the AAP gateway will not insert a gateway token into the proxied request
       type: bool
+    is_internal_route:
+      description:
+        - Flag whether or not the route is an internal route.
+        - Internal routes are only accessible to other services.
+      type: bool
     service_path:
       description:
       - URL path on the AAP Service cluster to route traffic to
@@ -113,6 +118,7 @@ def main():
         http_port=dict(type="str"),
         service_cluster=dict(type="str"),
         is_service_https=dict(type="bool", default=False),
+        is_internal_route=dict(type="bool"),
         enable_gateway_auth=dict(type="bool"),
         service_path=dict(type="str"),
         service_port=dict(type="int"),

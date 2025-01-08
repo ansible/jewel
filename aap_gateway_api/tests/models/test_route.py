@@ -80,7 +80,6 @@ class TestRoute:
         route = ServiceAPIRoute(gateway_path='/', service_path='/', envoy_cluster_name='testing')
         routes = route.get_xds_route_config()
         assert len(routes) == 1
-        assert 'filter_metadata' not in routes[0]["metadata"]
         assert 'envoy.filters.http.lua' not in routes[0]["typed_per_filter_config"]
 
     @pytest.mark.django_db
@@ -96,7 +95,20 @@ class TestRoute:
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', enable_gateway_auth=True)
         routes = route.get_xds_route_config()
         assert len(routes) == 1
-        assert 'envoy.filters.http.ext_authz' not in routes[0]["typed_per_filter_config"]
+        assert 'disabled' not in routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'check_settings' in routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'is_internal_route' in routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]
+        assert routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]["is_internal_route"] == "f"
+
+    @pytest.mark.django_db
+    def test_xds_route_config_enable_gateway_auth_internal_route(self):
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', enable_gateway_auth=True, is_internal_route=True)
+        routes = route.get_xds_route_config()
+        assert len(routes) == 1
+        assert 'disabled' not in routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'check_settings' in routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'is_internal_route' in routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]
+        assert routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]["is_internal_route"] == "t"
 
     @pytest.mark.django_db
     def test_xds_route_config_disable_gateway_auth(self):
