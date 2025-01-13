@@ -37,6 +37,12 @@ options:
         - Optional description of this access token.
       required: False
       type: str
+    organization:
+      description:
+        - Organization name, ID, or named URL the application exists in if applicable
+        - Used to help lookup the object, cannot be modified using this module.
+        - If not provided, will lookup by name only, which does not work with duplicates.
+      type: str
     existing_token:
       description: The data structure produced from token in create mode to be used with state absent.
       type: dict
@@ -133,6 +139,7 @@ def main():
     argument_spec = dict(
         description=dict(),
         application=dict(),
+        organization=dict(),
         scope=dict(choices=['read', 'write']),
         existing_token=dict(type='dict', no_log=False),
         existing_token_id=dict(),
@@ -158,6 +165,7 @@ def main():
     # Extract our parameters
     description = module.params.get('description')
     application = module.params.get('application')
+    organization = module.params.get('organization')
     scope = module.params.get('scope')
     existing_token = module.params.get('existing_token')
     existing_token_id = module.params.get('existing_token_id')
@@ -179,14 +187,19 @@ def main():
 
     # Attempt to look up the related items the user specified (these will fail the module if not found)
     application_id = None
+    organization_id = None
+    search_fields = {}
     if application:
-        application_id = module.resolve_name_to_id('applications', application)
+        if organization:
+            organization_id = module.get_one('organizations', name_or_id=organization, allow_none=False)['id']
+            search_fields['organization'] = organization_id
+        application_id = module.get_one('applications', name_or_id=application, allow_none=False, **{'data': search_fields})['id']
 
     # Create the data that gets sent for create and update
     new_fields = {}
     if description is not None:
         new_fields['description'] = description
-    if application is not None:
+    if application_id is not None:
         new_fields['application'] = application_id
     if scope is not None:
         new_fields['scope'] = scope

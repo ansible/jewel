@@ -41,7 +41,7 @@ ignore_api_parameters = {
 # Add the module name as the key with the value being the list of params to ignore
 no_api_parameter_ok = {
     # Existing_token and id are for working with an existing tokens
-    'token': ['existing_token', 'existing_token_id'],
+    'token': ['existing_token', 'existing_token_id', 'organization'],
 }
 
 # When this tool was created we were not feature complete. Adding something in here indicates a module
