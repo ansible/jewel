@@ -19,7 +19,8 @@ export ANSIBLE_CONFIG
 	check lint check_black check_flake8 check_isort \
 	docker-compose plumb update_django_ansible_base_hash \
 	collection-install collection-test collection-docs \
-	collection-lint collection-sanity  collection-test-completeness
+	collection-lint collection-sanity  collection-test-completeness \
+        collection-test-integration-check
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -262,6 +263,10 @@ collection-test: collection-install
 collection-sanity: collection-install
 	cd /tmp/collections/ansible_collections/ansible/platform && \
 	ansible-test sanity
+
+## Run the collections test-integration check to see if all modules have integration tests
+collection-test-integration-check:
+	./ansible_platform_collection/tests/test_integation_check.py
 
 ## Run the collections test-completness check
 collection-test-completeness:
