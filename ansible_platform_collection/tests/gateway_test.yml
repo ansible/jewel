@@ -38,4 +38,5 @@
 #    - include_tasks: integration/targets/routes_test/tasks/main.yml
 #    - include_tasks: integration/targets/role_user_assignments_test/tasks/main.yml
 #    - include_tasks: integration/targets/lookup_test/tasks/main.yml
+#    - include_tasks: integration/targets/tokens_test/tasks/main.yml
 ...
