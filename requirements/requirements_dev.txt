@@ -1,3 +1,4 @@
+ansible    # Needed by the dev environment to run playbooks
 build
 django-debug-toolbar
 ipython # Used in shell_plus
