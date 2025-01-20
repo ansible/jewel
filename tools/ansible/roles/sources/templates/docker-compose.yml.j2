@@ -219,7 +219,7 @@ services:
       - gateway{{ container_id }}
 {% endfor %}
 {% else %}
-{# We have harpoxy enabled so we will add one of those and gateway_node_count envoy nodes behind it #}
+{# We have haproxy enabled so we will add one of those and gateway_node_count envoy nodes behind it #}
 {% for i in range(gateway_node_count|int) %}
   {% set container_id = loop.index %}
   {% set exposed_port = 9079 + container_id | int %}
@@ -256,7 +256,7 @@ services:
 # Optional containers
 {% if enabled_containers['haproxy']|bool %}
   haproxy:
-    image: haproxy:{{ proxy_container_version }}
+    image: mirror.gcr.io/haproxy:{{ proxy_container_version }}
     container_name: aap_gw_haproxy_1
     hostname: haproxy
     user: "${UID}"
@@ -302,7 +302,7 @@ services:
 
 {% if enabled_containers['ldap'] | bool %}
   ldap:
-    image: bitnami/openldap:{{ ldap_image_version }}
+    image: mirror.gcr.io/bitnami/openldap:{{ ldap_image_version }}
     container_name: aap_gw_ldap_1
     hostname: ldap
     user: "${UID:-1000}"
@@ -329,7 +329,7 @@ services:
 
 {% if enabled_containers['tacacs'] | bool %}
   tacacs:
-    image: dchidell/docker-tacacs:{{ tacacs_container_version }}
+    image: mirror.gcr.io/dchidell/docker-tacacs:{{ tacacs_container_version }}
     container_name: aap_gw_tacacs_1
     hostname: tacacs
     ports:
