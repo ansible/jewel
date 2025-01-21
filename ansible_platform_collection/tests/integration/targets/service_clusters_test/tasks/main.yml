@@ -38,6 +38,8 @@
         name: "{{ test_id }}-Automation-Controller"
         service_type: "{{ controller_st.id }}"
         health_check_interval_seconds: 1162
+        dns_discovery_type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
       register: controller_sc
 
     - name: Assert that we created the controller service cluster
@@ -71,6 +73,7 @@
         name: "{{ test_id }}-Automation-Hub"
         service_type: "{{ hub_st.id }}"
         health_check_interval_seconds: 1162
+        upstream_hostname: hub.com
       register: hub_sc
 
     - name: Assert that we created the hub service cluster
@@ -114,6 +117,7 @@
       ansible.platform.service_cluster:
         name: "{{ hub_sc.name }}"
         service_type: "{{ hub_st.id }}"
+        upstream_hostname: hub.com
         state: exists
       register: exists_hub
 
@@ -188,6 +192,17 @@
         that:
           - change_eda_sc is changed
           - change_eda_sc.id == eda_sc.id
+
+    - name: Change auth_type for a service
+      ansible.platform.service_cluster:
+        name: "{{ eda_sc.id }}"
+        auth_type: "TOKEN"
+      register: change_eda_auth_type
+
+    - name: Assert that auth_type is changed
+      ansible.builtin.assert:
+        that:
+          - change_eda_auth_type is changed
 
   always:
     # Always Cleanup

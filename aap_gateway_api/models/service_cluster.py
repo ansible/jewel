@@ -73,6 +73,48 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
         help_text=_("The number of consecutive successful health checks before a node is considered healthy."),
     )
 
+    class ServiceAuthType(models.TextChoices):
+        JWT_AUTH = "JWT", "JWT"
+        BASIC_AUTH = "BASIC", "Basic auth"
+        TOKEN_AUTH = "TOKEN", "Bearer token"
+
+    auth_type = models.CharField(
+        choices=ServiceAuthType.choices,
+        default=ServiceAuthType.JWT_AUTH,
+        max_length=255,
+        null=False,
+        blank=False,
+        help_text=_("The authorization type for this service."),
+    )
+
+    upstream_hostname = models.CharField(
+        default="", max_length=255, null=False, blank=True, help_text=_("Set this value to enable server name identification on associated routes.")
+    )
+
+    class DNSServiceDiscovery(models.TextChoices):
+        LOGICAL_DNS = "LOGICAL_DNS", "Logical DNS"
+        STRICT_DNS = "STRICT_DNS", "Strict DNS"
+
+    dns_discovery_type = models.CharField(
+        choices=DNSServiceDiscovery.choices,
+        default=DNSServiceDiscovery.STRICT_DNS,
+        max_length=255,
+        null=False,
+        blank=False,
+        help_text=_("The DNS service discovery type for this service."),
+    )
+
+    class DNSLookupFamily(models.TextChoices):
+        V4_ONLY = "V4_ONLY", "IPv4 only"
+        V6_ONLY = "V6_ONLY", "IPv6 only"
+        AUTO = "AUTO", "Auto (IPv6 preferred)"
+        ALL = "ALL", "All IPv4 and IPv6 addresses"
+        V4_PREFERRED = "V4_PREFERRED", "IPv4 preferred"
+
+    dns_lookup_family = models.CharField(
+        choices=DNSLookupFamily.choices, default=DNSLookupFamily.ALL, max_length=255, null=False, blank=False, help_text=_("DNS lookup type for this service.")
+    )
+
     def summary_fields(self):
         response = {}
         response['id'] = self.id

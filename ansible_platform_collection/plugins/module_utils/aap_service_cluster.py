@@ -77,3 +77,19 @@ class AAPServiceCluster(AAPObject):
         health_check_healthy_threshold = self.params.get('health_check_healthy_threshold')
         if health_check_healthy_threshold is not None:
             self.new_fields["health_check_healthy_threshold"] = health_check_healthy_threshold
+
+        auth_type = self.params.get('auth_type')
+        if auth_type is not None:
+            self.new_fields["auth_type"] = auth_type
+
+        upstream_hostname = self.params.get('upstream_hostname')
+        if upstream_hostname is not None:
+            self.new_fields["upstream_hostname"] = upstream_hostname
+
+        dns_discovery_type = self.params.get('dns_discovery_type')
+        if dns_discovery_type is not None:
+            self.new_fields["dns_discovery_type"] = dns_discovery_type
+
+        dns_lookup_family = self.params.get('dns_lookup_family')
+        if dns_lookup_family is not None:
+            self.new_fields["dns_lookup_family"] = dns_lookup_family

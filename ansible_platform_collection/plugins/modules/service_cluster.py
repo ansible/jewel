@@ -25,10 +25,34 @@ options:
       type: str
       description: Setting this option will change the existing name (looked up via the name field)
     service_type:
-        description:
-          - Service Type for this cluster - name or ID
-          - Required when creating new Service Cluster
-        type: str
+      type: str
+      description:
+        - Service Type for this cluster - name or ID
+        - Required when creating new Service Cluster
+    auth_type:
+      type: str
+      description:
+        - Authentication type for this service cluster
+        - Defaults to JWT
+      choices: ["JWT", "BASIC", "TOKEN"]
+    upstream_hostname:
+      type: str
+      description:  If set, Server Name Identification(SNI) and host header are set to this value
+    dns_discovery_type:
+      type: str
+      description:
+        - DNS discovery type used for this service
+        - STRICT_DNS (default) - Use, maintain and load balance among all returned addresses
+        - LOGICAL_DNS - Use the first returned address at a time
+        - See envoy documentation for further details
+      choices: ["STRICT_DNS", "LOGICAL_DNS"]
+    dns_lookup_family:
+      type: str
+      description:
+        - DNS address selection control
+        - ALL - Use all addresses
+        - AUTO - IPv6 preferred
+      choices: ["ALL", "V4_ONLY", "V6_ONLY", "V4_PREFERRED", "AUTO"]
     outlier_detection_enabled:
       type: bool
       description: If true, outlier detection will be used to determine if a node is unhealthy and should be ejected from the cluster.
@@ -94,7 +118,11 @@ def main():
     argument_spec = dict(
         name=dict(required=True, type='str'),
         new_name=dict(type='str'),
-        service_type=dict(type="str"),
+        service_type=dict(type='str'),
+        auth_type=dict(choices=['JWT', 'BASIC', 'TOKEN']),
+        upstream_hostname=dict(type='str'),
+        dns_discovery_type=dict(choices=['STRICT_DNS', 'LOGICAL_DNS']),
+        dns_lookup_family=dict(choices=['ALL', 'V4_ONLY', 'V6_ONLY', 'V4_PREFERRED', 'AUTO']),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
         outlier_detection_enabled=dict(type='bool'),
         outlier_detection_consecutive_5xx=dict(type='int'),

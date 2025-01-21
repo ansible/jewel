@@ -48,6 +48,11 @@
         name: "{{ item.name }}"
         service_type: "{{ item.service_type }}"
         health_checks_enabled: "{{ item.health_checks_enabled | default(True) }}"
+        auth_type: "{{ item.auth_type | default(omit) }}"
+        upstream_hostname: "{{ item.upstream_hostname | default(omit) }}"
+        dns_discovery_type: "{{ item.dns_discovery_type | default(omit) }}"
+        dns_lookup_family: "{{ item.dns_lookup_family | default(omit) }}"
+
       loop: "{{ gateway_service_clusters | default([]) }}"
 
     - name: Manage service_nodes

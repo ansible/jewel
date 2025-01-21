@@ -56,7 +56,9 @@ request_headers = {
 
 
 class Request:
-    def __init__(self, method="GET", host="localhost", path="/", header_diff={}, body="", query="", is_internal_route="f"):
+    def __init__(
+        self, method="GET", host="localhost", path="/", header_diff={}, body="", query="", is_internal_route="f", service_type="gateway", auth_type="JWT"
+    ):
         self.method = method
         self.host = host
         self.path = path
@@ -71,6 +73,8 @@ class Request:
         self.http = self
         self.context_extensions = {
             "is_internal_route": is_internal_route,
+            "service_type": service_type,
+            "auth_type": auth_type,
         }
 
 
@@ -199,3 +203,41 @@ class TestExternalAuth:
         if return_message_string:
             assert response.denied_response.status.code == expected_http_status_code
             assert return_message_string in response.status.message
+
+    @pytest.mark.parametrize(
+        "service_type,auth_type,expected_headers",
+        [
+            ("controller", "JWT", ["X-DAB-JW-TOKEN", "x-trusted-proxy"]),
+            ("console", "BASIC", ["Authorization", "x-trusted-proxy"]),
+            ("console", "TOKEN", ["Authorization", "x-trusted-proxy"]),
+        ],
+    )
+    def test_auth_header_selection(self, ext_auth, service_type, auth_type, expected_headers, admin_user):
+        request = Request(service_type=service_type, auth_type=auth_type)
+
+        with mock.patch("aap_gateway_api.proxy.service_auth.ServiceAuthHelper._get_pref_or_setting", return_value="dummy"):
+            with mock.patch(
+                "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+                return_value=(admin_user, "ServiceTokenAuthentication"),
+            ):
+                response = ext_auth.Check(request, None)
+        for header in expected_headers:
+            assert any(x for x in response.ok_response.headers if x.header.key == header)
+
+    @pytest.mark.parametrize(
+        "service_type,auth_type,expected_exception",
+        [
+            ("controller", "BASIC", NameError),
+            ("hub", "TOKEN", NameError),
+            ("console", "BOGUS", RuntimeError),
+        ],
+    )
+    def test_auth_header_exceptions(self, ext_auth, service_type, auth_type, expected_exception, admin_user):
+        request = Request(service_type=service_type, auth_type=auth_type)
+
+        with pytest.raises(expected_exception):
+            with mock.patch(
+                "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+                return_value=(admin_user, "ServiceTokenAuthentication"),
+            ):
+                ext_auth.Check(request, None)
