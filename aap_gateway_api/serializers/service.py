@@ -42,6 +42,10 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
         fields = NamedCommonModelSerializer.Meta.fields + [
             'service_type',
             'service_id',
+            'auth_type',
+            'upstream_hostname',
+            'dns_discovery_type',
+            'dns_lookup_family',
             'outlier_detection_enabled',
             'outlier_detection_consecutive_5xx',
             'outlier_detection_interval_seconds',

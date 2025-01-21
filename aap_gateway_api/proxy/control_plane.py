@@ -25,7 +25,10 @@ from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
+from aap_gateway_api.models import ServiceCluster
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
+
+from .service_auth import ServiceAuthHelper
 
 MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware, LogRequestMiddleware]
 
@@ -74,16 +77,15 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
     def _log_process_time(self):
         logger.debug(f'GRPC process time for {self.request_id}: {self._get_ms_delta(self.start_time)}')
 
-    def _return_authenticated(self, jwt, username):
+    def _return_authenticated(self, username):
         logger.debug(f"User {username} successfully authenticated for {self.request_id}")
 
-        # We are going to send the JWT downstream so we should remove the Authorization header so the service does not see it
+        # Remove original authorization header unless we're overriding it so the service does not see it
+        headers_to_remove = [] if any(x for x in self.headers if x.header.key == 'Authorization') else ['Authorization']
+
         response = external_auth_pb2.OkHttpResponse(
-            headers=self.headers
-            + [
-                HeaderValueOption(header=HeaderValue(key=get_preference_value('proxy', 'gateway_token_name'), value=jwt)),
-            ],
-            headers_to_remove=['Authorization'],
+            headers=self.headers,
+            headers_to_remove=headers_to_remove,
         )
 
         self._log_process_time()
@@ -178,12 +180,26 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         if not user or not user.pk:
             return self._return_not_authenticated()
 
-        jwt = self.get_jwt_for_user(user)
+        match self.auth_type:
+            case ServiceCluster.ServiceAuthType.JWT_AUTH:
+                header_name = get_preference_value('proxy', 'gateway_token_name')
+                header_val = self.get_jwt_for_user(user)
+            case _:
+                # Not JWT
+                try:
+                    (header_name, header_val) = ServiceAuthHelper.get_auth_header(self.service_type, self.auth_type)
+                except (NameError, RuntimeError) as e:
+                    logger.exception(e)
+                    raise
 
-        return self._return_authenticated(jwt, user.username)
+        self.headers.append(HeaderValueOption(header=HeaderValue(key=header_name, value=header_val)))
+        return self._return_authenticated(user.username)
 
     def Check(self, request, context):
         self.start_time = time.time()
+
+        self.service_type = request.attributes.context_extensions["service_type"]
+        self.auth_type = request.attributes.context_extensions["auth_type"]
 
         # Clear the thread local request. If we log before we get the new one, we'll log the wrong request.
         logging_thread_local.request = None

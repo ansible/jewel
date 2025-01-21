@@ -31,6 +31,10 @@ gateway_service_clusters:  # Service clusters (1 per type)
   - name: console
     service_type: console
     health_checks_enabled: False
+    auth_type: BASIC
+    upstream_hostname: console.redhat.com
+    dns_discovery_type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
 {% endif %}
 
 gateway_service_nodes:   # Nodes of service clusters
@@ -58,7 +62,7 @@ gateway_service_nodes:   # Nodes of service clusters
 {% if 'console' in gateway_services %}
   - name: console
     service_cluster: console
-    address: "console.stage.redhat.com"
+    address: "console.redhat.com"
 {% endif %}
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)

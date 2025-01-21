@@ -135,9 +135,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             # LOGICAL_DNS can not have multiple endpoints defined in it because they assume that DNS for a single node will respond with multiple hosts
             # STRICT_DNS should give us the characteristics we want where if a node is removed from a cluster
             #            the connections we be drained and traffic will stop being routed there.
-            "type": "STRICT_DNS",
+            "type": self.service_cluster.dns_discovery_type,
             "lb_policy": "LEAST_REQUEST",
-            "dns_lookup_family": "ALL",
+            "dns_lookup_family": self.service_cluster.dns_lookup_family,
             "load_assignment": {"cluster_name": self.envoy_cluster_name, "endpoints": [{"lb_endpoints": endpoints}]},
         }
 
@@ -176,6 +176,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 },
             }
 
+            if self.service_cluster.upstream_hostname:
+                cfg["transport_socket"]["typed_config"]["sni"] = self.service_cluster.upstream_hostname
+
         return cfg
 
     def get_xds_route_config(self):
@@ -197,6 +200,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             "typed_per_filter_config": {},
         }
 
+        if self.service_cluster.upstream_hostname:
+            cfg["route"]["host_rewrite_literal"] = self.service_cluster.upstream_hostname
+
         if self.service_path != self.gateway_path:
             cfg["metadata"]["filter_metadata"] = {"envoy.filters.http.lua": {"prefix": self.gateway_path, "prefix_rewrite": self.service_path}}
 
@@ -217,6 +223,8 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     # map<string, string> to be sent to auth server per route
                     "context_extensions": {
                         "is_internal_route": self.is_internal_route_string(),
+                        "service_type": self.service_cluster.service_type.name,
+                        "auth_type": self.service_cluster.auth_type,
                     },
                 },
             }
@@ -262,6 +270,8 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                             "check_settings": {
                                 "context_extensions": {
                                     "is_internal_route": self.is_internal_route_string(),
+                                    "service_type": self.service_cluster.service_type.name,
+                                    "auth_type": self.service_cluster.auth_type,
                                 },
                             },
                         },
@@ -287,6 +297,8 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                             "check_settings": {
                                 "context_extensions": {
                                     "is_internal_route": self.is_internal_route_string(),
+                                    "service_type": self.service_cluster.service_type.name,
+                                    "auth_type": self.service_cluster.auth_type,
                                 },
                             },
                         },

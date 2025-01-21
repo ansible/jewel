@@ -139,7 +139,7 @@ def initialize_preferences():
         gateway_preference_manager[preference_name]
 
 
-def get_setting(name: str) -> Any:
+def get_setting(name: str, encrypted: bool = True) -> Any:
     possible_preferences = []
     for preference in gateway_preference_registry.preferences():
         if preference.name == name:
@@ -148,7 +148,7 @@ def get_setting(name: str) -> Any:
     if len(possible_preferences) == 0:
         raise SettingNotSetException()
     elif len(possible_preferences) == 1:
-        return get_preference_value_by_preference(possible_preferences[0])
+        return get_preference_value_by_preference(possible_preferences[0], encrypted)
     else:
         raise TooManyPreferencesException(
             _("There were %(possible_preferences)s for setting %(name)s, unable to get a setting by name")
