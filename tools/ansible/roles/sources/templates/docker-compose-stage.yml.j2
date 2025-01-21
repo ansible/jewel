@@ -1,17 +1,23 @@
 #jinja2: lstrip_blocks: True
 ---
-version: '2.1'
 services:
 {% for i in range(gateway_node_count|int) %}
   {% set container_id = loop.index %}
   {% set exposed_port = 7999 + container_id | int %}
   gateway{{ container_id }}:
-    image: {{ gateway_image }}
-    entrypoint: [ "/usr/bin/launch-gateway" ]
+    build:
+      context: $PWD
+      dockerfile: tools/generated/Dockerfile
+    command:
+      - /usr/bin/launch-gateway
     container_name: aap_gw_{{ container_id }}
-    hostname: aap-gw-{{ container_id }}
+    hostname: gateway{{ container_id }}
     depends_on:
       - db
+{% for i in range(redis_node_count|int) %}
+{% set container_id = loop.index %}
+      - redis{{ container_id }}
+{% endfor %}
     expose:
       - "{{ exposed_port }}"
     environment:
@@ -29,8 +35,11 @@ services:
       - REDIS_HOSTS={{ ",".join(redis_hosts) }}
       - REDIS_TLS={{ redis_uses_tls }}
       - CACHE_KEY_PREFIX={{ cache_key_prefix }}
-      - ENVOY_HOSTNAME=proxy
+      # TODO: What is this used for and how do we handle multiple proxies?
+      - ENVOY_HOSTNAME=proxy1
       - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
+      - DJANGO_DEBUG_TOOL_BAR={{ ddt_enabled }}
+      - CONTAINER_NUMBER={{ container_id }}
 {% if container_engine == 'docker' %}
     links:
       - db
@@ -42,16 +51,24 @@ services:
     networks:
       - dbnet
       - service-mesh
+{% if container_engine == 'docker' %}
     extra_hosts:
       host-gateway: host-gateway
+{% endif %}
     ports:
       - "{{ exposed_port }}:8000"
       - "{{ container_id }}4444:4444"
     user: "${UID:-1000}"
     volumes:
-      - $PWD/container-startup.yml:/opt/aap_gateway/src/container-startup.yml:z
+      - $PWD:/opt/aap_gateway/src:z
+      - $PWD/django-ansible-base:/opt/aap_gateway/django-ansible-base:z
+      - $PWD/tools/configs/nginx.conf:/etc/ansible-automation-platform/gateway/nginx.conf:z
+      - $PWD/tools/configs/nginx-gateway.conf:/etc/ansible-automation-platform/gateway/nginx-gateway.conf:z
       - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+      - $PWD/tools/configs/uwsgi.ini:/etc/ansible-automation-platform/gateway/uwsgi.ini:z
+      - $PWD/tools/configs/settings.py:/etc/ansible-automation-platform/gateway/settings.py:z
+      - $PWD/tools/configs/supervisord.conf:/etc/supervisord.conf:z
       - $PWD/tools/generated/redis_cluster/redis.cert:/etc/ansible-automation-platform/gateway/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/etc/ansible-automation-platform/gateway/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/etc/ansible-automation-platform/gateway/redis_ca.cert:z
@@ -64,10 +81,11 @@ services:
 
 {% for i in range(redis_node_count|int) %}
 {% set container_id = loop.index %}
+{% set name = redis_node_prefix ~ container_id %}
   redis{{ container_id }}:
-    container_name: {{ redis_node_prefix }}{{ container_id }}
-    hostname: {{ redis_node_prefix }}{{ container_id }}
-    image: rhel8-redis-6
+    container_name: {{ name }}
+    hostname: {{ name }}
+    image: quay.io/fedora/redis-6:{{ redis_container_version }}
     entrypoint: ["redis-server"]
     command:
       - /usr/local/etc/redis/redis.conf
@@ -81,13 +99,79 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
       - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/redis-volume{{ container_id }}:/var/lib/redis/data:z
+{% if redis_mode == 'cluster' %}
       - $PWD/tools/generated/redis_cluster/nodes{{ container_id }}.conf:/usr/local/etc/redis/nodes.conf:z
+{% endif %}
     networks:
       dbnet:
         aliases:
-          - {{ redis_node_prefix }}{{ container_id }}
+          - {{ name }}
+{% endfor %}
+
+{% if redis_mode == 'sentinel' %}
+{# Redis replica nodes #}
+{% for i in range(redis_sentinel_replica_nodes|int) %}
+{% set container_id = loop.index %}
+{% set name = redis_node_prefix ~ "replica-" ~ container_id %}
+  redis_replica_{{ container_id }}:
+    container_name: {{ name }}
+    hostname: {{ name }}
+    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    entrypoint: ["redis-server"]
+    command:
+      - /usr/local/etc/redis/redis.replica.conf
+    ports:
+      - "{{ redis_exposed_port + container_id}}:{{ redis_exposed_port }}"
+    volumes:
+      - $PWD/tools/generated/redis_cluster/redis.replica.conf:/usr/local/etc/redis/redis.replica.conf:z
+      - $PWD/tools/generated/redis_cluster/redis-users.acl:/usr/local/etc/redis/redis-users.acl:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/replica-volume{{ container_id }}:/var/lib/redis/data:z
+    networks:
+      dbnet:
+        aliases:
+          - {{ name }}
+    depends_on:
+      - redis1
+{% endfor %}
+
+{# Sentinel nodes #}
+{% for i in range(redis_sentinel_sentinel_nodes|int) %}
+{% set container_id = loop.index %}
+{% set name = redis_node_prefix ~ "sentinel-" ~ container_id %}
+  redis_sentinel_{{ container_id }}:
+    container_name: {{ name }}
+    hostname: {{ name }}
+    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    entrypoint: ["redis-server"]
+    command:
+      - /usr/local/etc/sentinel/sentinel.conf
+      - --sentinel
+    ports:
+      - "{{ container_id }}{{ redis_exposed_port}}:{{ container_id }}{{ redis_exposed_port }}"
+    volumes:
+      - $PWD/tools/generated/redis_cluster/sentinel{{ container_id }}:/usr/local/etc/sentinel/:z
+      - $PWD/tools/generated/redis_cluster/redis-users-sentinel.acl:/usr/local/etc/redis/redis-users-sentinel.acl:z
+      - $PWD/tools/generated/redis_cluster/redis.cert:/usr/local/etc/redis/redis.cert:z
+      - $PWD/tools/generated/redis_cluster/redis.key:/usr/local/etc/redis/redis.key:z
+      - $PWD/tools/generated/redis_cluster/ca.cert:/usr/local/etc/redis/ca.cert:z
+      - $PWD/tools/generated/redis_cluster/sentinel-volume{{ container_id }}:/var/lib/redis/data:z
+    networks:
+      dbnet:
+        aliases:
+          - {{ name }}
+    depends_on:
+      - redis1
+{% for i in range(redis_sentinel_replica_nodes|int) %}
+{% set container_id = loop.index %}
+      - redis_replica_{{ container_id }}
+{% endfor %}
 
 {% endfor %}
+{% endif %}
 
   db:
     container_name: aap_gw_db_pgsql_1
@@ -106,9 +190,11 @@ services:
     volumes:
       - "aap_gw_db:/var/lib/psql/data"
 
-  proxy:
-    container_name: aap_gw_proxy_1
-    hostname: aap-gw-proxy-1
+{% if not enabled_containers['haproxy']|bool %}
+{# If we are not enabling haproxy then we will just run with 1 envoy server #}
+  proxy1:
+    container_name: aap_gw_proxy1
+    hostname: proxy1
 {% if container_engine == 'docker' %}
     image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
     entrypoint: /usr/local/bin/envoy
@@ -120,6 +206,9 @@ services:
     environment:
       - ENVOY_UID=0
     ports:
+{% if proxy_insecure_redirect_port is defined %}
+      - "{{ proxy_insecure_redirect_port }}:{{ proxy_insecure_redirect_port }}"
+{% endif %}
       - "{{ proxy_port }}:9080"
       - "19000:19000"
     volumes:
@@ -134,14 +223,78 @@ services:
     networks:
       - dbnet
       - service-mesh
+    depends_on:
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+      - gateway{{ container_id }}
+{% endfor %}
+{% else %}
+{# We have harpoxy enabled so we will add one of those and gateway_node_count envoy nodes behind it #}
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+  {% set exposed_port = 9079 + container_id | int %}
+  {% set exposed_admin_port = 18999 + container_id | int %}
+  proxy{{ container_id }}:
+    container_name: aap_gw_proxy_{{ container_id }}
+    hostname: proxy{{ container_id }}
+    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    entrypoint: /usr/local/bin/envoy
+    command: --config-path /etc/envoy/envoy.yaml
+    environment:
+      - ENVOY_UID=0
+    ports:
+      - "{{ exposed_port }}:9080"
+      - "{{ exposed_admin_port }}:19000"
+    volumes:
+      - $PWD/tools/generated/envoy.yml:/etc/envoy/envoy.yaml:z
+      - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
+      - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
+      - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+{% if container_engine == 'docker' %}
+    extra_hosts:
+      host-gateway: "host-gateway"
+{% endif %}
+    networks:
+      - dbnet
+      - service-mesh
+    depends_on:
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+      - gateway{{ container_id }}
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 # Optional containers
+{% if enabled_containers['haproxy']|bool %}
+  haproxy:
+    image: haproxy:{{ proxy_container_version }}
+    container_name: aap_gw_haproxy_1
+    hostname: haproxy
+    user: "${UID}"
+    ports:
+      - "{{ proxy_port }}:8443"
+      - 8404:8404  # The stats port
+    volumes:
+      - $PWD/tools/generated/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,z
+      - $PWD/tools/generated/haproxy.pem:/usr/local/etc/haproxy/haproxy.pem:ro,z
+    networks:
+      - dbnet
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+    depends_on:
+{% for i in range(gateway_node_count|int) %}
+  {% set container_id = loop.index %}
+      - proxy{{ container_id }}
+{% endfor %}
+{% endif %}
+
 {% if enabled_containers['keycloak']|bool %}
   keycloak:
     image: {{ keycloak_image }}:{{ keycloak_image_version }}
     container_name: aap_gw_keycloak_1
     hostname: keycloak
-    user: "${UID}"
+    user: "${UID:-1000}"
     ports:
       - "{{ keycloak_exposed_port }}:8443"
     environment:
@@ -164,7 +317,7 @@ services:
     image: bitnami/openldap:{{ ldap_image_version }}
     container_name: aap_gw_ldap_1
     hostname: ldap
-    user: "${UID}"
+    user: "${UID:-1000}"
     ports:
       - "{{ ldap_exposed_ldap_port }}:1389"
       - "{{ ldap_exposed_ldaps_port }}:1636"
