@@ -266,7 +266,7 @@ collection-sanity: collection-install
 
 ## Run the collections test-integration check to see if all modules have integration tests
 collection-test-integration-check:
-	./ansible_platform_collection/tests/test_integation_check.py
+	./ansible_platform_collection/tests/test_integration_check.py
 
 ## Run the collections test-completness check
 collection-test-completeness:
