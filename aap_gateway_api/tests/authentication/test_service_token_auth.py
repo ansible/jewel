@@ -255,7 +255,7 @@ def test_bad_path_info(expected_log):
     from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
 
     token_auth = ServiceTokenAuthentication()
-    token_auth.authorized_paths = [('testing')]
+    token_auth.authorized_paths = ['testing']
 
     request = mock.Mock()
     request.path = '/junk'
