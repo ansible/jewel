@@ -1,7 +1,11 @@
 ansible    # Needed by the dev environment to run playbooks
+black==25.1.0           # Linting tool, if changed update pyproject.toml as well
 build
 django-debug-toolbar
+flake8==7.1.1           # Linting tool, if changed update pyproject.toml as well
+Flake8-pyproject==1.2.3 # Linting tool, if changed update pyproject.toml as well
 ipython # Used in shell_plus
+isort==6.0.0            # Linting tool, if changed update pyproject.toml as well
 remote-pdb # The debugger setup with Python's breakpoint()
 tox # Used for unit tests
 colorama # Allows addition of color to logs
