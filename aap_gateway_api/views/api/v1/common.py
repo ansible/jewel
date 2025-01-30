@@ -22,6 +22,7 @@ class GatewayModelViewSet(viewsets.ModelViewSet, AnsibleBaseView):
 
 class ProxyUnsafeGatewayModelViewSet(GatewayModelViewSet):
     "Use for models that should reject PUT and DELETE requests coming from proxy"
+
     permission_classes = [perm_class & DisallowWriteFromProxy for perm_class in GatewayModelViewSet.permission_classes]
 
     def object_write_unsafe(self, request, obj) -> bool:
@@ -31,6 +32,7 @@ class ProxyUnsafeGatewayModelViewSet(GatewayModelViewSet):
 
 class RoleModelViewSet(GatewayModelViewSet):
     "Use for models registered in the DAB RBAC permission registry"
+
     permission_classes = [OAuth2ScopePermission, AnsibleBaseObjectPermissions]
 
     def filter_queryset(self, qs):
