@@ -177,6 +177,7 @@ INSTALLED_APPS = [
     'ansible_base.rest_pagination',
     'ansible_base.rbac',
     'ansible_base.oauth2_provider',
+    "ansible_base.feature_flags",
 ]
 
 # Internationalization
