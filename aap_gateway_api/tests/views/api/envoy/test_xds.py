@@ -25,7 +25,7 @@ def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_s
 
     listener_routes = response.data['resources'][0]['filterChains'][0]['filters'][0]['typedConfig']['routeConfig']['virtualHosts'][0]['routes']
     sc_routes = full_service_hierarchy_controller.service_cluster.routes.all()
-
+    listener_routes.pop(0)  # Discard /up static route
     assert sc_routes.count() > 0
     assert len(listener_routes) == sc_routes.count()
 
@@ -85,7 +85,7 @@ def test_lds_listener_discover_service_service_type_auth_type(admin_api_client, 
     response = admin_api_client.post(lds_url, data={})
     assert response.status_code == 200
 
-    route_config = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"][0]
+    route_config = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"][1]
     assert route_config["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["checkSettings"]["contextExtensions"]["service_type"] == "hub"
     assert route_config["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["checkSettings"]["contextExtensions"]["auth_type"] == "TOKEN"
 
@@ -236,6 +236,9 @@ def get_lds_routes(admin_api_client):
     assert response.status_code == 200
     filter = response.data['resources'][0]["filterChains"][0]["filters"][0]
     for route in filter["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]:
+        if route["match"]["prefix"] == "/up":
+            # Avoid envoy self-hosted /up route
+            continue
         routes[route["match"]["prefix"]] = route["route"]["cluster"]
     return routes
 

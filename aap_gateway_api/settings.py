@@ -271,6 +271,10 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.ScryptPasswordHasher",
 ]
 
+# Timeout in seconds for ping of DB, proxy and service ping URLs.
+PING_PAGE_CHECK_TIMEOUT = 3
+PING_PAGE_CHECK_IGNORE_CERT = False
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
@@ -449,6 +453,12 @@ if getenv('CSRF_TRUSTED_ORIGINS', None) is not None:
 
 if getenv('LOGOUT_ALLOWED_HOSTS', None) is not None:
     LOGOUT_ALLOWED_HOSTS = getenv('LOGOUT_ALLOWED_HOSTS').split(",")
+
+if getenv('PING_PAGE_CHECK_TIMEOUT', None) is not None:
+    PING_PAGE_CHECK_TIMEOUT = getenv('PING_PAGE_CHECK_TIMEOUT')
+
+if getenv('PING_PAGE_CHECK_IGNORE_CERT', None) is not None:
+    PING_PAGE_CHECK_IGNORE_CERT = to_python_boolean(getenv('PING_PAGE_CHECK_IGNORE_CERT'))
 
 # override invalid settings
 if GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH < GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE:

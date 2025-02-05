@@ -5,6 +5,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext as _
 
+from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
 
 
@@ -60,6 +61,13 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         ]
 
         routes = []
+        # Allow envoy to respond to /up itself without auth
+        up_route = {
+            "match": {"prefix": "/up"},
+            "direct_response": {"status": 200, "body": {"inline_string": "UP"}},
+            "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
+        }
+        routes.append(up_route)
         for route in self.routes.all().order_by('order'):
             routes.extend(route.get_xds_route_config())
 
