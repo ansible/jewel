@@ -1,62 +1,166 @@
-# sonarcloud
+# SonarQube Cloud in AAP-Gateway
 
-We use sonarcloud to help perform analysis on the code and ensure a certain
-level of code coverage and testing against PRs.
+SonarQube Cloud (formerly known as SonarCloud) is a **Software-as-a-Service (SaaS)** code analysis tool that helps maintain high-quality code by identifying issues related to maintainability, reliability, and security. 
 
-Making sonarcloud work against PRs to a private repository is slightly
-nontrivial. The way way have it set up, is by having a workflow that listens
-for the completion of the normal CI workflow, and then running sonar. This
-avoids the problem where normally GHA workflows run in the context of the user
-submitting the PR - who might not have access to repository secrets (including
-the sonarcloud API token).
+We use SonarQube Cloud to perform code analysis on main branch, pull and push requests to ensure a certain level of code coverage and compliance with quality code standards.
 
-So upon completion of the CI workflow, the sonar-pr workflow kicks off, running
-in the context of the upstream repository. Then sonarcloud will use the GitHub
-API to inject itself as a check on the PR.
+## 🔹 Core Concepts in SonarQube Cloud
 
-Generally this works well - however it makes it hard to see when changes to the
-`sonar-project.properties` file breaks sonarcloud. And since sonar doesn't run
-and inject itself into the PR in that case, the PR appears to be green.
+1. **Clean as You Code**:
+A development practice ensuring that **new code** complies with quality standards.  
 
-## Debugging sonarcloud
+2. **Clean Code Attributes**: Consistency, Intentionality, Adaptability and Responsibility.
+    - 📚 [Code analysis metrics](https://docs.sonarsource.com/sonarqube-cloud/digging-deeper/metric-definitions/)
 
-When a change to `sonar-project.properties` breaks sonarcloud, it can be
-a little annoying to debug. I have found the best way to debug it is to
-run `sonar-scanner` locally.
+3. **Software Quality**: SonarQube Cloud assesses software quality by detecting issues that violate clean code principles. Each issue impacts one or more software qualities with varying severity.  
+    - 📚 [Code analysis based on clean code](https://docs.sonarsource.com/sonarqube-cloud/core-concepts/clean-code/code-analysis/)
 
-The download for `sonar-scanner` can be found at the top of this page:
-https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/scanners/sonarscanner/
+4. **Quality Standards**: is made up of a quality profile and a quality gate.
+    - *Quality Profile* – A set of rules applied during analysis.  
+    - *Quality Gate* – A set of conditions that must be met for the code to pass code quality standards. 
+   The gate shows pass (green) or fail (red) status based on whether all conditions are met or if any condition is not met. 
 
-NOTE: The directory structure matters. You can unzip the zip file anywhere, but
-the files have to stay together. You *cannot* for example just move
-`bin/sonar-scanner` to `/usr/local/bin/`, this will not work. But you can add
-the `bin` directory you unzipped, into your $PATH. For example:
 
-```
-[user@host sonar-scanner-5.0.1.3006-linux]$ export PATH=`pwd`/bin:$PATH
-```
+## 🔍 SonarQube Cloud  Analysis Methods
 
-and then you can execute `sonar-scanner` from any directory.
+For **GitHub repositories**, SonarQube Cloud supports two analysis methods:
 
-Looking at the entrypoint for the official sonarcloud GHA action gives insight
-into how the scanner runs normally. You can view that here:
-https://github.com/SonarSource/sonarcloud-github-action/blob/master/entrypoint.sh
+### 1️⃣ [**Automatic Analysis**](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/automatic-analysis/)  
+- Requires no configuration in the repository.  
+- Analysis runs directly on **SonarCloud’s platform**.  
 
-You will need a sonar token, which you can get by logging into sonarcloud,
-clicking your avatar on the top right, going to My Account, and then clicking
-the Security tab.
+- ❌ **Limitations**:
+  - Not all repositories qualify.
+  - Branch analysis of non-pull request branches other than the main branch is not supported.
+  - Code coverage information is not supported.
+- Example: `ansible/awx` uses **automatic analysis**.
 
-Once you have a token, set it as an environment variable, `SONAR_TOKEN`:
+### 2️⃣ [**CI-Based Analysis**](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/overview-of-integrated-cis/)
 
-```
-export SONAR_TOKEN=your_token_here
-```
+- *SonarScanner* is installed as part of the build process and performs the actual code analysis in the build environment. 
+- Provides customized configuration options.
+- To include [***code coverage***](https://docs.sonarsource.com/sonarqube-cloud/enriching/test-coverage/overview/): A code coverage tool needs to be set up and run *before* the SonarScanner analysis step so that Sonar can import the code coverage report files.  
+- Results are uploaded to SonarCloud after execution.
 
-Finally you can run `sonar-scanner`:
+## ⚙️ How SonarCloud is Configured in AAP-Gateway
 
-```
-sonar-scanner -Dsonar.projectBaseDir=. -Dsonar.host.url=https://sonarcloud.io
-```
+AAP-Gateway uses CI-based analysis with GitHub Actions (GHA) to integrate SonarCloud while incorporating code coverage data.
 
-You can look for the errors and iterate as quickly as you like, and then commit
-the fix. Most errors tend to be at the bottom of the output.
+> [!NOTE]
+> Some of the links below require authentication to SonarCloud. If you see a blank page after clicking a link, use the login option in the upper right corner. If the page remains blank, you may not have permission to view the data.
+
+### 🔹 AAP-Gateway Quality Standards:
+AAP-Gateway uses the default "Sonar Way" Quality Profile and applies a Quality Gate to enforce coding standards.
+This ensures that any introduced changes meet defined thresholds for maintainability, reliability, and security.
+
+- 📚 [aap-gateway Quality Profile](https://sonarcloud.io/project/information?id=ansible_aap-gateway)
+- 📚 [aap-gatewat Quality Gate](https://sonarcloud.io/organizations/ansible/quality_gates/show/118786)
+
+### 🔹 Project Analysis Configuration and Parameters:
+In general, project analysis settings can be configured in 3 different places: in the UI, in a configuration file, or on the command line.
+
+For CI-based analysis, parameters can be set in the `sonar-project.properties` file.
+
+- 📚 [aap-gateway `sonar-project.properties`](https://github.com/ansible/aap-gateway/blob/devel/sonar-project.properties)
+- 📚 [Setting configuration with analysis parameters](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/analysis-parameters/#setting-configuration-in-a-file)
+
+> [!WARNING] 
+> If changes to `sonar-project.properties` break SonarCloud, the PR may still appear **green** since Sonar doesn't inject itself in such cases.
+
+## 📌 GitHub Actions Integration  
+There are two GitHub Actions workflows that handle the integration of SonarCloud into the AAP-Gateway CI/CD pipeline:  
+
+
+
+### 🔹 **1. CI Workflow**
+File: [`.github/workflows/ci.yml`](https://github.com/ansible/aap-gateway/blob/devel/.github/workflows/ci.yml)  
+Trigger: Runs on push and pull requests  
+
+- The CI workflow first using `tox` with `pytest` and `pytest-cov` to run tests while measuring code coverage and generating coverage report `coverage.xml`.
+- **`coverage.xml`** is then uploaded as an artifact to be used by the `sonar-pr.yml` workflow.  
+  📚 GitHub Docs: [Storing & Sharing Data from a Workflow](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/storing-and-sharing-data-from-a-workflow)
+
+- SonarCloud Scan (on push only, **not** PR): Here, SonarCloud analysis is run only on *direct pushes* to the upstream repository (e.g. when a PR is merged). This step is skipped otherwise.
+
+### 🔹 **2. SonarCloud PR Workflow**
+File: [`.github/workflows/sonar-pr.yml`](https://github.com/ansible/aap-gateway/blob/devel/.github/workflows/sonar-pr.yml)  
+Trigger: Runs after the CI workflow successfully completes on a pull request  
+
+- Downloads the `coverage.xml` artifact from the CI workflow.
+- Retrieves PR metadata, including the base branch.
+- Runs SonarCloud scan analysis on the PR.
+
+
+> [!NOTE]
+> *It is important to notice the use of `workflow_run` instead of `pull_request` on trigger condition.*
+> 
+> GitHub Actions workflows triggered by `pull_request` run in the context of the forked repository, which does not have access to secrets (e.g., the SonarCloud secrets).
+>
+> By using `workflow_run`:
+> - The CI workflow first runs and generates a coverage report.
+> - The Sonar PR workflow then executes SonarCloud analysis with the correct permissions, since `workflow_run` runs in the context of the upstream repository (which has access to secrets).
+> 
+> 📚 GitHub Docs: 
+> - [`workflow_run` event in GitHub Actions](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#workflow_run)
+> - [Using secrets in a workflow](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#using-secrets-in-a-workflow)
+
+
+ **📌 Summary: Why Two Workflows?**
+
+| **Workflow**     | **Trigger**       | **Runs SonarCloud?** | **Access to Secrets?** |
+|------------------|------------------|----------------------|------------------------|
+| `ci.yml`        | Push, PR          | ✅ **Only on push**  | ❌ **Not on PRs** (forks lack access) |
+| `sonar-pr.yml`  | After CI success  | ✅ **Only on PRs**   | ✅ **Has access to secrets** |
+
+
+## 🛠️ Debugging SonarCloud Issues
+
+### 🔹 **Common Issue: Broken `sonar-project.properties`**
+If a change in `sonar-project.properties` breaks SonarCloud, debugging can be tricky. The best approach is to run **`sonar-scanner` locally**.
+
+### 🔹 **Steps to Debug Locally**
+
+1. **Download SonarScanner**  
+📚 [SonarScanner Download](https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/scanners/sonarscanner/)  
+
+2. **Set up SonarScanner CLI**
+
+   SonarScanner CLI can be used with SonarCloud to debug and configure local analysis. 
+   After you have download the SonarScanner archive, follow [this instructions](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/sonarscanner-cli/) to finish the set up.
+   
+   > [!NOTE]
+   > The extracted `sonar-scanner` files **must stay together**. You **cannot** move only `bin/sonar-scanner` to `/usr/local/bin/`.
+   Instead, add the `bin` directory to `$PATH`:
+
+      ```sh
+      export PATH=$(pwd)/bin:$PATH
+      ```
+
+
+4. **Obtain a SonarCloud API Token**
+   - Log in to **SonarCloud**  
+   - Click your avatar (top-right) → **My Account** → [**Security Tab**](https://sonarcloud.io/account/security)  
+   - Generate a new **Sonar Token** and set it as an environment variable:
+
+   ```sh
+   export SONAR_TOKEN=your_token_here
+   ```
+
+5. **Run SonarScanner Manually**
+
+   Run the command `sonar-scanner` from the project base directory to run the analysis
+   ```sh
+   sonar-scanner -Dsonar.projectBaseDir=. -Dsonar.host.url=https://sonarcloud.io
+   ```
+
+6. **Check for Errors**
+   - Most issues appear at the **bottom of the output**.
+   - Fix any configuration problems and rerun `sonar-scanner`.
+
+
+
+## 📌 References
+
+- [SonarCloud Documentation](https://docs.sonarsource.com/sonarqube-cloud/)
+- [GitHub Actions for SonarCloud](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/github-actions-for-sonarcloud/)
+- [GitHub Workflow Data Sharing](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/storing-and-sharing-data-from-a-workflow)
