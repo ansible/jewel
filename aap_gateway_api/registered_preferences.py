@@ -276,7 +276,6 @@ register(
     label=_('Allow external users to create OAuth2 tokens'),
 )
 
-
 register(
     section="legacy_sso",
     preference_name="CONTROLLER_SSO_URL",

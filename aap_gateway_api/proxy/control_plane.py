@@ -12,14 +12,13 @@ from ansible_base.lib.middleware.logging import LogRequestMiddleware
 from django.conf import settings
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.db import DatabaseError, close_old_connections, connection
+from django.db import close_old_connections
 from django.http import HttpRequest, parse_cookie
 from django.views.csrf import csrf_failure
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
 from envoy.service.auth.v3 import attribute_context_pb2, external_auth_pb2, external_auth_pb2_grpc
 from envoy.type.v3 import http_status_pb2
 from google.rpc import status_pb2
-from psycopg import OperationalError
 from rest_framework.exceptions import APIException, AuthenticationFailed, PermissionDenied
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import Request as DRFRequest
@@ -27,6 +26,7 @@ from rest_framework.settings import api_settings
 
 from aap_gateway_api.models import ServiceCluster
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
+from aap_gateway_api.utils.db import get_db_connection_status
 
 from .service_auth import ServiceAuthHelper
 
@@ -135,21 +135,17 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
     def _can_read_from_db(self, initial_call: bool = True) -> Optional[external_auth_pb2.CheckResponse]:
         # This is overkill if we have CONN_HEALTH_CHECK=True in the settings
         # But just incase we will also do our own detection
+        timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
         try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                result = cursor.fetchone()
-                # Access the first item just incase we need to this returned by the driver in order for the connection test to complete
-                result[0]
+            get_db_connection_status('default', timeout)
             return None
-        except (DatabaseError, OperationalError) as e:
+        except Exception as e:
             if initial_call:
                 logger.warning("Database error. We think it's a connection error. Resetting the connection so it can be tried again.")
                 close_old_connections()
                 return self._can_read_from_db(initial_call=False)
             else:
-                logger.error(f"Failed to read from database! {e}")
-                return self._return_no_auth_with_reason(f'Unable to connect to database: {e}')
+                return self._return_no_auth_with_reason(f'Unable to connect to database: {type(e).__name__}')
 
     def get_jwt_for_user(self, user):
         if jwt := JWTSessionCache.get(user.pk):

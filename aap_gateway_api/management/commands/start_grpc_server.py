@@ -1,5 +1,6 @@
 import logging
 import multiprocessing
+import os
 import sys
 from concurrent import futures
 
@@ -16,6 +17,10 @@ _MAX_RECEIVE_MESSAGE_LENGTH = settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH
 _THREAD_CONCURRENCY = settings.GRPC_SERVER_MAX_THREADS_PER_PROCESS
 _PROCESS_COUNT = settings.GRPC_SERVER_PROCESSES
 _PORT = settings.GRPC_SERVER_PORT
+
+# Set verbosity for GRPC to ERROR (unless overridden in settings) to prevent log spam with:
+# fork_posix.cc:75] Other threads are currently calling into gRPC, skipping fork() handlers
+os.environ["GRPC_VERBOSITY"] = getattr(settings, "GRPC_VERBOSITY", "ERROR")
 
 
 def _run_server(bind_address):

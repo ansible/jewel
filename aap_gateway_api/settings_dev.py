@@ -69,3 +69,5 @@ if "test" not in sys.argv and getenv('DJANGO_DEBUG_TOOL_BAR', False):
         'ENABLE_STACKTRACES': True,
         "SHOW_TOOLBAR_CALLBACK": lambda req: True,
     }
+
+PING_PAGE_CHECK_IGNORE_CERT = True

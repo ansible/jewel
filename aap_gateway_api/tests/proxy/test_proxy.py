@@ -1,3 +1,4 @@
+import time
 from json import dumps
 from os import linesep
 from unittest import mock
@@ -145,15 +146,21 @@ class TestExternalAuth:
 
         request = Request()
 
-        mock_cursor_item = mock.MagicMock()
-        mock_cursor_item.execute.side_effect = DatabaseError('DB_error')
-        mock_cursor = mock.MagicMock()
-        mock_cursor.__enter__.return_value = mock_cursor_item
-
-        with mock.patch("django.db.connection.cursor", return_value=mock_cursor):
+        with mock.patch("django.db.connections.create_connection", side_effect=DatabaseError('DB_error')):
             response = ext_auth.Check(request, None)
 
         # assert permission denied
+        assert response.status.code == 7
+
+    def _sleeper(self, dbname):
+        time.sleep(10)
+
+    def test_check_db_timeout(self, ext_auth):
+        request = Request()
+
+        with mock.patch("django.db.connections.create_connection", side_effect=self._sleeper):
+            response = ext_auth.Check(request, None)
+
         assert response.status.code == 7
 
     @pytest.mark.parametrize(
@@ -203,6 +210,11 @@ class TestExternalAuth:
         if return_message_string:
             assert response.denied_response.status.code == expected_http_status_code
             assert return_message_string in response.status.message
+
+    def test_check_up_endpoint_no_auth(self, ext_auth, admin_user):
+        request = Request(path="/up")
+        response = ext_auth.Check(request, None)
+        assert response.status.code == 0
 
     @pytest.mark.parametrize(
         "service_type,auth_type,expected_headers",
