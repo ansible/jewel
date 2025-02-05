@@ -3,7 +3,8 @@ from unittest.mock import patch
 import pytest
 from ansible_base.authentication.models import Authenticator
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.resource_registry.models import service_id
+from ansible_base.resource_registry.models import Resource, service_id
+from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from rest_framework.test import APIClient
 
@@ -297,6 +298,71 @@ def test_merge_users(
 
     # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
     assert not User.objects.filter(username="already_migrated").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_correcting_user_service_id(
+    migration_service,
+    admin_user,
+    service_api_route_controller,
+    patched_resource_client,
+):
+    """Verify that a service user resource with the same ansible id but a differing
+    service id from gateway's has its service id corrected to gateway's via migration.
+    """
+    # First, perform a migration to bring our test user ("fury") to gateway.
+    # The migration preserves
+    call_command(
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=True,
+        merge_organizations=True,
+    )
+
+    service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
+
+    # Get the service-side user resource and set its is_partially_migrated flag as False.
+    response = service_client.list_resources(filters={"name": "fury"})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["count"] == 1
+    service_fury_resource_data = result["results"][0]
+    service_client.update_resource(
+        service_fury_resource_data["ansible_id"],
+        ResourceRequestBody(**{"is_partially_migrated": False}),
+        partial=True,
+    )
+
+    # Get the gateway user resource and force its service id to be gateway's.
+    # Combining this with the above setting of the service-side user resource's
+    # is_partially_migrated flag as False mimics the scenario where the service
+    # user resource has been automatically instantiated with a different
+    # service id than gateway's.
+    gw_fury_resource = Resource.objects.get(name="fury")
+    gw_fury_resource.service_id = service_id()
+    gw_fury_resource.save(update_fields=["service_id"])
+
+    # Run an additional migration which should correct the service-side user
+    # resource's server_id to that of gateway.
+    # First, perform a migration to bring our test user ("fury") to gateway.
+    # The migration preserves
+    call_command(
+        "migrate_service_data",
+        api_slug=service_api_route_controller.api_slug,
+        username=admin_user.username,
+        merge_teams=True,
+        merge_organizations=True,
+    )
+
+    # Retrieve the service-side user resource and verify its service id is now
+    # gateway's.
+    response = service_client.list_resources(filters={"name": "fury"})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["count"] == 1
+    service_fury_resource_data = result["results"][0]
+    assert service_fury_resource_data["service_id"] == service_id()
 
 
 @pytest.fixture

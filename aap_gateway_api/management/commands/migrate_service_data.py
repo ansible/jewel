@@ -279,7 +279,7 @@ class Command(BaseCommand):
                         # NOTE: the JWT auth classes create some items with correct ansible_id
                         # but without the service_id fully set, so this will reconcile those cases
                         create_gateway_resource = False
-                        updated_service_resource["ansible_id"] = existing_resource.ansible_id
+                        updated_service_resource["service_id"] = existing_resource.service_id
                         local_data = resource_type.serializer_class(existing_resource.content_object).data
                         if resource.get("resource_data", {}) == local_data:
                             logger.info(f"Correcting service_id of {resource_type.name} with name {resource['name']}.")
@@ -294,7 +294,9 @@ class Command(BaseCommand):
                         updated_service_resource["ansible_id"] = existing_resource.ansible_id
                         updated_service_resource["resource_data"] = resource_type.serializer_class(existing_resource.content_object).data
                         logger.warning(f"Merging {resource_type.name} with conflicting name {resource['name']}.")
-                    else:
+                    elif str(existing_resource.ansible_id) != resource_ansible_id:
+                        # We are not correcting the service-side of the same resource.
+                        #
                         # Change the name of the resource and update it on the upstream service
                         # Create a new resource in the gateway with the updated name
                         new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field)
@@ -312,7 +314,11 @@ class Command(BaseCommand):
 
                     # Connect legacy authentication for users, but do not connect any for the superuser
                     if user_partial_migration:
-                        self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
+                        # Create the migration entry only if we are actually creating a gateway
+                        # resource.  If we aren't we're updating an already existing user on
+                        # the service.
+                        if create_gateway_resource:
+                            self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
                     elif resource_type_name == "shared.user" and resource["name"] == self.client.user.username:
                         service_type = self.client.service.service_cluster.service_type
                         if str(service_type) == "controller" and not self.client.user.has_usable_password():
