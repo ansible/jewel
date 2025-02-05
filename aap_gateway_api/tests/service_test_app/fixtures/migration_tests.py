@@ -58,8 +58,10 @@ def setup():
 
     u = User.objects.create(username="hawkeye")
     u.teams.set([normal_h])
-
     UserSocialAuth.objects.create(user=u, provider="keycloak", uid="mr_hawk")
+
+    u = User.objects.create(username="fury")
+    u.teams.set([normal_h])
 
     u = User.objects.create(username="already_migrated")
     r = Resource.get_resource_for_object(u)
