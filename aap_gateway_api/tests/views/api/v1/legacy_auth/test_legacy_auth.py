@@ -4,7 +4,9 @@ from unittest.mock import patch
 import jwt
 import pytest
 import requests
-from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_class
+from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+from ansible_base.authentication.utils.authentication import determine_username_from_uid_social, get_or_create_authenticator_user
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from django.core.management import call_command
@@ -29,6 +31,15 @@ DOWN_TO_UP = {
 }
 
 SEP_CHAR = "_"
+
+
+def get_social_pipeline_kwargs(uid, username, authenticator, **kwargs):
+    return {
+        "uid": uid,
+        "details": {"username": username},
+        "backend": get_authenticator_class(authenticator.type)(database_instance=authenticator),
+        **kwargs,
+    }
 
 
 class AuthClient:
@@ -120,6 +131,8 @@ class TestLegacyAuth:
         patched_authenticator_all_resource_client,
         admin_user,
         local_authenticator,
+        ldap_authenticator,
+        keycloak_authenticator,
     ):
         hub_key = service_api_route_hub.service_cluster.generate_key()
         eda_key = service_api_route_eda.service_cluster.generate_key()
@@ -153,7 +166,16 @@ class TestLegacyAuth:
         eda.kill()
 
     @pytest.mark.django_db(transaction=True)
-    def test_all_legacy_auth(self, services, subtests, local_authenticator, keycloak_authenticator, admin_client, unauthenticated_api_client):
+    def test_all_legacy_auth(
+        self,
+        services,
+        subtests,
+        local_authenticator,
+        ldap_authenticator,
+        keycloak_authenticator,
+        admin_client,
+        unauthenticated_api_client,
+    ):
         """
         All of the tests in this class will be run through this test. While this is not proper form
         for pytest, there are two reasons to do it this way:
@@ -168,6 +190,7 @@ class TestLegacyAuth:
         awx_svc, eda_svc, galaxy_svc = services
 
         self.local_authenticator = local_authenticator
+        self.ldap_authenticator = ldap_authenticator
         self.keycloak_authenticator = keycloak_authenticator
         self.admin_client = admin_client
         self.unauthenticated_api_client = unauthenticated_api_client
@@ -189,7 +212,144 @@ class TestLegacyAuth:
                 with subtests.test(msg=attr):
                     getattr(self, attr)(AuthClient(service_routes))
 
+        self.controller_oidc_authenticator = Authenticator.objects.get(name__startswith="controller: legacy_sso-oidc")
+        self.controller_saml_authenticator = Authenticator.objects.get(name__startswith="controller: legacy_sso-saml-https://keycloak")
+        self.hub_keycloak_authenticator = Authenticator.objects.get(name__startswith="hub: legacy_sso-keycloak")
+        self.legacy_eternal_auth = Authenticator.objects.get(name__startswith="gateway: legacy_external_password")
+        self.hub_legacy_pass = Authenticator.objects.get(name__startswith="hub: legacy_password")
+        self.controller_legacy_pass = Authenticator.objects.get(name__startswith="controller: legacy_password")
+
+        # Auto migrate SSO
+        self.controller_saml_authenticator.auto_migrate_users_to = keycloak_authenticator
+        self.controller_saml_authenticator.save()
+        self.controller_oidc_authenticator.auto_migrate_users_to = keycloak_authenticator
+        self.controller_oidc_authenticator.save()
+        self.hub_keycloak_authenticator.auto_migrate_users_to = keycloak_authenticator
+        self.hub_keycloak_authenticator.save()
+
+        # Auto migrate LDAP
+        self.legacy_eternal_auth.auto_migrate_users_to = self.ldap_authenticator
+        self.legacy_eternal_auth.save()
+        self.hub_legacy_pass.auto_migrate_users_to = self.ldap_authenticator
+        self.hub_legacy_pass.save()
+        self.controller_legacy_pass.auto_migrate_users_to = self.ldap_authenticator
+        self.controller_legacy_pass.save()
+
+        # The day2_test subtests should run after the main tests. Here we will be configuring
+        # auto account migration and then running some of the users from the previous test through
+        # a series of additional tests that simulate logging in with a newly configure authenticator.
+
+        for attr in dir(self):
+            if attr.startswith("day2_test"):
+                if SINGLE_TEST and attr != SINGLE_TEST:
+                    continue
+                with subtests.test(msg=attr):
+                    getattr(self, attr)(AuthClient(service_routes))
+
         assert SINGLE_TEST is None
+
+    # Things to test
+    # - User that has logged in can login on new sso
+    # - User that has not logged in can login with ldap sso
+    # - User that has logged in can login with new ldap
+    # - User that has not logged in can login with new ldap
+    # - User with one legacy authenticator can log in
+    # - User with no legacy authenticator can log in
+
+    # How to verify?
+    # - users in services are merged
+    # - extra auth users are deleted
+    # - extra gateway users are deleted
+    # - teams are the same?
+
+    def _test_auto_migrate_sso(self, uid, sub, username, ctrl_legacy=None):
+        if ctrl_legacy is None:
+            ctrl_legacy = self.controller_oidc_authenticator
+
+        assert AuthenticatorUser.objects.filter(provider=self.hub_keycloak_authenticator, uid=uid).exists()
+        assert AuthenticatorUser.objects.filter(provider=ctrl_legacy, uid=sub).exists()
+
+        kwargs = get_social_pipeline_kwargs(uid=uid, username=username, authenticator=self.keycloak_authenticator, response={"sub": sub})
+
+        username = determine_username_from_uid_social(**kwargs)["username"]
+
+        assert username == username
+        assert not AuthenticatorUser.objects.filter(provider=self.hub_keycloak_authenticator, uid=uid).exists()
+        assert not AuthenticatorUser.objects.filter(provider=ctrl_legacy, uid=sub).exists()
+        assert User.objects.filter(username=username).exists()
+
+    def day2_test_login_new_migrated_account_sso(self, client: AuthClient):
+        self._test_auto_migrate_sso(uid="two_sso1", username="two_sso1", sub="4b4614e7-7086-496a-a4d5-694206b3f844")
+
+    def day2_test_login_new_non_migrated_account_sso(self, client: AuthClient):
+        self._test_auto_migrate_sso(uid="two_sso_not_migrated", username="two_sso_not_migrated", sub="3f7c3239-7272-4116-afd4-36e545d6e1ff")
+
+    def day2_test_login_new_migrated_account_ldap(self, client: AuthClient):
+        uid = "ldap_user_set1"
+
+        assert AuthenticatorUser.objects.filter(provider=self.legacy_eternal_auth, uid=uid).exists()
+
+        local_user, auth_user, created = get_or_create_authenticator_user(
+            uid=uid,
+            authenticator=self.ldap_authenticator,
+            user_details={},
+            extra_data={},
+        )
+
+        assert local_user.username == uid
+        assert not AuthenticatorUser.objects.filter(provider=self.legacy_eternal_auth, uid=uid).exists()
+
+    def day2_test_login_new_non_migrated_account_ldap(self, client: AuthClient):
+        uid = "unmigrated_ldap_user"
+
+        assert AuthenticatorUser.objects.filter(provider=self.hub_legacy_pass, uid=uid).exists()
+        assert AuthenticatorUser.objects.filter(provider=self.controller_legacy_pass, uid=uid).exists()
+
+        local_user, auth_user, created = get_or_create_authenticator_user(
+            uid=uid,
+            authenticator=self.ldap_authenticator,
+            user_details={},
+            extra_data={},
+        )
+
+        assert local_user.username == uid
+        assert not AuthenticatorUser.objects.filter(provider=self.hub_legacy_pass, uid=uid).exists()
+        assert not AuthenticatorUser.objects.filter(provider=self.controller_legacy_pass, uid=uid).exists()
+
+    def day2_test_login_sso_account_already_exists(self, client: AuthClient):
+        uid = "two_sso2"
+        u = User.objects.create(username=f"{uid}_random_string")
+        AuthenticatorUser.objects.create(provider=self.keycloak_authenticator, uid=uid, user=u)
+        self._test_auto_migrate_sso(
+            uid="two_sso2",
+            username=uid,
+            sub=uid,
+            ctrl_legacy=self.controller_saml_authenticator,
+        )
+
+        u.refresh_from_db()
+        assert u.username == uid
+
+    def day2_test_login_ldap_account_already_exists(self, client: AuthClient):
+        uid = "ldap_user_set2"
+
+        u = User.objects.create(username=f"{uid}_random_string")
+        AuthenticatorUser.objects.create(provider=self.ldap_authenticator, uid=uid, user=u)
+
+        assert AuthenticatorUser.objects.filter(provider=self.legacy_eternal_auth, uid=uid).exists()
+
+        local_user, auth_user, created = get_or_create_authenticator_user(
+            uid=uid,
+            authenticator=self.ldap_authenticator,
+            user_details={},
+            extra_data={},
+        )
+
+        assert local_user.username == uid
+        assert not AuthenticatorUser.objects.filter(provider=self.legacy_eternal_auth, uid=uid).exists()
+
+        u.refresh_from_db()
+        assert u.username == uid
 
     def subtest_merging_all_accounts_controller_oidc(self, client: AuthClient):
         user_set = get_user_set("controller_oidc")
