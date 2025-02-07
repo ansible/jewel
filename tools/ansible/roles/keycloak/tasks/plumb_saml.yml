@@ -11,7 +11,7 @@
 - name: SAML authenticator
   ansible.platform.authenticator:
     name: "{{ saml_adapter_name }}"
-    slug: "{{ saml_adapter_name | replace(' ', '') | lower }}"
+    slug: "{{ saml_slug }}"
     enabled: True
     create_objects: True
     remove_users: True

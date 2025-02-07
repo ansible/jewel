@@ -2,7 +2,7 @@
 - name: OIDC authenticator
   ansible.platform.authenticator:
     name: "{{ oidc_adapter_name }}"
-    slug: "{{ oidc_adapter_name | replace(' ', '') | lower }}"
+    slug: "{{ oidc_slug }}"
     enabled: True
     create_objects: True
     remove_users: True
