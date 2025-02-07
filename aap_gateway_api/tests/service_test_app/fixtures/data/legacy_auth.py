@@ -158,6 +158,10 @@ USERS = {
         "awx": Account(shib, "two_sso3", "e50aa50b-7b54-4faa-8096-319ea4590ad8", None),
         "galaxy": Account(kc, "two_sso3", "e50aa50b-7b54-4faa-8096-319ea4590ad8", None),
     },
+    "two_sso_not_migrated": {
+        "awx": Account(oidc_kc, "two_sso_not_migrated", "3f7c3239-7272-4116-afd4-36e545d6e1ff", None),
+        "galaxy": Account(kc, "two_sso_not_migrated", "3f7c3239-7272-4116-afd4-36e545d6e1ff", None),
+    },
     "disable_login": {
         "awx": Account(None, None, None, "pass"),
         "galaxy": Account(kc, "disable_login", "7b6939d0-dee4-4c24-8dd0-42e8484a7d1b", None),
@@ -194,6 +198,15 @@ USERS = {
         "galaxy": Account(None, None, None, "pass"),
     },
     "ldap_user_set2": {
+        "awx": Account(
+            None,
+            None,
+            None,
+            "pass",
+        ),
+        "galaxy": Account(None, None, None, "pass"),
+    },
+    "unmigrated_ldap_user": {
         "awx": Account(
             None,
             None,

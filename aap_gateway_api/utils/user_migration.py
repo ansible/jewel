@@ -1,3 +1,5 @@
+import logging
+
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
 from django.utils.translation import gettext as _
@@ -6,6 +8,8 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient, ResourceRequestBody
+
+logger = logging.getLogger('aap_gateway_api.utils.user_migration')
 
 
 def can_accounts_be_merged(main_account, to_merge):
@@ -27,7 +31,9 @@ def can_accounts_be_merged(main_account, to_merge):
 
 
 def migrate_account(user):
+    logger.debug(f"Migrating user {user.username} into Gateway.")
     if user.is_migrated:
+        logger.debug(f"Migrating user {user.username} is already migrated")
         return
 
     with transaction.atomic():
@@ -38,7 +44,7 @@ def migrate_account(user):
 
         for original in user.original_accounts.all():
             service = ServiceAPIRoute.objects.get(service_cluster=original.service)
-            client = GWResourceAPIClient(service=service)
+            client = GWResourceAPIClient(service=service, raise_if_bad_request=True)
 
             body = ResourceRequestBody(
                 service_id=acct_resource.service_id,
@@ -55,6 +61,8 @@ def migrate_account(user):
 
 
 def link_account(main_account, to_merge, preserve_authenticators=True, services_to_merge=None):
+    logger.debug(f"Merging account {to_merge.username} into account {main_account.username}")
+
     if main_account.pk == to_merge.pk:
         return
     with transaction.atomic():
@@ -79,13 +87,16 @@ def link_account(main_account, to_merge, preserve_authenticators=True, services_
 
             # clean up any references to the original account if they got created.
             try:
+                logger.debug(f"Removing {main_account.username} account from {client.service.service_cluster.name}")
                 client.delete_resource(ansible_id=main_account.resource.ansible_id)
             except HTTPError as e:
                 if e.response.status_code != 404:
                     raise
 
+            logger.debug(f"Updating account {to_merge_id} to point to {main_account.username}")
             client.update_resource(
                 to_merge_id,
                 data=ResourceRequestBody(ansible_id=main_account.resource.ansible_id, resource_data={"username": main_account.username}),
                 partial=True,
             )
+            logger.debug(f"Accounts {to_merge.username} and {main_account.username} merged successfully")
