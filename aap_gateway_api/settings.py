@@ -127,6 +127,19 @@ ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
 # Format: flag_name: [list of conditions]
 FLAGS = {}
 
+
+# Set the value of any feature flags that are defined in the local settings
+def _set_feature_flags(flags=FLAGS, locals_dict=None):
+    if locals_dict is None:
+        locals_dict = locals()
+    for feature in list(flags.keys()):
+        if feature in locals_dict:
+            flags[feature][0]['value'] = locals_dict[feature]
+    return flags
+
+
+FLAGS = _set_feature_flags()
+
 # Phase 2: Database-driven Feature Flags
 # Uncomment the settings below when Gateway synchronization is mature enough
 # to support feature flags synchronization across all services
