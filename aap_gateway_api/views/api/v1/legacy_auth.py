@@ -192,10 +192,15 @@ class LegacyAuthViewset(viewsets.ViewSet):
                 )
 
                 authenticator_meta = MigratedAuthenticatorMetadata.get_authenticator_for_auth_code(data)
+
+                # Handle cases where UID might be set to None
+                uid = payload.get("sso_uid", None)
+                if uid is None:
+                    uid = user.username
                 AuthenticatorUser.objects.create(
                     user=user,
                     provider=authenticator_meta.authenticator,
-                    uid=payload.get("uid", user.username),
+                    uid=uid,
                 )
             else:
                 # We already have the migrated user and their metadata, so we just need to update
