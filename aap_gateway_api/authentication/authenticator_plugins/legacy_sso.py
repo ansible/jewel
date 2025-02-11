@@ -2,7 +2,7 @@ import logging
 
 from ansible_base.authentication.authenticator_plugins.base import AbstractAuthenticatorPlugin, BaseAuthenticatorConfiguration
 
-from aap_gateway_api.authentication.authenticator_plugins.legacy_base import LegacyMixin
+from aap_gateway_api.authentication.authenticator_plugins.base import LegacyMixin
 
 logger = logging.getLogger('aap_gateway_api.authentication.authenticator_plugins.legacy_sso')
 
