@@ -5,7 +5,7 @@ from django.db import transaction
 from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.utils.user_migration import link_account, migrate_account
 
-logger = logging.getLogger('aap_gateway_api.authentication.authenticator_plugins.legacy_base')
+logger = logging.getLogger('aap_gateway_api.authentication.authenticator_plugins.base')
 
 
 class LegacyMixin:
