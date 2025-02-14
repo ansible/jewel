@@ -1,3 +1,5 @@
+from unittest import mock
+
 from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import DefaultServiceType, ServiceCluster, ServiceType
@@ -50,12 +52,60 @@ def test_service_type_update(admin_api_client, service_type_controller):
     assert ServiceType.objects.filter(pk=response.data["id"], name="My Hub").exists()
 
 
+def test_service_type_update_proxy(admin_api_client):
+    # Ensure default not editable via proxy
+    for type in DefaultServiceType:
+        st = ServiceType.objects.filter(name=type.value).first()
+        url = get_relative_url("service_type-detail", kwargs={"pk": st.pk})
+        with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+            response = admin_api_client.patch(url, {"name": "changed"})
+        assert response.status_code == 403, 'Mod of default service type should fail'
+
+        st = ServiceType.objects.filter(id=st.pk).first()
+        assert st.name != "changed", 'Default service types should not be changable'
+
+    # Ensure non-default editable via proxy
+    url = get_relative_url("service_type-list")
+    response = admin_api_client.post(url, {"name": "newbie", "ping_url": "/ping/"})
+    st = ServiceType.objects.filter(name="newbie").first()
+    url = get_relative_url("service_type-detail", kwargs={"pk": st.pk})
+    with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+        response = admin_api_client.patch(url, {"name": "changed"})
+    assert response.status_code == 200, 'Mod of non-default servie type should be accepted'
+    st = ServiceType.objects.filter(name="changed").first()
+    assert st, "Could not find expected 'changed' service type"
+
+
 def test_service_type_delete(admin_api_client, service_type_controller):
     url = get_relative_url("service_type-detail", kwargs={"pk": service_type_controller.pk})
     response = admin_api_client.delete(url)
     assert response.status_code == 204
     assert not ServiceType.objects.filter(pk=service_type_controller.pk).exists()
     assert ServiceCluster.get_cluster_by_type(service_type=service_type_controller.pk) is None
+
+
+def test_service_type_delete_proxy(admin_api_client):
+    # Ensure default not deletable via proxy
+    for type in DefaultServiceType:
+        st = ServiceType.objects.filter(name=type.value).first()
+        url = get_relative_url("service_type-detail", kwargs={"pk": st.pk})
+        with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+            response = admin_api_client.delete(url)
+        assert response.status_code == 403, 'Deletion of default service type should fail'
+
+        st = ServiceType.objects.filter(id=st.pk).first()
+        assert st, 'Default service types should not be deletable'
+
+    # Ensure non-default deletable via proxy
+    url = get_relative_url("service_type-list")
+    response = admin_api_client.post(url, {"name": "newbie", "ping_url": "/ping/"})
+    st = ServiceType.objects.filter(name="newbie").first()
+    url = get_relative_url("service_type-detail", kwargs={"pk": st.pk})
+    with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+        response = admin_api_client.delete(url)
+    assert response.status_code == 204, 'Deletion of non-default servie type should be accepted'
+    st = ServiceType.objects.filter(name="newbie").first()
+    assert st is None, "Non-default service type should be deletable"
 
 
 def test_service_type_name_must_be_unique(admin_api_client, service_type_controller):

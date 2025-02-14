@@ -72,6 +72,10 @@ class ServiceClusterViewSet(ProxyUnsafeGatewayModelViewSet):
     queryset = ServiceCluster.objects.all()
     serializer_class = ServiceClusterSerializer
 
+    # Default service clusters not editable/deletable via proxy, but non-default OK
+    def object_write_unsafe(self, request, obj: ServiceCluster) -> bool:
+        return DefaultServiceType.is_default(obj.service_type.name)
+
 
 class ServiceTypeViewSet(ProxyUnsafeGatewayModelViewSet):
     """
@@ -80,6 +84,10 @@ class ServiceTypeViewSet(ProxyUnsafeGatewayModelViewSet):
 
     queryset = ServiceType.objects.all()
     serializer_class = ServiceTypeSerializer
+
+    # Default service types not editable/deletable via proxy, but non-default OK
+    def object_write_unsafe(self, request, obj: ServiceType) -> bool:
+        return DefaultServiceType.is_default(obj.name)
 
 
 class AdditionalRouteViewSet(GatewayModelViewSet):

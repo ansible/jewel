@@ -1,8 +1,10 @@
+from unittest import mock
+
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.exceptions import ProxyDenied
-from aap_gateway_api.models import ServiceCluster
+from aap_gateway_api.models import ServiceCluster, ServiceType
 
 
 def test_service_cluster_detail_controller(admin_api_client, service_cluster_controller, service_type_controller):
@@ -115,3 +117,20 @@ def test_service_model_write_from_proxy(request, admin_api_client, endpoint_name
     response = admin_api_client.delete(url, **extras)
     assert response.status_code == 403
     assert str(ProxyDenied.default_detail) in str(response.content)
+
+
+def test_service_model_write_from_proxy_non_default(admin_api_client):
+    # Create service type and service cluster through proxy
+    with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+        url = get_relative_url("service_type-list")
+        response = admin_api_client.post(url, {"name": "testst", "ping_url": "/"})
+        url = get_relative_url("service_cluster-list")
+        response = admin_api_client.post(url, {"name": "testsc", "service_type": ServiceType.objects.filter(name="testst").first().id})
+        assert response.status_code == 201
+
+    # Modify service cluster through proxy
+    with mock.patch('aap_gateway_api.utils.views.permissions.from_proxy', return_value=True):
+        url = get_relative_url("service_cluster-detail", kwargs={"pk": ServiceCluster.objects.filter(name="testsc").first().id})
+        response = admin_api_client.patch(url, {"name": "changed"})
+        assert response.status_code == 200
+        assert "changed" == ServiceCluster.objects.filter(name="changed").first().name, "Expected cluster to have name changed"

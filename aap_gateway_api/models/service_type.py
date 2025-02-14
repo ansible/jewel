@@ -36,3 +36,7 @@ class DefaultServiceType(str, Enum):
     CONTROLLER = "controller"
     EDA = "eda"
     HUB = "hub"
+
+    @staticmethod
+    def is_default(name: str) -> bool:
+        return any(svc.value == name for svc in DefaultServiceType)
