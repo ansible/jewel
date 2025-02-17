@@ -132,6 +132,32 @@ We do not want to dictate individual components dev environment decisions. You m
 Be mindful of the dependencies you create.
 
 
+### Lightspeed
+
+Lightspeed service may be included as optional service e.g. with a day 2 setup. 
+
+Export the Lightspeed repo location locally optionally can git clone in services folder
+
+project url: https://github.com/ansible/ansible-ai-connect-service
+
+```commandline
+export LIGHTSPEED_REPO="<the lightspeed cloned location>"
+```
+
+To check service is up 
+
+```commandline
+make lightspeed-up-check.sh
+```
+to start the service
+```commandline
+make lightspeed-up
+```
+to shutdown the service
+```commandline
+make lightspeed-down
+```
+
 ### Random Notes
 
 Long-term all this dev stuff won't live in `aap-gateway`. It will probably live in a repo of its own.

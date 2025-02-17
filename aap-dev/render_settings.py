@@ -12,7 +12,7 @@ def escape_ansi(line):
     return ansi_escape.sub('', line)
 
 
-service_options = ('controller', 'eda', 'galaxy')
+service_options = ('controller', 'eda', 'galaxy', 'lightspeed')
 service = sys.argv[-1]
 
 if service not in service_options:

@@ -14,6 +14,7 @@ enabled_services:
   - 'hub'
   - 'controller'
   - 'eda'
+  - 'lightspeed'
 
 ### Redis
 ### Note: If you change the redis settings, please remove tools/generated/redis_cluster and let it rebuild

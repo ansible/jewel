@@ -34,6 +34,8 @@ HUB_DOCKERFILE=dev/compose/aap.yaml
 
 # If you over-ride the repo, make sure to NOT use a trailing slash, like AWX_REPO=~/repos/awx
 AWX_REPO?=$(SERVICE_DIR)/awx
+LIGHTSPEED_REPO?=$(SERVICE_DIR)/ansible-ai-connect-service
+LIGHTSPEED_ENV=DJANGO_SETTINGS_MODULE=ansible_ai_connect.main.settings.aap_dev_hacked_settings LIGHTSPEED_PORT=7080
 
 ## Display help targets
 help:
@@ -202,4 +204,11 @@ $(HUB_REPO)/.git/HEAD: ;
 hub-server-down:
 	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) --project-name $(HUB_PROJECT_NAME) down && docker volume rm var_lib_pulp
 
+lightspeed-settings-hack:
+	python3 render_settings.py lightspeed > $(LIGHTSPEED_REPO)/ansible_ai_connect/main/settings/aap_dev_hacked_settings.py
 
+lightspeed-up: lightspeed-settings-hack
+	cd $(LIGHTSPEED_REPO) && $(LIGHTSPEED_ENV) docker compose -f tools/docker-compose/compose.yaml --env-file ./.env up --remove-orphans
+
+lightspeed-down:
+	cd $(LIGHTSPEED_REPO) && $(LIGHTSPEED_ENV) docker compose -f tools/docker-compose/compose.yaml --env-file ./.env down
