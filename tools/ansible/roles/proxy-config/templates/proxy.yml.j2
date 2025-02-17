@@ -11,6 +11,9 @@ gateway_service_types:  # Service types
   - name: hub
   - name: eda
   - name: console
+  - name: lightspeed
+    ping_url: "/api/v1/health/"
+    service_index_path: "/api/v1/service-index/"
 
 gateway_service_clusters:  # Service clusters (1 per type)
   - name: gateway # -- name of cluster, used by [gateway_service_nodes | gateway_services | gateway_routes]/service_cluster
@@ -35,6 +38,10 @@ gateway_service_clusters:  # Service clusters (1 per type)
     upstream_hostname: console.redhat.com
     dns_discovery_type: LOGICAL_DNS
     dns_lookup_family: V4_ONLY
+{% endif %}
+{% if 'lightspeed' in gateway_services %}
+  - name: lightspeed
+    service_type: lightspeed
 {% endif %}
 
 gateway_service_nodes:   # Nodes of service clusters
@@ -63,6 +70,11 @@ gateway_service_nodes:   # Nodes of service clusters
   - name: console
     service_cluster: console
     address: "console.redhat.com"
+{% endif %}
+{% if 'lightspeed' in gateway_services %}
+  - name: lightspeed
+    service_cluster: lightspeed
+    address: "{{ gateway_host_address }}"
 {% endif %}
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)
@@ -121,6 +133,19 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
     service_path: '/api/eda/'
     service_port: 8010
     order: 3
+{% elif service == 'lightspeed' %}
+    # It configures proxy requests
+    # - from https://<gateway url>:9080/api/lightspeed/...
+    # - to http://localhost:7080/api/...  # localhost is taken from service node "Controller Node"
+  - name: Ansible Lightspeed
+    description: Proxy to LIGHTSPEED
+    http_port: API Port
+    api_slug: lightspeed
+    service_cluster: lightspeed
+    is_service_https: false
+    service_path: '/api/'
+    service_port: 7080
+    order: 4
 
 {% endif %}
 {% endfor %}
