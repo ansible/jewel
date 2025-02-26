@@ -159,16 +159,22 @@ legacy_tox_ini = """
     deps =
         flake8==7.1.1
         Flake8-pyproject==1.2.3
+    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
+    docker =
     commands = flake8 {posargs:.}
 
     [testenv:black]
     deps =
         black==25.1.0
+    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
+    docker =
     commands = black {posargs:.}
 
     [testenv:isort]
     deps =
         isort==6.0.0
+    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
+    docker =
     commands = isort {posargs:.}
 """
 
