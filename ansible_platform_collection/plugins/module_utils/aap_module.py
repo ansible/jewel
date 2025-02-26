@@ -801,3 +801,22 @@ class AAPModule(AnsibleModule):
         self.fail_json(msg="This is not yet implemented due to missing defaults: {error}".format(error=endpoint_defaults))
         # default_fields[endpoint]['new_fields'], default_fields[endpoint]['association_fields']
         return endpoint_defaults
+
+    @staticmethod
+    def fields_could_be_same(old_field, new_field):
+        """Treating $encrypted$ as a wild card,
+        return False if the two values are KNOWN to be different
+        return True if the two values are the same, or could potentially be the same,
+        depending on the unknown $encrypted$ value or sub-values
+        """
+        if isinstance(old_field, dict) and isinstance(new_field, dict):
+            if set(old_field.keys()) != set(new_field.keys()):
+                return False
+            for key in new_field.keys():
+                if not AAPModule.fields_could_be_same(old_field[key], new_field[key]):
+                    return False
+            return True  # all sub-fields are either equal or could be equal
+        else:
+            if old_field == AAPModule.ENCRYPTED_STRING:
+                return True
+            return bool(new_field == old_field)
