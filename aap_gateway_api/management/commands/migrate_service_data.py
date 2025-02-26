@@ -126,6 +126,9 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
             )
+
+            self.migrate_controller_admin()
+
             for r_type in self.resource_types_to_migrate.keys():
                 self.migrate_resource(r_type)
 
@@ -181,6 +184,22 @@ class Command(BaseCommand):
             )
 
             AuthenticatorUser.objects.create(provider=authenticator_meta.authenticator, uid=initial_data["username"], user=user.content_object)
+
+    def migrate_controller_admin(self):
+        service_type = self.client.service.service_cluster.service_type
+
+        if str(service_type) == "controller" and not self.client.user.has_usable_password():
+            authenticator, _ = Authenticator.objects.get_or_create(
+                type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+                defaults={"enabled": True, "name": "controller admin password"},
+            )
+
+            if not self.client.user.authenticator_users.filter(provider=authenticator).exists():
+                AuthenticatorUser.objects.create(
+                    user=self.client.user,
+                    provider=authenticator,
+                    uid=self.client.user.username,
+                )
 
     def migrate_resource(self, resource_type_name):
         """
@@ -319,19 +338,5 @@ class Command(BaseCommand):
                         # the service.
                         if create_gateway_resource:
                             self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
-                    elif resource_type_name == "shared.user" and resource["name"] == self.client.user.username:
-                        service_type = self.client.service.service_cluster.service_type
-                        if str(service_type) == "controller" and not self.client.user.has_usable_password():
-                            authenticator, _ = Authenticator.objects.get_or_create(
-                                type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-                                defaults={"enabled": True, "name": "controller admin password"},
-                            )
-
-                            if not self.client.user.authenticator_users.filter(provider=authenticator).exists():
-                                AuthenticatorUser.objects.create(
-                                    user=self.client.user,
-                                    provider=authenticator,
-                                    uid=self.client.user.username,
-                                )
 
                     self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
