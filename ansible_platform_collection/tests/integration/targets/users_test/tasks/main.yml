@@ -93,6 +93,20 @@
         that:
           - delete is changed
 
+    - name: Create a user like in AAP-36722
+      ansible.platform.user:
+        username: "{{ username }}"
+        password: ansible
+        update_secrets: false
+        state: present
+
+    - name: Create the user again for AAP-36722 (this would fail before)
+      ansible.platform.user:
+        username: "{{ username }}"
+        password: ansible
+        update_secrets: false
+        state: present
+
   always:
     # Always Cleanup
     - name: Delete user
