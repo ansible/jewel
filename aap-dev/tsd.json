@@ -2,30 +2,33 @@
     "version": "0.1.4",
     "artifact": {
         "type": "aap-candidate",
-        "version": "2.4",
+        "version": "2.5",
         "builds": []
     },
     "scenario": {
         "name": "rpm-gating",
         "environment": {
             "type": "gateway",
-            "automationcontroller": {
-                "url": "https://localhost:8043/",
-                "admin_user": "admin",
-                "admin_password": "admin"
-            },
             "automationgateway": {
                 "url": "https://localhost/",
                 "admin_user": "admin",
                 "admin_password": "admin"
-            },
-            "automationedacontroller": {
-                "url": "http://localhost:8010/",
+            }
+            ,
+            "automationcontroller": {
+                "url": "https://localhost:8043/",
                 "admin_user": "admin",
                 "admin_password": "admin"
-            },
+            }
+            ,
             "automationhub": {
                 "url": "http://localhost:5001/",
+                "admin_user": "admin",
+                "admin_password": "admin"
+            }
+            ,
+            "automationedacontroller": {
+                "url": "http://localhost:8010/",
                 "admin_user": "admin",
                 "admin_password": "admin"
             }
