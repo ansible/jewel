@@ -5,6 +5,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.utils.translation import gettext_lazy as _
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from dynamic_preferences.exceptions import NotFoundInRegistry
 from rest_framework import status
 from rest_framework.response import Response
@@ -59,6 +60,7 @@ class SettingSectionView(AnsibleBaseView):
         self.serializer = SettingSectionSerializer(category_slug)
         return super().options(request, category_slug, format)
 
+    @extend_schema(operation_id="settings_getter")
     def get(self, request, category_slug, format=None):
         # TODO: Check permissions (should be on the category)
         # self.check_object_permissions(self.request, obj)
@@ -71,6 +73,7 @@ class SettingSectionView(AnsibleBaseView):
         updated_data = self.serializer.validate_and_save(request.data)
         return Response(updated_data)
 
+    @extend_schema(operation_id="settings_destroyer")
     def delete(self, request, category_slug=None, *args, **kwargs):
         """
         Revert all preferences in the current category to their default values
@@ -110,6 +113,8 @@ class SettingSectionView(AnsibleBaseView):
 PreferenceSection = collections.namedtuple('PreferenceSection', ('url', 'name'))
 
 
+# Hides default /{id}/ endpoint from api docs.
+@extend_schema_view(retrieve=extend_schema(exclude=True))
 class SettingSectionViewSet(GatewayModelViewSet):
     """
     A view class for managing and displaying all section of settings, with their urls and names

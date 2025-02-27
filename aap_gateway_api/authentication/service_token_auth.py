@@ -9,6 +9,8 @@ from aap_gateway_api.utils.service_token import validate_service_token
 
 logger = logging.getLogger('aap.gateway.authentication.service_token_auth')
 
+service_token_header = "X-ANSIBLE-SERVICE-AUTH"
+
 
 class ServiceTokenAuthentication(BaseAuthentication):
     authorized_paths = [
@@ -21,7 +23,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
     ]
 
     def authenticate(self, request):
-        token = request.headers.get("X-ANSIBLE-SERVICE-AUTH", None)
+        token = request.headers.get(service_token_header, None)
 
         if token is None:
             return None

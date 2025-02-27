@@ -7,6 +7,8 @@ from django.urls.exceptions import NoReverseMatch
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.schemas.generators import EndpointEnumerator
@@ -17,6 +19,7 @@ logger = logging.getLogger('aap.gateway.views')
 ignore_endpoints = ['docs']
 
 
+@extend_schema(request=None, responses={"200": OpenApiTypes.OBJECT})
 class V1RootView(AnsibleBaseView):
     permission_classes = (AllowAny,)
     name = _('v1')

@@ -6,6 +6,7 @@ from django.conf import settings
 from rest_framework.response import Response
 
 from aap_gateway_api.models import HTTPPort
+from aap_gateway_api.serializers.status import PingSerializer
 from aap_gateway_api.utils.db import get_db_connection_status
 from aap_gateway_api.version import get_aap_version
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
@@ -13,6 +14,7 @@ from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
 class PingView(AnsibleBaseView):
     permission_classes = []
+    serializer_class = PingSerializer
 
     def get(self, request):
         timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
@@ -51,4 +53,5 @@ class PingView(AnsibleBaseView):
                 response['status'] = STATUS_DEGRADED
             response['proxy_connected'] = connected
 
-        return Response(response)
+        serialized = self.serializer_class(response)
+        return Response(serialized.data)
