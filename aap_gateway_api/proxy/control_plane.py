@@ -66,7 +66,7 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
     return req
 
 
-class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
+class _ExternalAuth:
     def is_route_internal(self, request) -> bool:
         return request.attributes.context_extensions["is_internal_route"] == "t"
 
@@ -247,6 +247,14 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
             # The GRPC server doesn't seem to be able to catch runtime errors and log a stack trace.
             logger.exception(e)
             raise
+
+
+class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
+    def Check(self, request, context):
+        """
+        Instantiate a NEW instance to prevent state bleeding across threads.
+        """
+        return _ExternalAuth().Check(request, context)
 
 
 def grpc_hook(server):

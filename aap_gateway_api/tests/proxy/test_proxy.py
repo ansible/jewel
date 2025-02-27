@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 from rest_framework.authentication import SessionAuthentication
 
-from aap_gateway_api.proxy.control_plane import ExternalAuth, get_drf_request
+from aap_gateway_api.proxy.control_plane import ExternalAuth, _ExternalAuth, get_drf_request
 
 csrf_cookie_string = "aAKwsypSuCpSmU4SMt7WrbGmvTBYfryg"
 bad_csrf_form_token = "gJElunW0ICBSx1jtgk9HGMD6qzTRdQdM3ycFn1DgkXi0UWFjDKUts1Azq5jmCTcS"
@@ -106,7 +106,13 @@ def ext_auth():
     yield ExternalAuth()
 
 
+@pytest.fixture
+def _ext_auth():
+    yield _ExternalAuth()
+
+
 class MockSessionAuth(SessionAuthentication):
+
     def authenticate(self, request):
         # Skip authentication, start enforcing csrf verification
         self.enforce_csrf(request)
@@ -171,12 +177,12 @@ class TestExternalAuth:
             ("application/yaml", "<h2>Testing</h2>", "text/html"),
         ],
     )
-    def test__return_no_auth_with_reason(self, accept_type, body, expected_type, ext_auth):
+    def test__return_no_auth_with_reason(self, accept_type, body, expected_type, _ext_auth):
         request = Request(header_diff={"ACCEPT": accept_type})
         from aap_gateway_api.proxy.control_plane import get_drf_request
 
-        ext_auth.drf_request = get_drf_request(request.attributes.request.http)
-        response = ext_auth._return_no_auth_with_reason("Testing", html_body=body)
+        _ext_auth.drf_request = get_drf_request(request.attributes.request.http)
+        response = _ext_auth._return_no_auth_with_reason("Testing", html_body=body)
 
         assert response.status.code == 7
         for header in response.denied_response.headers:
