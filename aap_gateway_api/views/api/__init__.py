@@ -5,10 +5,21 @@ from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 
+@extend_schema(
+    request=None,
+    responses={
+        "200": inline_serializer(
+            "api_gateway_root_view",
+            fields={"current_version": serializers.CharField(), "available_versions": serializers.DictField(child=serializers.CharField())},
+        )
+    },
+)
 class GatewayRootView(AnsibleBaseView):
     permission_classes = (AllowAny,)
     name = _('gateway')

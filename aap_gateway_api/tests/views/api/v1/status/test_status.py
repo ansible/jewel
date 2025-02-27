@@ -98,7 +98,7 @@ def test_status_full_hierarchy_with_500(get, admin_api_client, full_service_hier
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
 def test_status_full_hierarchy_with_200(get, admin_api_client, full_service_hierarchy_controller):
     with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
-        get.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+        get.return_value = mock.Mock(status_code=200, json=lambda: {"version": "test"})
         url = get_relative_url("status-view")
         response = admin_api_client.get(url)
         assert response.status_code == 200
@@ -107,7 +107,7 @@ def test_status_full_hierarchy_with_200(get, admin_api_client, full_service_hier
         assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['nodes'][node_id]["status"] == STATUS_GOOD
-        assert controller['nodes'][node_id]["response"] == {"test": "test"}
+        assert controller['nodes'][node_id]["response"] == {"version": "test"}
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -130,7 +130,7 @@ def test_status_two_routes_same_service_cluster(get, admin_api_client, full_serv
     """
     Test that the status endpoint can handle multiple routes to the same service cluster.
     """
-    get.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"version": "test"})
 
     port = http_port_factory()
     route_copy = full_service_hierarchy_controller.route
@@ -150,7 +150,7 @@ def test_status_two_routes_same_service_cluster(get, admin_api_client, full_serv
         assert controller is not None
         node_id = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['nodes'][node_id]["status"] == STATUS_GOOD
-        assert controller['nodes'][node_id]["response"] == {"test": "test"}
+        assert controller['nodes'][node_id]["response"] == {"version": "test"}
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -158,7 +158,7 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
     """
     Test that the status endpoint can handle multiple service nodes pointing to the same service cluster.
     """
-    get.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"version": "test"})
 
     new_service_node = ServiceNode.objects.create(
         name="Node 127.0.0.99",
@@ -190,7 +190,7 @@ def test_status_multiple_service_nodes(get, admin_api_client, full_service_hiera
 
         for node_id in (node_id_1, node_id_2, node_id_3):
             assert controller['nodes'][node_id]["status"] == STATUS_GOOD
-            assert controller['nodes'][node_id]["response"] == {"test": "test"}
+            assert controller['nodes'][node_id]["response"] == {"version": "test"}
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -198,7 +198,7 @@ def test_status_two_hierarchies(get, admin_api_client, full_service_hierarchy_co
     """
     Test that the status endpoint can handle multiple complete service hierarchies.
     """
-    get.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"version": "test"})
 
     with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
         url = get_relative_url("status-view")
@@ -214,12 +214,12 @@ def test_status_two_hierarchies(get, admin_api_client, full_service_hierarchy_co
         node_id_controller = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['status'] == STATUS_GOOD
         assert controller['nodes'][node_id_controller]["status"] == STATUS_GOOD
-        assert controller['nodes'][node_id_controller]["response"] == {"test": "test"}
+        assert controller['nodes'][node_id_controller]["response"] == {"version": "test"}
 
         node_id_hub = f"{full_service_hierarchy_hub.service_node.address}:{full_service_hierarchy_hub.route.service_port}"
         assert hub['status'] == STATUS_GOOD
         assert hub['nodes'][node_id_hub]["status"] == STATUS_GOOD
-        assert hub['nodes'][node_id_hub]["response"] == {"test": "test"}
+        assert hub['nodes'][node_id_hub]["response"] == {"version": "test"}
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
@@ -229,7 +229,7 @@ def test_status_two_hierarchies_services_formatted_with_keys_via_query_param(
     """
     Test that the status endpoint can handle multiple complete service hierarchies.
     """
-    get.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+    get.return_value = mock.Mock(status_code=200, json=lambda: {"version": "test"})
 
     with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
         url = get_relative_url("status-view")
@@ -245,12 +245,12 @@ def test_status_two_hierarchies_services_formatted_with_keys_via_query_param(
         node_id_controller = f"{full_service_hierarchy_controller.service_node.address}:{full_service_hierarchy_controller.route.service_port}"
         assert controller['status'] == STATUS_GOOD
         assert controller['nodes'][node_id_controller]["status"] == STATUS_GOOD
-        assert controller['nodes'][node_id_controller]["response"] == {"test": "test"}
+        assert controller['nodes'][node_id_controller]["response"] == {"version": "test"}
 
         node_id_hub = f"{full_service_hierarchy_hub.service_node.address}:{full_service_hierarchy_hub.route.service_port}"
         assert hub['status'] == STATUS_GOOD
         assert hub['nodes'][node_id_hub]["status"] == STATUS_GOOD
-        assert hub['nodes'][node_id_hub]["response"] == {"test": "test"}
+        assert hub['nodes'][node_id_hub]["response"] == {"version": "test"}
 
 
 @pytest.mark.parametrize(

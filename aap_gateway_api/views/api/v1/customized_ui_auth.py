@@ -1,5 +1,7 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.views.ui_auth import UIAuth, generate_ui_auth_data
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.response import Response
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
@@ -23,6 +25,42 @@ def get_default_hostname_for_service(service_type_name):
     return f"{proto}://{host.address}{port}"
 
 
+@extend_schema(
+    request=None,
+    responses={
+        "200": inline_serializer(
+            "custom_ui_auth",
+            fields={
+                "passwords": serializers.ListField(
+                    child=inline_serializer(
+                        "custom_ui_auth_password",
+                        fields={
+                            "name": serializers.CharField(),
+                        },
+                    )
+                ),
+                "ssos": serializers.ListField(
+                    child=inline_serializer(
+                        "custom_ui_auth_ssos",
+                        fields={
+                            "name": serializers.CharField(),
+                            "login_url": serializers.CharField(),
+                            "type": serializers.CharField(),
+                        },
+                    ),
+                ),
+                "show_login_form": serializers.BooleanField(),
+                "login_redirect_override": serializers.CharField(),
+                "custom_login_info": serializers.CharField(),
+                "custom_logo": serializers.CharField(),
+                "managed_cloud_install": serializers.BooleanField(),
+                "legacy_controller_sso_url": serializers.CharField(),
+                "legacy_automation_hub_sso_url": serializers.CharField(),
+                "legacy_auth_enabled": serializers.BooleanField(),
+            },
+        ),
+    },
+)
 class CustomUIAuth(UIAuth):
     """
     Extend the UIAuth view from DAB to show legacy auth information

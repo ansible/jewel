@@ -20,10 +20,12 @@ from envoy.extensions.filters.http.lua.v3 import lua_pb2  # noqa: 401
 from envoy.extensions.access_loggers.stream.v3 import stream_pb2  # noqa: 401
 from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: 401
 from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: 401
+from drf_spectacular.utils import extend_schema
 
 # isort: on
 
 
+@extend_schema(exclude=True)
 class XDSView(APIView):
     authentication_classes = []
     permission_classes = []

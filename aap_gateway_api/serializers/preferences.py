@@ -5,13 +5,15 @@ from ansible_base.lib.utils.settings import is_aoc_instance
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from dynamic_preferences import types
 from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.models.preference import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
 from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
 
 logger = logging.getLogger('aap.gateway.serializers.preferences')
@@ -59,6 +61,7 @@ class SettingSectionSerializer(serializers.Serializer):
             PEMPrivateKeyPreference: serializers.CharField,
             IntRangePreference: serializers.IntegerField,
             FloatRangePreference: serializers.FloatField,
+            MimeTypedImagePreference: serializers.CharField,
         }
 
         long_string_fields = (
@@ -177,6 +180,7 @@ class SettingPreferenceSerializer(serializers.ModelSerializer):
         model = Preference
         fields = ['section', 'name', 'value']
 
+    @extend_schema_field(field=OpenApiTypes.ANY)
     def get_value(self, obj):
         if obj.preference.encrypted:
             return ENCRYPTED_STRING

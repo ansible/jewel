@@ -13,10 +13,11 @@ from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.conf import settings
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiParameter, PolymorphicProxySerializer, extend_schema
 from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
+from aap_gateway_api.serializers.status import ServiceKeysStatusSerializer, StatusSerializer
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
@@ -228,18 +229,25 @@ def services_to_dict(services: List[Dict]) -> Dict:
     return new_services
 
 
+# NOTE: If the response format for /status is changed, please update
+# aap_gateway_api/serializers/status.py content to match
+@extend_schema(
+    parameters=[
+        OpenApiParameter(
+            "service_keys", OpenApiTypes.BOOL, OpenApiParameter.QUERY, description="Use a dictionary to describe services instead of a list", required=False
+        )
+    ],
+    responses=PolymorphicProxySerializer(
+        component_name='StatusResponseOptions',
+        serializers=[StatusSerializer, ServiceKeysStatusSerializer],
+        resource_type_field_name=None,
+    ),
+)
 class StatusView(AnsibleBaseView):
     """API endpoint that shows status of platform services."""
 
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                "service_keys", OpenApiTypes.BOOL, OpenApiParameter.QUERY, description="Use a dictionary to describe services instead of a list", required=False
-            )
-        ]
-    )
     def get(self, request):
         # We can't pull preferences or models in async functions
         # So we will construct our response object here and pass that around
@@ -274,6 +282,9 @@ class StatusView(AnsibleBaseView):
             new_services = services_to_dict(response['services'])
             del response['services']
             response['services'] = new_services
+            serialized = ServiceKeysStatusSerializer(response)
+        else:
+            serialized = StatusSerializer(response)
 
         # Return the response
-        return Response(response)
+        return Response(serialized.data)

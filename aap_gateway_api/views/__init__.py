@@ -8,6 +8,8 @@ from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -52,6 +54,12 @@ def gateway_exception_handler(exc, context):
     return exception_handler(exc, context)
 
 
+@extend_schema(
+    request=None,
+    responses={
+        "200": inline_serializer("api_root_view", fields={"description": serializers.CharField(), "apis": serializers.DictField(child=serializers.CharField())})
+    },
+)
 class ApiRootView(AnsibleBaseView):
     permission_classes = (AllowAny,)
     name = _('REST API')
