@@ -137,8 +137,8 @@ eda-server-down: $(EDA_REPO)/.git/HEAD
 ## Build local images for EDA, Gateway, and Hub
 dev-build:
 	cd $(GW_DIR) && ADMIN_PASSWORD=$(ADMIN_PASSWORD) make docker-compose-build
-	cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build
-	cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) build
+	if [[ "$(EDA_REPO)" != "skip" ]]; then make $(EDA_REPO)/.git/HEAD && cd $(EDA_REPO) && $(EDA_ENV) DOCKER_COMPOSE="$(DOCKER_COMPOSE)" $(TASK_CMD) docker:build ; fi
+	if [[ "$(HUB_REPO)" != "skip" ]]; then make $(HUB_REPO)/.git/HEAD && cd $(HUB_REPO) && $(DOCKER_COMPOSE) --file $(HUB_DOCKERFILE) build ; fi
 
 ## Bring up AAP services (Gateway + Controller + EDA) all at once
 dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack hub-server-up
