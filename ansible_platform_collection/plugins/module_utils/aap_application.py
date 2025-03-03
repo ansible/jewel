@@ -108,6 +108,10 @@ class AAPApplication(AAPObject):
                 post_logout_redirect_uris = ' '.join(post_logout_redirect_uris)
             self.new_fields['post_logout_redirect_uris'] = post_logout_redirect_uris
 
+        app_url = self.module.params.get('app_url')
+        if app_url is not None:
+            self.new_fields['app_url'] = app_url
+
         if self.user:
             user_id = (self.user.data or {}).get('id')
             if user_id is not None:

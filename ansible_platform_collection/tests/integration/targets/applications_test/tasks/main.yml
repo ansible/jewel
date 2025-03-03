@@ -129,6 +129,20 @@
         that:
           - app5 is changed
 
+    - name: Create Application 6
+      ansible.platform.application:
+        name: "{{ name_prefix }}-app6"
+        organization: "{{ org1.id }}"
+        authorization_grant_type: password
+        client_type: confidential
+        app_url: "https://tower.com"
+      register: app6
+
+    - name: Assert that we created application 6
+      ansible.builtin.assert:
+        that:
+          - app6 is changed
+
     - name: Test exists does not change
       ansible.platform.application:
         name: "{{ app1.name }}"
@@ -195,9 +209,35 @@
           - change_app5 is changed
           - change_app5.id == app5.id
 
+    - name: Change application app_url
+      ansible.platform.application:
+        name: "{{ name_prefix }}-app6"
+        organization: "{{ org1.id }}"
+        app_url: https://awx.com
+      register: change_app6
+
+    - name: Assert that we changed an existing application
+      ansible.builtin.assert:
+        that:
+          - change_app6 is changed
+          - change_app6.id == app6.id
+
+    - name: Change application app_url (blank out app_url)
+      ansible.platform.application:
+        name: "{{ name_prefix }}-app6"
+        organization: "{{ org1.id }}"
+        app_url: ""
+      register: change_app6
+
+    - name: Assert that we changed an existing application
+      ansible.builtin.assert:
+        that:
+          - change_app6 is changed
+          - change_app6.id == app6.id
+
     - name: Delete not existent ID
       ansible.platform.application:
-        name: "{{ name_prefix }}-app6"  # Does not exist
+        name: "{{ name_prefix }}-app314159"  # Does not exist
         organization: "{{ org1.id }}"
         state: absent
       register: delete_application
@@ -231,6 +271,7 @@
         - "app3"
         - "app4"
         - "app5"
+        - "app6"
       when: "item in vars and 'id' in vars[item]"
 
     - name: Delete Applications in Org2
@@ -244,6 +285,7 @@
         - "app3"
         - "app4"
         - "app5"
+        - "app6"
       when: "item in vars and 'id' in vars[item]"
 
     - name: Delete Users

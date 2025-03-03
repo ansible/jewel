@@ -66,6 +66,11 @@ options:
         - Allowed urls list, space separated. Required when authorization-grant-type=authorization-code
       type: list
       elements: str
+    app_url:
+      description:
+        - The URL of the application.
+      type: str
+      required: False
     state:
       description:
         - Desired state of the resource.
@@ -95,6 +100,7 @@ EXAMPLES = '''
     state: present
     authorization_grant_type: password
     client_type: public
+    app_url: http://example.com
 
 - name: Add Foo application
   ansible.platform.application:
@@ -106,6 +112,7 @@ EXAMPLES = '''
     client_type: confidential
     redirect_uris:
       - http://example.com/api/gateway/v1/
+    app_url: http://example.com
 ...
 '''
 
@@ -127,6 +134,7 @@ def main():
         skip_authorization=dict(type='bool'),
         algorithm=dict(choices=["", "RS256", "HS256"]),
         post_logout_redirect_uris=dict(type="list", elements="str"),
+        app_url=dict(type="str"),
         user=dict(type="str"),
         state=dict(choices=["present", "absent", "exists", "enforced"], default="present"),
     )
