@@ -185,7 +185,7 @@ services:
     ports:
       - "{{ db_port }}:5432"
     volumes:
-      - "aap_gw_db:/var/lib/psql/data"
+      - "aap_gw_db:/var/lib/pgsql/data"
 
 {% if not enabled_containers['haproxy']|bool %}
 {# If we are not enabling haproxy then we will just run with 1 envoy server #}

@@ -208,7 +208,7 @@ lightspeed-settings-hack:
 	python3 render_settings.py lightspeed > $(LIGHTSPEED_REPO)/ansible_ai_connect/main/settings/aap_dev_hacked_settings.py
 
 lightspeed-up: lightspeed-settings-hack
-	cd $(LIGHTSPEED_REPO) && $(LIGHTSPEED_ENV) docker compose -f tools/docker-compose/compose.yaml --env-file ./.env up --remove-orphans
+	cd $(LIGHTSPEED_REPO) && $(LIGHTSPEED_ENV) $(DOCKER_COMPOSE) -f tools/docker-compose/compose.yaml --env-file ./.env up --remove-orphans
 
 lightspeed-down:
-	cd $(LIGHTSPEED_REPO) && $(LIGHTSPEED_ENV) docker compose -f tools/docker-compose/compose.yaml --env-file ./.env down
+	cd $(LIGHTSPEED_REPO) && $(LIGHTSPEED_ENV) $(DOCKER_COMPOSE) -f tools/docker-compose/compose.yaml --env-file ./.env down
