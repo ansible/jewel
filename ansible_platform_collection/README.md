@@ -1,5 +1,9 @@
 # Ansible Platform Collection
 
+## Changelog for v2.5.20250312
+
+* Bug fix in AAP module that could cause a stack trace when using "present"
+
 ## Description
 
 This collection contains modules that can be used to automate the creation of resources on an install of Ansible Automation Platform.
