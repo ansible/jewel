@@ -8,11 +8,16 @@ from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import MigratedUserMetadata, Organization, Team, User
+from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.conftest import PatchedResourceClient
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 SEP_CHAR = "_"
+
+# Friendly reminder to all who come after me, this test file uses test fixtures defined
+# in module: aap_gateway_api/tests/service_test_app/fixtures/migration_tests.py
+# It might not be obvious because the test fixtures are not imported, the name of the
+# module is passed in as a parameter to launch_service() in migration_service fixture
 
 
 @pytest.fixture
@@ -29,26 +34,37 @@ def conflicting_team(conflicting_org):
     team.delete()
 
 
-@pytest.fixture
-def migration_service(patched_resource_client, service_api_route_controller):
-    controller_key = service_api_route_controller.service_cluster.generate_key()
-    proc = launch_service(
-        "awx",
-        service_api_route_controller.service_port,
-        setup_fixture="migration_tests",
-        secret_key=controller_key.secret,
-    )
-    yield service_api_route_controller
+def _launch_service(svc_route: Route, fixture: str, svc_type: str = "awx"):
+    port = svc_route.service_port
+    key = svc_route.service_cluster.generate_key()
+    return launch_service(service_type=svc_type, port=port, setup_fixture=fixture, secret_key=key.secret)
+
+
+def _kill_service(proc):
     proc.kill()
     stdout, stderr = proc.communicate()
     if stdout:
         print('')
-        print('AWX standard out:')
+        print('standard out:')
         print(str(stdout, encoding='utf-8'))
     if stderr:
         print('')
-        print('AWX standard err:')
+        print('standard err:')
         print(str(stderr, encoding='utf-8'))
+
+
+@pytest.fixture
+def migration_service(patched_resource_client, service_api_route_controller):
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests")
+    yield service_api_route_controller
+    _kill_service(proc)
+
+
+@pytest.fixture
+def migration_service_invalid_users(patched_resource_client, service_api_route_controller):
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_invalid_users")
+    yield service_api_route_controller
+    _kill_service(proc)
 
 
 def _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client):
@@ -363,6 +379,40 @@ def test_correcting_user_service_id(
     assert result["count"] == 1
     service_fury_resource_data = result["results"][0]
     assert service_fury_resource_data["service_id"] == service_id()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migrating_user_with_invalid_email(migration_service_invalid_users, admin_user):
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    cmd = MigrateCommand()
+    cmd.service_slug = 'controller'
+
+    call_command(cmd, api_slug=migration_service_invalid_users.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
+
+    users = User.objects.filter(username="bademailuser1")
+    assert users is not None and users.exists()
+    for u in users:
+        assert u.first_name == "Badema"
+        assert u.last_name == "Iluser"
+        assert u.email == ""
+
+
+@pytest.mark.django_db(transaction=True)
+def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, admin_user):
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    with patch.object(MigrateCommand, "update_resource_data") as mocked_update_resource_data_method:
+        mocked_update_resource_data_method.return_value = None  # None indicates that its data could not be updated
+
+        cmd = MigrateCommand()
+        cmd.service_slug = 'controller'
+
+        with pytest.raises(RuntimeError):
+            call_command(cmd, api_slug=migration_service_invalid_users.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
+
+        assert not User.objects.filter(username="invalidresource").exists()
+        assert not User.objects.filter(username="bademailuser1").exists()
 
 
 @pytest.fixture
