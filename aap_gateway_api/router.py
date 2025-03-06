@@ -88,3 +88,8 @@ router.register(
     views.AuthenticatorUserViewSet,
     basename='authenticator_user',
 )
+router.register(
+    r'app_urls',
+    views.AppUrlViewSet,
+    basename='app_url',
+)

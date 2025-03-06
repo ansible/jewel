@@ -176,6 +176,21 @@ legacy_tox_ini = """
     # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
     docker =
     commands = isort {posargs:.}
+
+    [testenv:check-lint]
+    # allowlist_externals = bash
+    deps = 
+        flake8==7.1.1
+        Flake8-pyproject==1.2.3
+        black==25.1.0
+        isort==6.0.0
+    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
+    docker = 
+    commands = 
+        # bash -c "black --check . || flake8 . || isort --check ."
+        black --check .
+        flake8 .
+        isort --check .
 """
 
 [tool.coverage.run]

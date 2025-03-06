@@ -18,6 +18,7 @@ from rest_framework.views import exception_handler
 from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
 from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
+from aap_gateway_api.views.api.v1.app_url import AppUrlViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.authenticator_user import AuthenticatorUserViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.customized_ui_auth import CustomUIAuth  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_key import JWTKeyView  # noqa: F401
