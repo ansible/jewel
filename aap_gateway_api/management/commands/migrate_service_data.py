@@ -201,6 +201,18 @@ class Command(BaseCommand):
                     uid=self.client.user.username,
                 )
 
+    def update_resource_data(self, resource_type_name, original_resource_data):
+        """
+        Used for producing updated resource data for resource that failed validation.
+        """
+        # if the resource is a user and there is only one validation error for email field, we can remove the field
+        if resource_type_name == "shared.user" and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
+            self.stderr.write(f"Removing invalid email address \'{original_resource_data.data['email']}\' for user: {original_resource_data.data['username']}")
+            # we want to update the email to empty string
+            updated_resource_data = original_resource_data.data
+            updated_resource_data["email"] = ""
+            return updated_resource_data
+
     def migrate_resource(self, resource_type_name):
         """
         Get a list of resources from the upstream service and add them to the gateway.
@@ -226,6 +238,10 @@ class Command(BaseCommand):
             "content_type__resource_type__name": resource_type_name,
         }
 
+        # Following 'while True' loop is used because we are modifying the list as we go through it.
+        # By changing the service ID or setting partially migrated, we are removing items from the filter,
+        # so this doesn't actually use pagination. It just keeps loading the same filter over and over
+        # until nothing is left to migrate.
         while True:
             data = self.client.list_resources(filters=api_call_filters).json()
             self.stdout.write(f"Items remaining: {data['count']}")
@@ -234,7 +250,9 @@ class Command(BaseCommand):
             if resource_type_name == 'shared.user':
                 # TODO: SYSTEM_USERNAME can theoretically vary by service, does this break if it's customized?
                 results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
+
             if len(results) == 0:
+                self.stdout.write("No more items remaining to migrate.")
                 break
 
             for resource_list in results:
@@ -248,8 +266,25 @@ class Command(BaseCommand):
 
                 # de-serialize the data so that we can decode ansible_ids into foreign key values
                 original_resource_data = resource_serializer(data=resource["resource_data"])
-                original_resource_data.is_valid(raise_exception=True)
-                original_resource_data = original_resource_data.validated_data
+
+                if original_resource_data.is_valid(raise_exception=False):
+                    original_resource_data = original_resource_data.validated_data
+                else:
+                    # if the validation failed, attempt to update resource data
+                    updated_resource_data = self.update_resource_data(resource_type_name, original_resource_data)
+                    if updated_resource_data is not None:
+                        # update the original resource data and the resource itself
+                        original_resource_data = updated_resource_data
+                        resource["resource_data"] = updated_resource_data
+                        # might need to figure out if the resource["resource_data"] is the only one we need to update
+                    else:
+                        # updating didn't produce valid data for the resource, hence this resource is invalid
+                        self.stderr.write(
+                            f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}'"
+                            f" failed validation with errors: {str(original_resource_data.errors)}"
+                        )
+                        # Raising exception here to stop migration to draw attention to existence of invalid resources.
+                        raise RuntimeError("Stopping migration of resources because invalid, non-correctable, resource(s) were encountered.")
 
                 unique_filter_kwargs = {}
                 for field_name in unique_fields:
