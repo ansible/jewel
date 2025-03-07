@@ -1,5 +1,32 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
+from rest_framework.test import APIClient
+
+
+# These additional platform_auditor fixtures are needed because the other ones get modified during other testing
+# via tox and the use of it here will cause these tests to fail.
+# Should this be executed on its own via tox, it works.  Therefore, creating another platform auditor that is not
+# used or modified elsewhere is needed.
+# Once the other tox issues are fixed, this might be resolved and can be removed, but the tests would need to be
+# updated to use the proper fixture - platform_auditor_user
+@pytest.fixture
+def platform_auditor_user_nomodify(db, django_user_model, local_authenticator):
+    user = django_user_model.objects.create_user(username="platform_auditor_nomodify", password="password")
+    user.set_is_platform_auditor(True)
+    user.save()
+    return user
+
+
+@pytest.fixture
+def platform_auditor_api_client_nomodify(db, platform_auditor_user_nomodify, local_authenticator):
+    client = APIClient()
+    client.login(username="platform_auditor_nomodify", password="password")
+    yield client
+    try:
+        client.logout()
+    except AttributeError:
+        # The test might have logged the user out already (e.g. to test the logout signal)
+        pass
 
 
 @pytest.mark.parametrize(
@@ -7,10 +34,11 @@ from ansible_base.lib.utils.response import get_relative_url
     [
         ("admin_api_client", 200),
         ("user_api_client", 200),
+        # ("platform_auditor_api_client_nomodify", 200),
         ("unauthenticated_api_client", 401),
     ],
 )
-def test_app_urls_access(request, client_fixture, expected_status):
+def test_app_url_access(request, client_fixture, expected_status):
     """
     Testing to ensure that getting the app_url list returns HTTP 200, for any authenticated user, unless you are unauthenticated
     """
@@ -25,11 +53,12 @@ def test_app_urls_access(request, client_fixture, expected_status):
     [
         ("admin_api_client", 400),
         ("user_api_client", 400),
+        # ("platform_auditor_api_client_nomodify", 400),
         ("unauthenticated_api_client", 401),
     ],
 )
 @pytest.mark.django_db
-def test_app_urls_details_access(request, oauth2_application, client_fixture, expected_status):
+def test_app_url_details_access(request, oauth2_application, client_fixture, expected_status):
     """
     Testing to ensure that getting the app_url detail returns HTTP 400, unless you are unauthenticated
     """
@@ -46,10 +75,11 @@ def test_app_urls_details_access(request, oauth2_application, client_fixture, ex
     [
         ("admin_api_client", 400),
         ("user_api_client", 400),
+        # ("platform_auditor_api_client_nomodify", 400),
         ("unauthenticated_api_client", 401),
     ],
 )
-def test_app_urls_details_access_bad_pk(request, client_fixture, expected_status):
+def test_app_url_details_access_bad_pk(request, client_fixture, expected_status):
     """
     Testing to ensure that getting the app_url detail returns HTTP 400, unless you are unauthenticated, even with a bad pk
     """
@@ -74,7 +104,7 @@ def test_app_urls_details_access_bad_pk(request, client_fixture, expected_status
     ],
 )
 @pytest.mark.django_db
-def test_app_urls_create_update_delete(request, client_fixture, rest_action, endpoint_type, expected_status, details_response, oauth2_application):
+def test_app_url_create_update_delete(request, client_fixture, rest_action, endpoint_type, expected_status, details_response, oauth2_application):
     """
     Test that we can not create, update or delete oauth2 applications from the app_urls details api endpoint.
     """
