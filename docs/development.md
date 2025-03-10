@@ -33,10 +33,10 @@
 ## UIs
 
 - **Automation Controller**
-  - AWX UI: https://localhost:8043/#/home 
+  - AWX UI: https://localhost:8043/#/home
   - Platform UI: http://localhost:4101
 - **Automation Hub**
-  - Hub UI: http://localhost:8002 
+  - Hub UI: http://localhost:8002
   - Platform UI: http://localhost:4102
 - **Event Driven Automation**
   - EDA UI: https://localhost:8443/eda/dashboard/
@@ -48,14 +48,14 @@
 
 - **Automation Controller**
   - API/UI (generated):
-    - user: `admin` 
+    - user: `admin`
     - pwd: `<awx root>/tools/docker-compose/_sources/secrets/admin_password.yml`
   - Postgres (generated):
     - user: `awx`
     - pwd: `<awx root>/tools/docker-compose/_source/secrets/pg_password.yml`
 - **Automation Hub**
-  - API/UI: `oci_env/compose.env`  
-    - user: ENV `DJANGO_SUPERUSER_USERNAME` 
+  - API/UI: `galaxy_ng/dev/compose/aap.yaml`
+    - user: ENV `DJANGO_SUPERUSER_USERNAME`
     - pwd: ENV `DJANGO_SUPERUSER_PASSWORD`
   - Postgres
     - ? TODO
@@ -67,7 +67,7 @@
   - Postgres:
     - db: eda
     - port: 5430
-    - user: postgres 
+    - user: postgres
     - pwd: secret
 - **Gateway**
   - API/UI (generated):
@@ -76,7 +76,7 @@
       - pwd: gateway_admin_password: admin
   - Postgres:
     - db: gateway
-    - port: 5432 
+    - port: 5432
     - user: gateway
     - pwd: gateway
 
@@ -97,7 +97,7 @@
   - Redis (`tools_redis_1`):
     - 6379 (not exposed)-
 - **Automation Hub**
-  - Galaxy (`oci_env-standalone_pulp_1`):
+  - Galaxy (`compose-manager-1`):
     - "5001:5001"  # http
     - "12345:12345"
 - **Event Driven Automation**
@@ -112,7 +112,7 @@
   - Redis:
     - "6379:6379"
   - Podman:
-    - "8888:8888" 
+    - "8888:8888"
 - **Gateway**
   - API:
     - "4444:4444"

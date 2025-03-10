@@ -1,22 +1,18 @@
 # Automation Hub/Galaxy Development
 
 Automation Hub/Galaxy is a plugin to the Pulp project.
-It's being deployed by the oci-env utility.  
-Galaxy_ng project has the Makefile, but running docker-compose through it is deprecated.
+Galaxy_ng project has the Makefile, where you can run the docker-compose.
 
 ## Assumptions
 
-All repositories are cloned to the `<your-path>/aap` folder, hereinafter referred to as `aap folder`. 
+All repositories are cloned to the `<your-path>/aap` folder, hereinafter referred to as `aap folder`.
 
 ## Repositories
 
 Clone into `aap folder`:
 - upstream:
-  - https://github.com/ansible/galaxy_ng 
+  - https://github.com/ansible/galaxy_ng
     - `git clone git@github.com:ansible/galaxy_ng.git`
-- dev installer
-  - https://github.com/pulp/oci_env 
-    - `git clone git@github.com:pulp/oci_env.git`
 - pulp
   - https://github.com/pulp/pulpcore (optional)
   - https://github.com/pulp/pulp_ansible (optional)
@@ -27,20 +23,14 @@ Clone into `aap folder`:
 
 ### Installation steps
 
-- init [virtualenv](#virtual-env)
-- create oci_env
-  - `cd <aap folder>/oci_env`
-  - `pip install -e client/`
-- `oci_env compose build`
-
 ## Run backend
 
 - `cd aap/galaxy_ng`
-- `make oci/dab`
+- `make compose/aap`
 
 ### Seed data
 
-- https://github.com/himdel/ansible-hub-ui/wiki/Getting-Data 
+- https://github.com/himdel/ansible-hub-ui/wiki/Getting-Data
 - Run on localhost (not in container), it connects to http://localhost:5001:
 ```shell
 pip install galaxykit ; galaxykit collection upload <my_namespace> <my_name>
@@ -54,29 +44,25 @@ Collection example:
 
 ### API
 
-The path is specified by `PULP_GALAXY_API_PATH_PREFIX` defined in `compose.env` above.  
+The path is specified by `PULP_GALAXY_API_PATH_PREFIX` defined in `compose.env` above.
 If not, default prefix is `/api/galaxy`
 - http://localhost:5001/api/hub/
 - http://localhost:5001/api/hub/v3/plugin/ansible/content/published/collections/
 - http://localhost:5001/api/hub/pulp/api/v3/status/
 
-**Credentials**:  
+**Credentials**:
 Specified by `DJANGO_SUPERUSER_USERNAME` and `DJANGO_SUPERUSER_PASSWORD` defined in `compose.env` above:
 - user: `admin`
 - password: `admin`
 
 ### Bash
 
-- `docker exec -it oci_env-dab_pulp_1 /bin/bash`
+- `docker exec -it compose-manager-1 /bin/bash`
 
 ### Postgres
 
-From localhost:
-- not available 
-
 From bash:
-- [Go to bash](#bash)
-- `psql -U postgres -d pulp`
+- `docker exec -u postgres -it compose-postgres-1 psql -U galaxy_ng -d galaxy_ng`
 
 ## Run UI
 
