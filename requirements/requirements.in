@@ -5,7 +5,6 @@ django-crum
 django-dynamic-preferences
 django-extensions
 django-flags
-django-split-settings
 grpcio
 grpcio-tools
 protobuf>=4.21
@@ -19,3 +18,4 @@ PyYAML
 # Not directly imported but pinned per dependabot alerts
 urllib3>=1.26.19,<1.27
 argon2-cffi
+dynaconf>=3.2.10,<4.0.0

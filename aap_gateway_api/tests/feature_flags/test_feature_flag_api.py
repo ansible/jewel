@@ -1,11 +1,10 @@
 import pytest
+from ansible_base.lib.dynamic_config import toggle_feature_flags
 from ansible_base.lib.utils.response import get_relative_url
 from django.conf import settings
 from django.test import override_settings
 from flags.state import flag_state
 from rest_framework import status
-
-from aap_gateway_api.settings import _set_feature_flags
 
 
 def test_feature_flags_list_endpoint(admin_api_client):
@@ -44,10 +43,16 @@ def test_feature_flags_override_flags(admin_api_client):
             {"condition": "boolean", "value": False},
         ],
     },
+    FEATURE_SOME_PLATFORM_FLAG_ENABLED=True,
 )
 @pytest.mark.django_db
 def test_set_feature_flags(admin_api_client):
-    _set_feature_flags(settings.FLAGS, {"FEATURE_SOME_PLATFORM_FLAG_ENABLED": True})
+    settings_override = {"FLAGS": settings.FLAGS, "FEATURE_SOME_PLATFORM_FLAG_ENABLED": settings.FEATURE_SOME_PLATFORM_FLAG_ENABLED}
+    assert toggle_feature_flags(settings_override) == {
+        "FLAGS__FEATURE_SOME_PLATFORM_FLAG_ENABLED": [
+            {"condition": "boolean", "value": True},
+        ]
+    }
     assert flag_state("FEATURE_SOME_PLATFORM_FLAG_ENABLED") is True
     url = get_relative_url("featureflags-list")
     response = admin_api_client.get(url)

@@ -1,12 +1,9 @@
+# This file uses dynaconf style of settings and it will be processed by dynaconf to handle merges and updates
 import logging
 import sys
 from os import getenv
 
 DEBUG = True
-
-# These lines are a hack to define LOGGING in this file so flake8 doesn't complain
-LOGGING = {} if not LOGGING else LOGGING  # noqa: F821
-INSTALLED_APPS = [] if not INSTALLED_APPS else INSTALLED_APPS  # noqa: F821
 
 # show colored logs in the dev environment
 try:
@@ -35,39 +32,28 @@ try:
             logging.CRITICAL: (None, 'red', True),
         }
 
-    LOGGING['handlers']['console']['()'] = ColorHandler
+    LOGGING__handlers__console = '@merge {"()": "aap_gateway_api.development_defaults.ColorHandler"}'
 
 except ImportError as e:
     # logutils is only used for colored logs in the dev environment
     print(f"Failed library import, colors won't be in logs: {e}")
 
 
-LOGGING['loggers']['aap']['level'] = "DEBUG"
-
-INSTALLED_APPS.append('ansible_base.help_text_check')
+LOGGING__loggers__aap__level = 'DEBUG'
+_INSTALLED_APPS = "ansible_base.help_text_check"
 
 ENABLE_DJANGO_DEBUG_TOOLBAR = False
 if "test" not in sys.argv and getenv('DJANGO_DEBUG_TOOL_BAR', False):
     ENABLE_DJANGO_DEBUG_TOOLBAR = True
 
-    try:
-        INSTALLED_APPS  # noqa: F821
-    except NameError:
-        INSTALLED_APPS = []
-    INSTALLED_APPS.append("debug_toolbar")
+    _INSTALLED_APPS = f"{_INSTALLED_APPS},debug_toolbar"
 
-    try:
-        MIDDLEWARE  # noqa: F821
-    except NameError:
-        MIDDLEWARE = []
-    MIDDLEWARE = [
-        "debug_toolbar.middleware.DebugToolbarMiddleware",
-        *MIDDLEWARE,
-    ]
+    MIDDLEWARE = "@insert 0 debug_toolbar.middleware.DebugToolbarMiddleware"
 
     DEBUG_TOOLBAR_CONFIG = {
         'ENABLE_STACKTRACES': True,
         "SHOW_TOOLBAR_CALLBACK": lambda req: True,
     }
 
+INSTALLED_APPS = f"@merge {_INSTALLED_APPS}"
 PING_PAGE_CHECK_IGNORE_CERT = True
