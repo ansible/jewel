@@ -124,6 +124,9 @@ class ApiSpecs:
             # control plane endpoints intentionally hidden
             if 'discovery' in endpoint:
                 continue
+            # app_url detail intentionally hidden
+            if 'app_url' in endpoint and endpoint.endswith('1/'):
+                continue
             valid_endpoints.append(endpoint)
         return valid_endpoints
 
