@@ -1,12 +1,25 @@
-from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_standard_settings_files, toggle_feature_flags
+import os
+
+from ansible_base.lib.dynamic_config import (
+    export,
+    factory,
+    load_envvars,
+    load_python_file_with_injected_context,
+    load_standard_settings_files,
+    toggle_feature_flags,
+)
 
 DYNACONF = factory(
     __name__,
     "GATEWAY",
     # Options passed directly to dynaconf
-    environments=("development"),
-    settings_files=["defaults.py"],
+    settings_files=["defaults.py", "settings_dev.py"],
 )
+
+# Load settings from the global settings file if specified in the
+# environment, defaulting to /etc/ansible-automation-platform/gateway/settings.py.
+settings_file_path = os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/ansible-automation-platform/gateway/settings.py')
+load_python_file_with_injected_context(settings_file_path, settings=DYNACONF)
 
 load_standard_settings_files(DYNACONF)  # /etc/ansible-automation-platform/*.yaml
 load_envvars(DYNACONF)  # load envvars prefixed with MYAPP_
