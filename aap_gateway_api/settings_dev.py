@@ -32,7 +32,7 @@ try:
             logging.CRITICAL: (None, 'red', True),
         }
 
-    LOGGING__handlers__console = '@merge {"()": "aap_gateway_api.development_defaults.ColorHandler"}'
+    LOGGING__handlers__console = '@merge {"()": "aap_gateway_api.settings_dev.ColorHandler"}'
 
 except ImportError as e:
     # logutils is only used for colored logs in the dev environment
