@@ -1,11 +1,15 @@
 import logging
 
+import requests
 from django.db import transaction
 
 from aap_gateway_api.models import ServiceAPIRoute
+from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 from aap_gateway_api.utils.user_migration import link_account, migrate_account
 
 logger = logging.getLogger('aap_gateway_api.authentication.authenticator_plugins.base')
+
+_API_SLUGS = ["awx", "controller", "eda", "galaxy"]
 
 
 class LegacyMixin:
@@ -25,10 +29,34 @@ class LegacyMixin:
 
             # If the old user is already linked with this account, don't try to re-link it.
             if old_user is not None:
+                # As link_account will delete the old user locally we need to preserve its
+                # ansible id and username for our later use.
+                old_user_ansible_id = old_user.resource.ansible_id
+                old_user_username = old_user.username
 
-                # This has to come last since it needs to delete the old user.
+                # This has to come last since it needs to delete the local old user.
                 link_account(new_user, old_user, preserve_authenticators=False, services_to_merge=services)
 
+                # Having performed the link we want to remove the old user from any remote
+                # service on which it remains.
+                for slug in _API_SLUGS:
+                    # We need a client connection to the service.
+                    try:
+                        service_api = ServiceAPIRoute.objects.get(api_slug=slug)
+                    except ServiceAPIRoute.DoesNotExist:
+                        # Not all services are necessarily extant in the environment.
+                        # Log the occurrence at debug level as for this current
+                        # implementation it's not unexpected.
+                        logger.debug(f"Service with API slug {slug} does not exist.")
+                        continue
+
+                    client = GWResourceAPIClient(service_api, raise_if_bad_request=True)
+                    logger.debug(f"Removing moved {old_user_username} account from service with API slug {slug}.")
+                    try:
+                        client.delete_resource(ansible_id=old_user_ansible_id)
+                    except requests.exceptions.HTTPError as e:
+                        if e.response.status_code != requests.codes.not_found:
+                            raise
             else:
                 logger.debug(f"User {new_user.username} is already set up with this authenticator.")
 
