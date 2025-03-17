@@ -2,7 +2,7 @@
 namespace: ansible
 name: platform
 description: A collection of roles to manage Ansible automation platform gateway
-version: 2.5.20250312
+version: 2.5.20250326
 readme: README.md
 authors:
   - automation platform gateway <aap-project@googlegroups.com>  # TBD
