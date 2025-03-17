@@ -9,6 +9,8 @@ from ansible_base.lib.dynamic_config import (
     toggle_feature_flags,
 )
 
+from .settings_utils import load_custom_envvars, set_secret_key
+
 DYNACONF = factory(
     __name__,
     "GATEWAY",
@@ -22,7 +24,10 @@ settings_file_path = os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/ansible-autom
 load_python_file_with_injected_context(settings_file_path, settings=DYNACONF)
 
 load_standard_settings_files(DYNACONF)  # /etc/ansible-automation-platform/*.yaml
-load_envvars(DYNACONF)  # load envvars prefixed with MYAPP_
+
+load_custom_envvars(DYNACONF)  # load custom unprefixed envvars
+load_envvars(DYNACONF)  # load envvars prefixed with GATEWAY_
+set_secret_key(DYNACONF)  # set secret key based on secret key file
 
 # toggle feature flags, considering flags coming from
 # /etc/ansible-automation-platform/*.yaml

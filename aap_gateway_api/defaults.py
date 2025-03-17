@@ -11,11 +11,8 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import socket
-import sys
-from os import getenv, path
+from os import path
 from pathlib import Path
-
-from ansible_base.lib.utils.validation import to_python_boolean
 
 ALLOWED_HOSTS = ["*"]
 
@@ -357,100 +354,6 @@ RESOURCE_SERVER_SYNC_ENABLED = False
 
 # Set the maximum number of secrets that can be active for a service cluster at any given time.
 MAX_ACTIVE_KEYS_PER_SERVICE = 2
-
-# Finally, environment variables always override last
-if getenv("DATABASE_ENGINE", None) is not None:
-    DATABASES["default"]["ENGINE"] = getenv("DATABASE_ENGINE")
-if getenv("DATABASE_NAME", None) is not None:
-    DATABASES["default"]["NAME"] = getenv("DATABASE_NAME")
-if getenv("DATABASE_USER", None) is not None:
-    DATABASES["default"]["USER"] = getenv("DATABASE_USER")
-if getenv("DATABASE_PASSWORD", None) is not None:
-    DATABASES["default"]["PASSWORD"] = getenv("DATABASE_PASSWORD")
-if getenv("DATABASE_HOST", None) is not None:
-    DATABASES["default"]["HOST"] = getenv("DATABASE_HOST")
-if getenv("DATABASE_PORT", None) is not None:
-    DATABASES["default"]["PORT"] = getenv("DATABASE_PORT")
-
-if getenv("ENVOY_HOSTNAME", None) is not None:
-    ENVOY_HOSTNAME = getenv("ENVOY_HOSTNAME")
-if getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES", None) is not None:
-    ENVOY_VERIFY_HTTPS_CERTIFICATES = getenv("ENVOY_VERIFY_HTTPS_CERTIFICATES")
-if getenv("ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES", None) is not None:
-    ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = getenv("ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES")
-
-if getenv('GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH', None) is not None:
-    GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH = getenv('GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH')
-
-if getenv('GATEWAY_STATIC_ROOT', None) is not None:
-    STATIC_ROOT = getenv('GATEWAY_STATIC_ROOT')
-if getenv('GATEWAY_SECRET_KEY_FILE', None) is not None:
-    secret_key_file = getenv('GATEWAY_SECRET_KEY_FILE')
-else:
-    secret_key_file = '/etc/ansible-automation-platform/gateway/SECRET_KEY'
-
-if getenv('GATEWAY_CERT_FILE', None) is not None:
-    GATEWAY_CERT_FILE = getenv('GATEWAY_CERT_FILE')
-if getenv('GATEWAY_KEY_FILE', None) is not None:
-    GATEWAY_KEY_FILE = getenv('GATEWAY_KEY_FILE')
-if getenv('GATEWAY_PATH_REWRITE_SCRIPT_FILE', None) is not None:
-    GATEWAY_PATH_REWRITE_SCRIPT_FILE = getenv('GATEWAY_PATH_REWRITE_SCRIPT_FILE')
-
-if getenv('REDIS_URL', None) is not None:
-    CACHES["primary"]['LOCATION'] = getenv('REDIS_URL')
-if getenv('CACHE_KEY_PREFIX', None) is not None:
-    CACHES["primary"]['KEY_PREFIX'] = getenv('CACHE_KEY_PREFIX')
-if getenv('REDIS_TLS', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl'] = to_python_boolean(getenv('REDIS_TLS'))
-if getenv('REDIS_MODE', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['mode'] = getenv('REDIS_MODE')
-if getenv('REDIS_SSL_CERT_REQS', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_cert_reqs'] = getenv('REDIS_SSL_CERT_REQS')
-if getenv('REDIS_HOSTS', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['redis_hosts'] = getenv('REDIS_HOSTS')
-if getenv('REDIS_KEY_FILE', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_keyfile'] = getenv('REDIS_KEY_FILE')
-if getenv('REDIS_CERT_FILE', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_certfile'] = getenv('REDIS_CERT_FILE')
-if getenv('REDIS_CA_CERT_FILE', None) is not None:
-    CACHES["primary"]["OPTIONS"]["CLIENT_CLASS_KWARGS"]['ssl_ca_certs'] = getenv('REDIS_CA_CERT_FILE')
-
-if getenv('FALLBACK_CACHE_FILE', None) is not None:
-    CACHES['fallback']['LOCATION'] = getenv('FALLBACK_CACHE_FILE')
-
-if getenv('CSRF_TRUSTED_ORIGINS', None) is not None:
-    CSRF_TRUSTED_ORIGINS = getenv('CSRF_TRUSTED_ORIGINS')
-
-if getenv('LOGOUT_ALLOWED_HOSTS', None) is not None:
-    LOGOUT_ALLOWED_HOSTS = getenv('LOGOUT_ALLOWED_HOSTS').split(",")
-
-if getenv('PING_PAGE_CHECK_TIMEOUT', None) is not None:
-    PING_PAGE_CHECK_TIMEOUT = getenv('PING_PAGE_CHECK_TIMEOUT')
-
-if getenv('PING_PAGE_CHECK_IGNORE_CERT', None) is not None:
-    PING_PAGE_CHECK_IGNORE_CERT = to_python_boolean(getenv('PING_PAGE_CHECK_IGNORE_CERT'))
-
-# override invalid settings
-if GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH < GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE:
-    sys.stderr.write(
-        f"GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH was set lower than allowed minimum ({GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE}),"
-        f" setting to {GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE}\n"
-    )
-    GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH = GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE
-
-# Make this unique, and don't share it with anybody.
-read_key = False
-try:
-    with open(secret_key_file, 'rb') as f:
-        SECRET_KEY = f.read().strip()
-    read_key = True
-except FileNotFoundError:
-    raise ImportError(f"Missing secret file {secret_key_file}")
-except PermissionError:
-    raise ImportError(f"Unable to read {secret_key_file}")
-except Exception as e:
-    raise ImportError(f"Unhandled exception when reading {secret_key_file}, ({e.__class__}): {e}")
-
 
 ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
     "ansible_base.authentication.authenticator_plugins",
