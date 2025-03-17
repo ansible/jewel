@@ -5,6 +5,7 @@ services:
   {% set container_id = loop.index %}
   {% set exposed_port = 7999 + container_id | int %}
   gateway{{ container_id }}:
+    image: {{ gateway_image }}
     build:
       context: $PWD
       dockerfile: tools/generated/Dockerfile
