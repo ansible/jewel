@@ -411,7 +411,7 @@ def test_updating_resource_data_for_invalid_resource(migration_service_invalid_u
         with pytest.raises(RuntimeError):
             call_command(cmd, api_slug=migration_service_invalid_users.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
 
-        assert not User.objects.filter(username="invalidresource").exists()
+        assert not User.objects.filter(username="invaliduser").exists()
         assert not User.objects.filter(username="bademailuser1").exists()
 
 
