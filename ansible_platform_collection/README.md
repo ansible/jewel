@@ -1,8 +1,8 @@
 # Ansible Platform Collection
 
-## Changelog for v2.5.20250312
+## Changelog for v2.5.20250326
 
-* Bug fix in AAP module that could cause a stack trace when using "present"
+* Added support for setting URL for applications
 
 ## Description
 
