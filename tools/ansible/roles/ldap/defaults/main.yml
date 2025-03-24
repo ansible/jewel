@@ -38,3 +38,30 @@ ldap_configuration:
   GROUP_TYPE_PARAMS:
     name_attr: "cn"
     member_attr: "member"
+
+ldap_users:
+  - username: 'ldap_admin'
+    password: 'admin123'
+  - username: 'ldap_auditor'
+    password: 'audit123'
+  - username: 'ldap_unpriv'
+    password: 'unpriv123'
+  - username: 'ldap_org_admin'
+    password: 'orgadmin123'
+
+ldap_groups:
+  - name: org_admins
+    members:
+      - ldap_org_admin
+  - name: users
+    members:
+      - admin
+      - ldap_auditor
+      - ldap_unpriv
+      - ldap_org_admin
+  - name: admins
+    members:
+      - admin
+  - name: auditors
+    members:
+      - ldap_auditor

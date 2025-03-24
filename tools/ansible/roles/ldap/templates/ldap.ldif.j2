@@ -1,0 +1,55 @@
+dn: dc=example,dc=org
+objectClass: dcObject
+objectClass: organization
+dc: example
+o: example
+
+dn: ou=users,dc=example,dc=org
+ou: users
+objectClass: organizationalUnit
+
+dn: ou=other_users,dc=example,dc=org
+ou: users
+objectClass: organizationalUnit
+
+dn: ou=groups,dc=example,dc=org
+ou: groups
+objectClass: top
+objectClass: organizationalUnit
+
+{% for user in ldap_users %}
+{% set surname = (user.username | regex_replace('_', ' ')).title() | regex_replace(' ', '') %}
+dn: cn={{ user.username }},ou=users,dc=example,dc=org
+mail: admin@example.org
+sn: {{ surname }}
+cn: {{ user.username }}
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+userPassword: {{ user.password }}
+givenName: gateway
+
+dn: cn=other_{{ user.username }},ou=other_users,dc=example,dc=org
+mail: admin@example.org
+sn: Other{{ surname }}
+cn: other_{{ user.username }}
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+userPassword: {{ user.password }}
+givenName: gateway
+
+{% endfor %}
+
+{% for group in ldap_groups %}
+dn: cn={{ group.name }},ou=groups,dc=example,dc=org
+cn: {{ group.name }}
+objectClass: top
+objectClass: groupOfNames
+{% for user in ldap_users %}
+member: cn={{ user.username }},ou=users,dc=example,dc=org
+member: cn=other_{{ user.username }},ou=other_users,dc=example,dc=org
+{% endfor %}
+{% endfor %}
