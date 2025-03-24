@@ -190,6 +190,7 @@ Once the playbook is done running LDAP should now be setup in your development e
 
 The first account is a normal user. The second account will be a super user in gateway. The third account will be a system auditor in gateway. The fourth account is an org admin. All users belong to an org called "LDAP Organization". To log in with one of these users go to the gateway login screen enter the username/password.
 
+Additionally, there is also a second authenticator called `Dev LDAP Container Union` that is disabled by default. This authenticator exposes both the ou `user` as well as `other_users` and comes with the users above as well as the same users with the prefix `other_` i.e. `other_lpda_unpriv`. All users have the same passwords as above for their corresponding account.
 
 ### tacacs+ Integration
 
