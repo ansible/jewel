@@ -9,6 +9,13 @@ function envoy_on_response(handle)
         return
     end
 
+    -- Ignore this script if the response is from a StreamingHTTPResponse event-stream
+    local ctype = handle:headers():get("content-type")
+    if ctype and string.match(ctype, "text/event%-stream") then
+        handle:headers():replace("X-Accel-Buffering", "no")
+        return
+    end
+
     local location = handle:headers():get("Location")
 
     -- If the location contains __gateway_no_rewrite__=1 (e.g. as a GET param),
