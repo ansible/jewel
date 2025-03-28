@@ -73,7 +73,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
         cfg = {
             "name": self.envoy_listener_name,
-            "address": {"socket_address": {"address": "0.0.0.0", "port_value": self.number}},
+            "address": {"socket_address": {"address": "::", "port_value": self.number, "ipv4_compat": True}},
             "filter_chains": [
                 {
                     "filters": [
