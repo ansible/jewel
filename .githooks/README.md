@@ -2,7 +2,7 @@
 
 This folder contains executable files that will be invoked by git at certain git operations.
 
-By default git hooks are located i `.git/hooks` folder at the root of the repository. Since the default folder is hidden by most IDEs, this repository reconfigures git's hook location in order to make the hooks visible and easier to maintain.
+By default git hooks are located in `.git/hooks` folder at the root of the repository. Since the default folder is hidden by most IDEs, this repository reconfigures git's hook location in order to make the hooks visible and easier to maintain.
 
 ## Configuration
 
