@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext as _
+from flags.state import flag_enabled
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
@@ -73,7 +74,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
         cfg = {
             "name": self.envoy_listener_name,
-            "address": {"socket_address": {"address": "::", "port_value": self.number, "ipv4_compat": True}},
+            "address": {"socket_address": {"address": "0.0.0.0", "port_value": self.number}},
             "filter_chains": [
                 {
                     "filters": [
@@ -83,6 +84,9 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             ],
             "per_connection_buffer_limit_bytes": settings.ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES,
         }
+
+        if flag_enabled("FEATURE_GATEWAY_IPV6_USAGE_ENABLED"):
+            cfg['address']['socket_address'] = {"address": "::", "port_value": self.number, "ipv4_compat": True}
 
         if self.use_https:
             cfg["filter_chains"][0]["transport_socket"] = transport_socket()

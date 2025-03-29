@@ -120,7 +120,7 @@ ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
 # The feature condition allows defining dependencies between features.
 # Note: Requires aap_gateway_api.feature_flags.conditions to be imported.
 # Format: flag_name: [list of conditions]
-FLAGS = {}
+FLAGS = {'FEATURE_GATEWAY_IPV6_USAGE_ENABLED': [{'condition': 'boolean', 'value': False}]}
 
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
