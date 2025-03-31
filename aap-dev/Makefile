@@ -19,7 +19,7 @@ DOCKER_COMPOSE?=docker compose
 EDA_IMAGE_TAG?=localhost/aap-eda
 EDA_IMAGE_VERSION?=latest
 # NOTE: see README.md on how to have git ignore the dev_hacked_settings.py file
-EDA_ENV=EDA_IMAGE=$(EDA_IMAGE_TAG) EDA_IMAGE_VERSION=$(EDA_IMAGE_VERSION) EDA_ACTIVATION_WORKERS=1 EDA_DEFAULT_WORKERS=1 EDA_API_PORT=8010 DJANGO_SETTINGS_MODULE=aap_eda.settings.dev_hacked_settings
+EDA_ENV=EDA_IMAGE=$(EDA_IMAGE_TAG) EDA_IMAGE_VERSION=$(EDA_IMAGE_VERSION) EDA_ACTIVATION_WORKERS=1 EDA_DEFAULT_WORKERS=1 EDA_API_PORT=8010 EDA_MODE=testing
 # the eda-server docker-compose-stage.yaml file does not allow customizing setting module
 EDA_DOCKERFILE?=tools/docker/docker-compose-dev.yaml
 EDA_REPO?=$(SERVICE_DIR)/eda-server
@@ -117,7 +117,7 @@ $(EDA_REPO)/.git/HEAD: ;
 
 ## Generate dynamic EDA settings and put in source tree
 .eda-settings-hack:
-	python3 render_settings.py eda > $(EDA_REPO)/src/aap_eda/settings/dev_hacked_settings.py
+	python3 render_settings.py eda > $(EDA_REPO)/src/aap_eda/settings/testing_defaults.py
 
 # Explaining: the EDA go-task docker:build runs `docker compose build`, which respects EDA_IMAGE environment var
 # this env var is referenced in the docker-compose yaml, so it obviously works in docker compose up too
