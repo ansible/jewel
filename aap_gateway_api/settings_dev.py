@@ -57,3 +57,19 @@ if "test" not in sys.argv and getenv('DJANGO_DEBUG_TOOL_BAR', False):
 
 INSTALLED_APPS = f"@merge {_INSTALLED_APPS}"
 PING_PAGE_CHECK_IGNORE_CERT = True
+
+
+if getenv('SUPERVISOR_PROCESS_NAME') == "runserver":
+    try:
+        import debugpy
+
+        debugpy.listen(("0.0.0.0", 3000))
+        print('Debugpy attached to port 3000!')
+    except ImportError:
+        print("unable to enable debugpy, missing module")
+    except RuntimeError as e:
+        # If debugpy is already bound for whatever reason, we will get a RuntimeError with one of these messages.
+        if "has already been called on this process" not in str(e) and "Address already in use" not in str(e):
+            raise
+
+    CSRF_TRUSTED_ORIGINS = ["https://localhost:8000"]

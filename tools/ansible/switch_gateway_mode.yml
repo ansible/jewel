@@ -1,0 +1,70 @@
+---
+- name: Switch gateway mode
+  hosts: localhost
+  gather_facts: false
+  pre_tasks:
+    - name: Fetch Docker context
+      community.docker.docker_context_info:
+        only_current: true
+      when: docker_host is not defined
+      ignore_errors: true
+      register: docker_context
+
+    - name: Set Docker socket path
+      when: docker_context is not skipped and docker_context is success
+      set_fact:
+        docker_host: "{{ docker_context.contexts[0].config.docker_host }}"
+
+  tasks:
+    - name: Make sure we got proper input
+      ansible.builtin.fail:
+        msg: "Please pass in the variable mode as either 'debug' or 'normal' and service as either 'api' or 'control-plane'"
+      when:
+        - mode is not defined or mode not in ['normal', 'debug'] or service is not defined or service not in ['api', 'control-plane']
+
+    - name: Ensure the container is running
+      community.docker.docker_container_info:
+        docker_host: "{{ docker_host | default(omit) }}"
+        name: aap_gw_1
+      register: gateway_container_status
+
+    - name: Fail if the container is not running
+      ansible.builtin.fail:
+        msg: "The aap_gw_1 container is not running"
+      when: gateway_container_status.container['State']['Status'] != 'running'
+
+    - name: Determine services and port
+      ansible.builtin.set_fact:
+        debug_port: "{{ debugpy_port }}"
+        until_condition: "0.0.0.0:{{ debugpy_port }}"
+        start_process: "{{ (mode == 'debug') | ternary(debug_service, normal_service) }}"
+        stop_process: "{{ (mode == 'debug') | ternary(normal_service, debug_service) }}"
+      vars:
+        debug_service: "{{ (service == 'api') | ternary('runserver', 'control-plane-debug') }}"
+        normal_service: "{{ (service == 'api') | ternary('gateway-processes:uwsgi', 'gateway-processes:control-plane') }}"
+        debugpy_port: "{{ (service == 'api') | ternary(3000, 3001) }}"
+
+    - name: "Stop process {{ stop_process }}"
+      community.docker.docker_container_exec:
+        docker_host: "{{ docker_host | default(omit) }}"
+        container: aap_gw_1
+        command: "supervisorctl stop {{ stop_process }}"
+      register: stop_output
+      changed_when: "'ERROR' not in stop_output.stdout"
+
+    - name: "Start process {{ start_process }}"
+      community.docker.docker_container_exec:
+        docker_host: "{{ docker_host | default(omit) }}"
+        container: aap_gw_1
+        command: "supervisorctl start {{ start_process }}"
+      register: start_output
+      changed_when: "'ERROR' not in start_output.stdout"
+
+    - name: Wait for debugpy port to be listening
+      ansible.builtin.wait_for:
+        host: localhost
+        port: "{{ debug_port }}"
+        search_regex: '"seq"'
+        delay: 1
+        timeout: 60
+      when: mode == 'debug'

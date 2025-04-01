@@ -1,0 +1,39 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Gateway API",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 3000
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/opt/aap_gateway/src"
+                }
+            ],
+            "preLaunchTask": "api-debug",
+            "postDebugTask": "api-normal"
+        },
+        {
+            "name": "Debug Gateway Control Plane",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 3001
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/opt/aap_gateway/src"
+                }
+            ],
+            "preLaunchTask": "control-plane-debug",
+            "postDebugTask": "control-plane-normal"
+        }
+    ]
+}
