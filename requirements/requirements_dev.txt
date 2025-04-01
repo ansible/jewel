@@ -1,18 +1,19 @@
-ansible    # Needed by the dev environment to run playbooks
+ansible                 # Needed by the dev environment to run playbooks
 black==25.1.0           # Linting tool, if changed update pyproject.toml as well
 build
+debugpy                 # Used for VSCode debugging
 django-debug-toolbar
 flake8==7.1.1           # Linting tool, if changed update pyproject.toml as well
 Flake8-pyproject==1.2.3 # Linting tool, if changed update pyproject.toml as well
-ipython # Used in shell_plus
+ipython                 # Used in shell_plus
 isort==6.0.0            # Linting tool, if changed update pyproject.toml as well
-remote-pdb # The debugger setup with Python's breakpoint()
-tox # Used for unit tests
-colorama # Allows addition of color to logs
+remote-pdb              # The debugger setup with Python's breakpoint()
+tox                     # Used for unit tests
+colorama                # Allows addition of color to logs
 logutils
 psycopg[binary]
 requests
-setuptools>=70.0.0 # Needed for the plumbing of the side cars
-setuptools_scm # Needed for proper version string on /api/gateway/v1/ping
-docker     # Needed for the plumbing of the side cars via Ansible
-PyYAML     # Collection tests
+setuptools>=70.0.0      # Needed for the plumbing of the side cars
+setuptools_scm          # Needed for proper version string on /api/gateway/v1/ping
+docker                  # Needed for the plumbing of the side cars via Ansible
+PyYAML                  # Collection tests

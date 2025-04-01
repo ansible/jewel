@@ -1,0 +1,61 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "api-debug",
+            "type": "shell",
+            "command": "ansible-playbook tools/ansible/switch_gateway_mode.yml -eservice=api -emode=debug",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "label": "api-normal",
+            "type": "shell",
+            "command": "ansible-playbook tools/ansible/switch_gateway_mode.yml -eservice=api -emode=normal",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "label": "control-plane-debug",
+            "type": "shell",
+            "command": "ansible-playbook tools/ansible/switch_gateway_mode.yml -eservice=control-plane -emode=debug",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "label": "control-plane-normal",
+            "type": "shell",
+            "command": "ansible-playbook tools/ansible/switch_gateway_mode.yml -eservice=control-plane -emode=normal",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        }
+    ]
+}

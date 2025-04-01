@@ -14,8 +14,6 @@ from aap_gateway_api.proxy.control_plane import ExternalAuth
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 _MAX_RECEIVE_MESSAGE_LENGTH = settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH
-_THREAD_CONCURRENCY = settings.GRPC_SERVER_MAX_THREADS_PER_PROCESS
-_PROCESS_COUNT = settings.GRPC_SERVER_PROCESSES
 _PORT = settings.GRPC_SERVER_PORT
 
 # Set verbosity for GRPC to ERROR (unless overridden in settings) to prevent log spam with:
@@ -23,7 +21,19 @@ _PORT = settings.GRPC_SERVER_PORT
 os.environ["GRPC_VERBOSITY"] = getattr(settings, "GRPC_VERBOSITY", "ERROR")
 
 
-def _run_server(bind_address):
+def _run_server(bind_address, debug):
+    if debug:
+        _THREAD_CONCURRENCY = 1
+        try:
+            import debugpy
+
+            debugpy.listen(("0.0.0.0", 3001))
+        except ImportError:
+            print("Unable to import debugpy, please install it")
+            raise
+    else:
+        _THREAD_CONCURRENCY = settings.GRPC_SERVER_MAX_THREADS_PER_PROCESS
+
     """Start a server in a subprocess."""
     logger.info("Starting gRPC worker process.")
     options = (("grpc.so_reuseport", 1), ("grpc.max_receive_message_length", _MAX_RECEIVE_MESSAGE_LENGTH))
@@ -43,7 +53,15 @@ def _run_server(bind_address):
 class Command(BaseCommand):
     help = "Launch gRPC auth service for envoy."
 
+    def add_arguments(self, parser):
+        parser.add_argument('--debug', action='store_true', help='Run GRPC in debug mode (single threaded)')
+
     def handle(self, *args, **options):
+        if options['debug']:
+            _PROCESS_COUNT = 1
+        else:
+            _PROCESS_COUNT = settings.GRPC_SERVER_PROCESSES
+
         bind_address = "[::]:" + _PORT
         logger.info("Binding to '%s'", bind_address)
         sys.stdout.flush()
@@ -52,7 +70,7 @@ class Command(BaseCommand):
             # NOTE: It is imperative that the worker subprocesses be forked before
             # any gRPC servers start up. See
             # https://github.com/grpc/grpc/issues/16001 for more details.
-            worker = multiprocessing.Process(target=_run_server, args=(bind_address,))
+            worker = multiprocessing.Process(target=_run_server, args=(bind_address, options['debug']))
             worker.start()
             workers.append(worker)
         for worker in workers:
