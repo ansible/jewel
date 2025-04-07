@@ -44,14 +44,14 @@ Collection example:
 
 ### API
 
-The path is specified by `PULP_GALAXY_API_PATH_PREFIX` defined in `compose.env` above.
+The path is specified by `PULP_GALAXY_API_PATH_PREFIX` defined in `dev/compose/aap.yaml` above.
 If not, default prefix is `/api/galaxy`
 - http://localhost:5001/api/hub/
 - http://localhost:5001/api/hub/v3/plugin/ansible/content/published/collections/
 - http://localhost:5001/api/hub/pulp/api/v3/status/
 
 **Credentials**:
-Specified by `DJANGO_SUPERUSER_USERNAME` and `DJANGO_SUPERUSER_PASSWORD` defined in `compose.env` above:
+Specified by `DJANGO_SUPERUSER_USERNAME` and `DJANGO_SUPERUSER_PASSWORD` defined in `dev/compose/aap.yaml` above:
 - user: `admin`
 - password: `admin`
 
