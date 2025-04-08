@@ -62,9 +62,11 @@ class TestUserOrganizationsAssociations:
 
         assert associated_user1_org_url_response.status_code == 200
         assert associated_user1_org_url_response.data['count'] == 3
-        assert associated_user1_org_url_response.data['results'][0]['name'] == "Test Org 1"
-        assert associated_user1_org_url_response.data['results'][1]['name'] == "Test Org 2"
-        assert associated_user1_org_url_response.data['results'][2]['name'] == "Test Org 3"
+
+        org_names = set()
+        for result in associated_user1_org_url_response.data['results']:
+            org_names.add(result['name'])
+        assert set(["Test Org 1", "Test Org 2", "Test Org 3"]) == set(org_names)
 
         # Verify that the associated Orgs for the user: test_user2 returns ONLY 1 Org
         user2_detail_url = get_relative_url('user-detail', kwargs={'pk': user2_response.data['id']})

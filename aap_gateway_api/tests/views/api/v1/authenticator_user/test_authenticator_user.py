@@ -222,7 +222,7 @@ def test_authenticator_user_move_merge_accounts_with_same_uid_but_same_user(admi
     assert AuthenticatorUser.objects.filter(uid=user.username).count() == 1
     url = get_relative_url("authenticator_user-move", kwargs={"pk": ua.pk})
     payload = {
-        "new_authenticator": ua.pk,
+        "new_authenticator": legacy_password_authenticator.pk,
         "remove_other_authenticators": True,
         "keep_memberships": True,
         "merge_accounts_with_same_uid": True,
