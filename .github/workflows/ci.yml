@@ -47,7 +47,7 @@ jobs:
           python-version: ${{ matrix.tests.python-version }}
 
       - name: Install tox
-        run: pip${{ matrix.tests.python-version }} install tox requests
+        run: pip${{ matrix.tests.python-version }} install tox tox-docker requests
 
       - name: Checkout DAB branch if needed
         env:

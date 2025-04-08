@@ -349,7 +349,7 @@ class TestUserSerializer:
         }
         response = admin_api_client.patch(url, payload)
         assert response.status_code == 200, response.data
-        assert response.json()['authenticators'] == [1]
+        assert response.json()['authenticators'] == [local_authenticator.id]
 
     def test_managed_field_unsetable_through_api(self, admin_api_client, random_user):
         """Test to ensure user.managed cannot be set to true via the API."""

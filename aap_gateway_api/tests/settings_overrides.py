@@ -1,3 +1,5 @@
+import os
+
 from fakeredis import FakeConnection
 
 from aap_gateway_api.settings import *  # noqa: F403
@@ -5,11 +7,13 @@ from aap_gateway_api.settings import *  # noqa: F403
 # noqa: F405
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": "aap_gateway_api/tests/db.sqlite3",
-        "TEST": {
-            "NAME": "aap_gateway_api/tests/test_dbs/db_test.sqlite3",
-        },
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": "localhost",
+        # These are defined in tools/dev_postgres/Dockerfile and in pyproject.toml (tox config)
+        "NAME": "gw_db",
+        "USER": "gw",
+        "PASSWORD": "password",
+        "PORT": os.getenv("DB_PORT", 5432),
     }
 }
 

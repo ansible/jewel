@@ -94,8 +94,14 @@ legacy_tox_ini = """
         check = check, check-migrations, check-oauth2-permissions
         lint = flake8, black, isort
 
+    [docker:db]
+    dockerfile = {toxinidir}/tools/dev_postgres/Dockerfile
+    expose =
+        DB_PORT=5432/tcp
+
     [testenv]
     allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    docker = db
     setenv =
         PYTHONPATH = {toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
@@ -135,7 +141,7 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
         -r{toxinidir}/requirements/requirements_test.txt
-        psycopg[binary]
+         psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api makemigrations --check
@@ -159,34 +165,30 @@ legacy_tox_ini = """
     deps =
         flake8==7.1.1
         Flake8-pyproject==1.2.3
-    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
     docker =
     commands = flake8 {posargs:.}
 
     [testenv:black]
     deps =
         black==25.1.0
-    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
     docker =
     commands = black {posargs:.}
 
     [testenv:isort]
     deps =
         isort==6.0.0
-    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
     docker =
     commands = isort {posargs:.}
 
     [testenv:check-lint]
     # allowlist_externals = bash
-    deps = 
+    deps =
         flake8==7.1.1
         Flake8-pyproject==1.2.3
         black==25.1.0
         isort==6.0.0
-    # This docker directive currently does nothing, but will prevent linting targets from spinning up containers when we integrate tox-docker into aap-gateway for unit testing.
-    docker = 
-    commands = 
+    docker =
+    commands =
         # bash -c "black --check . || flake8 . || isort --check ."
         black --check .
         flake8 .
