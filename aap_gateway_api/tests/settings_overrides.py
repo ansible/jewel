@@ -8,7 +8,7 @@ from aap_gateway_api.settings import *  # noqa: F403
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "HOST": "localhost",
+        "HOST": os.getenv("ANSIBLE_GW_TEST_DB_HOST", "localhost"),
         # These are defined in tools/dev_postgres/Dockerfile and in pyproject.toml (tox config)
         "NAME": "gw_db",
         "USER": "gw",

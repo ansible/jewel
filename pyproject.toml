@@ -105,6 +105,7 @@ legacy_tox_ini = """
     setenv =
         PYTHONPATH = {toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
+    passenv = ANSIBLE_GW_TEST_DB_HOST
     deps =
         -r{toxinidir}/requirements/requirements.txt
         -r{toxinidir}/requirements/requirements_git.txt
