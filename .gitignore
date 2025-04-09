@@ -22,8 +22,8 @@ coverage.json
 aap-gateway-test-results.xml
 htmlcov
 *.tox
-/venv
-/.venv
+/venv*
+/.venv*
 
 # Mac OS X
 *.DS_Store
