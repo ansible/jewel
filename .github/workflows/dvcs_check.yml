@@ -1,6 +1,7 @@
+---
+name: DVCS (Find Jira Key)
 on:
   pull_request_target:
-    type: opened, synchronize, reopened, edited
 jobs:
   dvcs_pr_checker:
     permissions:
@@ -9,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Check the PR for DVCS integration
     steps:
-      - id: foo
-        uses: ansible/dvcs-action@v1
+      - uses: ansible/dvcs-action@devel
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
