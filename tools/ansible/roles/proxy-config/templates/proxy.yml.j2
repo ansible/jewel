@@ -13,7 +13,7 @@ gateway_service_types:  # Service types
   - name: console
   - name: lightspeed
     ping_url: "/api/v1/health/"
-    service_index_path: "/api/v1/service-index/"
+    service_index_path: "/v1/service-index/"
 
 gateway_service_clusters:  # Service clusters (1 per type)
   - name: gateway # -- name of cluster, used by [gateway_service_nodes | gateway_services | gateway_routes]/service_cluster
