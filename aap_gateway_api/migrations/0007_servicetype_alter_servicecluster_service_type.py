@@ -10,7 +10,7 @@ from ._initialize_tasks import create_default_service_types, migrate_service_typ
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('aap_gateway_api', '0005_alter_httpport_created_alter_httpport_created_by_and_more'),
+        ('aap_gateway_api', '0006_alter_servicecluster_service_type'),
     ]
 
     operations = [
@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
                 ('modified', models.DateTimeField(auto_now=True, help_text='The date/time this resource was created.')),
                 ('created', models.DateTimeField(auto_now_add=True, help_text='The date/time this resource was created.')),
                 ('name', models.CharField(help_text='The name of this resource.', max_length=512, unique=True)),
-                ('ping_url', models.CharField(help_text='URL to the ping/status page of the service, ex. /pulp/api/v3/status/', max_length=255)),
+                ('ping_url', models.CharField(help_text='URL to the ping/status page of the service, ex. /pulp/api/v3/status/', max_length=255, null=True)),
                 ('login_path', models.CharField(help_text='API path to login for service, ex. /v1/auth/session/login/', max_length=255, null=True)),
                 ('logout_path', models.CharField(help_text='API path to logout for service, ex. /logout/', max_length=255, null=True)),
                 ('service_index_path', models.CharField(help_text='API path to resource service index endpoint, ex. /v2/service-index/', max_length=255, null=True)),
