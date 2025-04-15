@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('aap_gateway_api', '0007_alter_servicetype_ping_url'),
+        ('aap_gateway_api', '0007_servicetype_alter_servicecluster_service_type'),
     ]
 
     operations = [
