@@ -56,6 +56,7 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
             'health_check_interval_seconds',
             'health_check_unhealthy_threshold',
             'health_check_healthy_threshold',
+            'healthy_panic_threshold',
         ]
 
 

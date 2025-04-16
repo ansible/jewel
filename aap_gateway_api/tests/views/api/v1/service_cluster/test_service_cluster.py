@@ -134,3 +134,33 @@ def test_service_model_write_from_proxy_non_default(admin_api_client):
         response = admin_api_client.patch(url, {"name": "changed"})
         assert response.status_code == 200
         assert "changed" == ServiceCluster.objects.filter(name="changed").first().name, "Expected cluster to have name changed"
+
+
+@pytest.mark.parametrize(
+    "value,message",
+    [
+        (-1, "Ensure this value is greater than or equal to 0."),
+        (101, "Ensure this value is less than or equal to 100."),
+    ],
+)
+@pytest.mark.django_db
+def test_service_cluster_healthy_panic_threshold_min_max(value, message, service_cluster_controller, admin_api_client):
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
+    response = admin_api_client.patch(url, {"healthy_panic_threshold": value})
+    assert response.status_code == 400
+    assert response.data["healthy_panic_threshold"][0] == message
+
+
+@pytest.mark.parametrize(
+    "value,message",
+    [
+        (-1, "Ensure this value is greater than or equal to 0."),
+        (101, "Ensure this value is less than or equal to 100."),
+    ],
+)
+@pytest.mark.django_db
+def test_service_outlier_detection_max_ejection_percent_min_max(value, message, service_cluster_controller, admin_api_client):
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_controller.pk})
+    response = admin_api_client.patch(url, {"outlier_detection_max_ejection_percent": value})
+    assert response.status_code == 400
+    assert response.data["outlier_detection_max_ejection_percent"][0] == message

@@ -4,7 +4,39 @@ from django.conf import settings
 from django.utils import timezone
 from django.apps import apps as global_apps
 
+from aap_gateway_api.models import DefaultServiceType
 from ansible_base.rbac.management import create_dab_permissions
+
+_default_service_types = [
+    {
+        "name": DefaultServiceType.GATEWAY.value,
+        "ping_url": "/api/gateway/v1/ping/",
+        "login_path": None,
+        "logout_path": None,
+        "service_index_path": "",
+    },
+    {
+        "name": DefaultServiceType.CONTROLLER.value,
+        "ping_url": "/api/v2/ping/",
+        "login_path": "/login/",
+        "logout_path": "/logout/",
+        "service_index_path": "/v2/service-index/",
+    },
+    {
+        "name": DefaultServiceType.HUB.value,
+        "ping_url": "/api/galaxy/pulp/api/v3/status/",
+        "login_path": "/auth/login",
+        "logout_path": "/auth/logout",
+        "service_index_path": "/service-index/",
+    },
+    {
+        "name": DefaultServiceType.EDA.value,
+        "ping_url": "/api/eda/v1/status/",
+        "login_path": "/v1/auth/session/login/",
+        "logout_path": "/v1/auth/session/logout/",
+        "service_index_path": "/v1/service-index/",
+    },
+]
 
 
 def create_system_user(apps, schema_editor):
@@ -32,41 +64,11 @@ def create_default_service_types(apps, schema_editor):
     """
     Create the expected default service types to seed DB.
     """
-    default_service_types = [
-        {
-            "name": "gateway",
-            "ping_url": "/api/gateway/v1/ping/",
-            "login_path": None,
-            "logout_path": None,
-            "service_index_path": "",
-        },
-        {
-            "name": "controller",
-            "ping_url": "/api/v2/ping/",
-            "login_path": "/login/",
-            "logout_path": "/logout/",
-            "service_index_path": "/v2/service-index/",
-        },
-        {
-            "name": "hub",
-            "ping_url": "/pulp/api/v3/status/",
-            "login_path": "/auth/login",
-            "logout_path": "/auth/logout",
-            "service_index_path": "/service-index/",
-        },
-        {
-            "name": "eda",
-            "ping_url": "/api/eda/v1/status/",
-            "login_path": "/v1/auth/session/login/",
-            "logout_path": "/v1/auth/session/logout/",
-            "service_index_path": "/v1/service-index/",
-        },
-    ]
 
     ServiceType = apps.get_model('aap_gateway_api.ServiceType')
     User = apps.get_model(settings.AUTH_USER_MODEL)
     system_user = User.all_objects.filter(username=settings.SYSTEM_USERNAME).first()
-    for data in default_service_types:
+    for data in _default_service_types:
         st = ServiceType(**data)
         st.created_by = system_user
         st.modified_by = system_user
@@ -80,3 +82,26 @@ def migrate_service_types(apps, schema_editor):
         st = ServiceType.objects.filter(name=sc.service_type_name).first()
         sc.service_type = st
         sc.save()
+
+def update_service_ping_url(apps, schema_editor):
+    ServiceType = apps.get_model('aap_gateway_api.ServiceType')
+    for st_default in _default_service_types:
+        # only updating hub for now
+        if st_default["name"] == DefaultServiceType.HUB.value:
+            for st in ServiceType.objects.filter(name=st_default["name"]).all():
+                st.ping_url = st_default["ping_url"]
+                st.save()
+
+def change_outlier_detection_max_ejection_percent_from_33_to_100(apps, schema_editor):
+    change_outlier_detection_max_ejection_percent(apps, 33, 100)
+
+def change_outlier_detection_max_ejection_percent_from_100_to_33(apps, schema_editor):
+    change_outlier_detection_max_ejection_percent(apps, 100, 33)
+
+def change_outlier_detection_max_ejection_percent(apps, old, new):
+    ServiceCluster = apps.get_model('aap_gateway_api.ServiceCluster')
+    # The old default for the outlier_detection_max_ejection_percent was 33%.
+    # We want to change any existing 33% to 100% to address the defect associated with running at 33% 
+    for cluster in ServiceCluster.objects.filter(outlier_detection_max_ejection_percent=old).all():
+        cluster.outlier_detection_max_ejection_percent = new
+        cluster.save()

@@ -4,6 +4,7 @@ from typing import Optional, Union
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from ansible_base.resource_registry.models import service_id
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext as _
 
@@ -44,7 +45,11 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     )
 
     outlier_detection_max_ejection_percent = models.PositiveIntegerField(
-        default=33,
+        default=100,
+        validators=[
+            MaxValueValidator(100),
+            MinValueValidator(0),
+        ],
         help_text=_("The maximum percent of nodes that can be ejected from the cluster."),
     )
 
@@ -71,6 +76,15 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     health_check_healthy_threshold = models.PositiveIntegerField(
         default=3,
         help_text=_("The number of consecutive successful health checks before a node is considered healthy."),
+    )
+
+    healthy_panic_threshold = models.PositiveIntegerField(
+        default=0,
+        validators=[
+            MaxValueValidator(100),
+            MinValueValidator(0),
+        ],
+        help_text=_("The percentage of failed hosts when the proxy will panic and start routing traffic to all nodes. Set to 0 to disable this."),
     )
 
     class ServiceAuthType(models.TextChoices):
