@@ -139,6 +139,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             "lb_policy": "LEAST_REQUEST",
             "dns_lookup_family": self.service_cluster.dns_lookup_family,
             "load_assignment": {"cluster_name": self.envoy_cluster_name, "endpoints": [{"lb_endpoints": endpoints}]},
+            "common_lb_config": {
+                "healthy_panic_threshold": {
+                    "value": self.service_cluster.healthy_panic_threshold,
+                }
+            },
         }
 
         if self.service_cluster.outlier_detection_enabled:

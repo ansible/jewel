@@ -83,6 +83,9 @@ options:
     health_check_healthy_threshold:
       type: int
       description: The number of consecutive successful health checks before a node is considered healthy.
+    healthy_panic_threshold:
+      type: int
+      description: The percentage of failed hosts when the proxy will panic and start routing traffic to all nodes. Set to 0 to disable this.
 
 extends_documentation_fragment:
 - ansible.platform.state
@@ -134,6 +137,7 @@ def main():
         health_check_interval_seconds=dict(type='int'),
         health_check_unhealthy_threshold=dict(type='int'),
         health_check_healthy_threshold=dict(type='int'),
+        healthy_panic_threshold=dict(type='int'),
     )
 
     # Create a module with spec
