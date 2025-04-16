@@ -19,7 +19,7 @@ DOCKER_COMPOSE?=docker compose
 EDA_IMAGE_TAG?=localhost/aap-eda
 EDA_IMAGE_VERSION?=latest
 # NOTE: see README.md on how to have git ignore the dev_hacked_settings.py file
-EDA_ENV=EDA_IMAGE=$(EDA_IMAGE_TAG) EDA_IMAGE_VERSION=$(EDA_IMAGE_VERSION) EDA_ACTIVATION_WORKERS=1 EDA_DEFAULT_WORKERS=1 EDA_API_PORT=8010 EDA_MODE=testing
+EDA_ENV=EDA_IMAGE=$(EDA_IMAGE_TAG) EDA_IMAGE_VERSION=$(EDA_IMAGE_VERSION) EDA_ACTIVATION_WORKERS=1 EDA_DEFAULT_WORKERS=1 EDA_API_PORT=8010 EDA_REDIS_PORT=6389 EDA_MODE=testing
 # the eda-server docker-compose-stage.yaml file does not allow customizing setting module
 EDA_DOCKERFILE?=tools/docker/docker-compose-dev.yaml
 EDA_REPO?=$(SERVICE_DIR)/eda-server
@@ -144,24 +144,25 @@ dev-build:
 
 ## Bring up AAP services (Gateway + Controller + EDA) all at once
 dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack hub-server-up
-	$(AAP_DEV_DIR)/gateway-up-check.sh
+	$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh gateway gateway/v1/
 	if [[ "$(AWX_REPO)" == "skip" ]]; then \
 		echo "Skipping controller actions" ; \
 	else \
 		make .awx-settings-hack ; \
-		$(AAP_DEV_DIR)/awx-up-check.sh ; \
+		$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh controller controller/v2/ping/ ; \
 		docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username=admin  --merge-organizations=true ; \
 	fi;
 	if [[ "$(EDA_REPO)" == "skip" ]]; then \
 		echo "Skipping EDA server actions" ; \
 	else \
-		$(AAP_DEV_DIR)/eda-server-up-check.sh ; \
+		$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh EDA eda/v1/status/ ; \
 		docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username=admin --merge-organizations=true ; \
 	fi;
 	if [[ "$(HUB_REPO)" == "skip" ]]; then \
 		echo "Skipping Hub actions" ; \
 	else \
 		make .hub-settings-hack ; \
+		$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh hub galaxy/pulp/api/v3/status/ ; \
 		docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=galaxy --username=admin --merge-organizations=true ; \
 	fi;
 

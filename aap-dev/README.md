@@ -108,6 +108,7 @@ Just in case it is not obvious.
 aap-gateway/
 ├── aap-dev						            <-- aap developer environment (not gateway things)
 │   ├── controller_settings_template.py		<-- SETTINGS OVERRIDES
+│   ├── aap-service-cluster-up-check.sh		<-- UP check for aap service clusters
 │   ├── awx-up-check.sh						<-- UP
 │   ├── eda_settings_template.py			<-- SETTINGS OVERRIDES
 │   ├── eda-server-up-check.sh				<-- UP
