@@ -57,9 +57,9 @@ services:
 {% if container_id == 1 %}
       # Debug ports
       # 3000 - api debug
-      - "3000:3000"
+      - "{{ container_id }}3000:3000"
       # 3001 - control-plane debug
-      - "3001:3001"
+      - "{{ container_id }}3001:3001"
 {% endif %}
       - "{{ container_id + 50050 }}:50051"
     user: "${UID:-1000}"
