@@ -13,7 +13,18 @@ _API_SLUGS = ["awx", "controller", "eda", "galaxy"]
 
 
 class LegacyMixin:
+    """
+    Mixin for supporting legacy authentication from controller and hub services (pre-2.5)
+    """
+
     def move_authenticator_user_to(self, new_user, old_authenticator_user):
+        """
+        Merges the old authenticator user into the new user account in gateway
+        This includes migrating the new user account if necessary, linking accounts
+        across services, and cleaning up old user locally in gateway and in the services as well
+        Returns: None when new user is already or successfully linked
+        """
+
         with transaction.atomic():
             logger.debug(f'Merging {old_authenticator_user.uid} from {old_authenticator_user.provider.name} into {new_user.username}')
             # Ensure that the new account has been migrated if it hasn't.
@@ -60,4 +71,13 @@ class LegacyMixin:
             else:
                 logger.debug(f"User {new_user.username} is already set up with this authenticator.")
 
+        return None
+
+    def authenticate(self, request, username=None, password=None, service_type=None, **kwargs):
+        """
+        This method by default returns None to prevent breakage of AnsibleBaseAuth
+        Overrides may use 'request', 'username', 'password', 'service_type', or 'kwargs'
+        to implement custom authentication logic based on request context, user credentials,
+        service-specific behavior, or additional data passed in.
+        """
         return None
