@@ -12,6 +12,3 @@ class AuthenticatorPlugin(LegacyMixin, AbstractAuthenticatorPlugin):
     logger = logger
     type = "legacy_password"
     category = "legacy"
-
-    def authenticate(self, request, username=None, password=None, service_type=None, **kwargs):
-        pass
