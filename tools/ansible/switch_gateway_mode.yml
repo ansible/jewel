@@ -42,7 +42,7 @@
       vars:
         debug_service: "{{ (service == 'api') | ternary('runserver', 'control-plane-debug') }}"
         normal_service: "{{ (service == 'api') | ternary('gateway-processes:uwsgi', 'gateway-processes:control-plane') }}"
-        debugpy_port: "{{ (service == 'api') | ternary(3000, 3001) }}"
+        debugpy_port: "{{ (service == 'api') | ternary(13000, 13001) }}"
 
     - name: "Stop process {{ stop_process }}"
       community.docker.docker_container_exec:
