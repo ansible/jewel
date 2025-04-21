@@ -1,6 +1,6 @@
 ARG PYTHON=python3.11
 
-FROM quay.io/centos/centos:stream9 as builder
+FROM quay.io/centos/centos:stream9 AS builder
 ARG PYTHON
 
 ENV LANG en_US.UTF-8
@@ -27,7 +27,7 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
 
 RUN for dir in \
       /opt/aap_gateway; \
-    do mkdir -p $dir && chgrp -R 0 $dir && chmod -R g=u $dir ; done
+    do mkdir -p "$dir" && chgrp -R 0 "$dir" && chmod -R g=u "$dir" ; done
 
 RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
 RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/${PYTHON}/site-packages/project.pth
@@ -75,11 +75,11 @@ RUN for dir in \
       /var/run/uwsgi \
       /var/log/nginx \
       /var/run/django_metrics ; \
-    do mkdir -m 0775 -p $dir ; chmod g+rwx $dir ; chgrp root $dir ; done && \
+    do mkdir -m 0775 -p "$dir" ; chmod g+rwx "$dir" ; chgrp root "$dir" ; done && \
     for file in \
       /etc/nginx/gateway.crt \
       /etc/nginx/gateway.key ; \
-    do touch $file ; chmod g+rw $file ; chgrp root $file ; done && \
+    do touch "$file" ; chmod g+rw "$file" ; chgrp root "$file" ; done && \
     ln -s /usr/bin/aap-gateway-manage /usr/bin/gateway-manage
 
 # This is required for the xds protobuf defintions in order for them
