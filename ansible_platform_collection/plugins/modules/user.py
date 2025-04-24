@@ -40,6 +40,11 @@ options:
         - Designates that this user has all permissions without explicitly assigning them.
       type: bool
       aliases: ['superuser']
+    is_platform_auditor:
+      description:
+        - Designates that this user is a platform auditor.
+      type: bool
+      aliases: ['auditor']
     password:
       description:
         - Write-only field used to change the password.
@@ -89,6 +94,14 @@ EXAMPLES = """
     superuser: true
     state: present
 
+- name: Add user as a system auditor
+  ansible.platform.user:
+    username: jdoe
+    password: foobarbaz
+    email: jdoe@example.org
+    auditor: true
+    state: present
+
 - name: Delete user
   ansible.platform.user:
     username: jdoe
@@ -109,6 +122,7 @@ def main():
         last_name=dict(),
         email=dict(),
         is_superuser=dict(type="bool", aliases=["superuser"]),
+        is_platform_auditor=dict(type="bool", aliases=["auditor"]),
         password=dict(no_log=True),
         organizations=dict(type="list", elements='str'),
         update_secrets=dict(type="bool", default=True, no_log=False),
@@ -119,8 +133,61 @@ def main():
 
     # Create a module for ourselves
     module = AAPModule(argument_spec=argument_spec, supports_check_mode=True)
+    if module.params["is_platform_auditor"]:
+        module.deprecate(
+            msg="Configuring auditor via `ansible.platform.user` is not the recommended approach. "
+            "The preferred method going forward is to use the `role_user_assignment` module.",
+            date="2026-12-01",
+            collection_name="ansible.platform",
+        )
 
-    AAPUser(module).manage()
+    # Process the user first
+    AAPUser(module).manage(auto_exit=False)
+
+    # Only process organizations if the state is present or enforced
+    if module.params.get('state') in ['present', 'enforced']:
+        audit_user(module)
+
+    # Exit with the final status
+    module.exit_json(**module.json_output)
+
+
+def audit_user(module):
+    try:
+        user_data = module.get_one('users', module.params.get('username'), allow_none=False)
+        user_id = user_data['id']
+    except Exception as e:
+        module.fail_json(msg=f"Failed to fetch user data: {str(e)}")
+    try:
+        role_definition = module.get_one('role_definitions', "Platform Auditor", allow_none=False)
+        role_definition_id = role_definition['id']
+    except Exception as e:
+        module.fail_json(msg=f"Failed to fetch role definition: {str(e)}")
+    if module.params.get('is_platform_auditor') and not user_data['is_platform_auditor']:
+        payload = {
+            "role_definition": role_definition_id,
+            "user": user_id,
+        }
+        url = module.build_url("role_user_assignments/")
+        try:
+            module.make_request("POST", url, data=payload)
+            module.json_output["changed"] = True
+        except Exception as e:
+            module.fail_json(msg=f"Failed to assign platform auditor role: {str(e)}")
+
+    if module.params.get('is_platform_auditor') is False and user_data['is_platform_auditor']:
+        kwargs = {'role_definition': role_definition_id, 'user': user_id}
+        try:
+            role_user_assignment = module.get_one('role_user_assignments', **{'data': kwargs})['id']
+        except Exception as e:
+            module.fail_json(msg=f"Failed to fetch role user assignment: {str(e)}")
+        user_data['is_platform_auditor'] = False
+        url = module.build_url(f"role_user_assignments/{role_user_assignment}")
+        try:
+            module.make_request("DELETE", url)
+            module.json_output["changed"] = True
+        except Exception as e:
+            module.fail_json(msg=f"Failed to remove platform auditor role: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,18 @@
         that:
           - joe is changed
 
+    - name: Create Timmy user
+      ansible.platform.user:
+        username: "timmy-{{ username }}"
+        first_name: Timmy
+        password: "{{ 65535 | random | to_uuid }}"
+      register: timmy
+
+    - name: Assert the creation of the user changed the system
+      ansible.builtin.assert:
+        that:
+          - timmy is changed
+
     # Check idempotency
     - name: Recreate Joe
       ansible.platform.user:
@@ -55,6 +67,28 @@
       ansible.builtin.assert:
         that:
           - joe_superuser is changed
+
+    - name: Give Timmy auditor
+      ansible.platform.user:
+        username: "timmy-{{ username }}"
+        is_platform_auditor: true
+      register: timmy_auditor
+
+    - name: Assert that this changed the user
+      ansible.builtin.assert:
+        that:
+          - timmy_auditor is changed
+
+    - name: Revert Timmy auditor
+      ansible.platform.user:
+        username: "timmy-{{ username }}"
+        is_platform_auditor: false
+      register: timmy_auditor
+
+    - name: Assert that this changed the user
+      ansible.builtin.assert:
+        that:
+          - timmy_auditor is changed
 
     # Check idempotency when using a user id instead of a name
     - name: Give Joe superuser via his id instead of username
@@ -112,6 +146,13 @@
     - name: Delete user
       ansible.platform.user:
         username: "{{ username }}"
+        state: absent
+      register: delete
+      ignore_errors: true
+
+    - name: Delete user
+      ansible.platform.user:
+        username: "timmy-{{ username }}"
         state: absent
       register: delete
       ignore_errors: true
