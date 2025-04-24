@@ -23,6 +23,20 @@ except Exception as e:
 EOF
 }
 
+get_admin_username() {
+    ${GATEWAY_PYTHON} <<EOF
+import yaml
+
+data = {}
+with open("${GATEWAY_APP_DIR}/container-startup.yml", "r") as stream:
+    try:
+        data = yaml.safe_load(stream)
+    except Exception:
+        pass
+print(data.get('gateway_admin_username', 'admin'))
+EOF
+}
+
 get_admin_password() {
 ${GATEWAY_PYTHON} <<EOF
 import yaml
@@ -46,7 +60,7 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "aap_gateway_api.settings")
 django.setup()
 from aap_gateway_api.models import User
-user = User.objects.filter(username='admin').first()
+user = User.objects.filter(username='$DJANGO_SUPERUSER_USERNAME').first()
 user.password='$DJANGO_SUPERUSER_PASSWORD'
 user.save()
 EOF
@@ -63,7 +77,8 @@ if [ ${CONTAINER_NUMBER} -eq 1 ] ; then
     echo ${timestamp} Running migrations since I am container ${CONTAINER_NUMBER}
     ${GATEWAY_MANAGE} migrate --noinput
     export DJANGO_SUPERUSER_PASSWORD=$(get_admin_password)
-    if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=admin --email=admin@localhost 2> /dev/null); then
+    export DJANGO_SUPERUSER_USERNAME=$(get_admin_username)
+    if output=$(${GATEWAY_MANAGE} createsuperuser --noinput --username=$DJANGO_SUPERUSER_USERNAME --email=admin@localhost 2> /dev/null); then
         echo "$(timestamp) $output"
     else
         # Make sure the password is set as required
