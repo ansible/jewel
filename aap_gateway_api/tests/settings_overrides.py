@@ -14,6 +14,9 @@ DATABASES = {
         "USER": "gw",
         "PASSWORD": "password",
         "PORT": os.getenv("DB_PORT", 5432),
+        "OPTIONS": {
+            "keepalives_count": 5,
+        },
     }
 }
 

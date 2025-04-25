@@ -92,6 +92,7 @@ DATABASES = {
         "HOST": "DATABASE_HOST",
         "PORT": 5432,
         "CONN_HEALTH_CHECKS": True,
+        "OPTIONS": {},
     }
 }
 
