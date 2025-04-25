@@ -9,7 +9,7 @@ from ansible_base.lib.dynamic_config import (
     toggle_feature_flags,
 )
 
-from .settings_utils import load_custom_envvars, set_secret_key
+from .settings_utils import _GATEWAY_ETC_DIRECTORY, load_custom_envvars, load_grpc_settings, set_secret_key
 
 DYNACONF = factory(
     __name__,
@@ -20,8 +20,10 @@ DYNACONF = factory(
 
 # Load settings from the global settings file if specified in the
 # environment, defaulting to /etc/ansible-automation-platform/gateway/settings.py.
-settings_file_path = os.environ.get('GATEWAY_SETTINGS_FILE', '/etc/ansible-automation-platform/gateway/settings.py')
+settings_file_path = os.environ.get('GATEWAY_SETTINGS_FILE', f'{_GATEWAY_ETC_DIRECTORY}/settings.py')
 load_python_file_with_injected_context(settings_file_path, settings=DYNACONF)
+
+load_grpc_settings(DYNACONF)
 
 load_standard_settings_files(DYNACONF)  # /etc/ansible-automation-platform/*.yaml
 

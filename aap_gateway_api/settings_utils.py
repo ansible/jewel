@@ -1,7 +1,13 @@
+import logging
 import os
 import sys
 
+from ansible_base.lib.dynamic_config import load_python_file_with_injected_context
 from ansible_base.lib.utils.validation import to_python_boolean
+from dynaconf import Dynaconf
+
+logger = logging.getLogger('aap.gateway.settings.utils')
+_GATEWAY_ETC_DIRECTORY = '/etc/ansible-automation-platform/gateway/'
 
 
 def load_custom_envvars(settings):
@@ -80,7 +86,7 @@ def load_custom_envvars(settings):
 def set_secret_key(settings):
     """Based on the value of GATEWAY_SECRET_KEY_FILE, set the SECRET_KEY setting."""
 
-    settings.setdefault("SECRET_KEY_FILE", '/etc/ansible-automation-platform/gateway/SECRET_KEY')
+    settings.setdefault("SECRET_KEY_FILE", f'{_GATEWAY_ETC_DIRECTORY}/SECRET_KEY')
 
     # Make this unique, and don't share it with anybody.
     try:
@@ -92,3 +98,19 @@ def set_secret_key(settings):
         raise ImportError(f"Unable to read {settings.SECRET_KEY_FILE}")
     except Exception as e:
         raise ImportError(f"Unhandled exception when reading {settings.SECRET_KEY_FILE}, ({e.__class__}): {e}")
+
+
+def load_grpc_settings(settings: Dynaconf) -> None:
+    from sys import argv
+
+    if 'start_grpc_server' not in argv:
+        logger.debug('Not starting GRPC server, skipped loading GRPC settings')
+        return
+
+    logger.debug('Loading GRPC settings')
+
+    settings.load_file("grpc_defaults.py")
+
+    # Load settings for the GRPC server
+    settings_file_path = os.environ.get('GATEWAY_GRPC_SETTINGS_FILE', f'{_GATEWAY_ETC_DIRECTORY}/grpc_settings.py')
+    load_python_file_with_injected_context(settings_file_path, settings=settings)
