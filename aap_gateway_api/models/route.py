@@ -4,11 +4,13 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
+from flags.state import flag_enabled
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
+from aap_gateway_api.utils.address import is_ipv6_address_string
 from aap_gateway_api.utils.preferences import get_preference_value
 
 API_PREFIX = "/api/"
@@ -124,8 +126,12 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 },
             }
             if self.service_cluster.health_checks_enabled:
+                hostname = node.address
+                if flag_enabled("FEATURE_GATEWAY_IPV6_USAGE_ENABLED") and is_ipv6_address_string(hostname):
+                    hostname = f"[{hostname}]"
+
                 endpoint["endpoint"]["health_check_config"] = {
-                    "hostname": node.address,
+                    "hostname": hostname,
                     "port_value": self.service_port,
                 }
             endpoints.append(endpoint)
