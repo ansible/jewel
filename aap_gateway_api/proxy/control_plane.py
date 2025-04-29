@@ -132,20 +132,17 @@ class _ExternalAuth:
         logger.error(f"CSRF verification failure for {self.request_id} - {reason}")
         return self._return_no_auth_with_reason(reason=reason, html_body=csrf_failure(self.drf_request, reason).content)
 
-    def _can_read_from_db(self, initial_call: bool = True) -> Optional[external_auth_pb2.CheckResponse]:
+    def _can_read_from_db(self) -> Optional[external_auth_pb2.CheckResponse]:
         # This is overkill if we have CONN_HEALTH_CHECK=True in the settings
         # But just incase we will also do our own detection
         timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
+        # We need to close out old connections here to prevent accidental usage of obsolete database connections
+        close_old_connections()
         try:
             get_db_connection_status('default', timeout)
             return None
         except Exception as e:
-            if initial_call:
-                logger.warning("Database error. We think it's a connection error. Resetting the connection so it can be tried again.")
-                close_old_connections()
-                return self._can_read_from_db(initial_call=False)
-            else:
-                return self._return_no_auth_with_reason(f'Unable to connect to database: {type(e).__name__}')
+            return self._return_no_auth_with_reason(f'Unable to connect to database: {type(e).__name__}')
 
     def get_jwt_for_user(self, user):
         if jwt := JWTSessionCache.get(user.pk):
