@@ -60,6 +60,31 @@
           - fail is failed
           - fail.msg == 'map_type is team but all of the following are missing: team, organization'
 
+    - name: Create authenticator map 1 with check mode
+      ansible.platform.authenticator_map:
+        name: "{{ name_prefix }}-AMap-1"
+        authenticator: "{{ authenticator1.name }}"
+        revoke: false
+        map_type: organization
+        role: Organization Member
+        organization: "Organization 1"
+        triggers:
+          always: {}
+          never: {}
+        order: 10
+      check_mode: true
+
+    - name: Search for the authenticator map 1
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'authenticator_maps',
+          query_params={'name': '{{ name_prefix }}-AMap-1'}, **connection_info) }}"
+
+    - name: Assert that authenticator map 1 does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Authenticator map '{{ name_prefix }}-app1' exists in the system!"
+
     - name: Create authenticator map 1
       ansible.platform.authenticator_map:
         name: "{{ name_prefix }}-AMap-1"

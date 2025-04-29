@@ -13,6 +13,24 @@
       gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
 
   block:
+    - name: Create http port 1 with check mode
+      ansible.platform.http_port:
+        name: "{{ test_id }}-Port-65531"
+        number: 65531
+        use_https: false
+      check_mode: true
+
+    - name: Search for http port 1
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'http_ports',
+          query_params={'name': '{{ test_id }}-Port-65531'}, **connection_info) }}"
+
+    - name: Assert that http port 1 does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "http port '{{ test_id }}-Port-65531' exists in the system!"
+
     - name: Create http port 1
       ansible.platform.http_port:
         name: "{{ test_id }}-Port-65530"

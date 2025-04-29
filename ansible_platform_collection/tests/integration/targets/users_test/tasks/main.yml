@@ -18,6 +18,25 @@
       gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
 
   block:
+    # Test simple creation with check mode
+    - name: Create Joe user with check mode
+      ansible.platform.user:
+        username: "{{ username }}"
+        first_name: Joe
+        password: "{{ 65535 | random | to_uuid }}"
+      check_mode: true
+
+    - name: Search for Joe user and assert that it does not exist
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'users',
+          query_params={'username': '{{ username }}'}, **connection_info) }}"
+
+    - name: Assert that Joe user does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "User '{{ username }}' unexpectedly exists in the system!"
+
     # Test simple creation
     - name: Create Joe user
       ansible.platform.user:

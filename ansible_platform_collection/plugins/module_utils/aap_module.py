@@ -333,6 +333,10 @@ class AAPModule(AnsibleModule):
         elif kwargs.get("binary", False):
             data = kwargs.get("data", None)
 
+        if method.upper() in {'PUT', 'POST', 'DELETE', 'PATCH'} and self.check_mode:
+            self.json_output['changed'] = True
+            self.exit_json(**self.json_output)
+
         try:
             response = self.session.open(
                 method,

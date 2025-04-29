@@ -48,6 +48,25 @@
           - invalid_team is failed
           - invalid_team.msg == 'missing required arguments: organization'
 
+    # create team with check mode
+    - name: Create Team 1 with check mode
+      ansible.platform.team:
+        name: "{{ name_prefix }}-Team-1"
+        organization: "{{ org1.name }}" # Org by name
+        description: Team 1
+      check_mode: true
+
+    - name: Search for team1
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'teams',
+          query_params={'name': '{{ name_prefix }}-Team-1'}, **connection_info) }}"
+
+    - name: Assert that team1 does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Team '{{ name_prefix }}-Team-1' exists in the system!"
+
     - name: Create Team 1
       ansible.platform.team:
         name: "{{ name_prefix }}-Team-1"

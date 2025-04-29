@@ -87,6 +87,29 @@
     # </Service Clusters> -------------------------
 
     # <Services> ----------------------------------
+    - name: Create Hub Service with check mode
+      ansible.platform.service:
+        name: "{{ name_prefix }}-Automation Hub API"
+        description: "Proxy to the Automation Hub"
+        http_port: "{{ api_port_id }}"
+        api_slug: hub
+        service_cluster: "{{ hub_sc.id }}"
+        service_path: '/api/hub/'
+        service_port: 5001
+        order: 1
+      check_mode: true
+
+    - name: Search for the Hub Service
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'services',
+          query_params={'name': '{{ name_prefix }}-Automation Hub API'}, **connection_info) }}"
+
+    - name: Assert that Hub Service does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Service '{{ name_prefix }}-Automation Hub API' exists in the system!"
+
     - name: Create Hub Service
       ansible.platform.service:
         name: "{{ name_prefix }}-Automation Hub API"
