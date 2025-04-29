@@ -466,6 +466,7 @@ class AAPModule(AnsibleModule):
             # If we don't have an existing_item, we can try to create it
             # We have to rely on item_type being passed in since we don't have an existing item that declares its type
             # We will pull the item_name out from the new_item, if it exists
+            response = {}
             item_name = self.get_item_name(new_item, allow_unknown=True)
             response = self.make_request("POST", item_url, **{"data": new_item})
 
@@ -497,9 +498,10 @@ class AAPModule(AnsibleModule):
             on_create(self, response["json"])
         elif auto_exit:
             self.exit_json(**self.json_output)
-        else:
+        elif not existing_item:
             last_data = response["json"]
             return last_data
+        return None
 
     def update_if_needed(
         self,
