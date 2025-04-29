@@ -243,13 +243,13 @@ class UserSerializer(CommonUserSerializer):
             if conflicting_user:
                 errors.setdefault('authenticator_uid', []).append(
                     ErrorDetail(
-                        _("UID '%(uid)s' is already in use for authenticator: %(auth)s").format(auth=authenticator.name, uid=authenticator_uid),
+                        _("UID '{uid}' is already in use for authenticator: {auth}").format(auth=authenticator.name, uid=authenticator_uid),
                         code='uid_conflict',
                     )
                 )
                 errors.setdefault('authenticators', []).append(
                     ErrorDetail(
-                        _("Cannot set authenticator '%(auth)s': UID '%(uid)s' is already in use by user '%(user)s'").format(
+                        _("Cannot set authenticator '{auth}': UID '{uid}' is already in use by user '{user}'").format(
                             auth=authenticator.name, uid=authenticator_uid, user=conflicting_user.user.username
                         ),
                         code='uid_conflict',
