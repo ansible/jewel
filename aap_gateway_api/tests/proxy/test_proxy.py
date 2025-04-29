@@ -122,6 +122,13 @@ class MockSessionAuth(SessionAuthentication):
 
 @pytest.mark.django_db
 class TestExternalAuth:
+
+    # Need to mock away close_old_connections, because we can't expect the application code to re-connect to the test db.
+    @pytest.fixture(scope="class", autouse=True)
+    def mock_close_old_connections(self):
+        with mock.patch("aap_gateway_api.proxy.control_plane.close_old_connections"):
+            yield
+
     @pytest.mark.parametrize(
         "method,host,path,body,headers",
         [
