@@ -18,6 +18,22 @@
 
   block:
     # <Organizations> -------------------
+    - name: Create an organization with check mode
+      ansible.platform.organization:
+        name: "{{ organization_name }}"
+      check_mode: true
+
+    - name: Search for the organization
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'organizations',
+          query_params={'name': '{{ organization_name }}'}, **connection_info) }}"
+
+    - name: Assert that organization does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "organization '{{ organization_name }}' exists in the system!"
+
     - name: Create Organizations
       ansible.platform.organization:
         name: "{{ organization_name }}"

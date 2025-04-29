@@ -13,6 +13,26 @@
       gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
 
   block:
+    - name: Create dummy Service Type with check mode
+      ansible.platform.service_type:
+        name: dummy
+        ping_url: "/api/ping/"
+        login_path: "/api/login/"
+        logout_path: "/api/logout/"
+        service_index_path: "/api/service-index/"
+      check_mode: true
+
+    - name: Search for the Service Type
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'service_types',
+          query_params={'name': 'dummy'}, **connection_info) }}"
+
+    - name: Assert that Service Type does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Service Type 'dummy' exists in the system!"
+
     - name: Create dummy Service Type
       ansible.platform.service_type:
         name: dummy

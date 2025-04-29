@@ -69,6 +69,24 @@
         service_type: "{{ eda_st.id }}"
       register: eda_sc
 
+    - name: Create Service Node1 with check mode
+      ansible.platform.service_node:
+        name: "Controller on 10.10.0.1"
+        address: 10.10.0.1
+        service_cluster: "{{ controller_sc.name }}"
+      check_mode: true
+
+    - name: Search for Service Node 1
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'service_nodes',
+          query_params={'name': 'Controller on 10.10.0.1'}, **connection_info) }}"
+
+    - name: Assert that Service Node 1 does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Service Node 'Controller on 10.10.0.1' exists in the system!"
+
     - name: Create Service Node 1
       ansible.platform.service_node:
         name: "Controller on 10.10.0.1"

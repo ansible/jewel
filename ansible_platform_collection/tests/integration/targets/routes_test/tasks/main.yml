@@ -7,12 +7,12 @@
 - name: Route Module Tests
   module_defaults:
     group/ansible.platform.gateway:
-      gateway_hostname:         "{{ gateway_hostname | default(omit, true) }}"
-      gateway_username:         "{{ gateway_username | default(omit, true) }}"
-      gateway_password:         "{{ gateway_password | default(omit, true) }}"
-      gateway_token:            "{{ gateway_oauthtoken | default(omit, true) }}"
-      gateway_request_timeout:  "{{ gateway_request_timeout | default(omit, 10) }}"
-      gateway_validate_certs:   "{{ gateway_validate_certs | default(omit) }}"
+      gateway_hostname: "{{ gateway_hostname | default(omit, true) }}"
+      gateway_username: "{{ gateway_username | default(omit, true) }}"
+      gateway_password: "{{ gateway_password | default(omit, true) }}"
+      gateway_token: "{{ gateway_oauthtoken | default(omit, true) }}"
+      gateway_request_timeout: "{{ gateway_request_timeout | default(omit, 10) }}"
+      gateway_validate_certs: "{{ gateway_validate_certs | default(omit) }}"
 
   block:
     ### Create Http Port ###
@@ -69,19 +69,57 @@
             service_type: "{{ __service_types_create_result.results[2].id }}"
 
     ### Create Routes ###
+    - name: Create Routes with check mode
+      ansible.platform.route:
+        name: "{{ item.name | mandatory }}"
+        new_name: "{{ item.new_name | default(omit) }}"
+        description: "{{ item.description | default(omit) }}"
+        gateway_path: "{{ item.gateway_path | default(omit) }}"
+        http_port: "{{ item.http_port | default(omit) }}"
+        service_cluster: "{{ item.service_cluster | default(omit) }}"
+        is_service_https: "{{ item.is_service_https | default(omit) }}"
+        enable_gateway_auth: "{{ item.enable_gateway_auth | default(omit) }}"
+        service_path: "{{ item.service_path | default(omit) }}"
+        service_port: "{{ item.service_port | default(omit) }}"
+        node_tags: "{{ item.node_tags | default(omit) }}"
+        state: present
+      loop: "{{ gateway_routes }}"
+      vars:
+        gateway_routes:
+          - name: "{{ test_id }}Gateway Svc Route"
+            description: Gateway Service Route
+            gateway_path: '/gw-svc-1/v1/'
+            http_port: "{{ test_id }}Port 9082"
+            enable_gateway_auth: false
+            service_cluster: "{{ test_id }}gateway"
+            service_path: '/aaa/v1/'
+            service_port: 1234
+      check_mode: true
+
+    - name: Search for the authenticator map and assert that it does not exist
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'routes',
+          query_params={'name': '{{ test_id }}Gateway Svc Route'}, **connection_info) }}"
+
+    - name: Assert that Route does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Route '{{ test_id }}Gateway Svc Route' exists in the system!"
+
     - name: Create Routes
       ansible.platform.route:
-        name:                     "{{ item.name | mandatory }}"
-        new_name:                 "{{ item.new_name | default(omit) }}"
-        description:              "{{ item.description | default(omit) }}"
-        gateway_path:             "{{ item.gateway_path | default(omit) }}"
-        http_port:                "{{ item.http_port | default(omit) }}"
-        service_cluster:          "{{ item.service_cluster | default(omit) }}"
-        is_service_https:         "{{ item.is_service_https | default(omit) }}"
-        enable_gateway_auth:      "{{ item.enable_gateway_auth | default(omit) }}"
-        service_path:             "{{ item.service_path | default(omit) }}"
-        service_port:             "{{ item.service_port | default(omit) }}"
-        node_tags:                "{{ item.node_tags | default(omit) }}"
+        name: "{{ item.name | mandatory }}"
+        new_name: "{{ item.new_name | default(omit) }}"
+        description: "{{ item.description | default(omit) }}"
+        gateway_path: "{{ item.gateway_path | default(omit) }}"
+        http_port: "{{ item.http_port | default(omit) }}"
+        service_cluster: "{{ item.service_cluster | default(omit) }}"
+        is_service_https: "{{ item.is_service_https | default(omit) }}"
+        enable_gateway_auth: "{{ item.enable_gateway_auth | default(omit) }}"
+        service_path: "{{ item.service_path | default(omit) }}"
+        service_port: "{{ item.service_port | default(omit) }}"
+        node_tags: "{{ item.node_tags | default(omit) }}"
         state: present
       loop: "{{ gateway_routes }}"
       vars:
@@ -119,18 +157,18 @@
     ### 2nd run for Routes ###
     - name: Check Routes Idempotency
       ansible.platform.route:
-        name:                     "{{ item.name | mandatory }}"
-        new_name:                 "{{ item.new_name | default(omit) }}"
-        description:              "{{ item.description | default(omit) }}"
-        gateway_path:             "{{ item.gateway_path | default(omit) }}"
-        http_port:                "{{ item.http_port | default(omit) }}"
-        service_cluster:          "{{ item.service_cluster | default(omit) }}"
-        is_service_https:         "{{ item.is_service_https | default(omit) }}"
-        enable_gateway_auth:      "{{ item.enable_gateway_auth | default(omit) }}"
-        service_path:             "{{ item.service_path | default(omit) }}"
-        service_port:             "{{ item.service_port | default(omit) }}"
-        node_tags:                "{{ item.node_tags | default(omit) }}"
-        state:                    "{{ item.state | default('present') }}"
+        name: "{{ item.name | mandatory }}"
+        new_name: "{{ item.new_name | default(omit) }}"
+        description: "{{ item.description | default(omit) }}"
+        gateway_path: "{{ item.gateway_path | default(omit) }}"
+        http_port: "{{ item.http_port | default(omit) }}"
+        service_cluster: "{{ item.service_cluster | default(omit) }}"
+        is_service_https: "{{ item.is_service_https | default(omit) }}"
+        enable_gateway_auth: "{{ item.enable_gateway_auth | default(omit) }}"
+        service_path: "{{ item.service_path | default(omit) }}"
+        service_port: "{{ item.service_port | default(omit) }}"
+        node_tags: "{{ item.node_tags | default(omit) }}"
+        state: "{{ item.state | default('present') }}"
       loop: "{{ gateway_routes }}"
       vars:
         gateway_routes:
@@ -219,18 +257,18 @@
 
     - name: Check Rename Routes
       ansible.platform.route:
-        name:                     "{{ item.name | mandatory }}"
-        new_name:                 "{{ item.new_name | default(omit) }}"
-        description:              "{{ item.description | default(omit) }}"
-        gateway_path:             "{{ item.gateway_path | default(omit) }}"
-        http_port:                "{{ item.http_port | default(omit) }}"
-        service_cluster:          "{{ item.service_cluster | default(omit) }}"
-        is_service_https:         "{{ item.is_service_https | default(omit) }}"
-        enable_gateway_auth:      "{{ item.enable_gateway_auth | default(omit) }}"
-        service_path:             "{{ item.service_path | default(omit) }}"
-        service_port:             "{{ item.service_port | default(omit) }}"
-        node_tags:                "{{ item.node_tags | default(omit) }}"
-        state:                    "{{ item.state | default('present') }}"
+        name: "{{ item.name | mandatory }}"
+        new_name: "{{ item.new_name | default(omit) }}"
+        description: "{{ item.description | default(omit) }}"
+        gateway_path: "{{ item.gateway_path | default(omit) }}"
+        http_port: "{{ item.http_port | default(omit) }}"
+        service_cluster: "{{ item.service_cluster | default(omit) }}"
+        is_service_https: "{{ item.is_service_https | default(omit) }}"
+        enable_gateway_auth: "{{ item.enable_gateway_auth | default(omit) }}"
+        service_path: "{{ item.service_path | default(omit) }}"
+        service_port: "{{ item.service_port | default(omit) }}"
+        node_tags: "{{ item.node_tags | default(omit) }}"
+        state: "{{ item.state | default('present') }}"
       loop: "{{ gateway_routes }}"
       vars:
         gateway_routes:
@@ -249,17 +287,17 @@
     ### Delete Routes ###
     - name: Delete Routes
       ansible.platform.route:
-        name:                     "{{ item.name | mandatory }}"
-        new_name:                 "{{ item.new_name | default(omit) }}"
-        description:              "{{ item.description | default(omit) }}"
-        gateway_path:             "{{ item.gateway_path | default(omit) }}"
-        http_port:                "{{ item.http_port | default(omit) }}"
-        service_cluster:          "{{ item.service_cluster | default(omit) }}"
-        is_service_https:         "{{ item.is_service_https | default(omit) }}"
-        enable_gateway_auth:      "{{ item.enable_gateway_auth | default(omit) }}"
-        service_path:             "{{ item.service_path | default(omit) }}"
-        service_port:             "{{ item.service_port | default(omit) }}"
-        node_tags:                "{{ item.node_tags | default(omit) }}"
+        name: "{{ item.name | mandatory }}"
+        new_name: "{{ item.new_name | default(omit) }}"
+        description: "{{ item.description | default(omit) }}"
+        gateway_path: "{{ item.gateway_path | default(omit) }}"
+        http_port: "{{ item.http_port | default(omit) }}"
+        service_cluster: "{{ item.service_cluster | default(omit) }}"
+        is_service_https: "{{ item.is_service_https | default(omit) }}"
+        enable_gateway_auth: "{{ item.enable_gateway_auth | default(omit) }}"
+        service_path: "{{ item.service_path | default(omit) }}"
+        service_port: "{{ item.service_port | default(omit) }}"
+        node_tags: "{{ item.node_tags | default(omit) }}"
         state: absent
       loop: "{{ gateway_routes }}"
       vars:

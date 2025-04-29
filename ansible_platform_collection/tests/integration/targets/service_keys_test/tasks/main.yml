@@ -76,6 +76,27 @@
     # </Service Clusters> ----------------------------
 
     # <Service Keys> ----------------------------
+    - name: Create Service Key 1 with check mode
+      ansible.platform.service_key:
+        name: "{{ name_prefix }}-Key 1"
+        is_active: true
+        service_cluster: "{{ controller_sc.id }}"
+        algorithm: HS384
+        secret: "gateway-secret"
+        mark_previous_inactive: false
+      check_mode: true
+
+    - name: Search for Service Key 1
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'service_keys',
+          query_params={'name': '{{ name_prefix }}-Key 1'}, **connection_info) }}"
+
+    - name: Assert that Service Key 1 does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Service Key '{{ name_prefix }}-Key 1' exists in the system!"
+
     - name: Create Service Key 1
       ansible.platform.service_key:
         name: "{{ name_prefix }}-Key 1"

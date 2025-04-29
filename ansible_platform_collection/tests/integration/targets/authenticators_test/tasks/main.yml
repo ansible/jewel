@@ -17,6 +17,26 @@
       gateway_validate_certs: "{{ gateway_validate_certs | bool }}"
 
   block:
+    - name: Create Local Authenticator with check mode
+      ansible.platform.authenticator:
+        name: "{{ name_prefix }}-local"
+        slug: "{{ name_prefix }}-local-url"
+        type: 'ansible_base.authentication.authenticator_plugins.local'
+        enabled: true
+        configuration: {}
+      check_mode: true
+
+    - name: Search for Local Authenticator
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'authenticators',
+          query_params={'name': '{{ name_prefix }}-local'}, **connection_info) }}"
+
+    - name: Assert that Local Authenticator does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist is not defined or item_that_should_not_exist | length == 0
+        fail_msg: "Local Authenticator '{{ name_prefix }}-local' exists in the system!"
+
     - name: Create Local Authenticator
       ansible.platform.authenticator:
         name: "{{ name_prefix }}-local"
@@ -62,6 +82,28 @@
       ansible.builtin.assert:
         that:
           - azure is changed
+
+    - name: Create GitHub Authenticator with check mode
+      ansible.platform.authenticator:
+        name: "{{ name_prefix }}-github"
+        type: 'ansible_base.authentication.authenticator_plugins.github'
+        enabled: false
+        configuration:
+          CALLBACK_URL: "https://example.com"
+          KEY: "github-oauth2-key"
+          SECRET: "github-oauth2-secret"  # Needs to be excluded from log
+      check_mode: true
+
+    - name: Search for the github authenticator and assert that it does not exist
+      ansible.builtin.set_fact:
+        item_that_should_not_exist: "{{ lookup('ansible.platform.gateway_api', 'authenticators',
+          query_params={'name': '{{ name_prefix }}-github'}, **connection_info) }}"
+
+    - name: Assert that github Authenticator does not exist
+      ansible.builtin.assert:
+        that:
+          - item_that_should_not_exist | length == 0
+        fail_msg: "Github Authenticator '{{ name_prefix }}-github' exists in the system!"
 
     - name: Create GitHub Authenticator
       ansible.platform.authenticator:
