@@ -55,20 +55,29 @@ class TestCreatePreloadedData:
                 create_preload_data(verbosity=verbosity, plan=[('0000', False)])
 
     @pytest.mark.django_db
-    def test_console_st(self):
-        console_type = ServiceType.objects.get(name="console")
-        assert console_type is not None
-        console_type.delete()
-
+    @pytest.mark.parametrize(
+        "flag_value",
+        [
+            'True',
+            'False',
+        ],
+    )
+    def test_console_st(self, flag_value, settings_override_mutable, settings):
         with pytest.raises(ServiceType.DoesNotExist):
             ServiceType.objects.get(name="console")
 
-        add_console_service_type()
+        with settings_override_mutable('FLAGS'):
+            settings.FLAGS['FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE'][0]['value'] = flag_value
+            add_console_service_type()
 
-        console_type = ServiceType.objects.get(name="console")
+        if flag_value == 'False':
+            with pytest.raises(ServiceType.DoesNotExist):
+                ServiceType.objects.get(name="console")
+        else:
+            console_type = ServiceType.objects.get(name="console")
 
-        assert console_type.name == "console"
-        assert console_type.ping_url is None
-        assert console_type.service_index_path is None
-        assert console_type.login_path is None
-        assert console_type.logout_path is None
+            assert console_type.name == "console"
+            assert console_type.ping_url is None
+            assert console_type.service_index_path is None
+            assert console_type.login_path is None
+            assert console_type.logout_path is None

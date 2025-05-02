@@ -5,7 +5,6 @@ from unittest import mock
 import pytest
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
 from ansible_base.lib.utils.response import get_relative_url
-from django.conf import settings
 from django.test import override_settings
 
 from aap_gateway_api.models import HTTPPort, Route, ServiceCluster, ServiceNode, ServiceType
@@ -487,9 +486,9 @@ def test_console_status(get, console_return, side_effect, expected_status):
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
-def test_status_includes_console(get, admin_api_client):
+def test_status_includes_console(get, admin_api_client, settings_override_mutable, settings):
     get.return_value = mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "operational"}]})
-    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get(name="console"))
+    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get_or_create(name="console")[0])
     ServiceNode.objects.create(name="Console", service_cluster=sc)
     port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
     Route.objects.create(name="Console", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")
@@ -504,10 +503,10 @@ def test_status_includes_console(get, admin_api_client):
 
 
 @override_settings()
-def test_missing_console_url(admin_api_client):
+def test_missing_console_url(admin_api_client, settings_override_mutable, settings):
     del settings.CRC_STATUS_URL
 
-    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get(name="console"))
+    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get_or_create(name="console")[0])
     ServiceNode.objects.create(name="Console", service_cluster=sc)
     port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
     Route.objects.create(name="Console", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")

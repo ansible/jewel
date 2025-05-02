@@ -3,6 +3,7 @@ import logging
 from ansible_base.lib.utils.models import get_system_user
 from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
+from flags.state import flag_enabled
 
 from aap_gateway_api.models import ServiceType
 
@@ -111,8 +112,9 @@ def set_system_user_managed_flag() -> None:
 
 
 def add_console_service_type() -> None:
-    # Add console.redhat.com service type
-    console_type = {
-        "name": "console",
-    }
-    ServiceType.objects.get_or_create(**console_type)
+    if flag_enabled("FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE"):
+        # Add console.redhat.com service type
+        console_type = {
+            "name": "console",
+        }
+        ServiceType.objects.get_or_create(**console_type)
