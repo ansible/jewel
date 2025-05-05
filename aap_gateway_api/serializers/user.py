@@ -69,42 +69,48 @@ class UserSerializer(CommonUserSerializer):
         return False
 
     def validate_password(self, value: str) -> str:
-        errors = []
-        # Validate the password
-        if value and value not in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
-            user_instance = self.instance  # This will be None for creation
-            if user_instance is not None:
-                if not can_user_change_password(user_instance):
-                    raise ValidationError(_('Password can not be set for this user'))
+        if not value or value in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
+            return value
 
-            password_min_length = get_preference_value('local_login', 'password_min_length')
-            password_min_digits = get_preference_value('local_login', 'password_min_digits')
-            password_min_upper = get_preference_value('local_login', 'password_min_upper')
-            password_min_special = get_preference_value('local_login', 'password_min_special')
+        user_instance = self.instance  # This will be None for creation
 
-            if password_min_length > 0 and len(value) < password_min_length:
-                errors.append(_('Password must be at least {} characters long.'.format(password_min_length)))
-            if password_min_digits > 0 and sum(c.isdigit() for c in value) < password_min_digits:
-                errors.append(_('Password must contain at least {} digits.'.format(password_min_digits)))
-            if password_min_upper > 0 and sum(c.isupper() for c in value) < password_min_upper:
-                errors.append(_('Password must contain at least {} uppercase characters.'.format(password_min_upper)))
-            if password_min_special > 0 and sum(not c.isalnum() for c in value) < password_min_special:
-                errors.append(_('Password must contain at least {} special characters.'.format(password_min_special)))
+        if user_instance and not can_user_change_password(user_instance):
+            raise ValidationError(_('Password can not be set for this user'))
 
-            if errors:
-                allow_admins_to_set_insecure = get_preference_value('local_login', 'allow_admins_to_set_insecure')
-                if self.is_superuser_making_request() and allow_admins_to_set_insecure:
-                    user = get_current_user()
-                    username = self.initial_data.get('username', None)
-                    if username is None:
-                        if user_instance is None:
-                            raise ValidationError(_("Either username needs to be present or we need an active instance"))
-                        username = user_instance.username
-                    logger.warning(f"User {user.username} was allowed to save an insecure password for user {username}")
-                else:
-                    raise ValidationError(errors)
+        errors = self._perform_password_validation(value)
+        if errors and not self._allow_insecure_password_override():
+            raise ValidationError(errors)
 
+        # Proceed if password passes all checks, or if an insecure password is allowed by superuser
         return value
+
+    def _perform_password_validation(self, password: str) -> list:
+        errors = []
+        password_min_length = get_preference_value('local_login', 'password_min_length')
+        password_min_digits = get_preference_value('local_login', 'password_min_digits')
+        password_min_upper = get_preference_value('local_login', 'password_min_upper')
+        password_min_special = get_preference_value('local_login', 'password_min_special')
+        if password_min_length > 0 and len(password) < password_min_length:
+            errors.append(_('Password must be at least {} characters long.'.format(password_min_length)))
+        if password_min_digits > 0 and sum(c.isdigit() for c in password) < password_min_digits:
+            errors.append(_('Password must contain at least {} digits.'.format(password_min_digits)))
+        if password_min_upper > 0 and sum(c.isupper() for c in password) < password_min_upper:
+            errors.append(_('Password must contain at least {} uppercase characters.'.format(password_min_upper)))
+        if password_min_special > 0 and sum(not c.isalnum() for c in password) < password_min_special:
+            errors.append(_('Password must contain at least {} special characters.'.format(password_min_special)))
+        return errors
+
+    def _allow_insecure_password_override(self) -> bool:
+        if self.is_superuser_making_request() and get_preference_value('local_login', 'allow_admins_to_set_insecure'):
+            user = get_current_user()
+            username = self.initial_data.get('username', None)
+            if username is None:
+                if self.instance is None:
+                    raise ValidationError(_("Either username needs to be present or we need an active instance"))
+                username = self.instance.username
+            logger.warning(f"User {user.username} was allowed to save an insecure password for user {username}")
+            return True
+        return False
 
     def validate_authenticator_uid(self, value: str) -> str:
         """
