@@ -7,6 +7,7 @@
 - name: Generate names
   ansible.builtin.set_fact:
     username: "Gateway-Collection-tests-user-user-{{ test_id }}"
+    name_prefix: "Gateway-Collection-tests-org-{{ test_id }}"
 
 
 - name: Run Tests
@@ -160,19 +161,106 @@
         update_secrets: false
         state: present
 
-  always:
-    # Always Cleanup
-    - name: Delete user
+    - name: Create org1
+      ansible.platform.organization:
+        name: "{{ name_prefix }}-Org-1"
+      register: org1
+
+    - name: Create Doe user with org1
       ansible.platform.user:
-        username: "{{ username }}"
-        state: absent
-      register: delete
+        username: "{{ username }}-Doe"
+        first_name: Doe
+        password: "{{ 65535 | random | to_uuid }}"
+        organizations:
+          - "{{ org1.name }}"
+      register: doe
+
+    - name: Assert the creation of the user changed the system
+      ansible.builtin.assert:
+        that:
+          - doe is changed
+
+    - name: Create a user without any organizations
+      ansible.platform.user:
+        username: "{{ username }}-noorg"
+        first_name: NoOrg
+        password: "{{ 65535 | random | to_uuid }}"
+      register: noorg_user
+
+    - name: Assert the creation of the user changed the system
+      ansible.builtin.assert:
+        that:
+          - noorg_user is changed
+
+    - name: Add the user to org1
+      ansible.platform.user:
+        username: "{{ username }}-noorg"
+        organizations:
+          - "{{ org1.name }}"
+      register: add_to_org
+
+    - name: Assert that adding the organization changed the user
+      ansible.builtin.assert:
+        that:
+          - add_to_org is changed
+
+    - name: Create org2
+      ansible.platform.organization:
+        name: "{{ name_prefix }}-Org-2"
+      register: org2
+
+    - name: Create user with multiple organizations
+      ansible.platform.user:
+        username: "{{ username }}-multiorg"
+        first_name: MultiOrg
+        password: "{{ 65535 | random | to_uuid }}"
+        organizations:
+          - "{{ org1.name }}"
+          - "{{ org2.name }}"
+      register: multiorg_user
+
+    - name: Assert the creation of the user changed the system
+      ansible.builtin.assert:
+        that:
+          - multiorg_user is changed
+
+    - name: Attempt to create a user with non-existent organization
+      ansible.platform.user:
+        username: "{{ username }}-invalid-org"
+        first_name: InvalidOrg
+        password: "{{ 65535 | random | to_uuid }}"
+        organizations:
+          - "Non-Existent-Organization-{{ test_id }}"
+      register: invalid_org_result
       ignore_errors: true
 
-    - name: Delete user
-      ansible.platform.user:
-        username: "timmy-{{ username }}"
+    - name: Assert that the task failed with the expected error message
+      ansible.builtin.assert:
+        that:
+          - invalid_org_result is failed
+
+  always:
+    # Always Cleanup
+    - name: Delete organizations
+      ansible.platform.organization:
+        name: "{{ item }}"
         state: absent
-      register: delete
+      loop:
+        - "{{ org2.name }}"
+        - "{{ org1.name }}"
+      register: delete_results
+      ignore_errors: true
+
+    - name: Delete users
+      ansible.platform.user:
+        username: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ username }}"
+        - "{{ doe.username }}"
+        - "timmy-{{ username }}"
+        - "{{ username }}-noorg"
+        - "{{ username }}-multiorg"
+      register: delete_results
       ignore_errors: true
 ...
