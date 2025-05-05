@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import random
 import re
@@ -17,6 +18,19 @@ from rest_framework.test import APIClient
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, Preference, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
+
+
+def pytest_configure():
+    """
+    macOS uses 'spawn' by default (unlike Linux, which uses 'fork'). This causes issues with Django's app registry in subprocesses,
+    as it doesn't inherit the parent process's state.
+    This function sets the multiprocessing start method to 'fork' before any tests run.
+    """
+    try:
+        multiprocessing.set_start_method("fork", force=True)
+    except RuntimeError:
+        # Ignore if already set
+        pass
 
 
 @pytest.fixture
