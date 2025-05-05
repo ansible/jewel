@@ -114,24 +114,29 @@ class UserSerializer(CommonUserSerializer):
 
     def validate_authenticator_uid(self, value: str) -> str:
         """
-        Validates the UID according to constraints on users with multiple authenticators.
-        Specifically:
-        - Prevents changes to the UID if the user has more than one authenticator.
-        - Ensures data integrity by disallowing ambiguous or unsupported UID changes.
+        Ensure that when a user has multiple authenticators, their authenticator_uid field
+        cannot be changed (to avoid ambiguity).
+        Single-authenticator users can freely update their authenticator_uid.
         """
         user_instance = self.instance  # This will be None for creation
-        current_uids = user_instance.get_authenticator_uids() if user_instance else []
 
-        # If the value is not changing, it's valid
-        if value == ', '.join(current_uids):
+        if user_instance is None:
+            # no validation needed upon user creation
             return value
 
-        # Disallow UID changes for users with multiple authenticators to prevent ambiguity and data loss.
-        # Future improvements could include:
-        # - Setting all authenticators to a single UID
-        # - Updating specific authenticator UIDs
-        # - Adding an endpoint for managing multiple authenticators
-        if user_instance and len(current_uids) > 1:
+        # if there is an active user instance, we are performing an update on existing authenticator_uid
+        current_uids = user_instance.get_authenticator_uids()
+
+        # if only one (or zero) authenticator, allow change
+        if len(current_uids) <= 1:
+            return value
+
+        if value and not self._is_authenticator_uid_unchanged(value, current_uids):
+            # Disallow UID changes for users with multiple authenticators to prevent ambiguity and data loss.
+            # Future improvements could include:
+            # - Setting all authenticators to a single UID
+            # - Updating specific authenticator UIDs
+            # - Adding an endpoint for managing multiple authenticators
             raise ValidationError(
                 _(
                     "UID changes are not supported for users with multiple authenticators to "
@@ -141,6 +146,10 @@ class UserSerializer(CommonUserSerializer):
             )
 
         return value
+
+    def _is_authenticator_uid_unchanged(self, value: str, current_uids: list[str]) -> bool:
+        incoming_values = {uid.strip() for uid in value.split(',') if uid.strip()}
+        return incoming_values == set(current_uids)
 
     def validate_authenticators(self, value):
         """
