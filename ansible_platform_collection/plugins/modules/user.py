@@ -18,6 +18,27 @@ short_description: Configure a gateway user.
 description:
     - Configure an automation platform gateway user.
 options:
+    organizations:
+      description:
+        - B(Deprecated)
+        - This option is deprecated and will be removed in a release after 2026-01-31.
+        - For associating a user to an organization, please use the ansible.platform.role_user_assignment module.
+        - HORIZONTALLINE
+        - List of organization names or IDs to associate with the user.
+        - Organizations must already exist - the module will not create missing organizations.
+        - If any specified organization doesn't exist, the operation will fail.
+        - If a user was created as part of this operation and an organization association fails, the newly created user will be removed.
+      type: list
+      elements: str
+    is_platform_auditor:
+      description:
+        - B(Deprecated)
+        - This option is deprecated and will be removed in a release after 2026-01-31.
+        - For designating a user as an auditor, please use the ansible.platform.role_user_assignment module.
+        - HORIZONTALLINE
+        - Designates that this user is a platform auditor.
+      type: bool
+      aliases: ['auditor']
     username:
       description:
         - Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
@@ -40,20 +61,10 @@ options:
         - Designates that this user has all permissions without explicitly assigning them.
       type: bool
       aliases: ['superuser']
-    is_platform_auditor:
-      description:
-        - Designates that this user is a platform auditor.
-      type: bool
-      aliases: ['auditor']
     password:
       description:
         - Write-only field used to change the password.
       type: str
-    organizations:
-      description:
-        - List of organizations IDs to associate with the user
-      type: list
-      elements: str
     update_secrets:
       description:
         - C(true) will always change password if user specifies password, even if API gives $encrypted$ for password.
@@ -133,23 +144,105 @@ def main():
 
     # Create a module for ourselves
     module = AAPModule(argument_spec=argument_spec, supports_check_mode=True)
-    if module.params["is_platform_auditor"]:
+
+    if module.params["organizations"]:
         module.deprecate(
-            msg="Configuring auditor via `ansible.platform.user` is not the recommended approach. "
-            "The preferred method going forward is to use the `role_user_assignment` module.",
-            date="2026-12-01",
+            msg="Configuring organizations via `ansible.platform.user` is not the recommended approach. "
+            "The preferred method going forward is to use the `ansible.platform.role_user_assignment` module.",
+            date="2026-01-31",
             collection_name="ansible.platform",
         )
 
-    # Process the user first
+    if module.params["is_platform_auditor"]:
+        module.deprecate(
+            msg="Configuring auditor via `ansible.platform.user` is not the recommended approach. "
+            "The preferred method going forward is to use the `ansible.platform.role_user_assignment` module.",
+            date="2026-01-31",
+            collection_name="ansible.platform",
+        )
+
+    user_existed_before = True
+    try:
+        existing_user = module.get_one('users', module.params.get('username'), allow_none=True)
+        user_existed_before = existing_user is not None
+    except (ConnectionError, TimeoutError) as e:
+        module.fail_json(msg=f"Connection error while checking if user exists: {str(e)}")
+
     AAPUser(module).manage(auto_exit=False)
 
-    # Only process organizations if the state is present or enforced
     if module.params.get('state') in ['present', 'enforced']:
+        process_organizations(module, user_existed_before)
         audit_user(module)
 
-    # Exit with the final status
     module.exit_json(**module.json_output)
+
+
+def process_organizations(module, user_existed_before):
+    changed = module.json_output.get('changed', False)
+    organizations = module.params.get('organizations')
+    error_msg = []
+    user_id = None
+
+    if not organizations:
+        return
+
+    try:
+        if not module.json_output.get('id'):
+            user_data = module.get_one('users', module.params.get('username'), allow_none=False)
+            user_id = user_data['id']
+            module.json_output['id'] = user_id
+        else:
+            user_id = module.json_output['id']
+    except (ConnectionError, TimeoutError) as e:
+        error_msg.append(f"Connection error while retrieving user information: {str(e)}")
+    except ValueError as e:
+        error_msg.append(f"Invalid value or parameter: {str(e)}")
+
+    try:
+        role_definition = module.get_one('role_definitions', "Organization Member", allow_none=False)
+        role_definition_id = role_definition['id']
+    except ConnectionError as e:
+        error_msg.append(f"Failed to fetch role definition: {str(e)}")
+
+    for organization in organizations:
+        try:
+            org = module.get_one('organizations', organization, allow_none=True)
+            if not org:
+                error_msg.append(f"Organization '{organization}' not found. Please ensure it exists and is accessible.")
+                continue
+
+            org_id = org['id']
+            url = module.build_url("role_user_assignments")
+            payload = {"object_id": org_id, "user": user_id, "role_definition": role_definition_id}
+            associate_result = module.make_request("POST", url, data=payload)
+            if associate_result.get('status_code') not in [200, 201]:
+                error_msg.append(f"Failed to associate user with organization {organization}. API response: {associate_result}")
+                continue
+            changed = True
+        except (ConnectionError, TimeoutError) as e:
+            error_msg.append(f"Connection error while processing organization '{organization}': {str(e)}")
+            continue
+
+        module.json_output['changed'] = changed
+
+    if error_msg and not user_existed_before and user_id:
+        if cleanup_user(module, user_id):
+            error_msg.append(f"\nNewly created user '{module.params.get('username')}' was removed.")
+        else:
+            error_msg.append("\nFailed to clean up newly created user. Manual cleanup may be required.")
+
+    if error_msg:
+        module.fail_json(msg=error_msg)
+
+
+def cleanup_user(module, user_id):
+
+    try:
+        delete_url = module.build_url(f'users/{user_id}/')
+        delete_result = module.make_request('DELETE', delete_url)
+        return delete_result.get('status_code') == 204
+    except (ConnectionError, TimeoutError):
+        return False
 
 
 def audit_user(module):

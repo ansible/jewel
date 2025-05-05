@@ -135,7 +135,7 @@
         that:
           - app4 is changed
 
-    - name: Crate Application 5
+    - name: Create Application 5
       ansible.platform.application:
         name: "{{ name_prefix }}-app5"
         organization: "{{ org1.id }}"

@@ -381,7 +381,7 @@ class AAPModule(AnsibleModule):
             # API sends it as a logic error in a few situations (e.g. trying to cancel a job that isn't running).
             elif he.code == 405:
                 self.fail_json(
-                    msg="The {0} server says you can't make a request with the {1} method to this endpoing {2}".format(self.product_name, method, url.path)
+                    msg="The {0} server says you can't make a request with the {1} method to this endpoint {2}".format(self.product_name, method, url.path)
                 )
             # Sanity check: Did we get some other kind of error?  If so, write an appropriate error message.
             elif he.code >= 400:
