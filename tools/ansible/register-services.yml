@@ -60,6 +60,7 @@
         name: "{{ item.name }}"
         service_cluster: "{{ item.service_cluster }}"
         address: "{{ item.address }}"
+        tags: "{{ item.tags | default('') }}"
       loop: "{{ gateway_service_nodes | default([]) }}"
 
     - name: Manage services
@@ -72,6 +73,7 @@
         is_service_https: "{{ item.is_service_https | default(False) }}"
         service_path: "{{ item.service_path }}"
         service_port: "{{ item.service_port }}"
+        node_tags: "{{ item.node_tags | default('') }}"
         order: "{{ item.order }}"
         is_internal_route: "{{ item.is_internal_route | default(omit) }}"
       loop: "{{ gateway_services | default([]) }}"
@@ -86,6 +88,7 @@
         is_service_https: "{{ item.is_service_https | default(False) }}"
         service_path: "{{ item.service_path }}"
         service_port: "{{ item.service_port }}"
+        node_tags: "{{ item.node_tags | default('') }}"
         enable_gateway_auth: "{{ item.enable_gateway_auth }}"
         is_internal_route: "{{ item.is_internal_route | default(omit) }}"
       loop: "{{ gateway_routes | default([]) }}"
