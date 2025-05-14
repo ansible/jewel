@@ -48,8 +48,10 @@ dn: cn={{ group.name }},ou=groups,dc=example,dc=org
 cn: {{ group.name }}
 objectClass: top
 objectClass: groupOfNames
-{% for user in ldap_users %}
-member: cn={{ user.username }},ou=users,dc=example,dc=org
-member: cn=other_{{ user.username }},ou=other_users,dc=example,dc=org
+{% for user in group.members %}
+member: cn={{ user }},ou=users,dc=example,dc=org
+member: cn=other_{{ user }},ou=other_users,dc=example,dc=org
 {% endfor %}
+
+
 {% endfor %}

@@ -55,13 +55,13 @@ ldap_groups:
       - ldap_org_admin
   - name: users
     members:
-      - admin
+      - ldap_admin
       - ldap_auditor
       - ldap_unpriv
       - ldap_org_admin
   - name: admins
     members:
-      - admin
+      - ldap_admin
   - name: auditors
     members:
       - ldap_auditor
