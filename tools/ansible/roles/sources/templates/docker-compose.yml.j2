@@ -326,9 +326,9 @@ services:
       LDAP_TLS_CA_FILE: /opt/bitnami/openldap/certs/{{ ldap_public_key_file_name }}
       LDAP_TLS_KEY_FILE: /opt/bitnami/openldap/certs/{{ ldap_private_key_file_name }}
     volumes:
-      - 'aap_gw_openldap_data:/bitnami/openldap'
-      - '$PWD/tools/generated/ldap_certs:/opt/bitnami/openldap/certs'
-      - '$PWD/tools/generated/ldap_diffs:/opt/bitnami/openldap/ldiffs'
+      - 'aap_gw_openldap_data:/bitnami/openldap:z'
+      - '$PWD/tools/generated/ldap_certs:/opt/bitnami/openldap/certs:z'
+      - '$PWD/tools/generated/ldap_diffs:/opt/bitnami/openldap/ldiffs:z'
     networks:
       - dbnet
       - service-mesh
