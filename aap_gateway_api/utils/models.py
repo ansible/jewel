@@ -1,27 +1,21 @@
-def unique_fields_for_model(ModelCls, include_pk=False, flatten_unique_together=True):
+def get_model_lookup_keys(ModelCls):
     """
-    Given a model class, determine the names of the unique fields.
-
-    If `include_pk` is True, the primary key field will be included in the set of unique fields.
-
-    If `flatten_unique_together` is True, the unique_together fields will be flattened into the set
-    of unique fields (otherwise their tuples will be included).
+    Determine the field names that can be used to uniquely look up existing instances of the given model class
+    This method returns a set of the unique fields (not including the pk) and fields that are flattened from the unique_together tuples
+    Note that we're excluding the pk in this use case because the pk is assigned by the database, which may differ across services
     """
 
-    unique_fields = set()
+    lookup_fields = set()
 
-    # First the concrete fields
+    # First the concrete and unique fields
     for field in ModelCls._meta.fields:
-        if field.unique and (include_pk or (field != ModelCls._meta.pk)):
-            unique_fields.add(field.name)
+        if field.unique and field != ModelCls._meta.pk:
+            lookup_fields.add(field.name)
 
-    # But now the unique_together fields
+    # Now, the flattened unique_together fields
     for unique_together in ModelCls._meta.unique_together:
-        if flatten_unique_together:
-            for field in unique_together:
-                if include_pk or (field != ModelCls._meta.pk):
-                    unique_fields.add(field)
-        else:
-            unique_fields.add(unique_together)
+        for field in unique_together:
+            if field != ModelCls._meta.pk:
+                lookup_fields.add(field)
 
-    return unique_fields
+    return lookup_fields
