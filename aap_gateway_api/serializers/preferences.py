@@ -1,8 +1,7 @@
 import logging
+from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
-from ansible_base.lib.utils.settings import is_aoc_instance
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 from drf_spectacular.types import OpenApiTypes
@@ -13,8 +12,13 @@ from rest_framework import serializers
 
 from aap_gateway_api.models.preference import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
-from aap_gateway_api.utils import get_preference_value_by_preference, update_preference_value
+from aap_gateway_api.preferences.types import PEMPrivateKeyPreference
+from aap_gateway_api.utils import (
+    PREFERENCE_TYPE_CLASS_TO_SERIALIZER_FIELD_MAPPING,
+    get_preference_value_by_preference,
+    is_read_only_preference,
+    update_preference_value,
+)
 
 logger = logging.getLogger('aap.gateway.serializers.preferences')
 
@@ -36,42 +40,15 @@ class SettingSectionSerializer(serializers.Serializer):
             self.category_slug = category_slug
         super().__init__(None, *args, **kwargs)
 
-    def setting_is_cloud_readonly(self, setting_name: str) -> bool:
-        return is_aoc_instance() and setting_name in getattr(settings, 'AOC_UNCHANGEABLE_PREFERENCES', [])
-
     def get_fields(self) -> dict:
-        # TODO: Maybe move this somewhere
-        preference_type_to_field_mapping = {
-            types.StringPreference: serializers.CharField,
-            types.IntegerPreference: serializers.IntegerField,
-            types.BooleanPreference: serializers.BooleanField,
-            types.DecimalPreference: serializers.DecimalField,
-            types.FloatPreference: serializers.FloatField,
-            types.LongStringPreference: serializers.CharField,
-            types.ChoicePreference: serializers.ChoiceField,
-            types.ModelChoicePreference: serializers.PrimaryKeyRelatedField,
-            types.ModelMultipleChoicePreference: serializers.PrimaryKeyRelatedField,
-            types.FilePreference: serializers.FileField,
-            types.DurationPreference: serializers.DurationField,
-            types.DatePreference: serializers.DateField,
-            types.DateTimePreference: serializers.DateTimeField,
-            types.TimePreference: serializers.TimeField,
-            types.MultipleChoicePreference: serializers.MultipleChoiceField,
-            URLPreference: serializers.URLField,
-            PEMPrivateKeyPreference: serializers.CharField,
-            IntRangePreference: serializers.IntegerField,
-            FloatRangePreference: serializers.FloatField,
-            MimeTypedImagePreference: serializers.CharField,
-        }
-
         long_string_fields = (
             types.LongStringPreference,
             PEMPrivateKeyPreference,
         )
         fields = super().get_fields()
         for registered_preference in gateway_preference_registry.preferences(self.category_slug):
-            constructor = preference_type_to_field_mapping.get(registered_preference.field_type, serializers.Field)
-            read_only = registered_preference.read_only or self.setting_is_cloud_readonly(registered_preference.name)
+            constructor = PREFERENCE_TYPE_CLASS_TO_SERIALIZER_FIELD_MAPPING.get(registered_preference.field_type, serializers.Field)
+            read_only, _ = is_read_only_preference(registered_preference)
 
             fields[registered_preference.name] = constructor(
                 initial=get_preference_value_by_preference(registered_preference),
@@ -97,7 +74,40 @@ class SettingSectionSerializer(serializers.Serializer):
 
         return return_data
 
-    def process_fields(self, data: dict) -> (dict, dict, dict):
+    def _serialize_and_validate_preference_value(self, registered_preference: object, new_value: Any) -> tuple[bool, Any, Optional[str]]:
+        """
+        This method converts the raw input `new_value` into a python type using its associated preference's serializer, and
+        performs validation on the converted value
+
+        Returns:
+        - bool: True if the validation succeeds
+        - parsed_value: The converted and validated value, None otherwise
+        - e: Error messages, which is str or None
+        """
+        try:
+            # First, convert the raw input to appropriate python
+            # For boolean fields, to_python() expects a string, so we convert the input accordingly.
+            # If the conversion fails, to_python() will raise a ValidationError.
+            converted_value = registered_preference.serializer.to_python(str(new_value))
+
+            # Second, perform a usual validation
+            registered_preference.validate(converted_value)
+
+            # Then, catch the scenarios where the above missed
+            if issubclass(registered_preference.__class__, types.IntegerPreference):
+                if type(converted_value) is not int:
+                    raise SerializationError("Must be an integer")
+            if issubclass(registered_preference.__class__, types.StringPreference):
+                if type(converted_value) is not str:
+                    raise SerializationError("Must be a string")
+            # if succeeds
+            return True, converted_value, None
+        except (SerializationError, serializers.ValidationError, ValidationError) as e:
+            if isinstance(e, ValidationError):
+                e = ', '.join(e.messages)
+            return False, None, str(e)
+
+    def process_fields(self, data: dict) -> tuple[dict, dict, dict]:
         validated_fields = {}
         errors = {}
         values_to_save = {}
@@ -110,43 +120,33 @@ class SettingSectionSerializer(serializers.Serializer):
                 continue
             new_value = data[registered_preference.name]
 
-            if current_value != new_value and registered_preference.read_only:
-                # We are trying to change a read only setting
-                errors[registered_preference.name] = _("Cannot change read-only setting %(registered_preference_name)s") % {
-                    "registered_preference_name": registered_preference.name
-                }
+            # If there is no change to the current preference setting value, skip
+            if current_value == new_value:
+                continue
+            # Else, we are doing an update
+            # Now, check for read only setting
+            is_read_only, err_msg = is_read_only_preference(registered_preference)
+            if is_read_only:
+                errors[registered_preference.name] = err_msg
                 continue
 
-            if current_value != new_value and self.setting_is_cloud_readonly(registered_preference.name):
-                errors[registered_preference.name] = _("Cannot be changed in AoC environment")
-                continue
+            # Next, check for values that should be encrypted
+            if new_value != ENCRYPTED_STRING:
 
-            if current_value != new_value and new_value != ENCRYPTED_STRING:
                 masked_value = new_value
                 if registered_preference.encrypted:
                     masked_value = ENCRYPTED_STRING
                 logger.debug(f"Validating value change from {current_value} to {masked_value} for {registered_preference.name}")
-                try:
-                    # Try to let the preference's class serializer convert the value (will raise if not valid)
-                    # this method expects a string in case of a boolean value, so we have to convert it to pass validation
-                    new_value = registered_preference.serializer.to_python(str(new_value))
-                    registered_preference.validate(new_value)
 
-                    # There are a couple scenarios this does not catch
-                    if issubclass(registered_preference.__class__, types.IntegerPreference):
-                        if type(new_value) is not int:
-                            raise SerializationError("Must be an integer")
-                    elif issubclass(registered_preference.__class__, types.StringPreference):
-                        if type(new_value) is not str:
-                            raise SerializationError("Must be a string")
+                is_valid, parsed_value, err_msg = self._serialize_and_validate_preference_value(registered_preference, new_value)
 
-                    # Mark the setting to be saved
-                    values_to_save[registered_preference.name] = {'value': new_value, 'section': registered_preference.section.name}
-                    validated_fields[registered_preference.name] = masked_value
-                except (SerializationError, serializers.ValidationError, ValidationError) as e:
-                    if isinstance(e, ValidationError):
-                        e = ', '.join(e.messages)
-                    errors[registered_preference.name] = str(e)
+                if not is_valid:
+                    errors[registered_preference.name] = err_msg
+                    continue
+
+                # validation succeeded, we need to mark the setting to be saved
+                values_to_save[registered_preference.name] = {'value': parsed_value, 'section': registered_preference.section.name}
+                validated_fields[registered_preference.name] = masked_value
 
         return validated_fields, errors, values_to_save
 
