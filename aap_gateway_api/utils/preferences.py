@@ -1,11 +1,12 @@
-from typing import Any
+from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
-from ansible_base.lib.utils.settings import SettingNotSetException
+from ansible_base.lib.utils.settings import SettingNotSetException, is_aoc_instance
 from django.conf import settings
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
+from rest_framework import serializers
 
 from aap_gateway_api.preferences import gateway_preference_registry
 from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
@@ -30,7 +31,6 @@ def get_preference_value_by_preference(preference: object, encrypted: bool = Tru
 
 
 def get_default_value_by_preference(preference: object, encrypted: bool = True) -> str:
-    # is_encrypted = gateway_preference_registry.get(preference.name, preference.section.name).encrypted
     if encrypted:
         return ENCRYPTED_STRING
     return getattr(preference, 'default', None)
@@ -63,7 +63,33 @@ def get_preference_sections() -> [Section]:
 
 
 sections = {}
-preference_type_mapping = {
+
+# Maps preference type classes to their corresponding DFR serializer fields
+PREFERENCE_TYPE_CLASS_TO_SERIALIZER_FIELD_MAPPING = {
+    types.StringPreference: serializers.CharField,
+    types.IntegerPreference: serializers.IntegerField,
+    types.BooleanPreference: serializers.BooleanField,
+    types.DecimalPreference: serializers.DecimalField,
+    types.FloatPreference: serializers.FloatField,
+    types.LongStringPreference: serializers.CharField,
+    types.ChoicePreference: serializers.ChoiceField,
+    types.ModelChoicePreference: serializers.PrimaryKeyRelatedField,
+    types.ModelMultipleChoicePreference: serializers.PrimaryKeyRelatedField,
+    types.FilePreference: serializers.FileField,
+    types.DurationPreference: serializers.DurationField,
+    types.DatePreference: serializers.DateField,
+    types.DateTimePreference: serializers.DateTimeField,
+    types.TimePreference: serializers.TimeField,
+    types.MultipleChoicePreference: serializers.MultipleChoiceField,
+    URLPreference: serializers.URLField,
+    PEMPrivateKeyPreference: serializers.CharField,
+    IntRangePreference: serializers.IntegerField,
+    FloatRangePreference: serializers.FloatField,
+    MimeTypedImagePreference: serializers.CharField,
+}
+
+# Maps string-based type identifiers to their corresponding preference type classes
+_PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING = {
     "string": types.StringPreference,
     "longstring": types.LongStringPreference,
     "int": types.IntegerPreference,
@@ -91,13 +117,13 @@ def register(
     if not preference_name:
         raise NameError(_("A preference must have a name"))
 
-    if preference_type not in preference_type_mapping:
+    if preference_type not in _PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING:
         raise NotImplementedError(_("Preference type %(preference_type)s is not yet implemented in preferences utils") % {"preference_type": preference_type})
 
     if section not in sections:
         sections[section] = Section(section)
 
-    type_class = preference_type_mapping[preference_type]
+    type_class = _PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING[preference_type]
 
     class_name = f'{(preference_name.title())}_Preference'
 
@@ -154,3 +180,18 @@ def get_setting(name: str, encrypted: bool = True) -> Any:
             _("There were %(possible_preferences)s for setting %(name)s, unable to get a setting by name")
             % {"possible_preferences": len(possible_preferences), "name": name}
         )
+
+
+def is_read_only_preference(preference: object) -> tuple[bool, Optional[str]]:
+    """
+    Returns: tuple
+        - bool: True if preference is read_only by setting or by AoC environment. False, otherwise
+        - Optional[str]: appropriate message if read_only. None, otherwise
+    """
+    if preference.read_only:
+        return True, _("%(preference_name)s is read-only by setting.") % {"preference_name": preference.name}
+
+    if is_aoc_instance() and preference.name in getattr(settings, 'AOC_UNCHANGEABLE_PREFERENCES', []):
+        return True, _("%(preference_name)s is read-only by AoC environment") % {"preference_name": preference.name}
+
+    return False, None

@@ -182,7 +182,7 @@ def test_set_readonly_setting(admin_api_client, preference):
     url = get_relative_url("setting-section-list", kwargs={"category_slug": preference[0]})
     response = admin_api_client.put(url, data={preference[1]: "This should not work"})
     assert response.status_code == 400
-    assert str(response.data[preference[1]]) == f"Cannot change read-only setting {preference[1]}"
+    assert str(response.data[preference[1]]) == f"{preference[1]} is read-only by setting."
     assert Preference.objects.filter(name=preference[1]).first().value != "This should not work"
 
 
