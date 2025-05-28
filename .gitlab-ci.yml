@@ -1,0 +1,297 @@
+---
+# INSTALL:
+#   Setup a variable called DOCKER_AUTH_CONFIG in the secrets
+#     The use of printf (as opposed to echo) prevents encoding a newline in the password.
+#     printf "my_username:my_password" | openssl base64 -A
+#
+#     Example output to copy
+#       bXlfdXNlcm5hbWU6bXlfcGFzc3dvcmQ=
+#
+#     The contents of the variable:
+#       {
+#           "auths": {
+#               "registry.example.com:5000": {
+#                   "auth": "bXlfdXNlcm5hbWU6bXlfcGFzc3dvcmQ="
+#               }
+#           }
+#       }
+#
+#  Setup a variable called quay secret QUAY_ROBOT_TOKEN
+#  Generate a robot for quay.io https://docs.redhat.com/en/documentation/red_hat_quay/3.8/html-single/red_hat_quay_api_guide/index#create_oauth_access_token
+#
+#  Setup a variable called QUAY_REPO (like rhn_gps_jowestco/gitlab_ci_testing)
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "stable-2.5"
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "stable-2.5"
+
+
+.base_before_script_template:
+  before_script:
+    - sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/centos.repo
+    - dnf install -y python3.11 python3.11-pip make ansible-core libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel openldap-devel xmlsec1 git gcc python3.11-devel
+    - pip3.11 install tox
+
+# TODO:
+#   Finish container creating and pushing
+#   Push up a built gateway container?
+#   Implement the checkout DAB version script in the image build (if unspecified pull from gitlab stable 2.5)
+#   Finish ATF tasks
+default:
+  tags:
+    - shared-podman
+  image:
+    name: quay.io/centos/centos:stream9
+  before_script:
+    - !reference [".base_before_script_template", "before_script"]
+
+.unit_testing_before_script_template:
+  before_script:
+    - !reference [".base_before_script_template", "before_script"]
+    - git -c http.sslVerify=false clone https://gitlab.cee.redhat.com/ansible/django-ansible-base.git --branch stable-2.5
+    - mkdir -p /opt/aap_gateway
+    - tox d -e py311 /opt/aap_gateway/venv
+
+.collection_test_before_script_template:
+  variables:
+    POSTGRESQL_DATABASE: gateway
+    POSTGRESQL_USER: gateway
+    POSTGRESQL_PASSWORD: gateway
+    ADMIN_PASSWORD: admin
+    DJANGO_SUPERUSER_USERNAME: admin
+    DJANGO_SUPERUSER_PASSWORD: admin
+    DJANGO_SETTINGS_MODULE: aap_gateway_api.settings
+    DATABASE_NAME: gateway
+    DATABASE_USER: gateway
+    DATABASE_PASSWORD: gateway
+    DATABASE_HOST: db
+    GATEWAY_SECRET_KEY_FILE: tools/configs/dev_secret_key
+    GATEWAY_MANAGE: ./tools/scripts/aap-gateway-manage
+    # Need to change runserver command if changing this
+    GATEWAY_HOST: 'http://localhost:8000'
+  services:
+    - name: quay.io/sclorg/postgresql-15-c9s
+      alias: db
+      entrypoint: ["run-postgresql"]
+  script:
+  before_script:
+    - !reference [".unit_testing_before_script_template", "before_script"]
+    # Create all directories we will need (/opt/aap_gateway gets created in the referenced .unit_testing_before_script_template)
+    - mkdir -p /var/run/uwsgi
+    - mkdir -p /var/log/nginx
+    - mkdir -p /etc/ansible-automation-platform/gateway
+    - mkdir -p /var/run/supervisor
+    - cp -r . /opt/aap_gateway/src
+    - cd /opt/aap_gateway/src
+    # Generate venv, install ansible (to get ansible-test)
+    - dnf module install -y nginx:1.22/common
+    - dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+    - dnf install -y inotify-tools libpq postgresql procps socat supervisor
+    - source /opt/aap_gateway/venv/bin/activate
+    - pip install -r requirements/requirements.txt ansible ansible-core
+    # Generate sources needed
+    - mkdir -p tools/generated
+    - make tools/generated/sources
+    - make tools/generated/gateway.crt
+    # The below is usually handled by docker-compose and the gateway Dockerfile
+    # Copy over files normally mounted via docker-compose, and those done in Dockerfile.j2
+    - cp tools/configs/nginx.conf /etc/ansible-automation-platform/gateway/nginx.conf
+    - cp tools/configs/nginx-gateway.conf /etc/ansible-automation-platform/gateway/nginx-gateway.conf
+    - cp tools/generated/gateway.crt /etc/ansible-automation-platform/gateway/gateway.crt
+    - cp tools/generated/gateway.key /etc/ansible-automation-platform/gateway/gateway.key
+    - cp tools/configs/uwsgi.ini /etc/ansible-automation-platform/gateway/uwsgi.ini
+    - cp tools/configs/settings.py /etc/ansible-automation-platform/gateway/settings.py
+    - cp tools/configs/supervisord.conf /etc/supervisord.conf
+    - cp tools/scripts/auto-reload /usr/bin/auto-reload
+    - cp tools/scripts/aap-gateway-manage /usr/bin/aap-gateway-manage
+    - cp tools/configs/nginx.conf /etc/ansible-automation-platform/gateway/nginx.conf
+    - cp tools/configs/nginx-gateway.conf /etc/ansible-automation-platform/gateway/nginx-gateway.conf
+    - cp tools/configs/uwsgi.ini /etc/ansible-automation-platform/gateway/uwsgi.ini
+    - cp tools/configs/settings.py /etc/ansible-automation-platform/gateway/settings.py
+    # Run launch-gateway steps (since we're copying everything, we can just call launch-gateway in the background though)
+    - ${GATEWAY_MANAGE} migrate --noinput
+    - ${GATEWAY_MANAGE} collectstatic --noinput
+    - ${GATEWAY_MANAGE} createsuperuser --noinput --username=$DJANGO_SUPERUSER_USERNAME --email=admin@localhost 2> /dev/null
+    - ${GATEWAY_MANAGE} authenticators --initialize
+    # Start gateway, wait for startup.
+    - supervisord -c /etc/supervisord.conf --user root &
+    - sleep 5
+
+#variables:
+#  # see https://docs.gitlab.com/ci/docker/using_docker_build/
+#  DOCKER_TLS_CERTDIR: "/certs"
+
+stages:
+#  - build images
+  - linting
+  - unit-testing
+  - collection-lint
+  - collection-test
+  - cleanup
+
+#build ci image:
+#  stage: build images
+#  image: quay.io/podman/stable
+#  tags:
+#    - shared-podman
+#  script:
+#    # Use podman to build image
+#    - podman build -t quay.io/$QUAY_REPO:$CI_PIPELINE_IID .
+#    - podman push quay.io/$QUAY_REPO:$CI_PIPELINE_IID
+
+#cleanup images:
+#  stage: cleanup
+#  image: fedora:latest
+#  tags:
+#    - shared-podman
+#  rules:
+#    - when: always
+#  script:
+#    - echo "This job should always run."
+#    - "curl -X DELETE -H 'Authorization: Bearer $QUAY_ROBOT_TOKEN' https://quay.io/api/v1/repository/$QUAY_REPO/tags/$CI_PIPELINE_IID"
+
+
+# linting.yml
+flake8:
+  stage: linting
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+  script:
+    - make check_flake8
+
+black:
+  stage: linting
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+  script:
+    - make check_black
+
+isort:
+  stage: linting
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+  script:
+    - make check_isort
+
+# ATF-Testing
+#atf testing:
+#  stage: atf-testing
+#  needs: [build ci image]
+#  script:
+#    - ansible-playbook -v tools/ansible/smoke-test-no-services.yml -e repo_root=$(pwd) -e gateway_vars=$(readlink -f container-startup.yml)
+#    - make cleanup-services
+
+## ci.yml
+unit - py311:
+  stage: unit-testing
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+#  services:
+#    - redis
+  script:
+    - git -c http.sslVerify=false clone https://gitlab.cee.redhat.com/ansible/django-ansible-base.git --branch stable-2.5
+    - tox -e py311 -- -n0
+
+check migrations:
+  extends: .unit_testing_before_script_template
+  stage: unit-testing
+  tags:
+    - shared-podman
+#  needs: [build ci image]
+  script:
+    - tox -e check-migrations
+
+# OAuth2 permissions... do we need this?
+oauth2 permissions:
+  extends: .unit_testing_before_script_template
+  stage: unit-testing
+  tags:
+    - shared-podman
+#  needs: [build ci image]
+  script:
+    - tox -e check-oauth2-permissions
+
+# sanity.yml
+help text:
+  extends: .unit_testing_before_script_template
+  stage: unit-testing
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+  script:
+    - source /opt/aap_gateway/venv/bin/activate
+    - GATEWAY_SECRET_KEY_FILE=tools/configs/dev_secret_key python -m aap_gateway_api help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore
+
+sanity:
+  extends: .collection_test_before_script_template
+  stage: collection-test
+#  needs: [build ci image]
+#        ansible:
+#          - stable-2.16
+#          - stable-2.17
+  script:
+    - source /opt/aap_gateway/venv/bin/activate
+    - make collection-sanity
+#      - name: Perform sanity testing
+#        uses: ansible-community/ansible-test-gh-action@release/v1
+#        with:
+#          ansible-core-version: ${{ matrix.ansible }}
+#          collection-root: ansible_platform_collection
+#          testing-type: sanity
+#          target-python-version: 3.11
+
+coverage test:
+  extends: .collection_test_before_script_template
+  stage: collection-test
+#  needs: [build ci image]
+  script:
+    - source /opt/aap_gateway/venv/bin/activate
+    - make collection-test-integration-check
+
+completeness test:
+  extends: .collection_test_before_script_template
+  stage: collection-test
+#  needs: [build ci image]
+  script:
+    - source /opt/aap_gateway/venv/bin/activate
+    - make collection-test-completeness
+
+# collection.yml
+integration tests:
+  extends: .collection_test_before_script_template
+  stage: collection-test
+#  needs: [build ci image]
+  script:
+    - source /opt/aap_gateway/venv/bin/activate
+    - make collection-test
+#      - name: Dump the container logs on failure
+#        run: docker compose -f tools/generated/docker-compose.yml logs
+#        if: failure()
+
+docs:
+  stage: collection-lint
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+  script:
+    - make collection-docs
+#      - name: Get ansible-doc version
+#        run: ansible-doc --version
+#        if: failure()
+
+lint:
+  stage: collection-lint
+#  needs: [build ci image]
+  tags:
+    - shared-podman
+  script:
+    - pip3.11 install ansible-lint
+    - make collection-lint
+#      - name: Get ansible-lint version
+#        run: ansible-lint --version
+#        if: failure()
+
