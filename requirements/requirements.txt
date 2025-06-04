@@ -12,9 +12,9 @@ cffi==1.17.1
     #   cryptography
 charset-normalizer==3.4.0
     # via requests
-cryptography==44.0.0
+cryptography==44.0.1
     # via -r requirements/requirements.in
-django==4.2.17
+django==4.2.21
     # via
     #   -r requirements/requirements.in
     #   django-crum
@@ -78,5 +78,5 @@ xds-protos==1.68.1
     # via -r requirements/requirements.in
 
 # The following packages are considered to be unsafe in a requirements file:
-setuptools==75.8.0
+setuptools==78.1.1
     # via grpcio-tools
