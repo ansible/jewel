@@ -267,6 +267,7 @@ for endpoint in json_response.keys():
 longest_module_name = 0
 longest_option_name = 0
 longest_endpoint = 0
+
 for module, module_value in option_comparison.items():
     if len(module_value['module_name']) > longest_module_name:
         longest_module_name = len(module_value['module_name'])
