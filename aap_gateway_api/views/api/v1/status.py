@@ -2,7 +2,7 @@ import logging
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Literal
 
 import requests
 from ansible_base.lib.cache.fallback_cache import PRIMARY_CACHE
@@ -90,50 +90,66 @@ def check_node(server_data: ServiceCheck) -> ServiceCheck:
     return ServiceCheck(service_name=service, service_type=service_type, node_id=node, url=url, timeout=timeout, verify=verify, response=response)
 
 
+def _get_good_and_bad_node_counts(service: dict) -> tuple[int, int]:
+    good_nodes = 0
+    bad_nodes = 0
+    for node in service['nodes']:
+        node_status = service['nodes'][node].get('status', 'Unknown')
+        response_status = service['nodes'][node].get('response', {}).get('status', None)
+        # response status takes precedence over node_status
+        if response_status:
+            if response_status == 'OK':  # EDA status
+                overall_status = STATUS_GOOD
+            else:
+                overall_status = response_status
+            service['nodes'][node]['status'] = overall_status
+        else:
+            overall_status = node_status
+
+        if overall_status == STATUS_GOOD:
+            good_nodes = good_nodes + 1
+        elif overall_status == STATUS_FAILED:
+            bad_nodes = bad_nodes + 1
+        elif overall_status != STATUS_DEGRADED:
+            logger.error(
+                f"Got an unknown status for service {service['service_name']} from node {node}: "
+                f"{overall_status} from request {response_status} and {node_status}"
+            )
+            bad_nodes = bad_nodes + 1
+    return good_nodes, bad_nodes
+
+
+def _determine_service_status(service: Dict) -> Literal["good", "failed", "degraded"]:
+    """
+    Determine a service status by using its node statuses
+    """
+    good_nodes, bad_nodes = _get_good_and_bad_node_counts(service)
+    if good_nodes > 0 and bad_nodes == 0:
+        service_status = STATUS_GOOD
+    elif good_nodes == 0 and bad_nodes > 0:
+        service_status = STATUS_FAILED
+    else:
+        service_status = STATUS_DEGRADED
+
+    logger.debug(f"For {service['service_name']} got {good_nodes} good nodes and {bad_nodes} bad nodes, overall status is {service_status}")
+
+    return service_status
+
+
 def process_statuses(response: Dict) -> Dict:
-    # Aggregate a status for services from its nodes
+    """
+    This method determines the overall status for AAP based on service statuses.
+    If service statuses are unavailable, we infer a service status from its node statuses
+    """
     good_services = 0
     bad_services = 0
     degraded_services = 0
     for service in response['services']:
         service_name = service['service_name']
 
-        # If we don't know the status for the service than try to get it from the nodes
+        # If we don't know the status for the service then try to get it from the nodes
         if service['status'] == 'Unknown':
-            good_nodes = 0
-            bad_nodes = 0
-            for node in service['nodes']:
-                node_status = service['nodes'][node].get('status', 'Unknown')
-                response_status = service['nodes'][node].get('response', {}).get('status', None)
-                # response status takes prescience over node_status
-                if response_status:
-                    if response_status == 'OK':  # EDA status
-                        overall_status = STATUS_GOOD
-                    else:
-                        overall_status = response_status
-                    service['nodes'][node]['status'] = overall_status
-                else:
-                    overall_status = node_status
-
-                if overall_status == STATUS_GOOD:
-                    good_nodes = good_nodes + 1
-                elif overall_status == STATUS_FAILED:
-                    bad_nodes = bad_nodes + 1
-                elif overall_status != STATUS_DEGRADED:
-                    logger.error(
-                        f"Got an unknown status for service {service_name} from node {node}: {overall_status} from request {response_status} and {node_status}"
-                    )
-                    bad_nodes = bad_nodes + 1
-
-            # Determine the service status based on the node statuses
-            if good_nodes > 0 and bad_nodes == 0:
-                service['status'] = STATUS_GOOD
-            elif good_nodes == 0 and bad_nodes > 0:
-                service['status'] = STATUS_FAILED
-            else:
-                service['status'] = STATUS_DEGRADED
-
-            logger.debug(f"For {service_name} got {good_nodes} good nodes and {bad_nodes} bad nodes, overall status is {service['status']}")
+            service['status'] = _determine_service_status(service)
 
         # Now that we either had the status or we generated it, lets see how the service status contributes to the overall status
         if service['status'] == STATUS_FAILED:
