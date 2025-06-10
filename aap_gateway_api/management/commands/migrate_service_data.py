@@ -213,25 +213,253 @@ class Command(BaseCommand):
             updated_resource_data["email"] = ""
             return updated_resource_data
 
+    def _deserialize_and_validate_resource_data(self, resource, resource_serializer):
+        """
+        Deserializes and validates resource data using the corresponding resource serializer class
+        Returns the validated resource data
+        """
+        original_resource_data = resource_serializer(data=resource["resource_data"])
+        resource_type_name = resource['resource_type']
+        resource_ansible_id = resource['ansible_id']
+
+        if original_resource_data.is_valid(raise_exception=False):
+            return original_resource_data.validated_data
+
+        # if the validation failed, attempt to update resource data
+        updated_resource_data = self.update_resource_data(resource_type_name, original_resource_data)
+        if updated_resource_data is None:
+            # updating didn't produce valid data for the resource, hence this resource is invalid
+            self.stderr.write(
+                f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}'"
+                f" failed validation with errors: {str(original_resource_data.errors)}"
+            )
+            # Raising exception here to stop migration to draw attention to existence of invalid resources.
+            raise RuntimeError("Stopping migration of resources because invalid, non-correctable, resource(s) were encountered.")
+
+        resource["resource_data"] = updated_resource_data
+
+        return updated_resource_data
+
+    def _initialize_resource_sync_payloads(self, resource, user_partial_migration):
+        """
+        Prepare the initial data payloads required to create new resource in gateway and update the resource data in the upstream service.
+        If resource type is 'shared.user' and is partially migrated, its `service_id` is set to upstream's service_id
+        Otherwise, resource's service_id = gateway's service_id
+        Args:
+         - resource (dict): is the resource object being migrated
+         - user_partial_migration(bool): True if user should be partially migrated
+        Returns:
+         - resource_creation_kwargs (dict): used to create new resource in gateway correspondingly
+         - updated_service_resource (dict): used to update the resource on the service
+        """
+        resource_creation_kwargs = {}
+        updated_service_resource = {}
+
+        resource_creation_kwargs["ansible_id"] = resource["ansible_id"]
+
+        if user_partial_migration:
+            # We do not update the service_id of a user on the service, only mark is_partially_migrated to True to exclude it from the
+            # while loop in migrate_resource()
+            updated_service_resource["is_partially_migrated"] = True
+            # The resource to be created in Gateway needs to show as unmigrated by having the original service_id
+            resource_creation_kwargs["service_id"] = self.upstream_service_id
+        else:
+            # if current resource is not shared.user or user is not partially migrated, we update the 'service_id' to Gateway's service_id
+            updated_service_resource["service_id"] = str(service_id())
+
+        return resource_creation_kwargs, updated_service_resource
+
+    def _reconcile_existing_resource(self, resource, resource_context, validated_resource_data, updated_service_resource, should_merge):
+        """
+        this method compares the incoming resource against the existing local resources using a set of unique fields.
+        Based on whether a match is found and whether a merge is requested, it prepares the `updated_service_resource`
+        to reflect the appropriate migration or merge behavior
+        Args:
+         - resource (dict): is the resource object being migrated
+         - resource_context (dict): contains the static data related to the current resource item
+         - validated_resource_data (dict): validated data for the incoming resource, based on its shared resource type serializer.
+         - updated_service_resource (dict): used to update the resource on the service
+         - should_merge (bool): True if we should merge the resource in upstream with Gateway rather than creating a new one
+        Returns:
+         - create_gateway_resource: True if we should create the resource in gateway, False otherwise
+         - existing_resource: the existing resource if there is one, else None
+        """
+
+        resource_type = resource_context["type"]
+        resource_type_name_field = resource_context["type_name_field"]
+        unique_fields = resource_context["unique_fields"]
+        LocalResourceModel = resource_context["LocalResourceModel"]
+        create_gateway_resource = True  # default
+
+        # find a dict of key-value pairs for the specified unique fields from validated resource data
+        unique_filter_kwargs = {}
+        for field_name in unique_fields:
+            unique_filter_kwargs[field_name] = validated_resource_data[field_name]
+
+        try:
+            existing_resource = LocalResourceModel.objects.select_related("resource").get(**unique_filter_kwargs).resource
+        except LocalResourceModel.DoesNotExist:
+            return create_gateway_resource, None
+
+        # if an existing resource is found
+        resource_ansible_id = resource['ansible_id']
+        local_data = resource_type.serializer_class(existing_resource.content_object).data
+        incoming_data = resource.get("resource_data", {})
+
+        # case 1: the JWT auth classes create some items with correct ansible_id but without the service_id fully set,
+        # so this will correct the service_id and possibly update the stale resource_data
+        if str(existing_resource.ansible_id) == resource_ansible_id:
+            create_gateway_resource = False
+            updated_service_resource["service_id"] = existing_resource.service_id
+
+            if incoming_data == local_data:
+                logger.info(f"Correcting service_id of {resource_type.name} with name {resource['name']}.")
+            else:
+                updated_service_resource["resource_data"] = local_data
+                logger.warning(f"Updating already-merged {resource_type.name} with name {resource['name']}.")
+
+        # case 2: merge flag is set. We only set upstream metadata and ansible_id to be the same as gateway's
+        # don't set anything on the gateway
+        if should_merge:
+            create_gateway_resource = False
+            updated_service_resource.update(
+                {
+                    "ansible_id": existing_resource.ansible_id,
+                    "resource_data": local_data,
+                }
+            )
+            logger.warning(f"Merging {resource_type.name} with conflicting name {resource['name']}.")
+
+        # case 3: different ansible_id and not merging. We are not correcting the service-side of the same resource.
+        # We change the name of the resource and update it on the upstream service
+        # Create a new resource in the gateway with the updated name
+        elif str(existing_resource.ansible_id) != resource_ansible_id:
+            new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field)
+            resource["resource_data"][resource_type_name_field] = new_name
+            updated_service_resource["resource_data"] = resource["resource_data"]
+            logger.warning(f"Creating new {resource_type.name} with new name {resource['name']}.")
+
+        return create_gateway_resource, existing_resource
+
+    def _get_filtered_resources(self, filters, resource_type_name):
+        """
+        Retrieves and filters resources for a given resource type.
+        """
+        data = self.client.list_resources(filters=filters).json()
+        self.stdout.write(f"Items remaining: {data['count']}")
+        results = data['results']
+        # As special case exclude the system user, since Gateway excludes this in its own resources
+        if resource_type_name == 'shared.user':
+            # SYSTEM_USERNAME can theoretically vary by service
+            # Currently, the system username is None in controller, and in hub and eda it's the same as gateway's,
+            # If Hub and EDA system username is updated to != gateway's, we are migrating it too and we should avoid it
+            # See related Jira Ticket AAP-47114
+            results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
+        return results
+
+    def _process_and_migrate_resource_item(self, upstream_resource_item, resource_context):
+        """
+        Carries out migration logic for an individual resource item, and
+        then implement the migration by creating or updating a Gateway resource, and updating the upstream resource in a single database transaction
+        Args:
+        - upstream_resource_item (dict): the data for a single resource item, which is acquired from the GWResourceAPI
+        - resource_context (dict): contains the static data related to the current resource item
+        """
+        resource_ansible_id = upstream_resource_item["ansible_id"]
+        resource_type = resource_context["type"]
+
+        # Currently, we're making a GET request to the upstream service for every single resource
+        # This implementation is non-optimal. However, we can leave this as is for now
+        # since there is an ongoing initiative to rework the migration process
+        resource = self.client.get_resource(resource_ansible_id).json()
+        validated_resource_data = self._deserialize_and_validate_resource_data(resource, resource_context["type_serializer"])
+
+        # 'shared.user' type is treated differently
+        # If the user being migrated is not the current user (admin user), we need to check if we should partially migrate the user
+        user_partial_migration = bool(resource_context["type_name"] == "shared.user" and resource["name"] != self.client.user.username)
+
+        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(resource, user_partial_migration)
+
+        # should_merge indicates the final merge action.
+        # The default is the value passed into the merge option when running the command, which is True to indicate we are merging the admin user
+        should_merge = resource_context["merge_option"] if not user_partial_migration else False
+
+        # handles case with existing resource and figure out if we should create a new resource in gateway or not
+        create_gateway_resource, existing_resource = self._reconcile_existing_resource(
+            resource, resource_context, validated_resource_data, updated_service_resource, should_merge
+        )
+
+        # Run this as a transaction so that if the REST call to update the resource on the service fails
+        # we also rollback any database changes that were made on the gateway.
+        with transaction.atomic():
+            # determine the resource to use in Gateway
+            if create_gateway_resource:
+                gw_resource = Resource.create_resource(resource_type, resource["resource_data"], **resource_creation_kwargs)
+            else:
+                gw_resource = existing_resource
+
+            # Connect legacy authentication for users, but do not connect any for the superuser
+            if user_partial_migration:
+                # Create the migration entry only if we are actually creating a gateway
+                # resource.  If we aren't we're updating an already existing user on
+                # the service.
+                if create_gateway_resource:
+                    self.create_user_migration_entry(gw_resource, validated_resource_data, resource["additional_data"])
+
+            self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
+
+    """
+    Before migration, we need to send requests to upstream services and acquire resources data.
+    Then, to migrate, we need to do one of three things:
+    - If the resource exists in the gateway and merge is set to true: Don't change anything in
+      the gateway. Set the "ansible_id" and "service_id" on the resource in the service to
+      match the gateway's value. This indicates that the resource is managed by the gateway
+      and that the it is the same resource as the one that already exists in Gateway
+    - If the resource exists in the gateway and merge is set to false: Create a new resource
+      in Gateway with a name that doesn't conflict with the existing resource in the service
+      using the "ansible_id" provided by the service. Rename the existing resource on the
+      service and set the "service_id" to the gateway's ID.
+    - If the resource doesn't exist in Gateway: Create a new resource in Gateway using the
+      data from the resource in the service, including the "ansible_id". Set the "service_id"
+      of the resource in the service to match the gateway's ID.
+
+    Note that in all cases we're setting the "service_id" on the resource in the service to
+    match the gateway's ID. This indicates to the service and to the gateway that the resource
+    is now managed externally by the gateway.
+    """
+
     def migrate_resource(self, resource_type_name):
         """
         Get a list of resources from the upstream service and add them to the gateway.
+        Build a `resource_context` dict containing the data related to the current resource type to avoid code duplication
+        Keys:
+        - type (ResourceType instance): the object associated with the current resource.
+        - type_name (str): name of the resource type (i.e: 'shared.user', 'shared.organization', 'shared.team')
+        - type_serializer (serializer instance): used to validate and deserialize the resource data
+        - type_name_field (str): the name of the field used to uniquely define the resource
+        - unique_fields (list): a list of field names that together uniquely identify a resource
+        - merge_option (bool): whether to merge with existing Gateway resource
+        - LocalResourceModel (model class): the model class in gateway that is associated with the resource_type
+                                            (i.e: Organization class for resource_type 'shared.organization')
         """
         self.stdout.write(f"Migrating data for {resource_type_name}")
 
         resource_type = self.resource_types_to_migrate[resource_type_name]["type"]
-        merge = self.resource_types_to_migrate[resource_type_name]["merge"]
-        unique_fields = self.resource_types_to_migrate[resource_type_name]["unique_fields"]
 
-        resource_serializer = resource_type.serializer_class
-        resource_type_name_field = resource_type.get_resource_config().name_field
+        resource_context = {
+            "type": resource_type,
+            "type_name": resource_type_name,
+            "type_serializer": resource_type.serializer_class,
+            "type_name_field": resource_type.get_resource_config().name_field,
+            "unique_fields": self.resource_types_to_migrate[resource_type_name]["unique_fields"],
+            "merge_option": self.resource_types_to_migrate[resource_type_name]["merge"],
+            "LocalResourceModel": resource_type.content_type.model_class(),
+        }
 
-        LocalResourceModel = resource_type.content_type.model_class()
-
-        # Each resource that gets updated in the gateway will change the service ID, and will cause
-        # the migrated resources to be filtered out of the server response, so we don't need to
-        # deal with pagination here. We just keep calling the list view until the filter returns
-        # no items.
+        # Each resource that gets updated in the gateway will change the service ID to Gateway's (except for 'shared.user'), and
+        # will cause the migrated resources to be filtered out of the server response.
+        # 'shared.user' resource type can also be filtered out by setting the 'is_partially_migrated' flag to true
+        # Thus, we don't need to deal with pagination here. We just keep calling the list view until the filter returns no items.
         api_call_filters = {
             "service_id": self.upstream_service_id,
             "is_partially_migrated": "false",
@@ -243,135 +471,11 @@ class Command(BaseCommand):
         # so this doesn't actually use pagination. It just keeps loading the same filter over and over
         # until nothing is left to migrate.
         while True:
-            data = self.client.list_resources(filters=api_call_filters).json()
-            self.stdout.write(f"Items remaining: {data['count']}")
-            results = data['results']
-            # As special case exclude the system user, since Gateway excludes this in its own resources
-            if resource_type_name == 'shared.user':
-                # TODO: SYSTEM_USERNAME can theoretically vary by service, does this break if it's customized?
-                results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
+            results = self._get_filtered_resources(api_call_filters, resource_type_name)
 
             if len(results) == 0:
                 self.stdout.write("No more items remaining to migrate.")
                 break
 
-            for resource_list in results:
-                resource_type_name = resource_list["resource_type"]
-                resource_ansible_id = resource_list["ansible_id"]
-
-                # TODO: Should we add the resource_data to the list view serializer so that we
-                # don't have to make a GET request for every single resource?
-                # get the resource details
-                resource = self.client.get_resource(resource_ansible_id).json()
-
-                # de-serialize the data so that we can decode ansible_ids into foreign key values
-                original_resource_data = resource_serializer(data=resource["resource_data"])
-
-                if original_resource_data.is_valid(raise_exception=False):
-                    original_resource_data = original_resource_data.validated_data
-                else:
-                    # if the validation failed, attempt to update resource data
-                    updated_resource_data = self.update_resource_data(resource_type_name, original_resource_data)
-                    if updated_resource_data is not None:
-                        # update the original resource data and the resource itself
-                        original_resource_data = updated_resource_data
-                        resource["resource_data"] = updated_resource_data
-                        # might need to figure out if the resource["resource_data"] is the only one we need to update
-                    else:
-                        # updating didn't produce valid data for the resource, hence this resource is invalid
-                        self.stderr.write(
-                            f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}'"
-                            f" failed validation with errors: {str(original_resource_data.errors)}"
-                        )
-                        # Raising exception here to stop migration to draw attention to existence of invalid resources.
-                        raise RuntimeError("Stopping migration of resources because invalid, non-correctable, resource(s) were encountered.")
-
-                unique_filter_kwargs = {}
-                for field_name in unique_fields:
-                    unique_filter_kwargs[field_name] = original_resource_data[field_name]
-
-                try:
-                    existing_resource = LocalResourceModel.objects.select_related("resource").get(**unique_filter_kwargs).resource
-                except LocalResourceModel.DoesNotExist:
-                    existing_resource = None
-
-                # Now that we have all of the data from the service we need to do one of three things:
-                # - If the resource exists in the gateway and merge is set to true: Don't change anything in
-                #   the gateway. Set the "ansible_id" and "service_id" on the resource in the service to
-                #   match the gateway's value. This indicates that the resource is managed by the gateway
-                #   and that the it is the same resource as the one that already exists in Gateway
-                # - If the resource exists in the gateway and merge is set to false: Create a new resource
-                #   in Gateway with a name that doesn't conflict with the existing resource in the service
-                #   using the "ansible_id" provided by the service. Rename the existing resource on the
-                #   service and set the "service_id" to the gateway's ID.
-                # - If the resource doesn't exist in Gateway: Create a new resource in Gateway using the
-                #   data from the resource in the service, including the "ansible_id". Set the "service_id"
-                #   of the resource in the service to match the gateway's ID.
-                #
-                # Note that in all cases we're setting the "service_id" on the resource in the service to
-                # match the gateway's ID. This indicates to the service and to the gateway that the resource
-                # is now managed externally by the gateway.
-
-                create_gateway_resource = True
-                resource_creation_kwargs = {"ansible_id": resource_ansible_id}
-                # User are treated specially, we partially migrate
-                user_partial_migration = bool(resource_type_name == "shared.user" and resource["name"] != self.client.user.username)
-                if user_partial_migration:
-                    # We do not update the service_id of a user, so we mark is_partially_migrated to exclude it from next loop
-                    updated_service_resource = {"is_partially_migrated": True}
-                    # The resource created in Gateway needs to show as unmigrated by having the original service_id
-                    resource_creation_kwargs["service_id"] = self.upstream_service_id
-                    merge_item = False
-                else:
-                    # This is the request object we send to the upstream service to update the resource.
-                    # At the very least, this will update the 'service_id'.
-                    updated_service_resource = {"service_id": str(service_id())}
-                    merge_item = merge
-
-                if existing_resource:
-                    if str(existing_resource.ansible_id) == resource_ansible_id:
-                        # NOTE: the JWT auth classes create some items with correct ansible_id
-                        # but without the service_id fully set, so this will reconcile those cases
-                        create_gateway_resource = False
-                        updated_service_resource["service_id"] = existing_resource.service_id
-                        local_data = resource_type.serializer_class(existing_resource.content_object).data
-                        if resource.get("resource_data", {}) == local_data:
-                            logger.info(f"Correcting service_id of {resource_type.name} with name {resource['name']}.")
-                        else:
-                            updated_service_resource["resource_data"] = local_data
-                            logger.warning(f"Updating already-merged {resource_type.name} with name {resource['name']}.")
-
-                    if merge_item:
-                        # Set upstream metadata and ansible_id to be same as gateway's
-                        # Don't update anything on the gateway
-                        create_gateway_resource = False
-                        updated_service_resource["ansible_id"] = existing_resource.ansible_id
-                        updated_service_resource["resource_data"] = resource_type.serializer_class(existing_resource.content_object).data
-                        logger.warning(f"Merging {resource_type.name} with conflicting name {resource['name']}.")
-                    elif str(existing_resource.ansible_id) != resource_ansible_id:
-                        # We are not correcting the service-side of the same resource.
-                        #
-                        # Change the name of the resource and update it on the upstream service
-                        # Create a new resource in the gateway with the updated name
-                        new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field)
-                        resource["resource_data"][resource_type_name_field] = new_name
-                        updated_service_resource["resource_data"] = resource["resource_data"]
-                        logger.warning(f"Creating new {resource_type.name} with new name {resource['name']}.")
-
-                # Run this as a transaction so that if the REST call to update the resource on the service fails
-                # we also rollback any database changes that were made on the gateway.
-                with transaction.atomic():
-                    if create_gateway_resource:
-                        gw_resource = Resource.create_resource(resource_type, resource["resource_data"], **resource_creation_kwargs)
-                    else:
-                        gw_resource = existing_resource
-
-                    # Connect legacy authentication for users, but do not connect any for the superuser
-                    if user_partial_migration:
-                        # Create the migration entry only if we are actually creating a gateway
-                        # resource.  If we aren't we're updating an already existing user on
-                        # the service.
-                        if create_gateway_resource:
-                            self.create_user_migration_entry(gw_resource, original_resource_data, resource["additional_data"])
-
-                    self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
+            for upstream_resource_item in results:
+                self._process_and_migrate_resource_item(upstream_resource_item, resource_context)
