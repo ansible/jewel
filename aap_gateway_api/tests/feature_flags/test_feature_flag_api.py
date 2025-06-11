@@ -8,7 +8,7 @@ from rest_framework import status
 
 
 def test_feature_flags_list_endpoint(admin_api_client):
-    url = get_relative_url("featureflags-list")
+    url = get_relative_url("feature-flags-state-list")
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK, response.data
     # Test number of feature flags.
@@ -29,7 +29,7 @@ def test_feature_flags_list_endpoint(admin_api_client):
 )
 @pytest.mark.django_db
 def test_feature_flags_override_flags(admin_api_client):
-    url = get_relative_url("featureflags-list")
+    url = get_relative_url("feature-flags-state-list")
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK, response.data
     assert len(response.data) == 2
@@ -54,7 +54,7 @@ def test_set_feature_flags(admin_api_client):
         ]
     }
     assert flag_state("FEATURE_SOME_PLATFORM_FLAG_ENABLED") is True
-    url = get_relative_url("featureflags-list")
+    url = get_relative_url("feature-flags-state-list")
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK, response.data
     assert response.data["FEATURE_SOME_PLATFORM_FLAG_ENABLED"] is True
