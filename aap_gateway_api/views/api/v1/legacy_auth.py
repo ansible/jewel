@@ -212,8 +212,10 @@ class LegacyAuthViewset(viewsets.ViewSet):
                             service=data["service_cluster"],
                         )
                     except MigratedUserMetadata.DoesNotExist:
-                        # TODO: Is this unreachable? Prove it, I don't believe it.
-                        raise DRFValidationError(_("No migration metadata found for this user/service combination"))
+                        raise DRFValidationError(
+                            _("No migration metadata found for this user/service combination.")
+                            + _(" This could mean that this user has already migrated via another service.")
+                        )
                     migrated_user_metadata.backend_classification = auth_backend_classification
                     migrated_user_metadata.save(update_fields=["backend_classification"])
 
