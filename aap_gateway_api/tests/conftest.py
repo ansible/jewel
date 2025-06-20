@@ -15,7 +15,17 @@ from ansible_base.lib.testing.util import copy_fixture, delete_authenticator  # 
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, Preference, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType, User
+from aap_gateway_api.models import (
+    AdditionalRoute,
+    DefaultServiceType,
+    Preference,
+    ServiceAPIRoute,
+    ServiceCluster,
+    ServiceNode,
+    ServiceType,
+    UIPluginRoute,
+    User,
+)
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
 
@@ -353,6 +363,43 @@ for name in [x.value for x in DefaultServiceType]:
         yield route
         route.delete()
 
+    def _ui_plugin_route(request, http_api_port_factory, randname, name=name):  # noqa: F402
+        service_cluster = request.getfixturevalue(f"service_cluster_{name}")
+        randstr = uuid.uuid4().hex[:6]
+
+        # The port for this service may be opened on localhost in order to communicate
+        # with the service_test_app. This ensures that service ports won't conflict if
+        # multiple test apps are launched at the same time in different pytest workers.
+        # Conflicts may still occur if the developer has any ports greater than 10,000
+        # open on their machine.
+        port_prefixes = {
+            DefaultServiceType.CONTROLLER: 1,
+            DefaultServiceType.EDA: 2,
+            DefaultServiceType.HUB: 3,
+            DefaultServiceType.GATEWAY: 4,
+        }
+
+        port_prefix = port_prefixes[service_cluster.service_type.name]
+
+        if pytest_worker := os.environ.get("PYTEST_XDIST_WORKER"):
+            worker_num = re.sub("[^0-9]", "", pytest_worker).rjust(4, "0")
+            port = int(str(port_prefix) + worker_num)
+        else:
+            port = int(str(port_prefix) + str(random.randint(0, 1000)).rjust(4, "0"))
+
+        route = UIPluginRoute.objects.create(
+            name=randname("Test UI Plugin route"),
+            http_port=http_api_port_factory(),
+            is_service_https=False,
+            service_cluster=service_cluster,
+            service_port=port,
+            description="Test route",
+            envoy_cluster_name=randname("envoy cluster"),
+            ui_plugin_path=f"/plugin/{randstr}/",  # This is required
+        )
+        yield route
+        route.delete()
+
     def _full_service_hierarchy(request, name=name):
         service_node = request.getfixturevalue(f"service_node_{name}")
         service_cluster = service_node.service_cluster
@@ -366,6 +413,7 @@ for name in [x.value for x in DefaultServiceType]:
     globals()[f"service_node_{name}"] = pytest.fixture(_service_node)
     globals()[f"additional_route_{name}"] = pytest.fixture(_route)
     globals()[f"service_api_route_{name}"] = pytest.fixture(_service_api_route)
+    globals()[f"ui_plugin_route_{name}"] = pytest.fixture(_ui_plugin_route)
     globals()[f"full_service_hierarchy_{name}"] = pytest.fixture(_full_service_hierarchy)
 
 

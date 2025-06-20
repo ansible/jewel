@@ -3,6 +3,14 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.models.route import API_PREFIX, Route
+from aap_gateway_api.models.ui_plugin_route import PLUGIN_PREFIX
+
+
+def get_gateway_path_prefix_error_message():
+    return _("Custom routes on the API port cannot start with '%(API_PREFIX)s' or '%(PLUGIN_PREFIX)s'") % {
+        "API_PREFIX": API_PREFIX,
+        "PLUGIN_PREFIX": PLUGIN_PREFIX,
+    }
 
 
 class AdditionalRoute(Route, AuditableModel):
@@ -16,8 +24,8 @@ class AdditionalRoute(Route, AuditableModel):
     router_basename = 'route'
 
     def clean(self):
-        if self.http_port.is_api_port and self.gateway_path.startswith(API_PREFIX):
-            raise ValidationError({"gateway_path": _("Custom routes on the API port cannot start with '%(API_PREFIX)s'") % {"API_PREFIX": API_PREFIX}})
+        if self.http_port.is_api_port and (self.gateway_path.startswith(API_PREFIX) or self.gateway_path.startswith(PLUGIN_PREFIX)):
+            raise ValidationError({"gateway_path": get_gateway_path_prefix_error_message()})
 
     def save(self, *args, **kwargs):
         self.clean()

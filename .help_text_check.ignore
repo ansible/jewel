@@ -1,5 +1,7 @@
 aap_gateway_api.ServiceAPIRoute.route_ptr  # The pointer to a Route object
 aap_gateway_api.AdditionalRoute.route_ptr  # The pointer to a Route object
+aap_gateway_api.UIPluginRoute.route_ptr  # The pointer to a Route object
+
 
 aap_gateway_api.Preference.name            # Inherited from preference library
 aap_gateway_api.Preference.raw_value       # Inherited from preference library

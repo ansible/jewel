@@ -1,6 +1,6 @@
 import pytest
 
-from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType
+from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 
 
 class TestRoute:
@@ -159,6 +159,15 @@ class TestRoute:
         routes = route.get_xds_route_config()
         assert routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]["service_type"] == "eda"
         assert routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]["auth_type"] == "JWT"
+
+    @pytest.mark.django_db
+    def test_xds_route_config_ui_plugin_path(self, service_cluster_eda):
+        route = UIPluginRoute(gateway_path='/', ui_plugin_path='/plugin/', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        routes = route.get_xds_route_config()
+        assert len(routes) == 1
+        assert routes[0]["route"]["prefix_rewrite"] == "/plugin/"
+        assert routes[0]["metadata"]["filter_metadata"]["envoy.filters.http.lua"]["prefix"] == "/"
+        assert routes[0]["metadata"]["filter_metadata"]["envoy.filters.http.lua"]["prefix_rewrite"] == "/plugin/"
 
     @pytest.mark.django_db
     def test_xds_route_config_host_rewrite_literal(self, service_cluster_eda):
