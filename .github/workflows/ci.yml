@@ -72,14 +72,14 @@ jobs:
           path: coverage.xml
 
       - name: SonarCloud Scan (on push)
-        uses: SonarSource/sonarqube-scan-action@master
-        if: matrix.tests.sonar && github.event_name == 'push' && github.repository == 'ansible/aap-gateway'
+        uses: SonarSource/sonarqube-scan-action@v5
+        if: matrix.tests.sonar && github.event_name == 'push' && startsWith(github.repository, 'ansible') && endsWith(github.repository, '/aap-gateway')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
 
       - name: Upload jUnit XML test results
-        if: matrix.tests.junit-xml-upload && github.event_name == 'push' && github.repository == 'ansible/aap-gateway' && github.ref_name == 'devel'
+        if: matrix.tests.junit-xml-upload && github.event_name == 'push' && github.ref_name == 'devel' && startsWith(github.repository, 'ansible') && endsWith(github.repository, '/aap-gateway')
         continue-on-error: true
         run: >-
           curl -v --user "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}:${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}"
