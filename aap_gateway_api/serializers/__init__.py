@@ -13,4 +13,5 @@ from aap_gateway_api.serializers.service import (  # noqa: 401
 )
 from aap_gateway_api.serializers.service_auth import ServiceKeySerializer  # noqa: 401
 from aap_gateway_api.serializers.team import TeamSerializer  # noqa: 401
+from aap_gateway_api.serializers.ui_plugin_route import UIPluginRouteSerializer  # noqa: 401
 from aap_gateway_api.serializers.user import UserSerializer  # noqa: 401

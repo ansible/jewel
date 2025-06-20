@@ -36,6 +36,7 @@ from aap_gateway_api.views.api.v1.service import (  # noqa: F401
     ServiceClusterViewSet,
     ServiceNodeViewSet,
     ServiceTypeViewSet,
+    UIPluginRouteViewSet,
 )
 from aap_gateway_api.views.api.v1.service_auth import ServiceKeyViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.session import SessionView  # noqa: F401

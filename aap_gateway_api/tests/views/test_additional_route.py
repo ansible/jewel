@@ -1,6 +1,7 @@
 from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import AdditionalRoute
+from aap_gateway_api.models.additional_route import get_gateway_path_prefix_error_message
 
 
 def test_additional_route_detail(admin_api_client, additional_route_controller):
@@ -115,7 +116,27 @@ def test_additional_route_api_port_cannot_start_with_api_prefix(admin_api_client
     response = admin_api_client.post(url, data=data)
     assert response.status_code == 400
     assert AdditionalRoute.objects.count() == 0
-    assert response.data['gateway_path'][0] == "Custom routes on the API port cannot start with '/api/'"
+    assert response.data['gateway_path'][0] == get_gateway_path_prefix_error_message()
+
+
+def test_additional_route_api_port_cannot_start_with_plugin_prefix(admin_api_client, http_api_port_factory, service_cluster_eda):
+
+    http_port = http_api_port_factory()
+    url = get_relative_url('route-list')
+    data = {
+        'name': 'test',
+        'http_port': http_port.pk,
+        'service_cluster': service_cluster_eda.pk,
+        'service_path': '/test',
+        'service_port': 8080,
+        'description': 'test',
+        'gateway_path': '/plugin/test',
+        'is_service_https': False,
+    }
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == 400
+    assert AdditionalRoute.objects.count() == 0
+    assert response.data['gateway_path'][0] == get_gateway_path_prefix_error_message()
 
 
 def test_additional_route_name_must_be_unique(admin_api_client, additional_route_controller):

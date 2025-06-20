@@ -55,6 +55,11 @@ router.register(
     },
 )
 router.register(
+    r'ui_plugin_routes',
+    views.UIPluginRouteViewSet,
+    basename='ui_plugin_route',
+)
+router.register(
     r'http_ports',
     views.HTTPPortViewSet,
     basename='http_port',

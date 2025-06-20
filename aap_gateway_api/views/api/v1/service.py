@@ -2,7 +2,7 @@ from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.response import Response
 
-from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType
+from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType, UIPluginRoute
 from aap_gateway_api.serializers import (
     AdditionalRouteSerializer,
     HTTPPortSerializer,
@@ -10,6 +10,7 @@ from aap_gateway_api.serializers import (
     ServiceClusterSerializer,
     ServiceNodeSerializer,
     ServiceTypeSerializer,
+    UIPluginRouteSerializer,
 )
 from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ProxyUnsafeGatewayModelViewSet
 
@@ -23,6 +24,20 @@ class ServiceAPIRouteViewSet(ProxyUnsafeGatewayModelViewSet):
     serializer_class = ServiceAPIRouteSerializer
 
     def object_write_unsafe(self, request, obj: ServiceAPIRoute) -> bool:
+        # Currently we can be sure that there will only be one server per type,
+        # so we do not have to check if there are any more services of type GATEWAY
+        return obj.service_cluster.service_type.name in [DefaultServiceType.GATEWAY]
+
+
+class UIPluginRouteViewSet(ProxyUnsafeGatewayModelViewSet):
+    """
+    API endpoint that allows service plugin routes to be viewed or edited.
+    """
+
+    queryset = UIPluginRoute.objects.all()
+    serializer_class = UIPluginRouteSerializer
+
+    def object_write_unsafe(self, request, obj: UIPluginRoute) -> bool:
         # Currently we can be sure that there will only be one server per type,
         # so we do not have to check if there are any more services of type GATEWAY
         return obj.service_cluster.service_type.name in [DefaultServiceType.GATEWAY]

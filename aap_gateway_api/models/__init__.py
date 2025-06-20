@@ -11,6 +11,7 @@ from aap_gateway_api.models.service_auth import ServiceKey  # noqa: 401
 from aap_gateway_api.models.service_node import ServiceNode  # noqa: 401
 from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType  # noqa: 401
 from aap_gateway_api.models.team import Team  # noqa: 401
+from aap_gateway_api.models.ui_plugin_route import UIPluginRoute  # noqa: 401
 
 # Skip isort for the below to prevent circular imports caused by the alphabetical sorting of these imports.
 from aap_gateway_api.models.additional_route import AdditionalRoute  # noqa: 401  # isort: skip

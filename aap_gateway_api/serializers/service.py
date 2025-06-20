@@ -4,7 +4,9 @@ from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType
+from aap_gateway_api.models.additional_route import get_gateway_path_prefix_error_message
 from aap_gateway_api.models.route import API_PREFIX
+from aap_gateway_api.models.ui_plugin_route import PLUGIN_PREFIX
 
 
 def _validate_tags_field(value):
@@ -165,9 +167,17 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
 
         _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_route, errors)
 
-        if attrs.get("http_port") and attrs["http_port"].is_api_port and attrs.get("gateway_path") and attrs["gateway_path"].startswith(API_PREFIX):
+        if (
+            attrs.get("http_port")
+            and attrs["http_port"].is_api_port
+            and attrs.get("gateway_path")
+            and (attrs["gateway_path"].startswith(API_PREFIX) or attrs["gateway_path"].startswith(PLUGIN_PREFIX))
+        ):
             errors.setdefault('gateway_path', []).append(
-                ErrorDetail(_("Custom routes on the API port cannot start with '{API_PREFIX}'".format(API_PREFIX=API_PREFIX)), code='required')
+                ErrorDetail(
+                    get_gateway_path_prefix_error_message(),
+                    code='required',
+                )
             )
 
         if errors:
