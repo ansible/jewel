@@ -12,6 +12,7 @@ from ansible_base.lib.middleware.logging import LogRequestMiddleware
 from django.conf import settings
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.exceptions import BadRequest
 from django.db import close_old_connections
 from django.http import HttpRequest, parse_cookie
 from django.views.csrf import csrf_failure
@@ -35,6 +36,20 @@ MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationM
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 
+def get_server_name_and_port(request: attribute_context_pb2.AttributeContext.HttpRequest):
+    host = request.host.split(":")
+    if len(host) == 2:
+        server_name, server_port = host[0], host[1]
+    elif len(host) == 1:
+        server_name = host[0]
+        # since there is no : denoting the port, we can assume that the request is in line with the default one for the protocol
+        server_port = "443" if request.scheme == "https" else "80"
+    else:
+        raise BadRequest(f"expected at most 1 ':' in request hostname {request.host}, got {len(host) - 1}")
+
+    return server_name, server_port
+
+
 def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest) -> DRFRequest:
     d_request = HttpRequest()
     d_request.method = request.method
@@ -50,8 +65,9 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
         d_request._stream = BytesIO(request.raw_body)
         d_request._read_started = False
 
-    d_request.META["SERVER_NAME"] = request.host
-    d_request.META.pop("HTTP_ORIGIN", None)  # Force Referer checking for CSRF
+    server_name, server_port = get_server_name_and_port(request)
+    d_request.META["SERVER_NAME"] = server_name
+    d_request.META["SERVER_PORT"] = server_port
     # Needed because body parser will break if called HTTP_CONTENT_LENGTH
     d_request.META["CONTENT_LENGTH"] = d_request.META.pop("HTTP_CONTENT_LENGTH", 0)
 
