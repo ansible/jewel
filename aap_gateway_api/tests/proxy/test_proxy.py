@@ -4,10 +4,9 @@ from os import linesep
 from unittest import mock
 
 import pytest
-from django.core.exceptions import BadRequest
 from rest_framework.authentication import SessionAuthentication
 
-from aap_gateway_api.proxy.control_plane import ExternalAuth, _ExternalAuth, get_drf_request, get_server_name_and_port
+from aap_gateway_api.proxy.control_plane import ExternalAuth, _ExternalAuth, get_drf_request
 
 csrf_cookie_string = "aAKwsypSuCpSmU4SMt7WrbGmvTBYfryg"
 bad_csrf_form_token = "gJElunW0ICBSx1jtgk9HGMD6qzTRdQdM3ycFn1DgkXi0UWFjDKUts1Azq5jmCTcS"
@@ -59,21 +58,10 @@ request_headers = {
 
 class Request:
     def __init__(
-        self,
-        method="GET",
-        host="localhost",
-        path="/",
-        header_diff={},
-        body="",
-        query="",
-        is_internal_route="f",
-        service_type="gateway",
-        auth_type="JWT",
-        scheme="https",
+        self, method="GET", host="localhost", path="/", header_diff={}, body="", query="", is_internal_route="f", service_type="gateway", auth_type="JWT"
     ):
         self.method = method
         self.host = host
-        self.scheme = scheme
         self.path = path
         self.raw_body = bytes(body, "utf-8")
         self.headers = request_headers.copy()
@@ -89,26 +77,6 @@ class Request:
             "service_type": service_type,
             "auth_type": auth_type,
         }
-
-
-@pytest.mark.parametrize(
-    "input,expected_output",
-    (
-        (Request(host="localhost", scheme="https"), ("localhost", "443")),
-        (Request(host="localhost", scheme="http"), ("localhost", "80")),
-        (Request(host="localhost:8000", scheme="https"), ("localhost", "8000")),
-        (Request(host="localhost:8000", scheme="http"), ("localhost", "8000")),
-    ),
-)
-def test_get_server_name_and_port_name_happy_path(input, expected_output):
-    output = get_server_name_and_port(input)
-    assert output == expected_output
-
-
-def test_get_server_name_and_port_name_sad_path():
-    bad_request = Request(host="localhost:8080:8888")
-    with pytest.raises(BadRequest):
-        get_server_name_and_port(bad_request)
 
 
 @pytest.mark.parametrize(
