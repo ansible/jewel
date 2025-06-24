@@ -58,7 +58,17 @@ request_headers = {
 
 class Request:
     def __init__(
-        self, method="GET", host="localhost", path="/", header_diff={}, body="", query="", is_internal_route="f", service_type="gateway", auth_type="JWT"
+        self,
+        method="GET",
+        host="localhost",
+        path="/",
+        header_diff={},
+        body="",
+        query="",
+        is_internal_route="f",
+        service_type="gateway",
+        auth_type="JWT",
+        scheme="http",
     ):
         self.method = method
         self.host = host
@@ -68,6 +78,7 @@ class Request:
         self.headers.update(header_diff)
         self.query = query
         self.headers["CONTENT_LENGTH"] = str(len(self.raw_body))
+        self.scheme = scheme
 
         self.attributes = self
         self.request = self

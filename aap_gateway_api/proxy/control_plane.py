@@ -35,8 +35,24 @@ MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationM
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
 
+class EnvoyRequest(HttpRequest):
+    """Request class that allows us to override parts of HttpRequest that django expects to be overridden.
+
+    This can be seen as the envoy gRPC alternative to WSGIRequest; it handles overrides needed for request authentication to behave properly.
+    """
+
+    def __init__(self, envoy_request: attribute_context_pb2.AttributeContext.HttpRequest):
+        self._envoy_request_scheme = envoy_request.scheme
+        super().__init__()
+
+    def _get_scheme(self):
+        # Overrides the default implementation in Django and returns the scheme
+        # from Envoy's request in order to avoid default value that's often incorrect
+        return self._envoy_request_scheme
+
+
 def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest) -> DRFRequest:
-    d_request = HttpRequest()
+    d_request = EnvoyRequest(request)
     d_request.method = request.method
     d_request.path = request.path
 
@@ -50,8 +66,7 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
         d_request._stream = BytesIO(request.raw_body)
         d_request._read_started = False
 
-    d_request.META["SERVER_NAME"] = request.host
-    d_request.META.pop("HTTP_ORIGIN", None)  # Force Referer checking for CSRF
+    d_request.META["HTTP_HOST"] = request.host
     # Needed because body parser will break if called HTTP_CONTENT_LENGTH
     d_request.META["CONTENT_LENGTH"] = d_request.META.pop("HTTP_CONTENT_LENGTH", 0)
 
