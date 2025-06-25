@@ -1,6 +1,7 @@
 import pytest
 
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
+from aap_gateway_api.models.service_node import ServiceNode
 
 
 class TestRoute:
@@ -187,6 +188,37 @@ class TestRoute:
         service_cluster_eda.upstream_hostname = None
         cluster = route.get_xds_cluster_config()
         assert "sni" not in cluster["transport_socket"]["typed_config"]
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "is_ipv6_enabled,address,hostname",
+        [
+            ("True", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"),
+            ("False", "0.0.0.0", "0.0.0.0"),
+        ],
+    )
+    def test_xds_cluster_config_health_checks_enabled(self, is_ipv6_enabled, address, hostname, service_cluster_eda, settings_override_mutable, settings):
+        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.health_checks_enabled = True
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="my-eda-service-node",
+                    service_cluster=service_cluster_eda,
+                    address=address,
+                    tags="eda",
+                )
+            ]
+        )
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        route.node_tags = "eda"
+
+        with settings_override_mutable('FLAGS'):
+            settings.FLAGS['FEATURE_GATEWAY_IPV6_USAGE_ENABLED'][0]['value'] = is_ipv6_enabled
+            cluster = route.get_xds_cluster_config()
+            endpoint = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"][0]["endpoint"]
+            assert endpoint["address"]["socket_address"]["address"] == address
+            assert endpoint["health_check_config"]["hostname"] == hostname
 
     @pytest.mark.django_db
     def test_xds_cluster_config_dns_params(self, service_cluster_eda):
