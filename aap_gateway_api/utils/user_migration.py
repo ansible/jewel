@@ -96,7 +96,12 @@ def link_account(main_account, to_merge, preserve_authenticators=True, services_
             logger.debug(f"Updating account {to_merge_id} to point to {main_account.username}")
             client.update_resource(
                 to_merge_id,
-                data=ResourceRequestBody(ansible_id=main_account.resource.ansible_id, resource_data={"username": main_account.username}),
+                data=ResourceRequestBody(
+                    ansible_id=main_account.resource.ansible_id,
+                    service_id=service_id(),
+                    is_partially_migrated=False,
+                    resource_data={"username": main_account.username},
+                ),
                 partial=True,
             )
             logger.debug(f"Accounts {to_merge.username} and {main_account.username} merged successfully")
