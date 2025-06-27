@@ -1,4 +1,5 @@
 import logging
+from typing import List, Optional
 
 from ansible_base.resource_registry.models import service_id
 from django.db import transaction
@@ -6,13 +7,29 @@ from django.utils.translation import gettext as _
 from requests.exceptions import HTTPError
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from aap_gateway_api.models import ServiceAPIRoute
+from aap_gateway_api.models import ServiceAPIRoute, User
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient, ResourceRequestBody
 
 logger = logging.getLogger('aap_gateway_api.utils.user_migration')
 
 
-def can_accounts_be_merged(main_account, to_merge):
+def can_accounts_be_merged(main_account: User, to_merge: User) -> bool:
+    """Check if two user accounts can be safely merged.
+
+    Validates that the accounts are different and that the main account
+    doesn't already have a migrated account from the same service as
+    the account to be merged.
+
+    Args:
+        main_account: The primary user account to merge into
+        to_merge: The secondary user account to be merged
+
+    Returns:
+        True if accounts can be merged
+
+    Raises:
+        DRFValidationError: If accounts cannot be merged due to conflicts
+    """
     if main_account.pk == to_merge.pk:
         DRFValidationError(_("Can't merge an account with itself."))
 
@@ -30,7 +47,19 @@ def can_accounts_be_merged(main_account, to_merge):
     return True
 
 
-def migrate_account(user):
+def migrate_account(user: User) -> None:
+    """Migrate a user account to fully migrated status.
+
+    Updates the user's resource registry entry to mark it as fully migrated
+    and synchronizes the user data across all associated services.
+
+    Args:
+        user: The user account to migrate
+
+    Note:
+        This function is idempotent - calling it on an already migrated
+        user will have no effect.
+    """
     logger.debug(f"Migrating user {user.username} into Gateway.")
     if user.is_migrated:
         logger.debug(f"Migrating user {user.username} is already migrated")
@@ -60,7 +89,29 @@ def migrate_account(user):
             client.update_resource(acct_resource.ansible_id, data=body, partial=True)
 
 
-def link_account(main_account, to_merge, preserve_authenticators=True, services_to_merge=None):
+def link_account(
+    main_account: User,
+    to_merge: User,
+    preserve_authenticators: bool = True,
+    services_to_merge: Optional[List[ServiceAPIRoute]] = None,
+) -> None:
+    """Link and merge two user accounts.
+
+    Merges the secondary account into the main account, transferring all
+    associated metadata, authenticators, and service references. The
+    secondary account is deleted after successful merge.
+
+    Args:
+        main_account: The primary user account to merge into
+        to_merge: The secondary user account to be merged and deleted
+        preserve_authenticators: Whether to transfer authenticator relationships
+        services_to_merge: Optional list of specific services to merge,
+            defaults to all services associated with to_merge account
+
+    Note:
+        This operation is performed within a database transaction to ensure
+        data consistency. If any part fails, all changes are rolled back.
+    """
     logger.debug(f"Merging account {to_merge.username} into account {main_account.username}")
 
     if main_account.pk == to_merge.pk:

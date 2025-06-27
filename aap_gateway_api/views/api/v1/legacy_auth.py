@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 import jwt
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
@@ -7,6 +8,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.utils.translation import gettext as _
 from rest_framework import serializers, viewsets
@@ -235,7 +237,18 @@ class LegacyAuthViewset(viewsets.ViewSet):
 
         return data
 
-    def _get_user(self, request):
+    def _get_user(self, request: HttpRequest) -> Optional[User]:
+        """Get the current user from request or session.
+
+        Retrieves the authenticated user from the request, or if not present,
+        attempts to get a partially authenticated user from the session.
+
+        Args:
+            request: The HTTP request object
+
+        Returns:
+            User object if found, None otherwise
+        """
         if request.user and not isinstance(request.user, AnonymousUser):
             return request.user
         if unmigrated_id := request.session.get(UNMIGRATED_AUTH_SESSION_KEY):
@@ -245,16 +258,48 @@ class LegacyAuthViewset(viewsets.ViewSet):
                 return None
         return None
 
-    def _authenticate_user(self, user):
+    def _authenticate_user(self, user: User) -> None:
+        """Authenticate a user based on migration status.
+
+        For fully migrated users, performs a full Django login.
+        For partially migrated users, stores the user ID in session.
+
+        Args:
+            user: The user to authenticate
+        """
         if user.is_migrated:
             login(self.request, user)
         else:
             self.request.session[UNMIGRATED_AUTH_SESSION_KEY] = user.pk
 
-    def _migrate_account(self, user):
+    def _migrate_account(self, user: User) -> None:
+        """Migrate a user account to fully migrated status.
+
+        Delegates to the migrate_account utility function to handle the
+        full migration process for a user account.
+
+        Args:
+            user: The user account to migrate
+        """
         migrate_account(user)
 
-    def _link_account(self, main_account, to_merge, auth_type, auth_backend_classification):
+    def _link_account(self, main_account: User, to_merge: User, auth_type: str, auth_backend_classification: Optional[str]) -> None:
+        """Link an external account to the main AAP account.
+
+        Merges a secondary user account into the main account after validating
+        that the accounts can be safely merged. Handles SSO restrictions and
+        external authentication backend compatibility.
+
+        Args:
+            main_account: The primary AAP user account to link to
+            to_merge: The secondary user account to be merged
+            auth_type: Type of authentication ('password' or 'sso')
+            auth_backend_classification: Backend type ('local', 'ldap', etc.) or None
+
+        Raises:
+            DRFValidationError: If accounts cannot be merged due to SSO conflicts
+                or incompatible external authentication backends
+        """
         if can_accounts_be_merged(main_account, to_merge):
             sso_type = MigratedAuthenticatorMetadata.LegacyAuthTypes.SSO
             main_account_has_sso = main_account.authenticator_users.filter(provider__migrated_metadata__type=sso_type).exists()
@@ -287,9 +332,17 @@ class LegacyAuthViewset(viewsets.ViewSet):
                 main_account.username = old_username
                 main_account.save()
 
-    def _needs_rename(self, session_user):
-        """
-        if the user's username is not among any of the original usernames, request rename
+    def _needs_rename(self, session_user: User) -> bool:
+        """Check if user needs to rename their username.
+
+        Determines if the user's current username matches any of their
+        original usernames from migrated services.
+
+        Args:
+            session_user: The user to check
+
+        Returns:
+            True if user needs to rename their username, False otherwise
         """
         if session_user.is_migrated:
             return False
