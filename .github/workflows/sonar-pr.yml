@@ -8,6 +8,7 @@ on:
       - CI
     types:
       - completed
+permissions: read-all
 jobs:
   sonar:
     name: Upload to SonarCloud
