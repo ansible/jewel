@@ -1,5 +1,6 @@
 import logging
 from collections import OrderedDict
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
@@ -8,7 +9,7 @@ from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import models, transaction
 from requests.exceptions import HTTPError
 
 from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceType
@@ -19,12 +20,39 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
+    """
+    Django management command for migrating organizations, teams, and users from existing AAP
+    installations into the Gateway.
+
+    This command facilitates the migration of resources from upstream AAP services (Controller,
+    Hub, EDA) into the Gateway's resource registry system. It handles:
+
+    - Organizations: Can be merged or kept separate based on configuration
+    - Teams: Can be merged or kept separate based on configuration
+    - Users: Always merged for the admin user, others are partially migrated
+
+    The migration process involves:
+    1. Connecting to the upstream service via API
+    2. Fetching resource data from the upstream service
+    3. Creating or updating resources in the Gateway
+    4. Updating upstream resources with Gateway service IDs
+
+    Important: Users are never fully migrated - only the admin user is merged,
+    while other users are partially migrated to preserve authentication state.
+    """
+
     help = """Migrate Organizations and teams from existing AAP installations into the Gateway.
 
     There is no option to control merging of users, because users are never migrated.
     The exception is that the provided --username, which will be merged."""
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser) -> None:
+        """
+        Add command line arguments for the migrate_service_data command.
+
+        Args:
+            parser: ArgumentParser instance for adding command arguments
+        """
         services = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value).values_list("api_slug", flat=True)
 
         parser.add_argument("--api-slug", type=str, help="API slug for the ServiceAPIRoute that you wish to migrate.", choices=services, required=True)
@@ -50,7 +78,23 @@ class Command(BaseCommand):
             default=True,
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args, **options) -> None:
+        """
+        Main entry point for the migrate_service_data command.
+
+        Orchestrates the migration process by:
+        1. Validating inputs and setting up configuration
+        2. Establishing connection to upstream service
+        3. Migrating controller admin user if needed
+        4. Migrating resources in dependency order (orgs -> teams -> users)
+
+        Args:
+            *args: Positional arguments (unused)
+            **options: Command options containing api_slug, username, merge settings
+
+        Raises:
+            CommandError: If service doesn't exist, user doesn't exist, or migration fails
+        """
         self.service_slug = options["api_slug"]
         merge_teams = options["merge_teams"]
         merge_organizations = options["merge_organizations"]
@@ -137,9 +181,27 @@ class Command(BaseCommand):
         except HTTPError as e:
             raise CommandError("Bad API request: " + str(e))
 
-    def get_new_resource_name(self, name, unique_filter_kwargs: dict, LocalResourceModel, resource_type_name_field):
+    def get_new_resource_name(
+        self, name: str, unique_filter_kwargs: Dict[str, Any], LocalResourceModel: Type[models.Model], resource_type_name_field: str
+    ) -> str:
         """
-        Find a new name for the resource that does not violate any uniqueness constraints.
+        Generate a unique name for a resource that doesn't conflict with existing resources.
+
+        When a resource name conflicts with an existing resource in the Gateway, this method
+        generates a new name by prefixing with the service slug and adding a numeric suffix
+        if needed to ensure uniqueness.
+
+        Args:
+            name: Original resource name from upstream service
+            unique_filter_kwargs: Filter parameters used to check uniqueness
+            LocalResourceModel: Django model class for the resource type
+            resource_type_name_field: Field name used for the resource name
+
+        Returns:
+            A unique name that doesn't conflict with existing resources
+
+        Example:
+            If 'my-org' exists, will return 'service_my-org' or 'service_my-org1'
         """
         original_name = f'{self.service_slug}_{name}'
         name = original_name
@@ -155,7 +217,22 @@ class Command(BaseCommand):
 
         return name
 
-    def create_user_migration_entry(self, user, initial_data, additional_data):
+    def create_user_migration_entry(self, user: Resource, initial_data: Dict[str, Any], additional_data: Dict[str, Any]) -> None:
+        """
+        Create migration metadata entries for a migrated user.
+
+        This method creates records to track the migration of a user from an upstream
+        service, including their authentication providers and legacy auth data.
+
+        Args:
+            user: Resource object representing the migrated user
+            initial_data: Basic user data (username, etc.)
+            additional_data: Extended user data including social auth information
+
+        Note:
+            Creates MigratedUserMetadata and MigratedAuthenticatorMetadata records
+            to preserve authentication state from the upstream service.
+        """
         service_cluster = self.client.service.service_cluster
         MigratedUserMetadata.objects.create(
             user=user.content_object,
@@ -185,7 +262,17 @@ class Command(BaseCommand):
 
             AuthenticatorUser.objects.create(provider=authenticator_meta.authenticator, uid=initial_data["username"], user=user.content_object)
 
-    def migrate_controller_admin(self):
+    def migrate_controller_admin(self) -> None:
+        """
+        Set up controller admin authenticator for the current user if needed.
+
+        For Controller services, if the current user doesn't have a usable password,
+        this method creates a controller admin authenticator and associates it with
+        the user to enable authentication.
+
+        This is necessary because controller admin users may not have standard
+        password authentication configured.
+        """
         service_type = self.client.service.service_cluster.service_type
 
         if str(service_type) == "controller" and not self.client.user.has_usable_password():
@@ -201,7 +288,25 @@ class Command(BaseCommand):
                     uid=self.client.user.username,
                 )
 
-    def update_resource_data(self, resource_type_name, original_resource_data):
+    def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
+        """
+        Attempt to fix invalid resource data to make it valid for migration.
+
+        Currently handles the case where user email addresses are invalid by
+        removing them. This allows the migration to continue for users with
+        malformed email data.
+
+        Args:
+            resource_type_name: Type of resource being processed (e.g., 'shared.user')
+            original_resource_data: Serializer instance with validation errors
+
+        Returns:
+            Updated resource data dict if fixable, None if not correctable
+
+        Note:
+            Only handles email validation errors for user resources currently.
+            Can be extended to handle other validation issues as needed.
+        """
         """
         Used for producing updated resource data for resource that failed validation.
         """
@@ -213,7 +318,24 @@ class Command(BaseCommand):
             updated_resource_data["email"] = ""
             return updated_resource_data
 
-    def _deserialize_and_validate_resource_data(self, resource, resource_serializer):
+    def _deserialize_and_validate_resource_data(self, resource: Dict[str, Any], resource_serializer: Any) -> Dict[str, Any]:
+        """
+        Deserialize and validate resource data using the appropriate serializer.
+
+        This method validates resource data from the upstream service and attempts
+        to fix common validation errors. If validation fails and cannot be fixed,
+        the migration is halted.
+
+        Args:
+            resource: Resource data from upstream service
+            resource_serializer: Serializer class for the resource type
+
+        Returns:
+            Validated resource data ready for migration
+
+        Raises:
+            RuntimeError: If resource validation fails and cannot be corrected
+        """
         """
         Deserializes and validates resource data using the corresponding resource serializer class
         Returns the validated resource data
@@ -240,7 +362,26 @@ class Command(BaseCommand):
 
         return updated_resource_data
 
-    def _initialize_resource_sync_payloads(self, resource, user_partial_migration):
+    def _initialize_resource_sync_payloads(self, resource: Dict[str, Any], user_partial_migration: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Prepare payloads for creating Gateway resources and updating upstream resources.
+
+        This method sets up the data structures needed to:
+        1. Create a new resource in the Gateway
+        2. Update the corresponding resource in the upstream service
+
+        For partially migrated users, the Gateway resource retains the upstream
+        service_id to indicate it's not fully migrated.
+
+        Args:
+            resource: Resource data from upstream service
+            user_partial_migration: True if this is a user being partially migrated
+
+        Returns:
+            Tuple of (resource_creation_kwargs, updated_service_resource)
+            - resource_creation_kwargs: Data for creating Gateway resource
+            - updated_service_resource: Data for updating upstream resource
+        """
         """
         Prepare the initial data payloads required to create new resource in gateway and update the resource data in the upstream service.
         If resource type is 'shared.user' and is partially migrated, its `service_id` is set to upstream's service_id
@@ -269,7 +410,37 @@ class Command(BaseCommand):
 
         return resource_creation_kwargs, updated_service_resource
 
-    def _reconcile_existing_resource(self, resource, resource_context, validated_resource_data, updated_service_resource, should_merge):
+    def _reconcile_existing_resource(
+        self,
+        resource: Dict[str, Any],
+        resource_context: Dict[str, Any],
+        validated_resource_data: Dict[str, Any],
+        updated_service_resource: Dict[str, Any],
+        should_merge: bool,
+    ) -> Tuple[bool, Optional[Resource]]:
+        """
+        Handle conflicts with existing resources in the Gateway.
+
+        This method implements the core logic for handling cases where a resource
+        being migrated conflicts with an existing resource in the Gateway. It supports
+        three scenarios:
+
+        1. Same ansible_id: Update existing resource with correct service_id
+        2. Merge enabled: Link upstream resource to existing Gateway resource
+        3. No merge: Create new resource with unique name
+
+        Args:
+            resource: Resource data from upstream service
+            resource_context: Static data about the resource type
+            validated_resource_data: Validated resource data
+            updated_service_resource: Data for updating upstream resource
+            should_merge: Whether to merge with existing resources
+
+        Returns:
+            Tuple of (create_gateway_resource, existing_resource)
+            - create_gateway_resource: True if a new Gateway resource should be created
+            - existing_resource: Existing Gateway resource if found, None otherwise
+        """
         """
         this method compares the incoming resource against the existing local resources using a set of unique fields.
         Based on whether a match is found and whether a merge is requested, it prepares the `updated_service_resource`
@@ -341,7 +512,25 @@ class Command(BaseCommand):
 
         return create_gateway_resource, existing_resource
 
-    def _get_filtered_resources(self, filters, resource_type_name):
+    def _get_filtered_resources(self, filters: Dict[str, Any], resource_type_name: str) -> List[Dict[str, Any]]:
+        """
+        Retrieve and filter resources from the upstream service.
+
+        This method fetches resources from the upstream service API and applies
+        special filtering logic. For user resources, it excludes the system user
+        since Gateway excludes this in its own resources.
+
+        Args:
+            filters: API filters to apply when fetching resources
+            resource_type_name: Type of resource to fetch
+
+        Returns:
+            List of filtered resource data from upstream service
+
+        Note:
+            System users are filtered out for 'shared.user' resources to prevent
+            conflicts with Gateway's system user handling.
+        """
         """
         Retrieves and filters resources for a given resource type.
         """
@@ -357,7 +546,24 @@ class Command(BaseCommand):
             results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
         return results
 
-    def _process_and_migrate_resource_item(self, upstream_resource_item, resource_context):
+    def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any]) -> None:
+        """
+        Process and migrate a single resource item from upstream to Gateway.
+
+        This method handles the complete migration workflow for a single resource:
+        1. Fetch detailed resource data from upstream
+        2. Validate and prepare resource data
+        3. Handle conflicts with existing resources
+        4. Create/update Gateway resource and upstream resource atomically
+
+        Args:
+            upstream_resource_item: Basic resource data from upstream service list
+            resource_context: Static data about the resource type and migration settings
+
+        Note:
+            All operations are wrapped in a database transaction to ensure
+            consistency between Gateway and upstream service updates.
+        """
         """
         Carries out migration logic for an individual resource item, and
         then implement the migration by creating or updating a Gateway resource, and updating the upstream resource in a single database transaction
@@ -428,7 +634,27 @@ class Command(BaseCommand):
     is now managed externally by the Gateway.
     """
 
-    def migrate_resource(self, resource_type_name):
+    def migrate_resource(self, resource_type_name: str) -> None:
+        """
+        Migrate all resources of a specific type from upstream service to Gateway.
+
+        This method orchestrates the migration of all resources of a given type by:
+        1. Setting up resource type context and configuration
+        2. Continuously fetching unmigrated resources from upstream
+        3. Processing each resource through the migration pipeline
+        4. Stopping when no more resources remain to migrate
+
+        The migration uses a while loop because as resources are migrated,
+        their service_id is updated, which removes them from subsequent queries.
+        This eliminates the need for complex pagination logic.
+
+        Args:
+            resource_type_name: Type of resource to migrate (e.g., 'shared.organization')
+
+        Note:
+            Resources are migrated in dependency order: organizations first,
+            then teams (which depend on organizations), then users.
+        """
         """
         Get a list of resources from the upstream service and add them to the Gateway.
         Build a `resource_context` dict containing the data related to the current resource type to avoid code duplication
