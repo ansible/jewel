@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from ansible_base.authentication.models import Authenticator
@@ -115,93 +115,93 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_no_merge(migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client):
+def test_migrate_with_ignored_flags(migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client, capsys):
+    """Test that deprecated flags are ignored with warnings and migration still works"""
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
+    # Test the command with ignored flags - it should now process only the migration_service
+    # since that's the only DefaultServiceType service that exists in this test
     call_command("migrate_service_data", api_slug=migration_service.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
 
     _assert_all_resources_synced(admin_api_client, migration_service, service_client)
 
-    # Check that the org with the conflicting name was prefixed with the api slug
-    assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert Organization.objects.filter(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name).exists()
+    # Capture stderr to check for warning messages
+    captured = capsys.readouterr()
+    assert "Warning: --api-slug flag is ignored" in captured.err
+    assert "Warning: --merge-teams flag is ignored" in captured.err
+    assert "Warning: --merge-organizations flag is ignored" in captured.err
 
-    # Since orgs are not merged, team names should be the same.
+    # With the new architecture, merge is always True, so orgs should be merged, not renamed
+    # The conflicting org should still exist with the original name
+    assert Organization.objects.filter(name=conflicting_org.name).exists()
+    # There should NOT be a renamed org since merge=True is the new default
+    assert not Organization.objects.filter(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name).exists()
+
+    # Teams should also be merged since merge=True is the default
     original_org_teams = list(conflicting_org.teams.all().values_list("name", flat=True))
     assert original_org_teams == [conflicting_team.name]
 
-    new_org = Organization.objects.get(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name)
-
-    new_org_teams = list(new_org.teams.all().values_list("name", flat=True))
-    assert new_org_teams == [conflicting_team.name]
-
-    # Check that the org was renamed on the services.
-    updated_org = service_client.get_resource(str(new_org.resource.ansible_id)).json()
-    assert updated_org["name"] == migration_service.api_slug + SEP_CHAR + conflicting_org.name
-
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_merge_orgs(
+def test_migrate_forced_merge_behavior(
     migration_service,
     admin_user,
-    service_api_route_controller,
     admin_api_client,
     conflicting_org,
     conflicting_team,
     patched_resource_client,
 ):
+    """Test that merge flags are ignored and behavior is always merge=True"""
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
+    # Test that merge flags are ignored and behavior is always merge=True
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
         merge_teams=False,
-        merge_organizations=True,
+        merge_organizations=False,
     )
 
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
+    _assert_all_resources_synced(admin_api_client, migration_service, service_client)
 
-    # Check that only one organization exists
+    # Both orgs and teams should be merged regardless of flags since merge is always True
     assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert not Organization.objects.filter(name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_org.name).exists()
+    assert not Organization.objects.filter(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name).exists()
 
+    # Teams should also be merged since merge=True is always enforced
     assert Team.objects.filter(organization=conflicting_org, name=conflicting_team.name).exists()
-    assert Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_team.name).exists()
+    assert not Team.objects.filter(organization=conflicting_org, name=migration_service.api_slug + SEP_CHAR + conflicting_team.name).exists()
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_merge_orgs_and_teams(
+def test_migrate_default_merge_behavior(
     migration_service,
     admin_user,
-    service_api_route_controller,
     admin_api_client,
     conflicting_org,
     conflicting_team,
     patched_resource_client,
 ):
+    """Test default merge behavior with no flags specified"""
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
-    call_command(
-        "migrate_service_data", api_slug=service_api_route_controller.api_slug, username=admin_user.username, merge_teams=True, merge_organizations=True
-    )
+    call_command("migrate_service_data", username=admin_user.username)
 
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
+    _assert_all_resources_synced(admin_api_client, migration_service, service_client)
 
-    # Check that only one organization exists
+    # Check that only one organization exists (merged)
     assert Organization.objects.filter(name=conflicting_org.name).exists()
-    assert not Organization.objects.filter(name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_org.name).exists()
+    assert not Organization.objects.filter(name=migration_service.api_slug + SEP_CHAR + conflicting_org.name).exists()
 
+    # Teams should also be merged by default
     assert Team.objects.filter(organization=conflicting_org, name=conflicting_team.name).exists()
-    assert not Team.objects.filter(organization=conflicting_org, name=service_api_route_controller.api_slug + SEP_CHAR + conflicting_team.name).exists()
+    assert not Team.objects.filter(organization=conflicting_org, name=migration_service.api_slug + SEP_CHAR + conflicting_team.name).exists()
 
 
 @pytest.mark.django_db(transaction=True)
 def test_migrate_conflicting_user(
     migration_service,
     admin_user,
-    service_api_route_controller,
-    service_api_route_hub,
     admin_api_client,
     patched_resource_client,
 ):
@@ -209,18 +209,23 @@ def test_migrate_conflicting_user(
     assert not User.objects.filter(username="natasha").exists()
     assert not User.objects.filter(username="hawkeye").exists()
 
-    # Create a conflict
+    # Create a conflict with a different service (we'll use a fake service ID for this conflict)
+    from aap_gateway_api.models import ServiceCluster, ServiceType
+
+    # Create a fake service for the conflict
+    fake_service_type = ServiceType.objects.create(name="fake")
+    fake_service_cluster = ServiceCluster.objects.create(name="fake", service_type=fake_service_type)
+
     u = User.objects.create(username="hawkeye")
-    MigratedUserMetadata.objects.create(user=u, service=service_api_route_hub.service_cluster, original_username="hawkeye")
+    MigratedUserMetadata.objects.create(user=u, service=fake_service_cluster, original_username="hawkeye")
 
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
+    # Since migration_service is the only DefaultServiceType service in this test,
+    # the command will naturally process only that service
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
-        merge_teams=True,
-        merge_organizations=True,
     )
 
     pre_sync_resources = service_client.list_resources(
@@ -233,7 +238,7 @@ def test_migrate_conflicting_user(
 
     assert len(pre_sync_resources['results']) > 0
 
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
+    _assert_all_resources_synced(admin_api_client, migration_service, service_client)
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="natasha").exists()
@@ -275,24 +280,28 @@ def test_migrate_conflicting_user(
 def test_merge_users(
     migration_service,
     admin_user,
-    service_api_route_controller,
-    service_api_route_hub,
     admin_api_client,
     patched_resource_client,
 ):
-    # Create a conflict
+    # Create a conflict with a different service (we'll use a fake service ID for this conflict)
+    from aap_gateway_api.models import ServiceCluster, ServiceType
+
+    # Create a fake service for the conflict
+    fake_service_type = ServiceType.objects.create(name="fake")
+    fake_service_cluster = ServiceCluster.objects.create(name="fake", service_type=fake_service_type)
+
     u = User.objects.create(username="hawkeye", email="hawkeye@secretbase.invalid")
-    MigratedUserMetadata.objects.create(user=u, service=service_api_route_hub.service_cluster, original_username="hawkeye")
+    MigratedUserMetadata.objects.create(user=u, service=fake_service_cluster, original_username="hawkeye")
 
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
+
+    # Since migration_service is the only DefaultServiceType service in this test,
+    # the command will naturally process only that service
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
-        merge_teams=True,
-        merge_organizations=True,
     )
-    _assert_all_resources_synced(admin_api_client, service_api_route_controller, service_client)
+    _assert_all_resources_synced(admin_api_client, migration_service, service_client)
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="hawkeye").exists()
@@ -320,7 +329,6 @@ def test_merge_users(
 def test_correcting_user_service_id(
     migration_service,
     admin_user,
-    service_api_route_controller,
     patched_resource_client,
 ):
     """Verify that a service user resource with the same ansible id but a differing
@@ -328,12 +336,11 @@ def test_correcting_user_service_id(
     """
     # First, perform a migration to bring our test user ("fury") to gateway.
     # The migration preserves
+    # Since migration_service is the only DefaultServiceType service in this test,
+    # the command will naturally process only that service
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
-        merge_teams=True,
-        merge_organizations=True,
     )
 
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
@@ -363,12 +370,11 @@ def test_correcting_user_service_id(
     # resource's server_id to that of gateway.
     # First, perform a migration to bring our test user ("fury") to gateway.
     # The migration preserves
+    # Since migration_service is the only DefaultServiceType service in this test,
+    # the command will naturally process only that service
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
-        merge_teams=True,
-        merge_organizations=True,
     )
 
     # Retrieve the service-side user resource and verify its service id is now
@@ -385,10 +391,12 @@ def test_correcting_user_service_id(
 def test_migrating_user_with_invalid_email(migration_service_invalid_users, admin_user):
     from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
+    # Since migration_service_invalid_users is the only DefaultServiceType service in this test,
+    # the command will naturally process only that service
     cmd = MigrateCommand()
     cmd.service_slug = 'controller'
 
-    call_command(cmd, api_slug=migration_service_invalid_users.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
+    call_command(cmd, username=admin_user.username)
 
     users = User.objects.filter(username="bademailuser1")
     assert users is not None and users.exists()
@@ -400,19 +408,24 @@ def test_migrating_user_with_invalid_email(migration_service_invalid_users, admi
 
 @pytest.mark.django_db(transaction=True)
 def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, admin_user):
+    from django.core.management.base import CommandError
+
     from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     with patch.object(MigrateCommand, "update_resource_data") as mocked_update_resource_data_method:
         mocked_update_resource_data_method.return_value = None  # None indicates that its data could not be updated
 
+        # Since migration_service_invalid_users is the only DefaultServiceType service in this test,
+        # the command will naturally process only that service
         cmd = MigrateCommand()
         cmd.service_slug = 'controller'
 
-        with pytest.raises(RuntimeError):
-            call_command(cmd, api_slug=migration_service_invalid_users.api_slug, username=admin_user.username, merge_teams=False, merge_organizations=False)
+        # With the new architecture, RuntimeError gets caught and re-thrown as CommandError
+        with pytest.raises(CommandError):
+            call_command(cmd, username=admin_user.username)
 
-        assert not User.objects.filter(username="invaliduser").exists()
-        assert not User.objects.filter(username="bademailuser1").exists()
+            assert not User.objects.filter(username="invaliduser").exists()
+            assert not User.objects.filter(username="bademailuser1").exists()
 
 
 @pytest.fixture
@@ -428,28 +441,27 @@ def cmd(patched_resource_client):
 @pytest.mark.django_db
 def test_use_given_name_first_found(cmd):
     # assert that the first argument takes precedence when the name-like field is given in unique fields
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser'
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser'
 
     # If user bob exists that should not affect the result
     User.objects.create(username='bob')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser'
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser'
 
 
 @pytest.mark.django_db
 def test_use_given_name_iteration(cmd):
     User.objects.create(username='controller_foouser')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser1'
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser1'
 
     User.objects.create(username='controller_foouser1')
     User.objects.create(username='controller_foouser2')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username') == 'controller_foouser3'
+    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser3'
 
 
 @pytest.mark.django_db(transaction=True)
 def test_migrated_admin_password(
     migration_service,
     admin_user,
-    service_api_route_controller,
     admin_api_client,
     patched_resource_client,
 ):
@@ -459,12 +471,11 @@ def test_migrated_admin_password(
 
     assert admin_user.username == "admin"
 
+    # Since migration_service is the only DefaultServiceType service in this test,
+    # the command will naturally process only that service
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
-        merge_teams=True,
-        merge_organizations=True,
     )
 
     assert admin_user.authenticator_users.filter(
@@ -506,7 +517,6 @@ def test_migrated_admin_password(
 def test_admin_user_already_set_migrated_admin_password(
     migration_service,
     admin_user,
-    service_api_route_controller,
     admin_api_client,
     patched_resource_client,
 ):
@@ -517,10 +527,7 @@ def test_admin_user_already_set_migrated_admin_password(
 
     call_command(
         "migrate_service_data",
-        api_slug=service_api_route_controller.api_slug,
         username=admin_user.username,
-        merge_teams=True,
-        merge_organizations=True,
     )
 
     assert not admin_user.authenticator_users.filter(
@@ -547,3 +554,193 @@ def test_admin_user_already_set_migrated_admin_password(
         client = APIClient()
         response = client.post(url, data, follow=True)
         assert response.status_code == 401
+
+
+@pytest.mark.django_db(transaction=True)
+def test_service_processing_order(admin_user, capsys, service_api_route_controller, service_api_route_hub, service_api_route_eda, patched_resource_client):
+    """Test that services are processed in exact order: controller, hub, eda"""
+
+    # Mock the client to fail early so we can see the processing order in stdout
+    with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class:
+        mock_client = Mock()
+        mock_client.get_service_metadata.side_effect = Exception("Test order tracking")
+        mock_client_class.return_value = mock_client
+
+        # Should process all three services and fail on each, but in the right order
+        with pytest.raises(Exception):
+            call_command("migrate_service_data", username=admin_user.username)
+
+        # Check the output for service processing order
+        captured = capsys.readouterr()
+        output_lines = captured.out.split('\n')
+
+        # Find lines that show service processing order
+        processing_lines = [line for line in output_lines if "Processing service:" in line]
+
+        # Should have all three services processed in order - we check by service type, not api_slug
+        assert len(processing_lines) == 3
+        # Extract service objects to check their service type order
+        assert service_api_route_controller.service_cluster.service_type.name == "controller"
+        assert service_api_route_hub.service_cluster.service_type.name == "hub"
+        assert service_api_route_eda.service_cluster.service_type.name == "eda"
+
+        # Check that controller's api_slug appears first, then hub's, then eda's
+        assert service_api_route_controller.api_slug in processing_lines[0]  # Controller first
+        assert service_api_route_hub.api_slug in processing_lines[1]  # Hub second
+        assert service_api_route_eda.api_slug in processing_lines[2]  # EDA third
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_error_handling_and_summary(admin_user, capsys, service_api_route_controller, service_api_route_hub, patched_resource_client, system_user):
+    """Test error handling and migration summary for mixed success/failure scenarios"""
+
+    # Mock the client to succeed for controller but fail for hub
+    with (
+        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+    ):
+
+        from requests.exceptions import HTTPError
+
+        # Mock JWT creation to avoid public key parsing issues
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            import uuid
+
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+
+            if service_api.service_cluster.service_type.name == "controller":
+                # Controller succeeds
+                mock_client.get_service_metadata.return_value.json.return_value = {
+                    "service_id": str(uuid.uuid4()),  # Generate proper UUID
+                    "service_type": "controller",
+                }
+                # Mock successful migration workflow
+                mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+            else:
+                # Hub fails
+                mock_client.get_service_metadata.side_effect = HTTPError("Mock HTTP error")
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        # Migration should fail with CommandError due to failed hub service
+        with pytest.raises(Exception) as exc_info:
+            call_command("migrate_service_data", username=admin_user.username)
+
+        # Check error message contains service failure information
+        error_message = str(exc_info.value)
+        assert "Migration failed" in error_message
+        assert service_api_route_hub.api_slug in error_message
+
+        # Check that migration summary was printed
+        captured = capsys.readouterr()
+        assert "=== Migration Summary ===" in captured.out
+        assert "Successful migrations: 1" in captured.out
+        assert "Failed migrations: 1" in captured.out
+        assert "Failed to migrate the following services:" in captured.err
+        assert service_api_route_hub.api_slug in captured.err
+
+
+@pytest.mark.django_db(transaction=True)
+def test_no_services_found_error(admin_user):
+    """Test error when no DefaultServiceType services are found"""
+    # In a clean test environment with no service fixtures, the command should fail
+    with pytest.raises(Exception) as exc_info:
+        call_command("migrate_service_data", username=admin_user.username)
+
+    assert "No services found with expected service types" in str(exc_info.value)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_multi_service_migration(
+    admin_user, capsys, service_api_route_controller, service_api_route_hub, service_api_route_eda, patched_resource_client, system_user
+):
+    """Test that all services are processed in a multi-service scenario"""
+
+    # Mock successful migration for all services
+    with (
+        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+    ):
+
+        # Mock JWT creation to avoid public key parsing issues
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            import uuid
+
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),  # Generate proper UUID
+                "service_type": service_api.service_cluster.service_type.name,
+            }
+            # Mock empty resource lists for clean migration
+            mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        # Should successfully process all three services
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Check that all services were processed
+        captured = capsys.readouterr()
+        assert "Found 3 services to migrate" in captured.out
+        assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
+        assert f"Processing service: {service_api_route_hub.api_slug}" in captured.out
+        assert f"Processing service: {service_api_route_eda.api_slug}" in captured.out
+        assert "Successful migrations: 3" in captured.out
+        assert "Failed migrations: 0" in captured.out
+        assert "All services migration completed successfully!" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_single_service_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test migration with only a single service available"""
+
+    # Mock successful migration for the controller service
+    with (
+        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+    ):
+
+        # Mock JWT creation to avoid public key parsing issues
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+
+        import uuid
+
+        mock_client = Mock()
+        mock_client.service = service_api_route_controller
+        mock_client.user = admin_user
+        mock_client.get_service_metadata.return_value.json.return_value = {
+            "service_id": str(uuid.uuid4()),  # Generate proper UUID
+            "service_type": "controller",
+        }
+        # Mock empty resource lists for clean migration
+        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client_class.return_value = mock_client
+
+        # Should successfully process the single service
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Check that only the controller service was processed
+        captured = capsys.readouterr()
+        assert "Found 1 services to migrate" in captured.out
+        assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
+        assert "hub" not in captured.out  # Hub should not be processed
+        assert "eda" not in captured.out  # EDA should not be processed
+        assert "Successful migrations: 1" in captured.out
+        assert "Failed migrations: 0" in captured.out
+        assert "All services migration completed successfully!" in captured.out

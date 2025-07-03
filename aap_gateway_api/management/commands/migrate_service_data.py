@@ -8,9 +8,9 @@ from ansible_base.resource_registry.models import Resource, ResourceType, servic
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AbstractUser
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
-from requests.exceptions import HTTPError
 
 from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceType
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
@@ -55,25 +55,25 @@ class Command(BaseCommand):
         """
         services = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value).values_list("api_slug", flat=True)
 
-        parser.add_argument("--api-slug", type=str, help="API slug for the ServiceAPIRoute that you wish to migrate.", choices=services, required=True)
+        parser.add_argument(
+            "--api-slug",
+            type=str,
+            help="[IGNORED] API slug for the ServiceAPIRoute that you wish to migrate. This flag is now ignored as the command processes all services.",
+            choices=services,
+            required=False,
+        )
         parser.add_argument("--username", type=str, help="Username for the AAP Gateway user to use on the request. Must be an admin user.", required=True)
         parser.add_argument(
             "--merge-teams",
             type=bool,
-            help=(
-                "If true, teams with the same names on different services will be combined. NOTE: this can potentially lead to"
-                " escalation of privileges, as users who are in Team A in service A, will also end up in Team A on service B, even "
-                "if they weren't before."
-            ),
-            default=False,
+            help=("[IGNORED] If true, teams with the same names on different services will be combined. " "This flag is now ignored and defaults to True."),
+            default=True,
         )
         parser.add_argument(
             "--merge-organizations",
             type=bool,
             help=(
-                "If true, organizations with the same names on different services will be combined. NOTE: this can potentially lead to"
-                " escalation of privileges, as users and resources who are in Org A in service A, will also end up in Org A on service "
-                "B, even if they weren't before."
+                "[IGNORED] If true, organizations with the same names on different services will be combined. " "This flag is now ignored and defaults to True."
             ),
             default=True,
         )
@@ -95,9 +95,21 @@ class Command(BaseCommand):
         Raises:
             CommandError: If service doesn't exist, user doesn't exist, or migration fails
         """
-        self.service_slug = options["api_slug"]
-        merge_teams = options["merge_teams"]
-        merge_organizations = options["merge_organizations"]
+        # Show warnings for ignored flags
+        if options.get("api_slug"):
+            self.stderr.write(
+                self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
+            )
+
+        if "merge_teams" in options:
+            self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
+
+        if "merge_organizations" in options:
+            self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
+
+        # Force merge options to True as per requirements
+        merge_teams = True
+        merge_organizations = True
         username = options["username"]
 
         # The order here matters. Organizations need to be migrated first.
@@ -127,62 +139,144 @@ class Command(BaseCommand):
         }
 
         try:
-            service_api = ServiceAPIRoute.objects.get(api_slug=self.service_slug)
-        except ServiceAPIRoute.DoesNotExist:
-            raise CommandError(f"Service with API slug {self.service_slug} does not exist.")
-
-        try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:
             raise CommandError(f"Username {username} does not exist")
 
+        # Get all services with DefaultServiceType in exact order: controller, hub, eda
+        service_type_order = [
+            DefaultServiceType.CONTROLLER.value,
+            DefaultServiceType.HUB.value,
+            DefaultServiceType.EDA.value,
+        ]
+
+        service_apis_dict = {
+            api.service_cluster.service_type.name: api for api in ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=service_type_order)
+        }
+
+        service_apis = [service_apis_dict[service_type] for service_type in service_type_order if service_type in service_apis_dict]
+
+        if not service_apis:
+            raise CommandError(f"No services found with expected service types: {', '.join(service_type_order)}")
+
+        self.stdout.write(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}")
+
+        # Track migration results
+        migration_results = {}
+        successful_services = []
+        failed_services = []
+
+        # Process each service
+        for service_api in service_apis:
+            service_slug = service_api.api_slug
+            self.stdout.write(f"\n=== Processing service: {service_slug} ===")
+
+            try:
+                # Process a single service migration
+                success, error_msg = self._migrate_single_service(service_api, service_slug, user)
+                if success:
+                    successful_services.append(service_slug)
+                    migration_results[service_slug] = {"status": "success", "error": None}
+                else:
+                    failed_services.append(service_slug)
+                    migration_results[service_slug] = {"status": "failed", "error": error_msg}
+            except Exception as e:
+                error_msg = str(e)
+                self.stderr.write(f"Error migrating service {service_slug}: {error_msg}")
+                failed_services.append(service_slug)
+                migration_results[service_slug] = {"status": "failed", "error": error_msg}
+                continue
+
+        # Provide comprehensive summary
+        self.stdout.write("\n=== Migration Summary ===")
+        self.stdout.write(f"Total services processed: {len(migration_results)}")
+        self.stdout.write(f"Successful migrations: {len(successful_services)}")
+        self.stdout.write(f"Failed migrations: {len(failed_services)}")
+
+        if successful_services:
+            self.stdout.write(f"\nSuccessfully migrated services: {', '.join(successful_services)}")
+
+        if failed_services:
+            self.stderr.write("\nFailed to migrate the following services:")
+            for service_slug in failed_services:
+                error = migration_results[service_slug]["error"]
+                self.stderr.write(f"  - {service_slug}: {error}")
+
+            raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. " "See error details above.")
+        else:
+            self.stdout.write("\nAll services migration completed successfully!")
+
+    def _migrate_single_service(
+        self,
+        service_api: ServiceAPIRoute,
+        service_slug: str,
+        user: AbstractUser,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Migrate data from a single service.
+
+        Args:
+            service_api: ServiceAPIRoute instance for the service
+            service_slug: API slug for the service
+            user: User to perform the migration as
+
+        Returns:
+            Tuple of (success: bool, error_message: Optional[str])
+        """
         # TODO: switch user out for _system. Need to get more fine grained permissions in resources
         # api merged first.
         self.client = GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
-        try:
-            self.stdout.write("Starting migration")
+        self.stdout.write("Starting migration")
 
-            self.stdout.write("Getting service metadata")
-            service_metadata = self.client.get_service_metadata().json()
+        self.stdout.write("Getting service metadata")
+        service_metadata = self.client.get_service_metadata().json()
 
-            self.upstream_service_id = service_metadata["service_id"]
-            # Preserve coersion of awx -> controller and galaxy -> hub
-            if service_metadata["service_type"].casefold() == "awx".casefold():
-                service_type_name = DefaultServiceType.CONTROLLER.value
-            elif service_metadata["service_type"].casefold() == "galaxy".casefold():
-                service_type_name = DefaultServiceType.HUB.value
-            else:
-                service_type_name = service_metadata["service_type"]
-            upstream_service_type = ServiceType.objects.filter(name=service_type_name).first()
-            if upstream_service_type is None:
-                raise CommandError(f"Migrations are not allowed for services of type {service_metadata['service_type']}")
+        self.upstream_service_id = service_metadata["service_id"]
+        # Preserve coercion of awx -> controller and galaxy -> hub
+        if service_metadata["service_type"].casefold() == "awx".casefold():
+            service_type_name = DefaultServiceType.CONTROLLER.value
+        elif service_metadata["service_type"].casefold() == "galaxy".casefold():
+            service_type_name = DefaultServiceType.HUB.value
+        else:
+            service_type_name = service_metadata["service_type"]
+        upstream_service_type = ServiceType.objects.filter(name=service_type_name).first()
+        if upstream_service_type is None:
+            error_msg = f"Migrations are not allowed for services of type {service_metadata['service_type']}"
+            self.stderr.write(f"Skipping service {service_slug}: {error_msg}")
+            return False, error_msg
 
-            if upstream_service_type.name != service_api.service_cluster.service_type.name:
-                raise CommandError(
-                    f"Service type mismatch: Service {self.service_slug} is configured as type {service_api.service_cluster.service_type.name},"
-                    f" but the server is reporting type {upstream_service_type.name}"
-                )
-
-            service_api.service_cluster.service_id = self.upstream_service_id
-            service_api.service_cluster.save()
-
-            self.stdout.write(
-                f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
+        if upstream_service_type.name != service_api.service_cluster.service_type.name:
+            error_msg = (
+                f"Service type mismatch: "
+                f"Service is configured as type {service_api.service_cluster.service_type.name}, "
+                f"but the server is reporting type {upstream_service_type.name}"
             )
+            self.stderr.write(f"Skipping service {service_slug}: {error_msg}")
+            return False, error_msg
 
-            self.migrate_controller_admin()
+        service_api.service_cluster.service_id = self.upstream_service_id
+        service_api.service_cluster.save()
 
-            for r_type in self.resource_types_to_migrate.keys():
-                self.migrate_resource(r_type)
+        self.stdout.write(
+            f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
+        )
 
-            self.stdout.write("Done")
+        self.migrate_controller_admin()
 
-        except HTTPError as e:
-            raise CommandError("Bad API request: " + str(e))
+        for r_type in self.resource_types_to_migrate.keys():
+            self.migrate_resource(r_type, service_slug)
+
+        self.stdout.write(f"Completed migration for service: {service_slug}")
+        return True, None
 
     def get_new_resource_name(
-        self, name: str, unique_filter_kwargs: Dict[str, Any], LocalResourceModel: Type[models.Model], resource_type_name_field: str
+        self,
+        name: str,
+        unique_filter_kwargs: Dict[str, Any],
+        LocalResourceModel: Type[models.Model],
+        resource_type_name_field: str,
+        service_slug: str,
     ) -> str:
         """
         Generate a unique name for a resource that doesn't conflict with existing resources.
@@ -203,7 +297,7 @@ class Command(BaseCommand):
         Example:
             If 'my-org' exists, will return 'service_my-org' or 'service_my-org1'
         """
-        original_name = f'{self.service_slug}_{name}'
+        original_name = f'{service_slug}_{name}'
         name = original_name
 
         filter_kwargs = unique_filter_kwargs.copy()
@@ -417,6 +511,7 @@ class Command(BaseCommand):
         validated_resource_data: Dict[str, Any],
         updated_service_resource: Dict[str, Any],
         should_merge: bool,
+        service_slug: str,
     ) -> Tuple[bool, Optional[Resource]]:
         """
         Handle conflicts with existing resources in the Gateway.
@@ -435,6 +530,7 @@ class Command(BaseCommand):
             validated_resource_data: Validated resource data
             updated_service_resource: Data for updating upstream resource
             should_merge: Whether to merge with existing resources
+            service_slug: API slug for the service being migrated
 
         Returns:
             Tuple of (create_gateway_resource, existing_resource)
@@ -505,7 +601,7 @@ class Command(BaseCommand):
         # We change the name of the resource and update it on the upstream service
         # Create a new resource in the Gateway with the updated name
         elif str(existing_resource.ansible_id) != resource_ansible_id:
-            new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field)
+            new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field, service_slug)
             resource["resource_data"][resource_type_name_field] = new_name
             updated_service_resource["resource_data"] = resource["resource_data"]
             logger.warning(f"Creating new {resource_type.name} with new name {resource['name']}.")
@@ -546,7 +642,7 @@ class Command(BaseCommand):
             results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
         return results
 
-    def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any]) -> None:
+    def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any], service_slug: str) -> None:
         """
         Process and migrate a single resource item from upstream to Gateway.
 
@@ -559,6 +655,7 @@ class Command(BaseCommand):
         Args:
             upstream_resource_item: Basic resource data from upstream service list
             resource_context: Static data about the resource type and migration settings
+            service_slug: API slug for the service being migrated
 
         Note:
             All operations are wrapped in a database transaction to ensure
@@ -592,7 +689,7 @@ class Command(BaseCommand):
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
         create_gateway_resource, existing_resource = self._reconcile_existing_resource(
-            resource, resource_context, validated_resource_data, updated_service_resource, should_merge
+            resource, resource_context, validated_resource_data, updated_service_resource, should_merge, service_slug
         )
 
         # Run this as a transaction so that if the REST call to update the resource on the service fails
@@ -634,7 +731,7 @@ class Command(BaseCommand):
     is now managed externally by the Gateway.
     """
 
-    def migrate_resource(self, resource_type_name: str) -> None:
+    def migrate_resource(self, resource_type_name: str, service_slug: str) -> None:
         """
         Migrate all resources of a specific type from upstream service to Gateway.
 
@@ -650,6 +747,7 @@ class Command(BaseCommand):
 
         Args:
             resource_type_name: Type of resource to migrate (e.g., 'shared.organization')
+            service_slug: API slug for the service being migrated
 
         Note:
             Resources are migrated in dependency order: organizations first,
@@ -704,4 +802,4 @@ class Command(BaseCommand):
                 break
 
             for upstream_resource_item in results:
-                self._process_and_migrate_resource_item(upstream_resource_item, resource_context)
+                self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
