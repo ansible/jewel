@@ -26,10 +26,14 @@ register(
 register(
     section="proxy",
     preference_name="jwt_expiration_buffer_in_seconds",
-    default=2,
+    default=15,
     required=True,
     preference_type="int",
-    help_text=_("The number of seconds before a JWT token's expiration to revoke it from the cache."),
+    help_text=_(
+        "Time, in seconds, prior to token expiration time when the token will be removed from cache. "
+        "Smaller numbers will increase how long the tokens are kept in cache "
+        "however it can increase the chance the token would expire while being used."
+    ),
     encrypted=False,
 )
 
