@@ -5,8 +5,12 @@ from ansible_base.lib.utils.validation import validate_image_data
 from cryptography.hazmat.primitives import serialization
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+from django.forms import JSONField
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
+from rest_framework.fields import ListField
+
+from aap_gateway_api.preferences.serializers import JSONSerializer
 
 logger = logging.getLogger("aap.gateway.preference_types")
 
@@ -69,3 +73,27 @@ class IntRangePreference(types.IntegerPreference):
         """Validate the value is between the min and max values"""
         if value < min_value or value > max_value:
             raise ValidationError(_("Must be an integer between %(min)d and %(max)d") % {"min": min_value, "max": max_value})
+
+
+class JSONPreference(types.BasePreferenceType):
+    field_class = JSONField
+    serializer = JSONSerializer
+
+
+class StringListPreference(JSONPreference):
+    field_class = ListField
+    serializer = JSONSerializer
+    _validation_error_bad_type_text = _('Input must be a list of strings. ex: ["list", "of", "strings"]')
+
+    # Provide helper to override, if you just want to change the error message to a subclass-specific error
+    # when running superclass validation and it fails to even be a list of strings
+    def _raise_bad_type_validation_error(self):
+        raise ValidationError(self._validation_error_bad_type_text)
+
+    def validate(self, value):
+        if not isinstance(value, list):
+            self._raise_bad_type_validation_error()
+
+        for item in value:
+            if not isinstance(item, str):
+                self._raise_bad_type_validation_error()

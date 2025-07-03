@@ -9,8 +9,18 @@ from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
 from rest_framework import serializers
 
+from aap_gateway_api.fields.serializers import JSONListField
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePreference, MimeTypedImagePreference, PEMPrivateKeyPreference, URLPreference
+from aap_gateway_api.preferences.serializers import JSONString
+from aap_gateway_api.preferences.types import (
+    FloatRangePreference,
+    IntRangePreference,
+    JSONPreference,
+    MimeTypedImagePreference,
+    PEMPrivateKeyPreference,
+    StringListPreference,
+    URLPreference,
+)
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
@@ -33,9 +43,16 @@ def get_preference_value_by_preference(preference: object, encrypted: bool = Tru
     return get_preference_value(preference.section.name, preference.name, encrypted)
 
 
+def get_encrypted_string_for_preference(preference: object) -> str:
+    # JSONPreferences and their subclasses need this to attach breadcrumbs for proper HTML form rendering
+    if isinstance(preference, JSONPreference):
+        return JSONString(ENCRYPTED_STRING)
+    return ENCRYPTED_STRING
+
+
 def get_default_value_by_preference(preference: object, encrypted: bool = True) -> str:
     if encrypted:
-        return ENCRYPTED_STRING
+        return get_encrypted_string_for_preference(preference)
     return getattr(preference, 'default', None)
 
 
@@ -58,9 +75,9 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
     preference_name = get_preference_key(section, name)
     value = gateway_preference_registry.manager().get(preference_name)
 
-    if gateway_preference_registry.get(name, section).encrypted:
+    if (preference := gateway_preference_registry.get(name, section)).encrypted:
         if encrypted:
-            return ENCRYPTED_STRING
+            return get_encrypted_string_for_preference(preference)
         # Note: values can be retrieved from cache instead of the DB.
         # However, decrypt_string() can identify encrypted values and decrypt them,
         # returning the non encrypted values unchanged.
@@ -97,6 +114,8 @@ PREFERENCE_TYPE_CLASS_TO_SERIALIZER_FIELD_MAPPING = {
     IntRangePreference: serializers.IntegerField,
     FloatRangePreference: serializers.FloatField,
     MimeTypedImagePreference: serializers.CharField,
+    JSONPreference: serializers.JSONField,
+    StringListPreference: JSONListField,
 }
 
 # Maps string-based type identifiers to their corresponding preference type classes
@@ -110,6 +129,8 @@ _PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING = {
     "image": MimeTypedImagePreference,
     "int_range": IntRangePreference,
     "float_range": FloatRangePreference,
+    "json": JSONPreference,
+    "string_list": StringListPreference,
 }
 
 

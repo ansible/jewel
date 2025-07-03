@@ -1,10 +1,14 @@
+from http import HTTPStatus
+from types import NoneType
+
 import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
-from aap_gateway_api.utils.preferences import update_preference_value
+from aap_gateway_api.preferences.types import StringListPreference
+from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
 from aap_gateway_api.views.api.v1.preference import SettingSectionViewSet
 
 
@@ -397,3 +401,96 @@ def test_get_and_delete_invalid_setting_preference(admin_api_client):
     delete_response = admin_api_client.delete(url)
     assert delete_response.status_code == 404
     assert delete_response.data['detail'] == "Preference 'hello123' in category 'proxy' was not found. Action was not performed."
+
+
+@pytest.mark.parametrize(
+    ("preference_type", "value", "expected_type", "encrypted"),
+    [
+        ("json", None, NoneType, False),
+        ("json", "somestr", str, False),
+        ("json", {}, dict, False),
+        ("json", [], list, False),
+        ("json", None, NoneType, True),
+        ("json", "somestr", str, True),
+        ("json", {}, dict, True),
+        ("json", [], list, True),
+        ("json", ["string"], list, True),
+        ("json", ["string"], list, False),
+        ("string_list", [], list, False),
+        ("string_list", ["string"], list, False),
+        ("string_list", [], list, True),
+        ("string_list", ["string"], list, True),
+    ],
+)
+def test_json_preferences(admin_api_client, register_preference, preference_type, value, expected_type, encrypted):
+    register_preference(
+        section="testing",
+        preference_name="test_preference",
+        default=None,
+        required=False,
+        encrypted=encrypted,
+        preference_type=preference_type,
+        help_text="This is a test preference",
+    )
+    expected_response_type = expected_type
+    expected_response_value = value
+    if encrypted:
+        expected_response_type = str
+        expected_response_value = ENCRYPTED_STRING
+
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "testing"})
+
+    response = admin_api_client.put(url, data={"test_preference": value}, format="json")
+    assert response.status_code == HTTPStatus.OK, f"{response.content}"
+
+    response = admin_api_client.get(url)
+    assert response.status_code == HTTPStatus.OK
+    assert "test_preference" in response.data
+    assert isinstance(response.data["test_preference"], expected_response_type)
+    assert response.data["test_preference"] == expected_response_value
+
+    actual_preference_value = get_preference_value("testing", "test_preference", encrypted=False)
+    assert isinstance(actual_preference_value, expected_type)
+    assert actual_preference_value == value
+
+
+@pytest.mark.parametrize(
+    ("bad_input"),
+    [
+        "not a list",
+        [1],
+        {"test_string_list_preference": []},
+    ],
+)
+def test_string_list_preference_bad_path(admin_api_client, register_preference, bad_input):
+    register_preference(
+        section="testing",
+        preference_name="test_string_list_preference",
+        default=[],
+        required=False,
+        preference_type="string_list",
+        help_text="This is a test preference",
+    )
+
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "testing"})
+    response = admin_api_client.put(url, data={"test_string_list_preference": bad_input}, format="json")
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert StringListPreference._validation_error_bad_type_text in response.content.decode("unicode_escape")
+
+
+# If this fails, UI will have problems rendering the setting properly
+def test_string_list_preference_options(admin_api_client, register_preference):
+    register_preference(
+        section="testing",
+        preference_name="test_string_list_preference",
+        default=[],
+        required=False,
+        encrypted=False,
+        preference_type="string_list",
+        help_text="This is a test preference",
+    )
+
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "testing"})
+
+    response = admin_api_client.options(url)
+    assert response.data["actions"]["PUT"]["test_string_list_preference"]["type"] == "list"
