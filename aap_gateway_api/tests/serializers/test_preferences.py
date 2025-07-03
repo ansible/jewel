@@ -4,6 +4,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from django.test import override_settings
 
 from aap_gateway_api.models import Preference
+from aap_gateway_api.serializers.preferences import SettingSectionSerializer
 
 
 @override_settings(AOC_UNCHANGEABLE_PREFERENCES=['gateway_token_name'])
@@ -75,3 +76,20 @@ def test_secret_field_retains_original_value_when_passed_encrypted_marker(admin_
     # and preference_2 preserves its original value
     assert preference_1.value == 'i_am_updated'
     assert preference_2.value == 'two'
+
+
+def test_json_strings_are_not_double_deserialized(admin_api_client, register_preference):
+    """
+    Ensure that JSON preferences that are strings have their html form values rendered without being wrapped with json.dumps
+    """
+    register_preference(section='testing', preference_name='preference_1', default='one', encrypted=False, preference_type="json")
+    register_preference(section='testing', preference_name='preference_2', default='two', encrypted=True, preference_type="json")
+
+    preferences = SettingSectionSerializer(category_slug="testing")
+    # Get the actual values of these preferences, or '$encrypted$' if encrypted
+    preference_1 = preferences.data["preference_1"]
+    preference_2 = preferences.data["preference_2"]
+
+    # Compare the actual values to their DRF HTML form fields, which should not fail for these particular preferences
+    assert preference_1 == preferences["preference_1"].as_form_field().value
+    assert preference_2 == preferences["preference_2"].as_form_field().value

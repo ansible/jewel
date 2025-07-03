@@ -1,11 +1,18 @@
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from rest_framework.metadata import SimpleMetadata
 
+from aap_gateway_api.fields.serializers import JSONListField
+
 
 class SettingsPreferenceMetadata(SimpleMetadata):
     """
     This custom metadata class is used to include the "default" field in the response
     """
+
+    def __init__(self):
+        super().__init__()
+        # Add some additional type annotations for UI to use to select the correct form widgets
+        self.label_lookup[JSONListField] = "list"
 
     def get_field_info(self, field):
         """

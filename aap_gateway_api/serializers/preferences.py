@@ -88,7 +88,10 @@ class SettingSectionSerializer(serializers.Serializer):
             # First, convert the raw input to appropriate python
             # For boolean fields, to_python() expects a string, so we convert the input accordingly.
             # If the conversion fails, to_python() will raise a ValidationError.
-            converted_value = registered_preference.serializer.to_python(str(new_value))
+            # we pass in str(new_value), replacing ' with " as a workaround for JSONPreferences because json.loads fails if the JSON string does not use
+            # double quotes, no idea why.
+            converter_arg = str(new_value).replace("'", '"') if new_value is not None else None
+            converted_value = registered_preference.serializer.to_python(converter_arg)
 
             # Second, perform a usual validation
             registered_preference.validate(converted_value)
