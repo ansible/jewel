@@ -2,7 +2,7 @@ SHELL=/bin/bash
 
 # Prefer python 3.11 but take python3 if 3.11 is not installed
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
-CHECK_SYNTAX_FILES ?= .
+CHECK_SYNTAX_FILES ?= aap_gateway_api/ aap-dev/ ansible_platform_collection/
 RM ?= /bin/rm
 UID := $(shell id -u)
 TOX_ARGS ?= ""
