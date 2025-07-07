@@ -215,3 +215,99 @@ The plumb playbook will:
 * Backup and configure a tacacsplus authenticator in gateway. NOTE: this will back up your existing settings but the password fields can not be backed up through the API, you need a DB backup to recover this.
 
 Once the playbook is done running tacacs+ should now be setup in your development environment. This server has the accounts listed on https://hub.docker.com/r/dchidell/docker-tacacs
+
+# Branching Strategy
+We currently have 2 branches in aap-gateway:
+* `devel` (our development branch)
+* `stable-2.5` (our 2.5 release branch)
+
+This has been acceptable since we only needed to support and maintain one version of gateway. However, since we are now moving onto building 2.6 we need to expand our branching strategy. Some of our lessons learned from 2.5 include:
+* Causing ourselves backporting issues from having features partially merged
+* Having to decide to reorder stable-2.5 or ship unplanned fixes to get a CVE out
+
+Based on these we are going to implement the following branching strategy in the AAP gateway repo:
+
+```mermaid
+---
+config:
+  logLevel: 'debug'
+  theme: 'base'
+  gitGraph:
+    showBranches: true
+    showCommitLabel: true
+    mainBranchName: 'devel'
+---
+      gitGraph
+        commit id: "base"
+        commit id: "2.5 Fix 1"
+        commit id: "2.5 Fix 2"
+        branch "stable-2.5"
+        cherry-pick id:"2.5 Fix 1" tag:"2.5.20250702"
+        checkout devel
+        commit id:"2.5 CVE 1"
+        checkout "stable-2.5"
+        cherry-pick id:"2.5 CVE 1" tag:"2.5.20250712"
+        branch "unreleased-2.5"
+        commit id:"2.5 Fix 3"
+        commit id:"2.5 CVE 2"
+        checkout "stable-2.5"
+        cherry-pick id:"2.5 CVE 2" tag:"2.5.20250714"
+        checkout "unreleased-2.5"
+        commit id:"2.5 Fix 4 (no need to backport)"
+        checkout "stable-2.5"
+        cherry-pick id:"2.5 Fix 3" tag:""
+        cherry-pick id:"2.5 Fix 4 (no need to backport)" tag:"2.5.20250730"
+        checkout devel
+        cherry-pick id:"2.5 Fix 3" tag:""
+        branch "2.6 Feature AAP-123"
+        branch "2.6 Feature AAP-456"
+        branch "2.6 Feature AAP-789"
+        checkout "2.6 Feature AAP-123"
+        commit id:"2.6 Feat 123 1"
+        commit id:"2.6 Feat 123 2 (feat complete)"
+        checkout "2.6 Feature AAP-456"
+        commit "2.6 Feat 456 1 (feature complete)"
+        checkout "2.6 Feature AAP-789"
+        commit id:"2.6 Feat 789 1"
+        commit id:"2.6 Feat 789 2 (feature descoped)" type: REVERSE
+        checkout devel
+        commit id:"2.6 No Feat Bug fix"
+        checkout devel
+        merge "2.6 Feature AAP-123"
+        commit id:"2.6 No Feat Change"
+        merge "2.6 Feature AAP-456"
+        branch "stable-2.6"
+        commit id:"Initial 2.6 release" tag:"20251030" type: HIGHLIGHT
+```
+This branching strategy introduces several types of branches, each serving a specific purpose:
+
+## Core Branches
+*devel* - The main development branch where all new features and bug fixes are initially developed and merged
+*stable-2.x* - Long-lived release branches (e.g., stable-2.5, stable-2.6) that contain only production-ready code for each major version
+*unreleased-2.5* - Staging branches for 2.5 backported fixes that haven't been released yet
+
+## Feature Branches
+*2.x Feature AAP-XXX* - Shorter-lived branches for developing individual features, named after their corresponding JIRA tickets
+Features are developed in isolation and merged back to devel when complete.
+Features can be descoped if needed before release and their code will not be introduced into devel.
+
+## Workflow Patterns
+### Bug Fixes and Security Patches
+*Development*: All 2.6 fixes are initially developed on devel. All 2.5 fixes are initially developer on unreleased-2.5.
+*Backporting*: Important fixes are cherry-picked to relevant stable-2.x branches
+*Release*: Tagged releases are created from stable-2.x branches with appropriate version numbers
+
+### Feature Development
+*Branch Creation*: Feature branches are created from devel for each new feature
+*Development*: Features are developed in isolation on their respective branches
+*Integration*: Completed features (including ATF test completion) are merged back to devel
+*Release Preparation*: When ready for the initial release, a new stable-2.6 branch will be created from devel
+
+## Benefits of This Strategy
+*Isolated Development*: Features can be developed independently without affecting other work
+*Flexible Backporting*: Critical fixes can be selectively backported to supported versions
+*Release Control*: Each release branch maintains stability while allowing continued development
+*CVE Management*: Security fixes can be rapidly deployed without waiting for feature completion
+*Feature Flexibility*: Features can be easily descoped if they're not ready for release
+
+This strategy addresses the previous challenges by providing clear separation between feature development and maintenance work, while enabling flexible release management and easier backporting processes.
