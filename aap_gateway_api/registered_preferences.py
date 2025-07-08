@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.utils import register
@@ -266,6 +267,18 @@ register(
 )
 
 register(
+    section="configuration",
+    preference_name="AAP_DEPLOYMENT_TYPE",
+    required=True,
+    default=getattr(settings, "AAP_DEPLOYMENT_TYPE", "self-managed"),
+    preference_type="string",
+    help_text=_("The deployment type for this instance."),
+    encrypted=False,
+    read_only=True,
+    settings_bound=True,
+)
+
+register(
     section="oauth2_provider",
     preference_name="ALLOW_OAUTH2_FOR_EXTERNAL_USERS",
     default=False,
@@ -371,4 +384,27 @@ register(
     preference_type="int_range",
     help_text=_("The maximum number of items allowed on a list page"),
     encrypted=False,
+)
+
+register(
+    section="notification",
+    preference_name="NOTIFICATION_RSS_FEED_URL",
+    required=True,
+    default=getattr(settings, "NOTIFICATION_RSS_FEED_URL", "https://announcements.ansiblecloud.redhat.com/feed.atom"),
+    preference_type="string",
+    help_text=_("URL for RSS feeds from which to load user notifications"),
+    encrypted=False,
+    read_only=True,
+    settings_bound=True,
+)
+
+register(
+    section="notification",
+    preference_name="NOTIFICATION_RSS_FEED_ENABLED",
+    required=True,
+    default=True,
+    preference_type="bool",
+    help_text=_("Enable or disable user notifications"),
+    encrypted=False,
+    read_only=False,
 )
