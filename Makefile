@@ -292,3 +292,12 @@ collection-docs: collection-install
 collection-lint: collection-install
 	# ansible-lint gets its settings from ansible_platform_collection/.ansible-lint
 	cd ansible_platform_collection && ansible-lint
+
+
+
+# Hygiene
+# --------------------------------------
+
+## List open PRs and branches older than 6 months
+hygiene-gh-old:
+	./tools/scripts/github-hygiene.sh
