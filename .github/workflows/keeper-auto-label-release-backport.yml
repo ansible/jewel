@@ -1,0 +1,150 @@
+---
+# GitHub Repository Automations - Keeper: auto-label release and backport
+# MIT License
+# Source: https://github.com/thenets/repo-automations
+
+name: "Keeper: auto-label release and backport from PR description"
+
+'on':
+  pull_request:
+    types: [opened, synchronize, edited, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-label-release-backport:
+    runs-on: ubuntu-latest
+
+    # CHANGE THIS: set your repo name here
+    # this is used to prevent the workflow from running on other repos/forks
+    if: github.repository == 'ansible/jewel' && !github.event.pull_request.draft
+
+    env:
+      # Define accepted release and backport values
+      ACCEPTED_RELEASES: '["2.5", "2.6", "2.7", "devel"]'
+      ACCEPTED_BACKPORTS: '["2.5", "2.6", "2.7"]'
+
+    steps:
+      - name: Parse YAML from PR description and add labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log(`Processing PR #${context.issue.number}`);
+
+            // Get accepted values from environment variables
+            const acceptedReleases = JSON.parse(process.env.ACCEPTED_RELEASES);
+            const acceptedBackports = JSON.parse(process.env.ACCEPTED_BACKPORTS);
+            console.log(`Accepted releases: ${acceptedReleases.join(', ')}`);
+            console.log(`Accepted backports: ${acceptedBackports.join(', ')}`);
+
+            // Get existing labels on the PR
+            const { data: existingLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const existingLabelNames = existingLabels.map(label => label.name);
+            console.log(`Existing labels: ${existingLabelNames.join(', ')}`);
+
+            // Check if release/backport labels already exist
+            const hasReleaseLabel = existingLabelNames.some(label => label.startsWith('release '));
+            const hasBackportLabel = existingLabelNames.some(label => label.startsWith('backport '));
+
+            console.log(`Has existing release label: ${hasReleaseLabel}`);
+            console.log(`Has existing backport label: ${hasBackportLabel}`);
+
+            // Get PR description
+            const prBody = context.payload.pull_request.body || '';
+            console.log(`PR description:\n${prBody}`);
+
+            let yamlFound = false;
+            let releaseLabel = null;
+            let backportLabel = null;
+
+            // Look for YAML code blocks in the PR description
+            const yamlBlockRegex = /```yaml\s*\n([\s\S]*?)\n\s*```/g;
+            let match;
+
+            while ((match = yamlBlockRegex.exec(prBody)) !== null) {
+              const yamlContent = match[1];
+              console.log(`Found YAML block:\n${yamlContent}`);
+
+              // Parse release and backport values
+              const releaseMatch = yamlContent.match(/^release:\s*(.+)$/m);
+              const backportMatch = yamlContent.match(/^backport:\s*(.+)$/m);
+
+              if (releaseMatch) {
+                const releaseValue = releaseMatch[1].trim().replace(/#.*$/, '').trim();
+                if (releaseValue === '') {
+                  // Empty value - skip gracefully
+                  console.log('Empty release value found, skipping');
+                } else if (hasReleaseLabel) {
+                  // Release label already exists - skip to preserve existing label
+                  console.log(`Release label already exists, skipping automatic assignment of "release ${releaseValue}"`);
+                } else if (acceptedReleases.includes(releaseValue)) {
+                  // Valid value and no existing label - add label
+                  releaseLabel = `release ${releaseValue}`;
+                  console.log(`Found valid release: ${releaseValue}`);
+                  yamlFound = true;
+                } else {
+                  // Invalid value - fail the workflow
+                  const errorMsg = `❌ Invalid release value: "${releaseValue}". Accepted values: ${acceptedReleases.join(', ')}`;
+                  console.error(errorMsg);
+                  throw new Error(errorMsg);
+                }
+              }
+
+              if (backportMatch) {
+                const backportValue = backportMatch[1].trim().replace(/#.*$/, '').trim();
+                if (backportValue === '') {
+                  // Empty value - skip gracefully
+                  console.log('Empty backport value found, skipping');
+                } else if (hasBackportLabel) {
+                  // Backport label already exists - skip to preserve existing label
+                  console.log(`Backport label already exists, skipping automatic assignment of "backport ${backportValue}"`);
+                } else if (acceptedBackports.includes(backportValue)) {
+                  // Valid value and no existing label - add label
+                  backportLabel = `backport ${backportValue}`;
+                  console.log(`Found valid backport: ${backportValue}`);
+                  yamlFound = true;
+                } else {
+                  // Invalid value - fail the workflow
+                  const errorMsg = `❌ Invalid backport value: "${backportValue}". Accepted values: ${acceptedBackports.join(', ')}`;
+                  console.error(errorMsg);
+                  throw new Error(errorMsg);
+                }
+              }
+
+              // Stop after finding the first YAML block with any content (valid or processed)
+              if (releaseMatch || backportMatch) break;
+            }
+
+            if (!yamlFound) {
+              console.log('No valid YAML code blocks found in PR description');
+              return;
+            }
+
+            // Add labels to the PR
+            const labelsToAdd = [];
+            if (releaseLabel) labelsToAdd.push(releaseLabel);
+            if (backportLabel) labelsToAdd.push(backportLabel);
+
+            if (labelsToAdd.length > 0) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  labels: labelsToAdd
+                });
+                console.log(`Successfully added labels: ${labelsToAdd.join(', ')}`);
+              } catch (error) {
+                if (error.status === 422) {
+                  console.log('Some labels may already exist on the PR');
+                } else {
+                  console.error('Error adding labels:', error);
+                }
+              }
+            }
