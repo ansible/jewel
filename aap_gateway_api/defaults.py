@@ -246,6 +246,13 @@ MIDDLEWARE = [
     'ansible_base.lib.middleware.logging.LogRequestMiddleware',
 ]
 
+# AAP_DEPLOYMENT_TYPE indicates the type of deployment
+# "self-managed" (default), "managed-azure", or "saas-aws"
+AAP_DEPLOYMENT_TYPE = "self-managed"
+
+# URL for customer notifications feed
+NOTIFICATION_RSS_FEED_URL = "https://announcements.ansiblecloud.redhat.com/feed.atom"
+
 # NEVER remove anything from this list.
 PASSWORD_HASHERS = [
     "aap_gateway_api.authentication.hashers.OwaspRecommendedArgon2PasswordHasher",

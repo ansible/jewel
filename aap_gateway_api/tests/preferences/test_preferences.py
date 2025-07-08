@@ -1,9 +1,12 @@
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.settings import SettingNotSetException
+from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.test import override_settings
 from dynamic_preferences.managers import PreferencesManager
 from dynamic_preferences.serializers import SerializationError
 
@@ -78,6 +81,43 @@ def test_encrypted_preference(register_preference):
     assert preferences.get_preference_value("general", "enc_test") == ENCRYPTED_STRING
     preference = Preference.objects.get(section="general", name="enc_test")
     assert preference.value == "hello test"
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_settings_bound_pref(logger, register_preference):
+    pref = register_preference(
+        section="general",
+        preference_name="settings_bound",
+        encrypted=False,
+        preference_type="string",
+        default="",
+        settings_bound=True,
+    )
+
+    assert logger.warning.call_count == 1
+    assert "marked as read_only" in logger.warning.call_args[0][0]
+
+    assert pref.read_only
+
+
+@pytest.mark.django_db
+def test_settings_bound_pref_none(register_preference):
+    register_preference(
+        section="general",
+        preference_name="MY_PREF",
+        encrypted=False,
+        preference_type="string",
+        default="",
+        settings_bound=True,
+        read_only=True,
+    )
+
+    with override_settings(MY_PREF=None):
+        with pytest.raises(ValueError) as v:
+            preferences.get_preference_value("general", "MY_PREF")
+
+            assert "can not have a None value" in str(v.value)
 
 
 @pytest.mark.parametrize(
@@ -213,6 +253,38 @@ def test_get_preference_value_gets_encrypted_value(register_preference):
 
     with patch('aap_gateway_api.preferences.registry.gateway_preference_registry.manager', return_value=CustomManager(expected_value)):
         assert preferences.get_preference_value('general', 'encrypted_test_value', encrypted=False) == expected_value
+
+
+@pytest.mark.django_db
+def test_get_notification_prefs():
+    url = preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL")
+
+    assert url == settings.NOTIFICATION_RSS_FEED_URL
+
+    t = preferences.get_preference_value(section="configuration", name="AAP_DEPLOYMENT_TYPE")
+
+    assert t == settings.AAP_DEPLOYMENT_TYPE
+
+    enabled_state = preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_ENABLED")
+
+    assert enabled_state
+
+    with override_settings(NOTIFICATION_RSS_FEED_URL="http://myurl.com"):
+        assert preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL") == "http://myurl.com"
+
+
+@pytest.mark.django_db
+def test_set_notification_prefs():
+    # (read only)
+    preferences.update_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL", value="http://notgonnawork.com/nope.xml")
+    assert preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL") != "http://notgonnawork.com/nope.xml"
+
+    preferences.update_preference_value(section="configuration", name="AAP_DEPLOYMENT_TYPE", value="rpm")
+    assert preferences.get_preference_value(section="configuration", name="AAP_DEPLOYMENT_TYPE") != "rpm"
+
+    # (read write)
+    preferences.update_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_ENABLED", value=False)
+    assert not preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_ENABLED")
 
 
 def test_encrypted_manager(register_preference):

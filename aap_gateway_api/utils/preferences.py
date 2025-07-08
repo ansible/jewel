@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
@@ -13,6 +14,8 @@ from aap_gateway_api.preferences.types import FloatRangePreference, IntRangePref
 
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
+
+logger = logging.getLogger("aap_gateway_api.utils.preferences")
 
 
 class TooManyPreferencesException(Exception):
@@ -43,6 +46,14 @@ def get_preference_key(section: str, name: str) -> str:
 def get_preference_value(section: str, name: str, encrypted: bool = True) -> str:
     if not section or not name:
         raise ValueError(_("You must pass get_preference_value a section and a name"))
+
+    # Return setting value for settings bound prefs or drop through to default value if not found
+    if gateway_preference_registry.get(name, section).settings_bound:
+        setting_val = getattr(settings, name, None)
+        if setting_val is not None:
+            return setting_val
+        else:
+            raise ValueError(_("A settings_bound preference can not have a None value"))
 
     preference_name = get_preference_key(section, name)
     value = gateway_preference_registry.manager().get(preference_name)
@@ -112,6 +123,7 @@ def register(
     help_text=_("No help text specified"),
     read_only=False,
     on_update=None,
+    settings_bound=False,
     **kwargs,
 ):
     if not preference_name:
@@ -123,6 +135,9 @@ def register(
     if section not in sections:
         sections[section] = Section(section)
 
+    if settings_bound and not read_only:
+        read_only = True
+        logger.warning(f"Setting {preference_name} was set as settings_bound but not marked as read_only. Altering setting to be read only")
     type_class = _PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING[preference_type]
 
     class_name = f'{(preference_name.title())}_Preference'
@@ -137,6 +152,7 @@ def register(
         "help_text": help_text,
         "read_only": read_only,
         "on_update": on_update,
+        "settings_bound": settings_bound,
     }
     preference_details.update(kwargs)
     my_transient_class = type(
