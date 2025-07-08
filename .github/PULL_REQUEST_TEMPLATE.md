@@ -1,8 +1,15 @@
 ## Description
+
 <!-- Mandatory: Provide a clear, concise description of the changes and their purpose -->
 - What is being changed?
 - Why is this change needed?
 - How does this change address the issue?
+
+```yaml
+release: # (required) "2.5", "2.6", "2.7", "devel"
+backport: # (optional) "2.5", "2.6", "2.7"
+needs_feature_branch: false
+```
 
 ## Type of Change
 <!-- Mandatory: Check one or more boxes that apply -->

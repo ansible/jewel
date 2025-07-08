@@ -1,0 +1,119 @@
+---
+# GitHub Repository Automations - Keeper: feature branch auto-labeling
+# MIT License
+# Source: https://github.com/thenets/repo-automations
+
+name: "Keeper: feature branch auto-labeling from PR description"
+
+'on':
+  pull_request:
+    types: [opened, synchronize, edited, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-label-feature-branch:
+    runs-on: ubuntu-latest
+
+    # CHANGE THIS: set your repo name here
+    # this is used to prevent the workflow from running on other repos/forks
+    if: github.repository == 'ansible-automation-platform/aap-gateway' && !github.event.pull_request.draft
+
+    steps:
+      - name: Parse YAML from PR description and add feature-branch label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log(`Processing PR #${context.issue.number}`);
+
+            // Get existing labels on the PR
+            const { data: existingLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const existingLabelNames = existingLabels.map(label => label.name);
+            console.log(`Existing labels: ${existingLabelNames.join(', ')}`);
+
+            // Check if feature-branch label already exists
+            const hasFeatureBranchLabel = existingLabelNames.includes('feature-branch');
+            console.log(`Has existing feature-branch label: ${hasFeatureBranchLabel}`);
+
+            // Skip if feature-branch label already exists to preserve manual labeling
+            if (hasFeatureBranchLabel) {
+              console.log('Feature-branch label already exists, skipping automatic assignment');
+              return;
+            }
+
+            // Get PR description
+            const prBody = context.payload.pull_request.body || '';
+            console.log(`PR description:\n${prBody}`);
+
+            let yamlFound = false;
+            let shouldAddFeatureBranchLabel = false;
+
+            // Look for YAML code blocks in the PR description
+            const yamlBlockRegex = /```yaml\s*\n([\s\S]*?)\n\s*```/g;
+            let match;
+
+            while ((match = yamlBlockRegex.exec(prBody)) !== null) {
+              const yamlContent = match[1];
+              console.log(`Found YAML block:\n${yamlContent}`);
+
+              // Parse needs_feature_branch value
+              const featureBranchMatch = yamlContent.match(/^needs_feature_branch:\s*(.+)$/m);
+
+              if (featureBranchMatch) {
+                const featureBranchValue = featureBranchMatch[1].trim().replace(/#.*$/, '').trim();
+                console.log(`Found needs_feature_branch value: "${featureBranchValue}"`);
+
+                if (featureBranchValue === '') {
+                  // Empty value - skip gracefully
+                  console.log('Empty needs_feature_branch value found, skipping');
+                } else if (featureBranchValue === 'true') {
+                  // Valid true value - add feature-branch label
+                  shouldAddFeatureBranchLabel = true;
+                  console.log('needs_feature_branch is true, will add feature-branch label');
+                  yamlFound = true;
+                } else if (featureBranchValue === 'false') {
+                  // Valid false value - no action needed
+                  console.log('needs_feature_branch is false, no label will be added');
+                  yamlFound = true;
+                } else {
+                  // Invalid value - fail the workflow
+                  const errorMsg = `❌ Invalid needs_feature_branch value: "${featureBranchValue}". Accepted values: true, false`;
+                  console.error(errorMsg);
+                  throw new Error(errorMsg);
+                }
+
+                // Stop after finding the first YAML block with needs_feature_branch
+                break;
+              }
+            }
+
+            if (!yamlFound) {
+              console.log('No needs_feature_branch field found in YAML code blocks');
+              return;
+            }
+
+            // Add feature-branch label if needed
+            if (shouldAddFeatureBranchLabel) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  labels: ['feature-branch']
+                });
+                console.log('Successfully added feature-branch label');
+              } catch (error) {
+                if (error.status === 422) {
+                  console.log('Feature-branch label may already exist on the PR');
+                } else {
+                  console.error('Error adding feature-branch label:', error);
+                  throw error;
+                }
+              }
+            }

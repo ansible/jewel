@@ -274,7 +274,7 @@ class Command(BaseCommand):
         self,
         name: str,
         unique_filter_kwargs: Dict[str, Any],
-        LocalResourceModel: Type[models.Model],
+        local_resource_model: Type[models.Model],
         resource_type_name_field: str,
         service_slug: str,
     ) -> str:
@@ -288,7 +288,7 @@ class Command(BaseCommand):
         Args:
             name: Original resource name from upstream service
             unique_filter_kwargs: Filter parameters used to check uniqueness
-            LocalResourceModel: Django model class for the resource type
+            local_resource_model: Django model class for the resource type
             resource_type_name_field: Field name used for the resource name
 
         Returns:
@@ -304,7 +304,7 @@ class Command(BaseCommand):
         filter_kwargs[resource_type_name_field] = name
 
         counter = 1
-        while LocalResourceModel.objects.filter(**filter_kwargs).exists():
+        while local_resource_model.objects.filter(**filter_kwargs).exists():
             name = original_name + str(counter)
             filter_kwargs[resource_type_name_field] = name
             counter += 1
