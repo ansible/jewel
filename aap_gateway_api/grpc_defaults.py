@@ -2,3 +2,4 @@ DATABASES__default__OPTIONS__keepalives = 1
 DATABASES__default__OPTIONS__keepalives_idle = 5
 DATABASES__default__OPTIONS__keepalives_interval = 5
 DATABASES__default__OPTIONS__keepalives_count = 5
+DATABASES__default__OPTIONS__application_name = 'GRPC Server'
