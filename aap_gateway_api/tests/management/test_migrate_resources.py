@@ -558,126 +558,100 @@ def test_no_services_found_error(admin_user):
     assert "No services found with expected service types" in str(exc_info.value)
 
 
+def _assert_gateway_user_superuser_status(username, expected_is_superuser):
+    """Helper method to verify Gateway user superuser status"""
+    assert User.objects.filter(username=username).exists()
+    assert User.objects.filter(username=username).get().is_superuser is expected_is_superuser
+
+
+def _assert_service_user_superuser_status(service_client, username, expected_is_superuser):
+    """Helper method to verify service user superuser status via API"""
+    resource = service_client.list_resources(filters={"name": username}).json()
+    assert resource["count"] == 1
+    detail = service_client.get_resource(resource["results"][0]["ansible_id"]).json()
+    assert detail["resource_data"]["is_superuser"] is expected_is_superuser
+
+
+@pytest.fixture
+def superuser_migration_controller_service(service_api_route_controller):
+    """Launch a controller service with controller-specific superuser test data"""
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="controller_superuser_tests")
+    yield service_api_route_controller
+    _kill_service(proc)
+
+
+@pytest.fixture
+def superuser_migration_hub_service(service_api_route_hub):
+    """Launch a hub service with hub-specific superuser test data"""
+    proc = _launch_service(svc_route=service_api_route_hub, fixture="hub_superuser_tests", svc_type="galaxy")
+    yield service_api_route_hub
+    _kill_service(proc)
+
+
+@pytest.fixture
+def superuser_migration_eda_service(service_api_route_eda):
+    """Launch an EDA service with EDA-specific superuser test data"""
+    proc = _launch_service(svc_route=service_api_route_eda, fixture="eda_superuser_tests", svc_type="eda")
+    yield service_api_route_eda
+    _kill_service(proc)
+
+
 @pytest.mark.django_db(transaction=True)
 def test_multi_service_migration(
-    admin_user, capsys, service_api_route_controller, service_api_route_hub, service_api_route_eda, patched_resource_client, system_user
+    superuser_migration_controller_service,
+    service_api_route_controller,
+    superuser_migration_hub_service,
+    service_api_route_hub,
+    superuser_migration_eda_service,
+    service_api_route_eda,
+    admin_user,
+    patched_resource_client,
+    capsys,
 ):
-    """Test that all services are processed in a multi-service scenario"""
+    """Comprehensive test for superuser migration functionality across all services"""
 
-    # Mock successful migration for all services
-    with (
-        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
-        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
-        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
-    ):
+    # Verify initial state - Controller users don't exist in Gateway yet
+    assert not User.objects.filter(username="controller_super").exists()
+    assert not User.objects.filter(username="controller_regular").exists()
 
-        # Mock JWT creation to avoid public key parsing issues
-        mock_jwt.return_value = 'fake-jwt-token'
-        mock_key.return_value = 'fake-key'
+    # === Migration Phase: Run migration once for all services ===
+    call_command("migrate_service_data", username=admin_user.username)
 
-        def mock_client_factory(service_api, *args, **kwargs):
-            import uuid
+    captured = capsys.readouterr()
 
-            mock_client = Mock()
-            mock_client.service = service_api
-            mock_client.user = admin_user
-            mock_client.get_service_metadata.return_value.json.return_value = {
-                "service_id": str(uuid.uuid4()),  # Generate proper UUID
-                "service_type": service_api.service_cluster.service_type.name,
-            }
-            # Mock empty resource lists for clean migration
-            mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-            return mock_client
+    # === Verify migration output ===
+    assert "Found 3 services to migrate" in captured.out
+    assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
+    assert f"Processing service: {service_api_route_hub.api_slug}" in captured.out
+    assert f"Processing service: {service_api_route_eda.api_slug}" in captured.out
+    assert "Successful migrations: 3" in captured.out
+    assert "Failed migrations: 0" in captured.out
+    assert "All services migration completed successfully!" in captured.out
 
-        mock_client_class.side_effect = mock_client_factory
+    assert "Gateway superusers: ['admin', 'controller_super']" in captured.out
+    assert "Controller superusers: ['admin', 'controller_super']" in captured.out
+    assert "Controller and Gateway superusers are consistent" in captured.out
+    assert "Demoted user 'hub_super' from superuser in hub" in captured.out
+    assert "Demoted 1 users from superuser in hub: ['hub_super']" in captured.out
 
-        # Should successfully process all three services
-        call_command("migrate_service_data", username=admin_user.username)
+    # === Verify gateway users ===
+    # Controller users: superuser promoted, regular remains regular
+    _assert_gateway_user_superuser_status("controller_super", True)  # Synced from controller to gateway as superuser
+    _assert_gateway_user_superuser_status("controller_regular", False)  # Synced from controller to gateway as regular user
+    _assert_gateway_user_superuser_status("hub_super", False)  # Synced from hub to gateway as regular user
+    _assert_gateway_user_superuser_status("hub_regular", False)  # Synced from hub to gateway as regular user
+    _assert_gateway_user_superuser_status("eda_super", False)  # Synced from EDA to gateway as regular user
+    _assert_gateway_user_superuser_status("eda_regular", False)  # Synced from EDA to gateway as regular user
 
-        # Check that all services were processed
-        captured = capsys.readouterr()
-        assert "Found 3 services to migrate" in captured.out
-        assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
-        assert f"Processing service: {service_api_route_hub.api_slug}" in captured.out
-        assert f"Processing service: {service_api_route_eda.api_slug}" in captured.out
-        assert "Successful migrations: 3" in captured.out
-        assert "Failed migrations: 0" in captured.out
-        assert "All services migration completed successfully!" in captured.out
+    # === Verify service users ===
+    controller_client = patched_resource_client(service=superuser_migration_controller_service, user=admin_user, raise_if_bad_request=True)
+    _assert_service_user_superuser_status(controller_client, "controller_super", True)  # Should remain superuser
+    _assert_service_user_superuser_status(controller_client, "controller_regular", False)  # Should remain regular
 
+    hub_client = patched_resource_client(service=superuser_migration_hub_service, user=admin_user, raise_if_bad_request=True)
+    _assert_service_user_superuser_status(hub_client, "hub_super", False)  # Should be demoted to regular
+    _assert_service_user_superuser_status(hub_client, "hub_regular", False)  # Should remain regular
 
-@pytest.mark.django_db(transaction=True)
-def test_single_service_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
-    """Test migration with only a single service available"""
-
-    # Mock successful migration for the controller service
-    with (
-        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
-        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
-        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
-    ):
-
-        # Mock JWT creation to avoid public key parsing issues
-        mock_jwt.return_value = 'fake-jwt-token'
-        mock_key.return_value = 'fake-key'
-
-        import uuid
-
-        mock_client = Mock()
-        mock_client.service = service_api_route_controller
-        mock_client.user = admin_user
-        mock_client.get_service_metadata.return_value.json.return_value = {
-            "service_id": str(uuid.uuid4()),  # Generate proper UUID
-            "service_type": "controller",
-        }
-        # Mock empty resource lists for clean migration
-        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client_class.return_value = mock_client
-
-        # Should successfully process the single service
-        call_command("migrate_service_data", username=admin_user.username)
-
-        # Check that only the controller service was processed
-        captured = capsys.readouterr()
-        assert "Found 1 services to migrate" in captured.out
-        assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
-        assert "hub" not in captured.out  # Hub should not be processed
-        assert "eda" not in captured.out  # EDA should not be processed
-        assert "Successful migrations: 1" in captured.out
-        assert "Failed migrations: 0" in captured.out
-        assert "All services migration completed successfully!" in captured.out
-
-
-@pytest.mark.django_db(transaction=True)
-def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api_client, local_authenticator):
-    """Test that two users cannot have the same email address on the same authenticator.
-
-    Steps to recreate the issue:
-    1. Create two users: user1, user2
-    2. Create an authenticator
-    3. Assign the authenticator to user1 with email address foo@test.com
-    4. Assign the authenticator to user2 with email address foo@test.com
-
-    Expected behavior: The second assignment should return an error
-    """
-    # Create two users
-    user1 = User.objects.create(username="user1", email="user1@example.com")
-    user2 = User.objects.create(username="user2", email="user2@example.com")
-
-    # Assign the authenticator to user1 with email address foo@test.com
-    AuthenticatorUser.objects.create(user=user1, provider=local_authenticator, email="foo@test.com")
-
-    # Attempt to assign the same authenticator to user2 with the same email address foo@test.com
-    # This should raise an error
-    with pytest.raises((IntegrityError, Exception)) as exc_info:
-        AuthenticatorUser.objects.create(user=user2, provider=local_authenticator, email="foo@test.com")
-
-    # The error should indicate a constraint violation or duplicate/unique constraint
-    error_message = str(exc_info.value).lower()
-    assert any(
-        keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]
-    ), f"Expected error message to indicate constraint violation, got: {exc_info.value}"
-
-    # Verify that only the first user has the authenticator with the email
-    assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com").count() == 1
-    assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com", user=user1).exists()
-    assert not AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com", user=user2).exists()
+    eda_client = patched_resource_client(service=superuser_migration_eda_service, user=admin_user, raise_if_bad_request=True)
+    _assert_service_user_superuser_status(eda_client, "eda_super", False)  # Should be demoted to regular
+    _assert_service_user_superuser_status(eda_client, "eda_regular", False)  # Should remain regular

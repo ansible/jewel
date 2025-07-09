@@ -204,6 +204,8 @@ class Command(BaseCommand):
 
             raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. " "See error details above.")
         else:
+            # Validate superuser consistency across all services
+            self._ensure_superuser_consistency(service_apis, user)
             self.stdout.write("\nAll services migration completed successfully!")
 
     def _migrate_single_service(
@@ -412,7 +414,7 @@ class Command(BaseCommand):
             updated_resource_data["email"] = ""
             return updated_resource_data
 
-    def _deserialize_and_validate_resource_data(self, resource: Dict[str, Any], resource_serializer: Any) -> Dict[str, Any]:
+    def _deserialize_and_validate_resource_data(self, upstream_resource: Dict[str, Any], resource_serializer: Any) -> Dict[str, Any]:
         """
         Deserialize and validate resource data using the appropriate serializer.
 
@@ -421,7 +423,7 @@ class Command(BaseCommand):
         the migration is halted.
 
         Args:
-            resource: Resource data from upstream service
+            upstream_resource: Complete resource data from upstream service
             resource_serializer: Serializer class for the resource type
 
         Returns:
@@ -434,9 +436,9 @@ class Command(BaseCommand):
         Deserializes and validates resource data using the corresponding resource serializer class
         Returns the validated resource data
         """
-        original_resource_data = resource_serializer(data=resource["resource_data"])
-        resource_type_name = resource['resource_type']
-        resource_ansible_id = resource['ansible_id']
+        original_resource_data = resource_serializer(data=upstream_resource["resource_data"])
+        resource_type_name = upstream_resource['resource_type']
+        resource_ansible_id = upstream_resource['ansible_id']
 
         if original_resource_data.is_valid(raise_exception=False):
             return original_resource_data.validated_data
@@ -452,11 +454,11 @@ class Command(BaseCommand):
             # Raising exception here to stop migration to draw attention to existence of invalid resources.
             raise RuntimeError("Stopping migration of resources because invalid, non-correctable, resource(s) were encountered.")
 
-        resource["resource_data"] = updated_resource_data
+        upstream_resource["resource_data"] = updated_resource_data
 
         return updated_resource_data
 
-    def _initialize_resource_sync_payloads(self, resource: Dict[str, Any], user_partial_migration: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any], user_partial_migration: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         Prepare payloads for creating Gateway resources and updating upstream resources.
 
@@ -481,7 +483,7 @@ class Command(BaseCommand):
         If resource type is 'shared.user' and is partially migrated, its `service_id` is set to upstream's service_id
         Otherwise, resource's service_id = gateway's service_id
         Args:
-         - resource (dict): is the resource object being migrated
+         - upstream_resource (dict): complete resource object from upstream service
          - user_partial_migration(bool): True if user should be partially migrated
         Returns:
          - resource_creation_kwargs (dict): used to create new resource in gateway correspondingly
@@ -490,7 +492,7 @@ class Command(BaseCommand):
         resource_creation_kwargs = {}
         updated_service_resource = {}
 
-        resource_creation_kwargs["ansible_id"] = resource["ansible_id"]
+        resource_creation_kwargs["ansible_id"] = upstream_resource["ansible_id"]
 
         if user_partial_migration:
             # We do not update the service_id of a user on the service, only mark is_partially_migrated to True to exclude it from the
@@ -506,7 +508,7 @@ class Command(BaseCommand):
 
     def _reconcile_existing_resource(
         self,
-        resource: Dict[str, Any],
+        upstream_resource: Dict[str, Any],
         resource_context: Dict[str, Any],
         validated_resource_data: Dict[str, Any],
         updated_service_resource: Dict[str, Any],
@@ -525,7 +527,7 @@ class Command(BaseCommand):
         3. No merge: Create new resource with unique name
 
         Args:
-            resource: Resource data from upstream service
+            upstream_resource: Complete resource data from upstream service
             resource_context: Static data about the resource type
             validated_resource_data: Validated resource data
             updated_service_resource: Data for updating upstream resource
@@ -542,7 +544,7 @@ class Command(BaseCommand):
         Based on whether a match is found and whether a merge is requested, it prepares the `updated_service_resource`
         to reflect the appropriate migration or merge behavior
         Args:
-         - resource (dict): is the resource object being migrated
+         - upstream_resource (dict): complete resource object from upstream service
          - resource_context (dict): contains the static data related to the current resource item
          - validated_resource_data (dict): validated data for the incoming resource, based on its shared resource type serializer.
          - updated_service_resource (dict): used to update the resource on the service
@@ -569,9 +571,9 @@ class Command(BaseCommand):
             return create_gateway_resource, None
 
         # if an existing resource is found
-        resource_ansible_id = resource['ansible_id']
+        resource_ansible_id = upstream_resource['ansible_id']
         local_data = resource_type.serializer_class(existing_resource.content_object).data
-        incoming_data = resource.get("resource_data", {})
+        incoming_data = upstream_resource.get("resource_data", {})
 
         # case 1: the JWT auth classes create some items with correct ansible_id but without the service_id fully set,
         # so this will correct the service_id and possibly update the stale resource_data
@@ -580,10 +582,10 @@ class Command(BaseCommand):
             updated_service_resource["service_id"] = existing_resource.service_id
 
             if incoming_data == local_data:
-                logger.info(f"Correcting service_id of {resource_type.name} with name {resource['name']}.")
+                logger.info(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.")
             else:
                 updated_service_resource["resource_data"] = local_data
-                logger.warning(f"Updating already-merged {resource_type.name} with name {resource['name']}.")
+                logger.warning(f"Updating already-merged {resource_type.name} with name {upstream_resource['name']}.")
 
         # case 2: merge flag is set. We only set upstream metadata and ansible_id to be the same as gateway's
         # don't set anything on the gateway
@@ -595,16 +597,21 @@ class Command(BaseCommand):
                     "resource_data": local_data,
                 }
             )
-            logger.warning(f"Merging {resource_type.name} with conflicting name {resource['name']}.")
+            logger.warning(f"Merging {resource_type.name} with conflicting name {upstream_resource['name']}.")
 
         # case 3: different ansible_id and not merging. We are not correcting the service-side of the same resource.
         # We change the name of the resource and update it on the upstream service
         # Create a new resource in the Gateway with the updated name
         elif str(existing_resource.ansible_id) != resource_ansible_id:
-            new_name = self.get_new_resource_name(resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field, service_slug)
-            resource["resource_data"][resource_type_name_field] = new_name
-            updated_service_resource["resource_data"] = resource["resource_data"]
-            logger.warning(f"Creating new {resource_type.name} with new name {resource['name']}.")
+            new_name = self.get_new_resource_name(upstream_resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field, service_slug)
+            upstream_resource["resource_data"][resource_type_name_field] = new_name
+            # For users that are renamed due to conflicts, they should not be superusers
+            # This prevents partially migrated users from inheriting superuser status
+            # This is temporary and should be deleted after implementing https://issues.redhat.com/browse/AAP-47840 to fully merge user on migrations
+            if resource_type.name == "shared.user":
+                upstream_resource["resource_data"]["is_superuser"] = False
+            updated_service_resource["resource_data"] = upstream_resource["resource_data"]
+            logger.warning(f"Creating new {resource_type.name} with new name {upstream_resource['name']}.")
 
         return create_gateway_resource, existing_resource
 
@@ -638,7 +645,6 @@ class Command(BaseCommand):
             # SYSTEM_USERNAME can theoretically vary by service
             # Currently, the system username is None in controller, and in hub and eda it's the same as gateway's,
             # If Hub and EDA system username is updated to != gateway's, we are migrating it too and we should avoid it
-            # See related Jira Ticket AAP-47114
             results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
         return results
 
@@ -674,14 +680,26 @@ class Command(BaseCommand):
         # Currently, we're making a GET request to the upstream service for every single resource
         # This implementation is non-optimal. However, we can leave this as is for now
         # since there is an ongoing initiative to rework the migration process
-        resource = self.client.get_resource(resource_ansible_id).json()
-        validated_resource_data = self._deserialize_and_validate_resource_data(resource, resource_context["type_serializer"])
+
+        # Fetch the complete resource data from the upstream service (Controller/Hub/EDA)
+        # This contains the full API response structure with metadata, ansible_id, service_id, resource_data, additional_data, etc.
+        upstream_resource = self.client.get_resource(resource_ansible_id).json()
+
+        # Extract and validate the core resource data from the upstream response
+        # This is the clean, validated resource data ready for Gateway use
+        validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
+
+        # Sync superuser flags for user resources
+        if resource_context["type_name"] == "shared.user":
+            upstream_resource = self._sync_user_superuser_flag(upstream_resource, validated_resource_data)
+            # Re-validate after potential superuser flag changes
+            validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
         # 'shared.user' type is treated differently
         # If the user being migrated is not the current user (admin user), we need to check if we should partially migrate the user
-        user_partial_migration = bool(resource_context["type_name"] == "shared.user" and resource["name"] != self.client.user.username)
+        user_partial_migration = bool(resource_context["type_name"] == "shared.user" and upstream_resource["name"] != self.client.user.username)
 
-        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(resource, user_partial_migration)
+        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource, user_partial_migration)
 
         # should_merge indicates the final merge action.
         # The default is the value passed into the merge option when running the command, which is True to indicate we are merging the admin user
@@ -689,7 +707,7 @@ class Command(BaseCommand):
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
         create_gateway_resource, existing_resource = self._reconcile_existing_resource(
-            resource, resource_context, validated_resource_data, updated_service_resource, should_merge, service_slug
+            upstream_resource, resource_context, validated_resource_data, updated_service_resource, should_merge, service_slug
         )
 
         # Run this as a transaction so that if the REST call to update the resource on the service fails
@@ -697,7 +715,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             # determine the resource to use in Gateway
             if create_gateway_resource:
-                gw_resource = Resource.create_resource(resource_type, resource["resource_data"], **resource_creation_kwargs)
+                gw_resource = Resource.create_resource(resource_type, upstream_resource["resource_data"], **resource_creation_kwargs)
             else:
                 gw_resource = existing_resource
 
@@ -707,7 +725,7 @@ class Command(BaseCommand):
                 # resource.  If we aren't we're updating an already existing user on
                 # the service.
                 if create_gateway_resource:
-                    self.create_user_migration_entry(gw_resource, validated_resource_data, resource["additional_data"])
+                    self.create_user_migration_entry(gw_resource, validated_resource_data, upstream_resource["additional_data"])
 
             self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
 
@@ -803,3 +821,193 @@ class Command(BaseCommand):
 
             for upstream_resource_item in results:
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
+
+    def _sync_user_superuser_flag(self, upstream_resource: Dict[str, Any], validated_resource_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sync superuser flags between services according to the following requirements.
+
+        Controller → Gateway: If Controller user is superuser, promote Gateway user to superuser
+        Gateway → Hub/EDA: Sync Gateway superuser status to upstream service
+
+        Args:
+            upstream_resource: Complete resource data from upstream service
+            validated_resource_data: Validated resource data
+
+        Returns:
+            Updated resource data with correct is_superuser flag
+        """
+        service_type = self.client.service.service_cluster.service_type.name
+        username = validated_resource_data["username"]
+        upstream_is_superuser = validated_resource_data.get("is_superuser", False)
+
+        if service_type == DefaultServiceType.CONTROLLER.value:
+            # Controller → Gateway: Promote Gateway user if Controller user is superuser
+            if upstream_is_superuser:
+                try:
+                    gateway_user = User.objects.get(username=username)
+                    if not gateway_user.is_superuser:
+                        gateway_user.is_superuser = True
+                        gateway_user.save()
+                        self.stdout.write(f"Promoted Gateway user '{username}' to superuser based on Controller")
+                except User.DoesNotExist:
+                    # New user will be created with Controller's superuser status
+                    self.stdout.write(f"New user '{username}' will be created with superuser status from Controller")
+
+                # Ensure the resource data reflects superuser status
+                upstream_resource["resource_data"]["is_superuser"] = True
+
+        elif service_type in [DefaultServiceType.HUB.value, DefaultServiceType.EDA.value]:
+            # Hub/EDA users should only be superusers if they already exist in Gateway as superusers
+            # This prevents auto-synced superuser users from maintaining superuser status during migration
+            self.stdout.write(f"Checking superuser status for user '{username}'")
+
+            self.stdout.write(f"Is admin user in {service_type}: {upstream_is_superuser}")
+
+            should_be_superuser = False
+
+            # Only set superuser if user already exists in Gateway as a superuser
+            try:
+                gateway_user = User.objects.get(username=username)
+                self.stdout.write(f"Gateway user exists: {gateway_user}")
+                should_be_superuser = gateway_user.is_superuser
+                self.stdout.write(f"Gateway user is superuser: {should_be_superuser}")
+            except User.DoesNotExist:
+                # New users from Hub/EDA should not be superusers
+                should_be_superuser = False
+                self.stdout.write("Gateway user does not exist, will not be superuser")
+
+            upstream_resource["resource_data"]["is_superuser"] = should_be_superuser
+
+            if upstream_is_superuser != should_be_superuser:
+                action = "promoted to" if should_be_superuser else "demoted from"
+                reason = "exists in Gateway as superuser" if should_be_superuser else "does not exist in Gateway as superuser"
+                self.stdout.write(f"User '{username}' {action} superuser in {service_type} ({reason})")
+
+        return upstream_resource
+
+    def _ensure_superuser_consistency(self, service_apis: List[ServiceAPIRoute], user: AbstractUser) -> None:
+        """
+        Validate and correct superuser consistency across all services after migration.
+
+        Requirements:
+        1. Superusers in Controller and Gateway should match exactly
+        2. Superusers in EDA/Hub that are not in Gateway should be demoted
+
+        Args:
+            service_apis: List of service APIs that were processed
+            user: User to perform API calls as
+        """
+        self.stdout.write("\n=== Validating superuser consistency ===")
+
+        # Get all Gateway superusers
+        gateway_superusers = set(User.objects.filter(is_superuser=True).values_list('username', flat=True))
+        self.stdout.write(f"Gateway superusers: {sorted(gateway_superusers)}")
+
+        controller_api = None
+        hub_eda_apis = []
+
+        for service_api in service_apis:
+            service_type = service_api.service_cluster.service_type.name
+            if service_type == DefaultServiceType.CONTROLLER.value:
+                controller_api = service_api
+            elif service_type in [DefaultServiceType.HUB.value, DefaultServiceType.EDA.value]:
+                hub_eda_apis.append(service_api)
+
+        # Validate Controller ↔ Gateway consistency
+        if controller_api:
+            self._validate_controller_gateway_superusers(controller_api, gateway_superusers, user)
+
+        # Demote superusers in Hub/EDA that are not superusers in Gateway
+        for service_api in hub_eda_apis:
+            self._demote_extra_superusers(service_api, gateway_superusers, user)
+
+    def _validate_controller_gateway_superusers(self, controller_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
+        """
+        Validate that Controller and Gateway superusers match exactly.
+
+        After migration, all resources have Gateway's service_id, so this validation
+        checks that the shared resource registry has consistent superuser flags.
+        """
+        client = GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
+
+        # Get all users from the shared resource registry (no service_id filter since
+        # after migration all resources have Gateway's service_id)
+        filters = {
+            "content_type__resource_type__name": "shared.user",
+        }
+
+        controller_superusers = set()
+        page = 1
+
+        while True:
+            data = client.list_resources(filters={**filters, "page": page}).json()
+
+            for user_item in data["results"]:
+                user_detail = client.get_resource(user_item["ansible_id"]).json()
+                username = user_detail["resource_data"]["username"]
+                resource_data = user_detail["resource_data"]
+
+                # Check if user is actually a superuser
+                if resource_data.get("is_superuser", False):
+                    controller_superusers.add(username)
+
+            if not data.get("next"):
+                break
+            page += 1
+
+        self.stdout.write(f"Controller superusers: {sorted(controller_superusers)}")
+
+        # Check for mismatches
+        gateway_only = gateway_superusers - controller_superusers
+        controller_only = controller_superusers - gateway_superusers
+
+        if gateway_only:
+            self.stderr.write(f"Error: Users are superusers in Gateway but not Controller: {sorted(gateway_only)}")
+            raise CommandError(f"Superuser inconsistency detected: Users {sorted(gateway_only)} are superusers in Gateway but not in Controller")
+
+        if controller_only:
+            self.stderr.write(f"Error: Users are superusers in Controller but not Gateway: {sorted(controller_only)}")
+            raise CommandError(f"Superuser inconsistency detected: Users {sorted(controller_only)} are superusers in Controller but not in Gateway")
+
+        if not gateway_only and not controller_only:
+            self.stdout.write("✓ Controller and Gateway superusers are consistent")
+
+    def _demote_extra_superusers(self, service_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
+        """Demote superusers in Hub/EDA that are not superusers in Gateway."""
+        service_type = service_api.service_cluster.service_type.name
+        client = GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
+
+        filters = {
+            "service_id": service_api.service_cluster.service_id,
+            "content_type__resource_type__name": "shared.user",
+        }
+
+        demoted_users = []
+        page = 1
+        while True:
+            data = client.list_resources(filters={**filters, "page": page}).json()
+
+            for user_item in data["results"]:
+                user_detail = client.get_resource(user_item["ansible_id"]).json()
+                username = user_detail["resource_data"]["username"]
+                is_superuser = user_detail["resource_data"].get("is_superuser", False)
+
+                # If user is superuser in service but not in Gateway, demote them
+                if is_superuser and username not in gateway_superusers:
+                    updated_resource_data = user_detail["resource_data"].copy()
+                    updated_resource_data["is_superuser"] = False
+
+                    update_payload = {"resource_data": updated_resource_data}
+                    client.update_resource(user_item["ansible_id"], ResourceRequestBody(**update_payload), partial=True)
+
+                    demoted_users.append(username)
+                    self.stdout.write(f"Demoted user '{username}' from superuser in {service_type}")
+
+            if not data.get("next"):
+                break
+            page += 1
+
+        if demoted_users:
+            self.stdout.write(f"Demoted {len(demoted_users)} users from superuser in {service_type}: {sorted(demoted_users)}")
+        else:
+            self.stdout.write(f"✓ No extra superusers found in {service_type}")
