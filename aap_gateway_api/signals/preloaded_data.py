@@ -1,6 +1,7 @@
 import logging
 
 from ansible_base.lib.utils.models import get_system_user
+from ansible_base.rbac.management import create_dab_permissions
 from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
 from flags.state import flag_enabled
@@ -88,6 +89,9 @@ def create_default_organization() -> bool:
 
 
 def create_managed_roles() -> None:
+    # Permissions and types must be created before creating managed roles
+    create_dab_permissions(global_apps.get_app_config('dab_rbac'))
+    # Create the managed=True entries of RoleDefinition model
     permission_registry.create_managed_roles(global_apps)
 
 
