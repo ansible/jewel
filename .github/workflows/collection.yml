@@ -2,11 +2,7 @@
 name: collection tests
 on:
   push:
-    branches:
-      - devel
   pull_request:
-    branches:
-      - devel
 
 jobs:
   no_collection_files_allowed:
