@@ -117,6 +117,21 @@ fetch-service-key:
 migrate-service-data:
 	ansible-playbook tools/ansible/migrate-service-data.yml -e @container-startup.yml
 
+## Get migrate_service_data.py from stable-2.5 branch
+./aap_gateway_api/management/commands/migrate_service_data_2.5.py:
+	@echo "Finding github.com/ansible/jewel remote..."
+	@AAP_REMOTE=$$(git remote -v | grep 'github.com[:/]ansible/jewel' | head -1 | awk '{print $$1}'); \
+	if [ -z "$$AAP_REMOTE" ]; then \
+		echo "Error: No remote found for github.com/ansible/jewel"; \
+		exit 1; \
+	fi; \
+	echo "Using remote: $$AAP_REMOTE"; \
+	echo "Fetching from remote..."; \
+	git fetch $$AAP_REMOTE; \
+	echo "Extracting migrate_service_data.py from stable-2.5 branch..."; \
+	git show $$AAP_REMOTE/stable-2.5:aap_gateway_api/management/commands/migrate_service_data.py > ./aap_gateway_api/management/commands/migrate_service_data_2.5.py; \
+	echo "migrate_service_data_2.5.py created successfully"
+
 
 ## Start docker containers without additional playbooks
 docker-compose-basic: tools/generated/sources docker-compose-build git_hooks_config

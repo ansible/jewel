@@ -56,3 +56,6 @@ tools/generated/*
 
 # Dev
 aap_gateway_dev
+
+# Ignore migrate_service_data_2.5.py (generated from stable-2.5 branch)
+aap_gateway_api/management/commands/migrate_service_data_2.5.py
