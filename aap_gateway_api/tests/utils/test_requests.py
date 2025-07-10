@@ -23,8 +23,8 @@ def test_from_proxy(headers, expected):
     "input,message",
     [
         ("https://localhost", None),
-        ("localhost", "The scheme must be https or http only"),
-        ("https://localhost/path", "The url path needs to be empty"),
+        ("localhost", "the origin must start with either http:// or https://"),
+        ("https://localhost/path", "the origin must include only the host name"),
         ("https://", "The network location should not be empty"),
         ("*", None),
         ("https://*.example.com", None),
