@@ -10,7 +10,8 @@ from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from rest_framework.fields import ListField
 
-from aap_gateway_api.preferences.serializers import JSONSerializer
+from aap_gateway_api.preferences.serializers import CSRFSerializer, JSONSerializer
+from aap_gateway_api.utils.requests import check_csrf_origin
 
 logger = logging.getLogger("aap.gateway.preference_types")
 
@@ -97,3 +98,24 @@ class StringListPreference(JSONPreference):
         for item in value:
             if not isinstance(item, str):
                 self._raise_bad_type_validation_error()
+
+
+class CSRFListPreference(StringListPreference):
+    serializer = CSRFSerializer
+
+    def validate(self, value, **kwargs):
+        try:
+            super().validate(value)
+        except ValidationError:
+            raise ValidationError('Must be a list of valid origins such as: ["https://localhost", "*", "https://*.example.com"]')
+
+        errors = []
+        for item in value:
+            error = check_csrf_origin(item)
+            if error:
+                errors.append(error)
+
+        if errors:
+            raise ValidationError(errors)
+
+        return value

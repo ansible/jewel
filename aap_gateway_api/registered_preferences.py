@@ -266,6 +266,17 @@ register(
     encrypted=False,
 )
 
+
+register(
+    section="configuration",
+    preference_name="CSRF_TRUSTED_ORIGINS",
+    required=False,
+    default=[],
+    preference_type="CSRF_list",
+    help_text=_("List of CSRF trusted origin URLs. Note, if there are values in Djangos CSRF_TRUSTED_ORIGIN, they will always appear in this list."),
+    encrypted=False,
+)
+
 register(
     section="configuration",
     preference_name="AAP_DEPLOYMENT_TYPE",

@@ -13,6 +13,7 @@ from aap_gateway_api.fields.serializers import JSONListField
 from aap_gateway_api.preferences import gateway_preference_registry
 from aap_gateway_api.preferences.serializers import JSONString
 from aap_gateway_api.preferences.types import (
+    CSRFListPreference,
     FloatRangePreference,
     IntRangePreference,
     JSONPreference,
@@ -116,6 +117,7 @@ PREFERENCE_TYPE_CLASS_TO_SERIALIZER_FIELD_MAPPING = {
     MimeTypedImagePreference: serializers.CharField,
     JSONPreference: serializers.JSONField,
     StringListPreference: JSONListField,
+    CSRFListPreference: JSONListField,
 }
 
 # Maps string-based type identifiers to their corresponding preference type classes
@@ -131,6 +133,7 @@ _PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING = {
     "float_range": FloatRangePreference,
     "json": JSONPreference,
     "string_list": StringListPreference,
+    "CSRF_list": CSRFListPreference,
 }
 
 
