@@ -22,7 +22,6 @@ from aap_gateway_api.views.api.v1.app_url import AppUrlViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.authenticator_user import AuthenticatorUserViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.customized_ui_auth import CustomUIAuth  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_key import JWTKeyView  # noqa: F401
-from aap_gateway_api.views.api.v1.legacy_auth import LegacyAuthViewset  # noqa: F401
 from aap_gateway_api.views.api.v1.local_login import LoggedLoginView, LoggedLogoutView  # noqa: F401
 from aap_gateway_api.views.api.v1.me import MeViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.organization import OrganizationViewSet  # noqa: F401
