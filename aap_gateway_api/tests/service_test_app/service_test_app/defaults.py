@@ -177,7 +177,6 @@ AUTH_USER_MODEL = 'service_test_app.User'
 ANSIBLE_BASE_JWT_KEY = os.environ.get("ANSIBLE_BASE_JWT_KEY")
 
 RESOURCE_SERVER = {"URL": "https://localhost", "SECRET_KEY": os.environ.get("SERVICE_TEST_APP_SECRET_KEY"), "VALIDATE_HTTPS": False}
-SERVICE_BACKED_SSO_AUTH_CODE_REDIRECT_PATH = "/api/gateway/v1/legacy_auth/"
 
 _service_prefix = os.environ.get("RENAMED_USERNAME_PREFIX", "aap")
 RENAMED_USERNAME_PREFIX = f"{_service_prefix}_"
