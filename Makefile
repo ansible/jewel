@@ -118,7 +118,7 @@ migrate-service-data:
 	ansible-playbook tools/ansible/migrate-service-data.yml -e @container-startup.yml
 
 ## Get migrate_service_data.py from stable-2.5 branch
-./aap_gateway_api/management/commands/migrate_service_data_2.5.py:
+./aap_gateway_api/management/commands/migrate_service_data_25.py:
 	@echo "Finding github.com/ansible-automation-platform/aap-gateway remote..."
 	@AAP_REMOTE=$$(git remote -v | grep 'github.com[:/]ansible-automation-platform/aap-gateway' | head -1 | awk '{print $$1}'); \
 	if [ -z "$$AAP_REMOTE" ]; then \
@@ -129,8 +129,8 @@ migrate-service-data:
 	echo "Fetching from remote..."; \
 	git fetch $$AAP_REMOTE; \
 	echo "Extracting migrate_service_data.py from stable-2.5 branch..."; \
-	git show $$AAP_REMOTE/stable-2.5:aap_gateway_api/management/commands/migrate_service_data.py > ./aap_gateway_api/management/commands/migrate_service_data_2.5.py; \
-	echo "migrate_service_data_2.5.py created successfully"
+	git show $$AAP_REMOTE/stable-2.5:aap_gateway_api/management/commands/migrate_service_data.py > ./aap_gateway_api/management/commands/migrate_service_data_25.py; \
+	echo "migrate_service_data_25.py created successfully"
 
 
 ## Start docker containers without additional playbooks
