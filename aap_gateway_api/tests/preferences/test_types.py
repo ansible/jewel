@@ -56,8 +56,8 @@ def test_min_max_value_of_int_range_type(min_value, max_value, register_preferen
     "csrf_setting,csrf_preference_value,exception",
     [
         ([], ["https://localhost"], None),
-        ([], ["localhost"], "The scheme must be https or http only"),
-        ([], ["https://localhost/path"], "The url path needs to be empty"),
+        ([], ["localhost"], "the origin must start with either http:// or https://"),
+        ([], ["https://localhost/path"], "the origin must include only the host name"),
         ([], ["https://"], "The network location should not be empty"),
         ([], "https://localhost", "Must be a list of valid origins such as"),
         ([], ["*"], None),

@@ -35,11 +35,11 @@ def check_csrf_origin(value: str) -> Optional[str]:
 
         # We need to support http or https
         if parts.scheme not in ["https", "http"]:
-            return f"The scheme must be https or http only. {value}"
+            return f"the origin must start with either http:// or https://. {value}"
 
         # and urls without a path
         if parts.path != "":
-            return f"The url path needs to be empty. {value}"
+            return f"the origin must include only the host name. {value}"
 
         # We need to be able to support wild card patterns https://*.mydomain.com
         if parts.netloc == "":
