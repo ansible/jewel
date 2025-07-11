@@ -1,3 +1,4 @@
+import uuid
 from unittest import mock
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.test.client import RequestFactory
 from rest_framework import status
+from rest_framework.exceptions import ErrorDetail
 
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers.user import PASSWORD_DISABLED, UserSerializer
@@ -196,6 +198,219 @@ class TestUserSerializer:
         }
         response = admin_api_client.patch(url, payload)
         assert response.status_code == 400
+
+    @pytest.mark.django_db
+    def test_associated_authenticators_get(self, random_user, local_authenticator, user_api_client):
+        user_api_client.login(username=random_user.username, password='password')
+        url = get_relative_url("user-detail", kwargs={"pk": random_user.id})
+        response = user_api_client.get(url)
+        assert response.status_code == 200, response.json()
+        assert response.data["associated_authenticators"] == {local_authenticator.id: {"uid": random_user.username}}
+
+    def test_associated_authenticators_admin_patch_no_email(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}, ldap_authenticator.id: {"uid": random_user.username}},
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == payload['associated_authenticators']
+
+    def test_associated_authenticators_admin_patch_email(self, admin_api_client, local_authenticator, ldap_authenticator):
+        username = str(uuid.uuid4()).replace('-', '')[:8]
+        email = f"{username}@example.com"
+        aap_user = User.objects.create(username=username, email=email)
+        url = get_relative_url('user-detail', kwargs={'pk': aap_user.id})
+        payload = {
+            'username': aap_user.username,
+            'associated_authenticators': {
+                local_authenticator.id: {"uid": aap_user.username, "email": email},
+                ldap_authenticator.id: {"uid": aap_user.username, "email": email},
+            },
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == payload['associated_authenticators']
+
+    def test_associated_authenticators_admin_put_no_email(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}, ldap_authenticator.id: {"uid": random_user.username}},
+        }
+        response = admin_api_client.put(url, payload, format='json')
+        assert response.status_code == 200
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == payload['associated_authenticators']
+
+    def test_associated_authenticators_admin_put_email(self, admin_api_client, local_authenticator, ldap_authenticator):
+        username = str(uuid.uuid4()).replace('-', '')[:8]
+        email = f"{username}@example.com"
+        aap_user = User.objects.create(username=username, email=email)
+        url = get_relative_url('user-detail', kwargs={'pk': aap_user.id})
+        payload = {
+            'username': aap_user.username,
+            'associated_authenticators': {
+                local_authenticator.id: {"uid": aap_user.username, "email": email},
+                ldap_authenticator.id: {"uid": aap_user.username, "email": email},
+            },
+        }
+        response = admin_api_client.put(url, payload, format='json')
+        assert response.status_code == 200
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == payload['associated_authenticators']
+
+    def test_associated_authenticators_admin_post_no_email(self, admin_api_client, local_authenticator, ldap_authenticator):
+        username = str(uuid.uuid4()).replace('-', '')[:8]
+        payload = {
+            'username': username,
+            'associated_authenticators': {local_authenticator.id: {"uid": username}, ldap_authenticator.id: {"uid": username}},
+        }
+        response = admin_api_client.post('/api/gateway/v1/users/', payload, format='json')
+        assert response.status_code == 201
+        url = get_relative_url('user-detail', kwargs={'pk': response.data.get('id')})
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == payload['associated_authenticators']
+
+    def test_associated_authenticators_admin_post_email(self, admin_api_client, local_authenticator, ldap_authenticator):
+        username = str(uuid.uuid4()).replace('-', '')[:8]
+        email = f"{username}@example.com"
+        payload = {
+            'username': username,
+            'associated_authenticators': {local_authenticator.id: {"uid": username, "email": email}, ldap_authenticator.id: {"uid": username, "email": email}},
+        }
+        response = admin_api_client.post('/api/gateway/v1/users/', payload, format='json')
+        assert response.status_code == 201
+        url = get_relative_url('user-detail', kwargs={'pk': response.data.get('id')})
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == payload['associated_authenticators']
+
+    def test_associated_authenticators_user_patch_forbidden(self, user_api_client, local_authenticator, ldap_authenticator, random_user):
+        user_api_client.login(username=random_user.username, password='password')
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        dummy_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}, ldap_authenticator.id: {"uid": random_user.username}},
+        }
+        response = user_api_client.patch(url, dummy_payload, format='json')
+        # Assert Patch Fails
+        assert response.status_code == 400
+        assert response.data == {
+            'associated_authenticators': [ErrorDetail(string='Only superusers can manage associated_authenticators using this field.', code='invalid')]
+        }
+        # Assert associated authenticators is not changed
+        response = user_api_client.get(url)
+        expected_payload = {'username': random_user.username, 'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}}}
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == expected_payload['associated_authenticators']
+
+    def test_associated_authenticators_local_auth_not_updated_if_incorrect_uid(self, admin_api_client, local_authenticator, random_user):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        dummy_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": "FAKEVALUE"}},
+        }
+        response = admin_api_client.patch(url, dummy_payload, format='json')
+        assert response.status_code == 200
+        response = admin_api_client.get(url)
+        expected_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}},
+        }
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == expected_payload['associated_authenticators']
+
+    def test_associated_authenticators_can_be_removed(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        initial_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}, ldap_authenticator.id: {"uid": random_user.username}},
+        }
+        # Set initial associated authenticators
+        response = admin_api_client.patch(url, initial_payload, format='json')
+        assert response.status_code == 200
+        # Set empty dict for associated authenticators
+        empty_associated_authenticators_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {},
+        }
+        response = admin_api_client.patch(url, empty_associated_authenticators_payload, format='json')
+        assert response.status_code == 200
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert response.data["associated_authenticators"] == empty_associated_authenticators_payload['associated_authenticators']
+
+    def test_invalid_associated_authenticator_uid_returns_error(self, admin_api_client, random_user):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        initial_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {"-1": {"uid": random_user.username}},
+        }
+        response = admin_api_client.patch(url, initial_payload, format='json')
+        assert response.status_code == 400
+        assert response.data == {'associated_authenticators': [ErrorDetail(string='The following authenticator IDs do not exist: -1', code='invalid')]}
+
+    def test_associated_authenticators_returns_error_if_bad_email(self, admin_api_client, local_authenticator, random_user):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        initial_payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username, "email": "Not An Email"}},
+        }
+        response = admin_api_client.patch(url, initial_payload, format='json')
+        assert response.status_code == 400
+        assert response.data == {
+            'associated_authenticators': [
+                ErrorDetail(string=f"The email 'Not An Email' for authenticator '{local_authenticator.id}' is not a valid email address.", code='invalid')
+            ]
+        }
+
+    def test_associated_authenticators_takes_precedence_over_authenticators(self, admin_api_client, random_user, local_authenticator):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}},
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+        assert response.data['associated_authenticators'] == payload['associated_authenticators']
+        assert response.data['authenticators'][0] == local_authenticator.id
+        updated_payload = {
+            'username': random_user.username,
+            'authenticators': [],
+            'authenticator_uid': random_user.username,
+            'associated_authenticators': {},
+        }
+        response = admin_api_client.patch(url, updated_payload, format='json')
+        assert response.status_code == 200
+        assert response.data['associated_authenticators'] == updated_payload['associated_authenticators']
+        assert len(response.data['authenticators']) == 0
+
+    def test_associated_authenticator_unknown_keys_returns_error(self, admin_api_client, random_user, local_authenticator):
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'associated_authenticators': {
+                local_authenticator.id: {"uid": random_user.username, "email": f"{random_user.username}@example.com", "invalid_key": "invalid_value"}
+            },
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 400
+        assert response.data == {
+            'associated_authenticators': [
+                ErrorDetail(
+                    string=f"Unknown key(s) for authenticator '{local_authenticator.id}': invalid_key. Only 'uid' and 'email' are allowed.", code='invalid'
+                )
+            ]
+        }
 
     def test_add_authenticator_conflicting_uid_on_new_authenticator(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')

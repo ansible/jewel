@@ -147,6 +147,12 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
     def get_authenticator_uids(self) -> list[str]:
         return list(self.authenticator_users.values_list('uid', flat=True).distinct())
 
+    def get_associated_authenticators(self) -> dict:
+        return {
+            auth_user['provider__id']: {"uid": auth_user['uid'], **({"email": auth_user['email']} if auth_user['email'] not in [None, ''] else {})}
+            for auth_user in self.authenticator_users.values('provider__id', 'uid', 'email')
+        }
+
     def get_is_platform_auditor(self):
         if not hasattr(self, '_is_platform_auditor'):
             # For performance purposes, catch the value from the database

@@ -193,4 +193,6 @@ def compare_types(api_type, doc_type):
             return doc_type in ["array"]
         case "float":
             return doc_type in ["number"]
+        case "nested object":
+            return doc_type == "object"
     return doc_type == api_type
