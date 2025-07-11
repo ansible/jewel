@@ -9,6 +9,8 @@ from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import EmailValidator
 from django.db import transaction
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
@@ -37,7 +39,9 @@ class UserSerializer(CommonUserSerializer):
         allow_blank=True,
         allow_null=True,
     )
+
     authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    associated_authenticators = serializers.JSONField(write_only=True, required=False)
     is_platform_auditor = serializers.BooleanField(read_only=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
@@ -58,6 +62,7 @@ class UserSerializer(CommonUserSerializer):
             'is_platform_auditor',
             'authenticators',
             'authenticator_uid',
+            'associated_authenticators',
             'managed',
         ]
         read_only_fields = ["last_login", "is_platform_auditor"]
@@ -179,6 +184,77 @@ class UserSerializer(CommonUserSerializer):
 
         return value
 
+    def validate_associated_authenticators(self, value):
+        """
+        Validate the associated_authenticators field by coordinating helper validations.
+        """
+        if not value:
+            return value
+
+        if not self.is_superuser_making_request():
+            raise serializers.ValidationError(_("Only superusers can manage associated_authenticators using this field."))
+
+        if not isinstance(value, dict):
+            raise serializers.ValidationError(_("This field must be a JSON object (dictionary)."))
+
+        self._validate_authenticator_keys_exist(value.keys())
+        self._validate_authenticator_details_format(value)
+
+        return value
+
+    def _validate_authenticator_keys_exist(self, keys):
+        """Ensure all authenticator IDs are valid integers that exist in the database."""
+        try:
+            authenticator_ids = [int(key) for key in keys]
+        except (ValueError, TypeError):
+            raise serializers.ValidationError(_("All authenticator IDs (the keys) must be valid integers."))
+
+        existing_ids = set(Authenticator.objects.filter(id__in=authenticator_ids).values_list('id', flat=True))
+        non_existent_ids = set(authenticator_ids) - existing_ids
+
+        if non_existent_ids:
+            error_message = _("The following authenticator IDs do not exist: {ids}").format(ids=", ".join(map(str, sorted(non_existent_ids))))
+            raise serializers.ValidationError(error_message)
+
+    def _validate_authenticator_details_format(self, value):
+        """Validate the format of each authenticator's details dictionary."""
+        errors = []
+        validate_email = EmailValidator()
+        # Define the set of valid keys for each authenticator's details.
+        allowed_keys = {'uid', 'email'}
+
+        for auth_id, details in value.items():
+            if not isinstance(details, dict):
+                errors.append(_("The value for key '{auth_id}' must be a dictionary.").format(auth_id=auth_id))
+                continue  # Move to next item if format is wrong
+
+            unknown_keys = set(details.keys()) - allowed_keys
+            if unknown_keys:
+                # Format the unknown keys for a clear error message.
+                keys_str = ", ".join(sorted(unknown_keys))
+                errors.append(
+                    _("Unknown key(s) for authenticator '{auth_id}': {keys_str}. Only 'uid' and 'email' are allowed.").format(
+                        auth_id=auth_id, keys_str=keys_str
+                    )
+                )
+
+            # Check for mandatory 'uid'
+            if not isinstance(details.get('uid'), str) or not details.get('uid'):
+                errors.append(_("Each authenticator must have a non-empty 'uid' string. Error at key '{auth_id}'.").format(auth_id=auth_id))
+
+            # Check optional 'email'
+            if 'email' in details and details['email'] is not None:
+                email = details['email']
+                if not isinstance(email, str):
+                    errors.append(_("The 'email' for authenticator '{auth_id}' must be a string or null.").format(auth_id=auth_id))
+                else:
+                    try:
+                        validate_email(email)
+                    except DjangoValidationError:
+                        errors.append(_("The email '{email}' for authenticator '{auth_id}' is not a valid email address.").format(email=email, auth_id=auth_id))
+        if errors:
+            raise serializers.ValidationError(errors)
+
     def validate(self, data):
         """
         Perform cross-field validation for authenticators and authenticator_uid.
@@ -195,20 +271,22 @@ class UserSerializer(CommonUserSerializer):
         """
         authenticators = data.get('authenticators')
         authenticator_uid = data.get('authenticator_uid')
+
         user_instance = self.instance  # This will be None for creation
         current_authenticators = user_instance.get_authenticator_ids() if user_instance else []
 
         self._handle_partial_update(data, user_instance)
 
         errors = {}
+        if 'associated_authenticators' not in self.initial_data:
 
-        if authenticators:
-            self._validate_authenticators_and_uid(authenticators, authenticator_uid, user_instance, current_authenticators, errors)
+            if authenticators:
+                self._validate_authenticators_and_uid(authenticators, authenticator_uid, user_instance, current_authenticators, errors)
 
-        self._validate_empty_authenticators(authenticators, authenticator_uid, errors)
+            self._validate_empty_authenticators(authenticators, authenticator_uid, errors)
 
-        if errors:
-            raise ValidationError(errors)
+            if errors:
+                raise ValidationError(errors)
 
         return data
 
@@ -326,7 +404,7 @@ class UserSerializer(CommonUserSerializer):
 
         logger.info(f"Removed authenticators: {list(authenticators_to_remove)}")
 
-    def _add_authenticators(self, authenticators_to_add, authenticator_uid, user_instance):
+    def _add_authenticators(self, authenticators_to_add, authenticator_uid, user_instance, email=None):
         """
         Add new authenticators to the user, create AuthenticatorUser objects, and log the additions.
         """
@@ -348,7 +426,7 @@ class UserSerializer(CommonUserSerializer):
             else:
                 new_uid = authenticator_uid
 
-            AuthenticatorUser.objects.create(uid=new_uid, user=user_instance, provider=authenticator)
+            AuthenticatorUser.objects.create(uid=new_uid, user=user_instance, provider=authenticator, email=email)
 
         logger.info(f"Added authenticators: {authenticators_to_add}")
 
@@ -388,7 +466,7 @@ class UserSerializer(CommonUserSerializer):
 
         logger.info(f"Updated authenticator UID to {authenticator_uid}")
 
-    def _update_users_authenticators(self, authenticators, authenticator_uid, user_instance):
+    def _update_users_authenticators(self, authenticators, authenticator_uid, associated_authenticators, user_instance):
         """
         Update user's authenticators:
         1. Remove old authenticators
@@ -400,14 +478,24 @@ class UserSerializer(CommonUserSerializer):
 
         existing_authenticators = user_instance.get_authenticator_ids()
 
-        if authenticators is not None:
+        if 'associated_authenticators' in self.initial_data:
+            if existing_authenticators:
+                self._remove_authenticators(existing_authenticators, user_instance)
+
+            for auth_id_str, data in associated_authenticators.items():
+                specific_uid = data.get('uid')
+                email = data.get('email')
+                if specific_uid is not None:
+                    self._add_authenticators([int(auth_id_str)], specific_uid, user_instance, email)
+                    self._update_authenticator_uids(specific_uid, user_instance)
+
+        elif authenticators is not None:
             authenticators_to_remove = set(existing_authenticators) - set(authenticators)
             authenticators_to_add = set(authenticators) - set(existing_authenticators)
 
             self._remove_authenticators(authenticators_to_remove, user_instance)
             self._add_authenticators(authenticators_to_add, authenticator_uid, user_instance)
-
-        self._update_authenticator_uids(authenticator_uid, user_instance)
+            self._update_authenticator_uids(authenticator_uid, user_instance)
 
         logger.info(f"Successfully updated authenticators for user {user_instance.username}")
 
@@ -436,11 +524,12 @@ class UserSerializer(CommonUserSerializer):
         # Remove the authenticators field since thats not a real field on the User model
         authenticators = validated_data.pop('authenticators', None)
         authenticator_uid = validated_data.pop('authenticator_uid', None)
+        associated_authenticators = validated_data.pop('associated_authenticators', None)
 
         # Update the User model with validated data
         instance = super().update(instance, validated_data)
         # Handle authenticator changes
-        self._update_users_authenticators(authenticators, authenticator_uid, instance)
+        self._update_users_authenticators(authenticators, authenticator_uid, associated_authenticators, instance)
 
         # If we are updating a password we need to reset the session or the user will be logged out
         if validated_data.get('password', None) and self.context['request'].user.username == instance.username:
@@ -457,12 +546,13 @@ class UserSerializer(CommonUserSerializer):
         # Remove the authenticators field since thats not a real field on the User model
         authenticators = validated_data.pop('authenticators', None)
         authenticator_uid = validated_data.pop('authenticator_uid', None)
+        associated_authenticators = validated_data.pop('associated_authenticators', None)
 
         # Create the User instance
         new_user = super().create(validated_data)
 
         # Associate authenticators with the new user
-        self._update_users_authenticators(authenticators, authenticator_uid, new_user)
+        self._update_users_authenticators(authenticators, authenticator_uid, associated_authenticators, new_user)
 
         return new_user
 
@@ -493,6 +583,7 @@ class UserSerializer(CommonUserSerializer):
         if request and request.user and (request.user.is_superuser or request.user.is_platform_auditor or request.user.username == obj.username):
             ret['authenticators'] = obj.get_authenticator_ids()
             ret['authenticator_uid'] = ', '.join(obj.get_authenticator_uids())
+            ret['associated_authenticators'] = obj.get_associated_authenticators()
 
         return ret
 
