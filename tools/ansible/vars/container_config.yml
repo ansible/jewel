@@ -49,7 +49,7 @@ keycloak_image: quay.io/keycloak/keycloak
 keycloak_image_version: 15.0.2
 keycloak_username: admin
 keycloak_password: admin
-cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN="
+cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN=devenv"
 oidc_reference:
 
 # LDAP docker compose settings
