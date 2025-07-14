@@ -3,7 +3,7 @@ ldap_cert_dir: '{{ sources_dest }}/ldap_certs'
 ldap_diff_dir: '{{ sources_dest }}/ldap_diffs'
 ldap_public_key_file: '{{ ldap_cert_dir }}/{{ ldap_public_key_file_name }}'
 ldap_private_key_file: '{{ ldap_cert_dir }}/{{ ldap_private_key_file_name }}'
-ldap_cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN="
+ldap_cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN=devenv"
 ldap_container_name: "Dev LDAP Container"
 ldap_auth_map_name: "Dev LDAP Container Map"
 

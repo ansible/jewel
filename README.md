@@ -128,11 +128,11 @@ Once the containers come up a new port (8443 by default) should be exposed and t
 
 #### Additional Configuration
 ```
-keycloak_exposed_port: 8443                         <- The exposed port on the machine running docker
-keycloak_username: admin                            <- Admin username and password
+keycloak_exposed_port: 8443                               <- The exposed port on the machine running docker
+keycloak_username: admin                                  <- Admin username and password
 keycloak_password: admin
-cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN="  <- The CN for the self signed cert
-oidc_reference:                                     <- See note below
+cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN=devenv"  <- The CN for the self signed cert
+oidc_reference:                                           <- See note below
 ```
 
 Note: SAML works by sending redirects between gateway and Keycloak through the browser. Because of this we have to tell both gateway and Keycloak how they will construct the redirect URLs. On the Keycloak side, this is done within the realm configuration and on the gateway side its done through the SAML settings. The `container_reference` variable in the general section above is used for the configuration.
