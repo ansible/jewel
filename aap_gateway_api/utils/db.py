@@ -1,33 +1,42 @@
 import logging
-from multiprocessing import Pool
-from multiprocessing.context import TimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
-from django.db import DatabaseError, connections
+from django.db import connections
+from django.db.utils import OperationalError
 
-logger = logging.getLogger("aap_gateway_api.utils.db")
+logger = logging.getLogger("aap.aap_gateway_api.utils.db")
 
 
 def get_db_connection_status(db_name, timeout):
     """
-    Attempts to connect to the DB in a terminable thread and returns at
+    Attempts to connect to the DB in a separate thread and returns after
     specified timeout (even if it's shorter than DB connection timeout).
     Returns True if successful.
-    Logs and raises TimeoutError for timeout or DatabaseError for other problems.
+    Logs and raises TimeoutError for timeout or OperationalError for other problems.
     """
+    # Not using "with ...:", it would wait for thread to finish even after timeout
+    ex = ThreadPoolExecutor(thread_name_prefix="db_status")
+    start_time = datetime.now()
+    future = ex.submit(_check_db, db_name)
     try:
-        with Pool(processes=1) as p:
-            result = p.map_async(_try_connection, [db_name]).get(timeout=timeout)[0]
-            return result
-    except (DatabaseError, TimeoutError) as e:
-        logger.error(f"Failed to connect to DB! {type(e).__name__}")
+        result = future.result(timeout=timeout)
+        return result
+    except TimeoutError:
+        elapsed_time = datetime.now() - start_time
+        logger.warning(f"Thread checking status of database did not finish in time, ran for {elapsed_time.total_seconds()} seconds, abandoning the thread!")
         raise
     finally:
-        p.terminate()
-        p.close()
+        # shutting down and not waiting for the thread
+        ex.shutdown(wait=False)
 
 
-def _try_connection(db_name):
-    db_conn = connections.create_connection(db_name)
-    c = db_conn.cursor()
-    c.execute('SELECT 1')
-    return True
+def _check_db(db_name):
+    try:
+        c = connections[db_name].cursor()
+        c.execute("SELECT 1;")
+        c.close()
+        return True
+    except OperationalError as e:
+        logger.error(f"Failed to connect to DB! {type(e).__name__} ")
+        raise
