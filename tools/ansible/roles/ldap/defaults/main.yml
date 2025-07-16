@@ -17,7 +17,7 @@ ldap_configuration:
     - "ldap://ldap:1389"
   BIND_DN: "cn={{ ldap_admin_username }},dc=example,dc=org"
   BIND_PASSWORD: "{{ ldap_admin_password }}"
-  START_TLS: False
+  START_TLS: false
   CONNECTION_OPTIONS:
     OPT_REFERRALS: 0
     OPT_NETWORK_TIMEOUT: 30
@@ -42,12 +42,30 @@ ldap_configuration:
 ldap_users:
   - username: 'ldap_admin'
     password: 'admin123'
+    title:
+      - "Engineering"
+      - "Database Team"
+      - "Research Division"
+      - "Platform Administrators"
+      - "East Coast Region"
+      - "<script>alert('hey')</script>East Coast Region<script>alert('ho')</script>"
   - username: 'ldap_auditor'
     password: 'audit123'
+    title:
+      - "Engineering"
+      - "Database Team"
+      - "Security Auditors"
+      - "Compliance Team"
+      - "West Coast Region"
   - username: 'ldap_unpriv'
     password: 'unpriv123'
   - username: 'ldap_org_admin'
     password: 'orgadmin123'
+    title:
+      - "Engineering"
+      - "Organization Administrators"
+      - "Management Team"
+      - "Central Region"
 
 ldap_groups:
   - name: org_admins

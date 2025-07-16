@@ -3,9 +3,9 @@
   ansible.platform.authenticator:
     name: "{{ ldap_container_name }}"
     slug: "{{ ldap_container_name | replace(' ', '') | lower }}"
-    enabled: True
-    create_objects: True
-    remove_users: True
+    enabled: true
+    create_objects: true
+    remove_users: true
     configuration: "{{ ldap_configuration }}"
     type: "ansible_base.authentication.authenticator_plugins.ldap"
 
@@ -51,9 +51,9 @@
   ansible.platform.authenticator:
     name: "{{ ldap_container_name }} Union"
     slug: "{{ ldap_container_name | replace(' ', '') | lower }}union"
-    enabled: False
-    create_objects: True
-    remove_users: True
+    enabled: false
+    create_objects: true
+    remove_users: true
     configuration: "{{ ldap_configuration | combine({'USER_SEARCH': union_user_search}) | ansible.utils.remove_keys('USER_DN_TEMPLATE') }}"
     type: "ansible_base.authentication.authenticator_plugins.ldap"
   vars:
