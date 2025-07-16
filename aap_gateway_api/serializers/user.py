@@ -189,7 +189,7 @@ class UserSerializer(CommonUserSerializer):
         Validate the associated_authenticators field by coordinating helper validations.
         """
         if not value:
-            return value
+            return {}
 
         if not self.is_superuser_making_request():
             raise serializers.ValidationError(_("Only superusers can manage associated_authenticators using this field."))
