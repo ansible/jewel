@@ -55,7 +55,7 @@ oidc_reference:
 # LDAP docker compose settings
 ldap_exposed_ldap_port: 389
 ldap_exposed_ldaps_port: 636
-ldap_image_version: 2
+ldap_image_version: latest
 ldap_admin_username: admin
 ldap_admin_password: admin
 ldap_public_key_file_name: 'ldap.cert'

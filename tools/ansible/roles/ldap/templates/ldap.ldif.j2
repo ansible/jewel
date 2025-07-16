@@ -29,6 +29,11 @@ objectClass: organizationalPerson
 objectClass: inetOrgPerson
 userPassword: {{ user.password }}
 givenName: gateway
+{% if user.title is defined and user.title %}
+{% for title in user.title %}
+title: {{ title }}
+{% endfor %}
+{% endif %}
 
 dn: cn=other_{{ user.username }},ou=other_users,dc=example,dc=org
 mail: admin@example.org
@@ -40,6 +45,11 @@ objectClass: organizationalPerson
 objectClass: inetOrgPerson
 userPassword: {{ user.password }}
 givenName: gateway
+{% if user.title is defined and user.title %}
+{% for title in user.title %}
+title: {{ title }}
+{% endfor %}
+{% endif %}
 
 {% endfor %}
 
