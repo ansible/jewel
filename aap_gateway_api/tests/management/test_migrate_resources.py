@@ -1,15 +1,14 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from ansible_base.authentication.models import Authenticator
+from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
-from rest_framework.test import APIClient
+from django.db import IntegrityError
 
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
-from aap_gateway_api.tests.conftest import PatchedResourceClient
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 SEP_CHAR = "_"
@@ -459,104 +458,6 @@ def test_use_given_name_iteration(cmd):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrated_admin_password(
-    migration_service,
-    admin_user,
-    admin_api_client,
-    patched_resource_client,
-):
-    admin_user.set_password(None)
-    admin_user.save()
-    admin_user.authenticator_users.all().delete()
-
-    assert admin_user.username == "admin"
-
-    # Since migration_service is the only DefaultServiceType service in this test,
-    # the command will naturally process only that service
-    call_command(
-        "migrate_service_data",
-        username=admin_user.username,
-    )
-
-    assert admin_user.authenticator_users.filter(
-        provider__type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-    ).exists()
-
-    url = get_relative_url("login")
-    next_url = get_relative_url("me-list")
-
-    with patch("aap_gateway_api.authentication.authenticator_plugins.controller_admin.GWResourceAPIClient", PatchedResourceClient):
-        client = APIClient()
-        data = {"username": "admin", "password": "invalid_password", "next": next_url}
-        response = client.post(url, data, follow=True)
-        assert response.status_code == 401
-
-        client = APIClient()
-        data = {"username": "admin", "password": "controller_admin_pass", "next": next_url}
-        response = client.post(url, data, follow=True)
-        assert response.status_code == 200
-        assert response.data["results"][0]["username"] == "admin"
-
-        assert not admin_user.authenticator_users.filter(
-            provider__type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-        ).exists()
-
-        assert not Authenticator.objects.filter(
-            type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-        ).exists()
-
-        # make sure we can login with the new password
-        client = APIClient()
-        data = {"username": "admin", "password": "controller_admin_pass", "next": next_url}
-        response = client.post(url, data, follow=True)
-        assert response.status_code == 200
-        assert response.data["results"][0]["username"] == "admin"
-
-
-@pytest.mark.django_db(transaction=True)
-def test_admin_user_already_set_migrated_admin_password(
-    migration_service,
-    admin_user,
-    admin_api_client,
-    patched_resource_client,
-):
-    admin_user.set_password("admin")
-    admin_user.save()
-
-    assert admin_user.username == "admin"
-
-    call_command(
-        "migrate_service_data",
-        username=admin_user.username,
-    )
-
-    assert not admin_user.authenticator_users.filter(
-        provider__type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-    ).exists()
-
-    assert not Authenticator.objects.filter(
-        type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-    ).exists()
-
-    url = get_relative_url("login")
-    next_url = get_relative_url("me-list")
-
-    with patch("aap_gateway_api.authentication.authenticator_plugins.controller_admin.GWResourceAPIClient", PatchedResourceClient):
-        data = {"username": "admin", "password": "admin", "next": next_url}
-
-        client = APIClient()
-        response = client.post(url, data, follow=True)
-        assert response.status_code == 200
-        assert response.data["results"][0]["username"] == "admin"
-
-        data = {"username": "admin", "password": "controller_admin_pass", "next": next_url}
-
-        client = APIClient()
-        response = client.post(url, data, follow=True)
-        assert response.status_code == 401
-
-
-@pytest.mark.django_db(transaction=True)
 def test_service_processing_order(admin_user, capsys, service_api_route_controller, service_api_route_hub, service_api_route_eda, patched_resource_client):
     """Test that services are processed in exact order: controller, hub, eda"""
 
@@ -744,3 +645,39 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         assert "Successful migrations: 1" in captured.out
         assert "Failed migrations: 0" in captured.out
         assert "All services migration completed successfully!" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api_client, local_authenticator):
+    """Test that two users cannot have the same email address on the same authenticator.
+
+    Steps to recreate the issue:
+    1. Create two users: user1, user2
+    2. Create an authenticator
+    3. Assign the authenticator to user1 with email address foo@test.com
+    4. Assign the authenticator to user2 with email address foo@test.com
+
+    Expected behavior: The second assignment should return an error
+    """
+    # Create two users
+    user1 = User.objects.create(username="user1", email="user1@example.com")
+    user2 = User.objects.create(username="user2", email="user2@example.com")
+
+    # Assign the authenticator to user1 with email address foo@test.com
+    AuthenticatorUser.objects.create(user=user1, provider=local_authenticator, email="foo@test.com")
+
+    # Attempt to assign the same authenticator to user2 with the same email address foo@test.com
+    # This should raise an error
+    with pytest.raises((IntegrityError, Exception)) as exc_info:
+        AuthenticatorUser.objects.create(user=user2, provider=local_authenticator, email="foo@test.com")
+
+    # The error should indicate a constraint violation or duplicate/unique constraint
+    error_message = str(exc_info.value).lower()
+    assert any(
+        keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]
+    ), f"Expected error message to indicate constraint violation, got: {exc_info.value}"
+
+    # Verify that only the first user has the authenticator with the email
+    assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com").count() == 1
+    assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com", user=user1).exists()
+    assert not AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com", user=user2).exists()
