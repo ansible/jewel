@@ -20,6 +20,8 @@ class ServiceTokenAuthentication(BaseAuthentication):
         #   3. An array of allowed methods
         ('setting-section-list', {'category_slug': 'analytics'}, ['get']),
         ('roleuserassignment-list', {}, ['get']),
+        ('authenticator-list', {}, ['get', 'post', 'patch']),
+        ('authenticatormap-list', {}, ['get', 'post', 'patch']),
     ]
 
     def authenticate(self, request):
