@@ -70,7 +70,7 @@ For CI-based analysis, parameters can be set in the `sonar-project.properties` f
 ## 📌 GitHub Actions Integration  
 There are two GitHub Actions workflows that handle the integration of SonarCloud into the AAP-Gateway CI/CD pipeline:  
 
-
+SonarCloud analysis on PRs to private repositories requires a special setup because PR workflows don’t have access to secrets. To solve this, we trigger the SonarCloud workflow (`sonar-pr.yml`) after the main CI workflow completes. This workflow runs in the upstream repository context, so it has access to the necessary secrets and can report results back to the PR.
 
 ### 🔹 **1. CI Workflow**
 File: [`.github/workflows/ci.yml`](https://github.com/ansible/aap-gateway/blob/devel/.github/workflows/ci.yml)  
@@ -116,7 +116,7 @@ Trigger: Runs after the CI workflow successfully completes on a pull request
 ## 🛠️ Debugging SonarCloud Issues
 
 ### 🔹 **Common Issue: Broken `sonar-project.properties`**
-If a change in `sonar-project.properties` breaks SonarCloud, debugging can be tricky. The best approach is to run **`sonar-scanner` locally**.
+If a change in `sonar-project.properties` breaks SonarCloud, debugging can be tricky since the PR may still appear **green** because Sonar doesn't inject itself in such cases. The best approach is to run **`sonar-scanner` locally**.
 
 ### 🔹 **Steps to Debug Locally**
 
@@ -126,7 +126,7 @@ If a change in `sonar-project.properties` breaks SonarCloud, debugging can be tr
 2. **Set up SonarScanner CLI**
 
    SonarScanner CLI can be used with SonarCloud to debug and configure local analysis. 
-   After you have download the SonarScanner archive, follow [this instructions](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/sonarscanner-cli/) to finish the set up.
+   After you have downloaded the SonarScanner archive, follow [this instructions](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/sonarscanner-cli/) to finish the set up.
    
    > [!NOTE]
    > The extracted `sonar-scanner` files **must stay together**. You **cannot** move only `bin/sonar-scanner` to `/usr/local/bin/`.
@@ -136,8 +136,10 @@ If a change in `sonar-project.properties` breaks SonarCloud, debugging can be tr
       export PATH=$(pwd)/bin:$PATH
       ```
 
+   > [!TIP]
+   > Some of these changes were based on the SonarCloud GitHub Action: https://github.com/SonarSource/sonarcloud-github-action/blob/master/action.yml
 
-4. **Obtain a SonarCloud API Token**
+3. **Obtain a SonarCloud API Token**
    - Log in to **SonarCloud**  
    - Click your avatar (top-right) → **My Account** → [**Security Tab**](https://sonarcloud.io/account/security)  
    - Generate a new **Sonar Token** and set it as an environment variable:
@@ -146,18 +148,71 @@ If a change in `sonar-project.properties` breaks SonarCloud, debugging can be tr
    export SONAR_TOKEN=your_token_here
    ```
 
-5. **Run SonarScanner Manually**
+4. **Run SonarScanner Manually**
 
    Run the command `sonar-scanner` from the project base directory to run the analysis
    ```sh
    sonar-scanner -Dsonar.projectBaseDir=. -Dsonar.host.url=https://sonarcloud.io
    ```
 
-6. **Check for Errors**
+5. **Check for Errors**
    - Most issues appear at the **bottom of the output**.
    - Fix any configuration problems and rerun `sonar-scanner`.
+   - You can iterate as quickly as you like, then commit the fix.
 
+## 🔧 Automated Local Analysis Script
 
+For easier PR analysis, we provide an automated script that uses the GitHub CLI to retrieve PR information and run the analysis with the correct parameters.
+
+The script follows the [thenets/bash-helpers](https://github.com/thenets/bash-helpers) boilerplate pattern with structured logging, self-documenting help, and robust error handling.
+
+### 🔹 **Quick Start**
+
+```bash
+# Setup (one-time)
+export SONAR_TOKEN=your_token_here
+gh auth login
+
+# Run analysis for current PR branch
+./tools/scripts/run-sonar-local.sh
+
+# Or analyze a specific PR number
+./tools/scripts/run-sonar-local.sh 123
+
+# View comprehensive help
+./tools/scripts/run-sonar-local.sh --help
+```
+
+### 🔹 **Features**
+
+- **Auto PR Detection**: Automatically detects current PR or accepts PR number argument
+- **GitHub CLI Integration**: Retrieves PR metadata (base branch, head branch, SHA) via `gh`
+- **Coverage Generation**: Generates coverage.xml if missing (requires pytest)
+- **Exact CI Simulation**: Uses identical sonar-scanner parameters as GitHub Actions workflow
+- **Structured Logging**: Color-coded output with `[INFO]`, `[SUCCESS]`, `[WARNING]`, `[ERROR]` levels
+- **Self-Documenting**: Help text extracted from script header comments
+- **Prerequisite Validation**: Checks all required tools and environment variables
+- **Robust Error Handling**: Clear error messages and troubleshooting guidance
+
+### 🔹 **Requirements**
+
+- `SONAR_TOKEN` environment variable  
+- GitHub CLI (`gh`) authenticated
+- `jq` for JSON parsing
+- `sonar-scanner` in PATH
+- Optional: `pytest` with `pytest-cov` for coverage generation
+
+### 🔹 **Output Example**
+
+```
+---- SonarCloud Local Analysis Tool ----
+[INFO ] Checking prerequisites...
+[SUCCESS] All prerequisites met
+[SUCCESS] Found PR #1
+[INFO ]   Head branch: AAP-49383
+[INFO ]   Base branch: stable-2.5
+[SUCCESS] SonarCloud analysis completed successfully!
+```
 
 ## 📌 References
 

@@ -40,18 +40,69 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Print SonarCloud Analysis Decision Summary
+        id: print_summary
+        run: |
+          echo "🔍 SonarCloud Analysis Decision Summary"
+          echo "========================================"
+          
+          # Check CI Event (we know it's a PR since we're here)
+          echo "├── CI Event: ✅ Pull Request"
+          
+          # Check backport labels
+          labels='${{ toJson(fromJson(steps.pr_info.outputs.data).labels) }}'
+          has_backport=$(echo "$labels" | jq -r 'any(.name | startswith("backport "))')
+          if [ "$has_backport" = "true" ]; then
+            backport_label_names=$(echo "$labels" | jq -r '.[] | select(.name | startswith("backport ")) | .name' | tr '\n' ',' | sed 's/,$//')
+            echo "├── Backport Label: ✅ Found ($backport_label_names)"
+            echo "└── Result: ⏭️ Skip - \"PR has backport label\""
+            exit 0
+          else
+            echo "├── Backport Label: ❌ None"
+          fi
+          
+          # Check Python changes
+          files=$(gh api repos/${{ github.event.repository.full_name }}/pulls/${{ env.PR_NUMBER }}/files --jq '.[].filename')
+          
+          # Get file extensions for summary
+          extensions=$(echo "$files" | sed 's/.*\.//' | sort | uniq | tr '\n' ',' | sed 's/,$//')
+          
+          # Check if any Python files were changed
+          python_files=$(echo "$files" | grep '\.py$' || true)
+          if [ -z "$python_files" ]; then
+            echo "├── Python Changes: ❌ None (.$extensions only)"
+            echo "└── Result: ⏭️ Skip - \"No Python code changes detected\""
+          else
+            python_count=$(echo "$python_files" | wc -l)
+            echo "├── Python Changes: ✅ Found ($python_count files)"
+            echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if analysis should proceed
+        id: check_proceed
+        run: |
+          # This step only runs if we got past the summary step
+          # which means no backport labels and Python changes were found
+          echo "proceed=true" >> $GITHUB_OUTPUT
+          echo "✅ All conditions met - proceeding with SonarCloud analysis"
+
       - name: Set PR info into env
+        if: steps.check_proceed.outputs.proceed == 'true'
         run: |
           echo "PR_BASE=${{ fromJson(steps.pr_info.outputs.data).base.ref }}" >> $GITHUB_ENV
           echo "PR_HEAD=${{ fromJson(steps.pr_info.outputs.data).head.ref }}" >> $GITHUB_ENV
 
       - name: Add base branch
+        if: steps.check_proceed.outputs.proceed == 'true'
         run: |
           gh pr checkout ${{ env.PR_NUMBER }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SonarCloud Scan
+        if: steps.check_proceed.outputs.proceed == 'true'
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
