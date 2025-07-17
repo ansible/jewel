@@ -1,12 +1,10 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
-from django.db import IntegrityError
 
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
