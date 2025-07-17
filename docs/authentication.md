@@ -9,6 +9,121 @@ If that succeeds, the Authorization header will be stripped from the request and
 
 If the login fails, the Authorization header will be left in the request and the JWT header will *not* be added. The request with the Authorization header will be sent to the service allowing the service to attempt to authenticate the header.
 
+## User Authenticator Fields Migration
+
+### Field Deprecation Notice
+
+The following fields in the User API are deprecated and will be removed in a future version:
+
+- `authenticator_uid` (string): Previously used to specify a single UID for user authenticators
+- `authenticators` (list): Previously used to specify a list of authenticator IDs
+
+These fields have been replaced with the new `associated_authenticators` field which provides enhanced functionality for managing multiple authenticators per user.
+
+### Deprecated Fields Behavior
+
+For backward compatibility, the deprecated fields still function but with modified behavior:
+
+#### `authenticator_uid` (Deprecated)
+- **Warning**: A deprecation warning will be logged when this field is used
+- **Current behavior**: Applies only to the authenticator from `last_login_from` field
+- **Fallback**: If no `last_login_from` is set, applies to the user's single authenticator or first authenticator
+- **Migration path**: Use `associated_authenticators` to specify UIDs per authenticator
+
+#### `authenticators` (Deprecated)
+- **Warning**: A deprecation warning will be logged when this field is used
+- **Removing authenticators**: Continues to work - removes AuthenticatorUser objects
+- **Adding single authenticator**: Continues to work - requires `authenticator_uid` to be set
+- **Adding multiple authenticators**: Will error with message directing users to use `associated_authenticators`
+- **Migration path**: Use `associated_authenticators` for multi-authenticator management
+
+### New Field: `associated_authenticators`
+
+The new field provides granular control over authenticator associations:
+
+```json
+{
+  "associated_authenticators": {
+    "authenticator_id_1": {
+      "uid": "user_identifier_1",
+      "email": "user1@example.com"
+    },
+    "authenticator_id_2": {
+      "uid": "user_identifier_2",
+      "email": "user2@example.com"
+    }
+  }
+}
+```
+
+**Key features:**
+- Specify different UIDs for different authenticators
+- Optional email field per authenticator
+- Supports multiple authenticators simultaneously
+- Provides clear mapping between authenticators and user identities
+
+### Processing Order
+
+When both old and new fields are provided in the same request:
+1. Old fields (`authenticator_uid` and `authenticators`) are processed first
+2. New field (`associated_authenticators`) is processed second, taking priority
+3. Deprecation warnings are logged for old fields
+
+### Migration Examples
+
+#### Before (Deprecated)
+```json
+{
+  "username": "john_doe",
+  "authenticators": [1, 2],
+  "authenticator_uid": "john123"
+}
+```
+
+#### After (Recommended)
+```json
+{
+  "username": "john_doe",
+  "associated_authenticators": {
+    "1": {
+      "uid": "john123",
+      "email": "john@example.com"
+    },
+    "2": {
+      "uid": "john.doe",
+      "email": "john.doe@company.com"
+    }
+  }
+}
+```
+
+### Ansible Collection Impact
+
+The `ansible.platform.user` module also includes deprecation warnings for these fields:
+
+```yaml
+# Deprecated approach
+- name: Create user (deprecated)
+  ansible.platform.user:
+    username: john_doe
+    authenticators: [1, 2]
+    authenticator_uid: john123
+
+# Recommended approach
+- name: Create user with authenticators
+  ansible.platform.user:
+    username: john_doe
+    associated_authenticators:
+      1:
+        "uid": "jdoe"
+        "email": "jdoe@example.com"
+      2:
+        "uid": "123456789"
+        "email": "jdoe@example.com"
+```
+
+For complex multi-authenticator scenarios, it's recommended to use the `ansible.platform.authenticator_user` module for granular control.
+
 ## SAML
 
 
@@ -197,7 +312,7 @@ An example authenticator payload ...
 
 ### Development environment
 
-Gateway development environment comes with a RADIUS sidecar container, 
+Gateway development environment comes with a RADIUS sidecar container,
 that is disabled by default. To enable it uncomment `radius_enabled: True` line in
 your `container-startup.yml` file. This will start and configure
 the [freeradius](https://freeradius.org/) container and configure the RADIUS authenticator plugin

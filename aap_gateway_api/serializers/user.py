@@ -1,6 +1,9 @@
 import logging
+import warnings
 
-from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_plugin
+from ansible_base.authentication.authenticator_plugins.utils import (
+    get_authenticator_plugin,
+)
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.authentication.utils.user import can_user_change_password
@@ -12,7 +15,6 @@ from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from django.db import transaction
-from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
@@ -38,9 +40,15 @@ class UserSerializer(CommonUserSerializer):
         required=False,
         allow_blank=True,
         allow_null=True,
+        help_text=_("DEPRECATED: This field is deprecated and will be removed in a future version. Please use 'associated_authenticators' instead."),
     )
 
-    authenticator_uid = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    authenticator_uid = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        help_text=_("DEPRECATED: This field is deprecated and will be removed in a future version. Please use 'associated_authenticators' instead."),
+    )
     associated_authenticators = serializers.JSONField(write_only=True, required=False)
     is_platform_auditor = serializers.BooleanField(read_only=True)
 
@@ -48,6 +56,8 @@ class UserSerializer(CommonUserSerializer):
         super().__init__(instance, data, **kwargs)
 
         self.fields['authenticators'].choices = list(Authenticator.objects.all().values_list('id', 'name').order_by('name'))
+        # Track deprecation warnings to show only once per request
+        self._deprecation_warnings = []
 
     class Meta(CommonUserSerializer.Meta):
         model = User
@@ -66,6 +76,81 @@ class UserSerializer(CommonUserSerializer):
             'managed',
         ]
         read_only_fields = ["last_login", "is_platform_auditor"]
+
+    def _add_deprecation_warning(self, field_name, message):
+        """Add a deprecation warning for a field if not already added."""
+        if field_name not in [w.get('field') for w in self._deprecation_warnings]:
+            self._deprecation_warnings.append({'field': field_name, 'message': message})
+            warnings.warn(message, DeprecationWarning, stacklevel=2)
+            logger.warning(f"Deprecation warning for field '{field_name}': {message}")
+
+    def _collect_validation_errors(self, validation_functions):
+        """
+        Common helper to collect validation errors from multiple validation functions.
+
+        Args:
+            validation_functions: List of tuples (function, args, kwargs) to call for validation
+
+        Returns:
+            List of error messages
+        """
+        errors = []
+        for func, args, kwargs in validation_functions:
+            try:
+                func(*args, **kwargs)
+            except ValidationError as e:
+                if isinstance(e.detail, list):
+                    errors.extend(e.detail)
+                else:
+                    errors.append(e.detail)
+        return errors
+
+    def _validate_authenticator_exists(self, authenticator_id):
+        """Validate that an authenticator exists and return it."""
+        try:
+            return Authenticator.objects.get(id=authenticator_id)
+        except Authenticator.DoesNotExist:
+            raise ValidationError(f"Authenticator with ID {authenticator_id} does not exist")
+
+    def _check_uid_conflict(self, authenticator, uid, user_instance=None):
+        """Check if a UID conflicts with an existing user for the given authenticator."""
+        existing_auth_user = AuthenticatorUser.objects.filter(provider=authenticator, uid=uid).exclude(user=user_instance).first()
+
+        if existing_auth_user:
+            return {
+                'conflicting_user': existing_auth_user.user.username,
+                'error_message': f"UID '{uid}' is already in use for authenticator '{authenticator.name}' by user '{existing_auth_user.user.username}'",
+            }
+        return None
+
+    def _create_authenticator_user(self, authenticator_id, uid, user_instance, email=None):
+        """Create an AuthenticatorUser with proper UID handling and logging."""
+        authenticator = self._validate_authenticator_exists(authenticator_id)
+
+        # Check for conflicts before creating
+        conflict = self._check_uid_conflict(authenticator, uid, user_instance)
+        if conflict:
+            raise ValidationError(conflict['error_message'])
+
+        logger.info(f"Adding authenticator {authenticator.name} with UID {uid} for user {user_instance.username}")
+
+        auth_type = get_authenticator_plugin(authenticator.type).type
+
+        # For local authenticators, UID must match the username
+        if auth_type == 'local' and uid != user_instance.username:
+            logger.info(
+                f"Creating new user {user_instance.username} with authenticator_uid {user_instance.username} for the local authenticator {authenticator.name}; "
+                "uid must match username for local authenticator users"
+            )
+            uid = user_instance.username
+
+        # Set email on user instance if provided (all authenticators for a user share the same email)
+        # Only set email if it's not already set
+        if email is not None and user_instance.email is None:
+            user_instance.email = email
+
+        AuthenticatorUser.objects.create(uid=uid, user=user_instance, provider=authenticator, email=email)
+        return authenticator
 
     def is_superuser_making_request(self) -> bool:
         request = self.context.get('request', None)
@@ -117,12 +202,35 @@ class UserSerializer(CommonUserSerializer):
             return True
         return False
 
+    def _get_last_login_authenticator(self, user_instance):
+        """Get the authenticator from last_login_from or the single authenticator if user has only one."""
+        if not user_instance:
+            return None
+
+        # TODO: When AAP-48723 is implemented, use last_login_from field
+        # For now, fall back to the single authenticator if user has only one
+        authenticators = user_instance.authenticator_users.all()
+        if len(authenticators) == 1:
+            return authenticators.first().provider
+        elif len(authenticators) == 0:
+            return None
+        else:
+            # Multiple authenticators - would need last_login_from to determine which one
+            # For now, return the first one as a fallback
+            logger.warning(f"User {user_instance.username} has multiple authenticators but no last_login_from field available")
+            return authenticators.first().provider
+
     def validate_authenticator_uid(self, value: str) -> str:
         """
-        Ensure that when a user has multiple authenticators, their authenticator_uid field
-        cannot be changed (to avoid ambiguity).
-        Single-authenticator users can freely update their authenticator_uid.
+        Validate authenticator_uid field with deprecation warning and enhanced backward compatibility.
         """
+        if value is not None and "authenticator_uid" in self.initial_data:
+            self._add_deprecation_warning(
+                "authenticator_uid",
+                "The 'authenticator_uid' field is deprecated and will be removed in a future version. "
+                "Use 'associated_authenticators' field instead to specify UIDs per authenticator.",
+            )
+
         user_instance = self.instance  # This will be None for creation
 
         if user_instance is None:
@@ -142,12 +250,25 @@ class UserSerializer(CommonUserSerializer):
             # - Setting all authenticators to a single UID
             # - Updating specific authenticator UIDs
             # - Adding an endpoint for managing multiple authenticators
-            raise ValidationError(
-                _(
-                    "UID changes are not supported for users with multiple authenticators to "
-                    "prevent ambiguous updates. Use specific authenticator endpoints for changes. "
-                    "If you are deleting the authenticator leave this field as is."
-                )
+            self._add_deprecation_warning(
+                "authenticator_uid_ambiguous",
+                "UID changes for users with multiple authenticators are ambiguous. "
+                "The update will be applied to the authenticator from 'last_login_from' if available. "
+                "Use 'associated_authenticators' for precise control.",
+            )
+
+        # For backward compatibility, allow authenticator_uid to be used when authenticators field is also present
+        if "authenticators" in self.initial_data and value:
+            # When both deprecated fields are used together, allow the operation
+            return value
+
+        # New behavior: authenticator_uid applies only to the authenticator from last_login_from
+        target_authenticator = self._get_last_login_authenticator(user_instance)
+        if not target_authenticator and value:
+            # Be more permissive for backward compatibility - only warn, don't fail
+            self._add_deprecation_warning(
+                "authenticator_uid_no_target",
+                "Cannot determine target authenticator for authenticator_uid update. Consider using 'associated_authenticators' field for precise control.",
             )
 
         return value
@@ -158,30 +279,29 @@ class UserSerializer(CommonUserSerializer):
 
     def validate_authenticators(self, value):
         """
-        1. Enforce the single authenticator rule, with an exception for migrated users.
-        2. Skip validation if the authenticators are not changing or are being removed.
-        3. Authenticator ID validation is implicitly handled by DRF's choice field validation.
+        Perform permissive validation for the 'authenticators' field.
 
-        Note: The restriction of authenticator modifications to superusers is enforced at the view level.
+        This validation is intentionally permissive and focuses on basic scenarios
+        to support backward compatibility with a deprecated field. It allows the value
+        to pass through, deferring more complex validation to the cross-field
+        `validate` method, which can assess the overall validity of the request.
+
+        The key responsibilities of this method are:
+        1. Add a deprecation warning if the 'authenticators' field is used.
+        2. Return the value to allow the validation process to continue, where
+           cross-field validation will handle more complex cases.
+
+        Note: The restriction of authenticator modifications to superusers is
+        enforced at the view level.
         """
-        user_instance = self.instance  # This will be None for creation
+        if value is not None and "authenticators" in self.initial_data:
+            self._add_deprecation_warning(
+                "authenticators",
+                "The 'authenticators' field is deprecated and will be removed in a future version. "
+                "Use 'associated_authenticators' field instead for full control over multiple authenticators.",
+            )
 
-        # Get the user's current authenticators (if there is a user)
-        current_authenticators = user_instance.get_authenticator_ids() if user_instance else []
-
-        # If the authenticators are not changing, it's fine
-        if value is None or (set(value) == set(current_authenticators)):
-            return value
-
-        # Handle specific case for removing a provider from a migrated user with multiple authenticators
-        if user_instance and value != current_authenticators:
-            if self._is_only_removing_authenticators(value, current_authenticators):
-                return value
-
-        # Enforce the rule: a user cannot be tied to multiple authenticators
-        if len(value) > 1:
-            raise ValidationError(ErrorDetail(_("You can only tie a user to a single authenticator"), code='multiple_authenticators'))
-
+        # Let cross-field validation handle all other scenarios
         return value
 
     def validate_associated_authenticators(self, value):
@@ -197,8 +317,16 @@ class UserSerializer(CommonUserSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError(_("This field must be a JSON object (dictionary)."))
 
-        self._validate_authenticator_keys_exist(value.keys())
-        self._validate_authenticator_details_format(value)
+        # Use the common validation error collection pattern
+        validation_functions = [
+            (self._validate_authenticator_keys_exist, (value.keys(),), {}),
+            (self._validate_authenticator_details_format, (value,), {}),
+            (self._validate_associated_authenticators_conflicts, (value, self.instance), {}),
+        ]
+
+        errors = self._collect_validation_errors(validation_functions)
+        if errors:
+            raise serializers.ValidationError(errors)
 
         return value
 
@@ -252,6 +380,7 @@ class UserSerializer(CommonUserSerializer):
                         validate_email(email)
                     except DjangoValidationError:
                         errors.append(_("The email '{email}' for authenticator '{auth_id}' is not a valid email address.").format(email=email, auth_id=auth_id))
+
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -275,9 +404,24 @@ class UserSerializer(CommonUserSerializer):
         user_instance = self.instance  # This will be None for creation
         current_authenticators = user_instance.get_authenticator_ids() if user_instance else []
 
+        # Check if we're adding authenticators without providing UID (only for specific scenarios)
+        # Skip this validation if associated_authenticators is present (new field takes precedence)
+        if authenticators is not None and user_instance and 'associated_authenticators' not in self.initial_data:
+            authenticators_to_add = set(authenticators) - set(current_authenticators)
+            authenticators_to_remove = set(current_authenticators) - set(authenticators)
+            # Only require UID when adding new authenticators to existing ones (not when replacing or removing)
+            if authenticators_to_add and not authenticators_to_remove and not authenticator_uid:
+                # For now, allow it to proceed but add a warning - backward compatibility
+                self._add_deprecation_warning(
+                    "authenticator_uid_missing",
+                    "When adding new authenticators using the deprecated 'authenticators' field, "
+                    "the 'authenticator_uid' field should be provided for best results.",
+                )
+
         self._handle_partial_update(data, user_instance)
 
         errors = {}
+        # Skip deprecated field validation when associated_authenticators is present (new field takes precedence)
         if 'associated_authenticators' not in self.initial_data:
 
             if authenticators:
@@ -299,55 +443,81 @@ class UserSerializer(CommonUserSerializer):
     def _validate_authenticators_and_uid(self, authenticators, authenticator_uid, user_instance, current_authenticators, errors):
         # Skip UID validation if we're only removing authenticators
         if not self._is_only_removing_authenticators(authenticators, current_authenticators):
-            self._validate_uid_presence(authenticator_uid, authenticators, errors)
+            authenticators_to_add = set(authenticators) - set(current_authenticators)
+            authenticators_to_remove = set(current_authenticators) - set(authenticators)
+
+            # Treat empty string as no UID
+            if authenticator_uid == '':
+                authenticator_uid = None
+
+            # For user creation, always require authenticator_uid if authenticators are specified
+            if authenticators and not authenticator_uid:
+                errors.setdefault('authenticator_uid', []).append(
+                    ErrorDetail(_("Authenticator UID cannot be empty when setting authenticators."), code='required')
+                )
+
+            # For user updates, only require UID when adding new authenticators to a user with existing authenticators
+            if user_instance and len(authenticators_to_add) > 0 and not authenticators_to_remove:
+                # This is adding new authenticators to existing ones
+                if len(current_authenticators) > 0:
+                    self._validate_uid_presence(authenticator_uid, authenticators, errors)
+
+            # Check for conflicts when UID is provided
             self._validate_uid_conflicts(authenticators, authenticator_uid, user_instance, errors)
+
+            # Check for specific scenarios that should fail
             self._validate_new_authenticators(authenticators, authenticator_uid, user_instance, current_authenticators, errors)
 
     def _is_only_removing_authenticators(self, authenticators, current_authenticators):
         return set(authenticators) < set(current_authenticators)
 
     def _validate_uid_presence(self, authenticator_uid, authenticators, errors):
-        # Ensure authenticator_uid is not empty when setting authenticators
-        if not authenticator_uid and authenticators:
-            errors.setdefault('authenticator_uid', []).append(ErrorDetail(_("Authenticator UID cannot be empty when setting authenticators."), code='required'))
+        # For deprecated fields, we need to check if adding new authenticators requires a UID
+        # Only require UID when adding new authenticators, not for other operations
+        if not authenticator_uid:
+            errors.setdefault('authenticator_uid', []).append(
+                ErrorDetail(_("When adding new authenticators, the 'authenticator_uid' field must be provided."), code='required')
+            )
 
     def _validate_uid_conflicts(self, authenticators, authenticator_uid, user_instance, errors):
-        for authenticator_id in authenticators:
-            authenticator = Authenticator.objects.get(id=authenticator_id)
-            # Check for UID conflicts using Q objects for efficiency
-            if AuthenticatorUser.objects.filter(Q(uid=authenticator_uid) & Q(provider=authenticator)).exclude(user=user_instance).exists():
-                errors.setdefault('authenticator_uid', []).append(
-                    ErrorDetail(_("UID is already in use for authenticator: {}").format(authenticator.name), code='unique')
-                )
+        # For deprecated fields, still need to check for conflicts
+        if authenticator_uid:
+            for authenticator_id in authenticators:
+                try:
+                    authenticator = self._validate_authenticator_exists(authenticator_id)
+                    conflict = self._check_uid_conflict(authenticator, authenticator_uid, user_instance)
+                    if conflict:
+                        errors.setdefault('authenticator_uid', []).append(
+                            ErrorDetail(_(f"UID '{authenticator_uid}' is already in use for authenticator: {authenticator.name}"), code='uid_conflict')
+                        )
+                        errors.setdefault('authenticators', []).append(
+                            ErrorDetail(_(f"Cannot set authenticator '{authenticator.name}': {conflict['error_message']}"), code='uid_conflict')
+                        )
+                except ValidationError:
+                    continue
 
     def _validate_new_authenticators(self, authenticators, authenticator_uid, user_instance, current_authenticators, errors):
-        # Handle the specific case for new authenticators being added
-        new_authenticators = set(authenticators) - set(current_authenticators)
-        for authenticator_id in new_authenticators:
-            self._check_conflicting_user(authenticator_id, authenticator_uid, user_instance, errors)
+        # For deprecated fields, validate specific scenarios that should fail
+        if user_instance and authenticators != current_authenticators:
+            authenticators_to_add = set(authenticators) - set(current_authenticators)
+            authenticators_to_remove = set(current_authenticators) - set(authenticators)
 
-    def _check_conflicting_user(self, authenticator_id, authenticator_uid, user_instance, errors):
-        authenticator = Authenticator.objects.get(id=authenticator_id)
-
-        # If an authenticator_uid is provided, check for UID conflicts
-        if authenticator_uid:
-            conflicting_user = AuthenticatorUser.objects.filter(uid=authenticator_uid, provider=authenticator).exclude(user=user_instance).first()
-            # Since we found a conflicting user we can't let this user be added to this authenticator
-            if conflicting_user:
-                errors.setdefault('authenticator_uid', []).append(
-                    ErrorDetail(
-                        _("UID '{uid}' is already in use for authenticator: {auth}").format(auth=authenticator.name, uid=authenticator_uid),
-                        code='uid_conflict',
-                    )
-                )
+            # If the result would have multiple authenticators, treat it as "multiple new authenticators"
+            if len(authenticators) > 1:
                 errors.setdefault('authenticators', []).append(
                     ErrorDetail(
-                        _("Cannot set authenticator '{auth}': UID '{uid}' is already in use by user '{user}'").format(
-                            auth=authenticator.name, uid=authenticator_uid, user=conflicting_user.user.username
+                        _(
+                            "Adding multiple new authenticators is not supported "
+                            "with the 'authenticators' field. Use 'associated_authenticators' field to manage multiple authenticators."
                         ),
-                        code='uid_conflict',
+                        code='multiple_new_authenticators',
                     )
                 )
+
+            # Adding to existing authenticators when result would be single: allow this case
+            elif len(authenticators_to_add) >= 1 and not authenticators_to_remove and len(authenticators) == 1:
+                # This is replacing existing authenticator with a single new one - should be allowed
+                pass
 
     def _validate_empty_authenticators(self, authenticators, authenticator_uid, errors):
         if authenticators is not None and len(authenticators) == 0 and authenticator_uid:
@@ -409,24 +579,7 @@ class UserSerializer(CommonUserSerializer):
         Add new authenticators to the user, create AuthenticatorUser objects, and log the additions.
         """
         for add_authenticator_id in authenticators_to_add:
-            authenticator = Authenticator.objects.get(id=add_authenticator_id)
-            logger.info(f"Adding authenticator {authenticator.name} with UID {authenticator_uid} for user {user_instance.username}")
-
-            auth_type = get_authenticator_plugin(authenticator.type).type
-            username = user_instance.username
-
-            if auth_type == 'local':
-                # For local authenticators, UID must match the username
-                new_uid = username
-                if username != authenticator_uid:
-                    logger.info(
-                        f"Creating new user {username} with authenticator_uid {username} for the local authenticator {authenticator.name}; "
-                        "uid must match username for local authenticator users"
-                    )
-            else:
-                new_uid = authenticator_uid
-
-            AuthenticatorUser.objects.create(uid=new_uid, user=user_instance, provider=authenticator, email=email)
+            self._create_authenticator_user(add_authenticator_id, authenticator_uid, user_instance, email)
 
         logger.info(f"Added authenticators: {authenticators_to_add}")
 
@@ -440,7 +593,17 @@ class UserSerializer(CommonUserSerializer):
         existing_authenticator_uid = user_instance.get_authenticator_uids()
 
         if authenticator_uid is None or authenticator_uid in existing_authenticator_uid:
-            return  # No update needed if UID is unchanged
+            # Still need to update local authenticators to match username even if no UID change requested
+            for authenticator_user in user_instance.authenticator_users.all():
+                auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
+                if auth_type == 'local' and authenticator_user.uid != new_username:
+                    logger.info(
+                        f"Auto-correcting local authenticator UID from {authenticator_user.uid} to {new_username} "
+                        f"for user {new_username} on {authenticator_user.provider.name}"
+                    )
+                    authenticator_user.uid = new_username
+                    authenticator_user.save(update_fields=['uid'])
+            return  # No other updates needed
 
         for authenticator_user in user_instance.authenticator_users.all():
             auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
@@ -468,36 +631,158 @@ class UserSerializer(CommonUserSerializer):
 
     def _update_users_authenticators(self, authenticators, authenticator_uid, associated_authenticators, user_instance):
         """
-        Update user's authenticators:
-        1. Remove old authenticators
-        2. Add new authenticators
-        3. Update UIDs if changed
+        Update user's authenticators with proper processing order:
+        1. Process legacy fields first (authenticators and authenticator_uid)
+        2. Then process new field (associated_authenticators) to give it priority
         Log all actions performed.
         """
         logger.info(f"Updating authenticators for user {user_instance.username}")
 
         existing_authenticators = user_instance.get_authenticator_ids()
 
-        if 'associated_authenticators' in self.initial_data:
-            if existing_authenticators:
-                self._remove_authenticators(existing_authenticators, user_instance)
+        # Process legacy fields first for backward compatibility
+        if authenticators is not None or authenticator_uid is not None:
+            self._process_legacy_authenticator_fields(
+                authenticators,
+                authenticator_uid,
+                user_instance,
+                existing_authenticators,
+            )
 
-            for auth_id_str, data in associated_authenticators.items():
-                specific_uid = data.get('uid')
-                email = data.get('email')
-                if specific_uid is not None:
-                    self._add_authenticators([int(auth_id_str)], specific_uid, user_instance, email)
-                    self._update_authenticator_uids(specific_uid, user_instance)
-
-        elif authenticators is not None:
-            authenticators_to_remove = set(existing_authenticators) - set(authenticators)
-            authenticators_to_add = set(authenticators) - set(existing_authenticators)
-
-            self._remove_authenticators(authenticators_to_remove, user_instance)
-            self._add_authenticators(authenticators_to_add, authenticator_uid, user_instance)
-            self._update_authenticator_uids(authenticator_uid, user_instance)
+        # Then process new field, giving it priority over legacy fields
+        if "associated_authenticators" in self.initial_data and associated_authenticators is not None:
+            self._process_associated_authenticators_field(associated_authenticators, user_instance)
 
         logger.info(f"Successfully updated authenticators for user {user_instance.username}")
+
+    def _process_legacy_authenticator_fields(self, authenticators, authenticator_uid, user_instance, existing_authenticators):
+        """Process the legacy authenticators and authenticator_uid fields."""
+        if authenticators is not None:
+            # When authenticators is explicitly set to empty list, remove ALL authenticators
+            if len(authenticators) == 0:
+                # Remove all authenticators unconditionally
+                user_instance.authenticator_users.all().delete()
+                # Force refresh the user instance to clear any cached QuerySet results
+                user_instance.refresh_from_db()
+                logger.info("Removed all authenticators as requested")
+            else:
+                # Normal add/remove logic for non-empty authenticators list
+                authenticators_to_remove = set(existing_authenticators) - set(authenticators)
+                authenticators_to_add = set(authenticators) - set(existing_authenticators)
+
+                self._remove_authenticators(authenticators_to_remove, user_instance)
+                self._add_authenticators(authenticators_to_add, authenticator_uid, user_instance)
+                self._update_authenticator_uids(authenticator_uid, user_instance)
+
+        # Handle authenticator_uid updates for the target authenticator
+        elif authenticator_uid is not None:
+            self._update_legacy_authenticator_uid(authenticator_uid, user_instance)
+
+    def _update_legacy_authenticator_uid(self, authenticator_uid, user_instance):
+        """Update UID for the target authenticator (from last_login_from or single authenticator)."""
+        # Check if user has multiple authenticators and generate warning
+        authenticators = list(user_instance.authenticator_users.all())
+        if len(authenticators) > 1:
+            self._add_deprecation_warning(
+                "authenticator_uid_multiple",
+                "Updating 'authenticator_uid' for a user with multiple authenticators. "
+                "The change will be applied to the authenticator from 'last_login_from' if available, or the first authenticator as a fallback. "
+                "Consider using 'associated_authenticators' instead for precise control.",
+            )
+
+        target_authenticator = self._get_last_login_authenticator(user_instance)
+        if not target_authenticator:
+            logger.warning(f"Cannot update authenticator_uid for user {user_instance.username}: no target authenticator found")
+            return
+
+        # Find the AuthenticatorUser for the target authenticator
+        try:
+            auth_user = user_instance.authenticator_users.get(provider=target_authenticator)
+
+            # For local authenticators, UID must match username
+            auth_type = get_authenticator_plugin(target_authenticator.type).type
+            if auth_type == 'local':
+                corrected_uid = user_instance.username
+                if auth_user.uid != corrected_uid:
+                    logger.info(
+                        f"Correcting local authenticator UID from {auth_user.uid} to {corrected_uid} "
+                        f"for user {user_instance.username} on authenticator {target_authenticator.name}"
+                    )
+                    auth_user.uid = corrected_uid
+                    auth_user.save(update_fields=["uid"])
+            else:
+                # For non-local authenticators, use the provided UID
+                if auth_user.uid != authenticator_uid:
+                    auth_user.uid = authenticator_uid
+                    auth_user.save(update_fields=["uid"])
+                    logger.info(f"Updated UID to {authenticator_uid} for user {user_instance.username} on authenticator {target_authenticator.name}")
+        except AuthenticatorUser.DoesNotExist:
+            logger.warning(f"No AuthenticatorUser found for user {user_instance.username} and authenticator {target_authenticator.name}")
+
+    def _validate_associated_authenticators_conflicts(self, associated_authenticators, user_instance):
+        """Validate UID conflicts for the associated_authenticators field."""
+        errors = []
+
+        for auth_id_str, data in associated_authenticators.items():
+            specific_uid = data.get("uid")
+            if not specific_uid:
+                continue
+
+            try:
+                authenticator = self._validate_authenticator_exists(int(auth_id_str))
+                conflict = self._check_uid_conflict(authenticator, specific_uid, user_instance)
+                if conflict:
+                    errors.append(conflict['error_message'])
+            except ValidationError:
+                continue  # This will be caught by field validation
+
+        if errors:
+            raise serializers.ValidationError({"associated_authenticators": errors})
+
+    def _process_associated_authenticators_field(self, associated_authenticators, user_instance):
+        """Process the new associated_authenticators field."""
+        # Validate conflicts before making changes
+        self._validate_associated_authenticators_conflicts(associated_authenticators, user_instance)
+
+        # Remove all existing authenticators first
+        existing_authenticators = user_instance.get_authenticator_ids()
+        if existing_authenticators:
+            self._remove_authenticators(existing_authenticators, user_instance)
+
+        # Find the email from any authenticator (they should all have the same email for the user)
+        user_email = None
+        for auth_id_str, data in associated_authenticators.items():
+            if data.get("email") is not None:
+                user_email = data.get("email")
+                break
+
+        # Set the email on the user instance once if any authenticator has an email
+        if user_email is not None:
+            user_instance.email = user_email
+            user_instance.save(update_fields=['email'])
+
+        # Add new authenticators from associated_authenticators
+        for auth_id_str, data in associated_authenticators.items():
+            specific_uid = data.get("uid")
+            email = data.get("email")
+            if specific_uid is not None:
+                self._add_authenticator_from_associated_field(int(auth_id_str), specific_uid, user_instance, email=email)
+                # Don't call _update_authenticator_uids here as it auto-corrects local authenticators
+                # The associated_authenticators field should preserve explicitly set UIDs
+
+    def _add_authenticator_from_associated_field(self, authenticator_id, uid, user_instance, email=None):
+        """Add authenticator from associated_authenticators field, preserving explicitly set UIDs."""
+        try:
+            authenticator = self._create_authenticator_user(authenticator_id, uid, user_instance, email=email)
+            logger.info(f"Added authenticator {authenticator.name} with UID {uid}")
+        except ValidationError as e:
+            # For local authenticators, auto-correct the UID to match username
+            auth_type = get_authenticator_plugin(Authenticator.objects.get(id=authenticator_id).type).type
+            if auth_type == 'local' and uid != user_instance.username:
+                logger.warning(f"Local authenticator UID '{uid}' does not match username '{user_instance.username}', correcting to username")
+                self._create_authenticator_user(authenticator_id, user_instance.username, user_instance, email=email)
+            else:
+                raise e
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -518,8 +803,11 @@ class UserSerializer(CommonUserSerializer):
             # Handle username change, updating related authenticator information
             validated_data['username'] = new_username
             instance.username = new_username
-            # We're in @transaction.atomic, so we don't risk uid getting out of sync here.
-            instance.update_local_authenticator_uid_from_username()
+            # Only update local authenticator UIDs automatically if not using the new field
+            # The new associated_authenticators field should preserve explicitly set UIDs
+            if "associated_authenticators" not in self.initial_data:
+                # We're in @transaction.atomic, so we don't risk uid getting out of sync here.
+                instance.update_local_authenticator_uid_from_username()
 
         # Remove the authenticators field since thats not a real field on the User model
         authenticators = validated_data.pop('authenticators', None)
@@ -530,6 +818,12 @@ class UserSerializer(CommonUserSerializer):
         instance = super().update(instance, validated_data)
         # Handle authenticator changes
         self._update_users_authenticators(authenticators, authenticator_uid, associated_authenticators, instance)
+
+        # Refresh the instance from the database to ensure the response reflects any authenticator UID corrections
+        instance.refresh_from_db()
+        # Also clear the cached related objects to ensure fresh data
+        if hasattr(instance, '_prefetched_objects_cache'):
+            instance._prefetched_objects_cache = {}
 
         # If we are updating a password we need to reset the session or the user will be logged out
         if validated_data.get('password', None) and self.context['request'].user.username == instance.username:
@@ -565,6 +859,8 @@ class UserSerializer(CommonUserSerializer):
             # User does not have a local password, or password is unusable/ disabled
             ret['password'] = PASSWORD_DISABLED
 
+        ret['managed'] = obj.managed
+
         # Get the users associated authenticator users
         authentications = AuthenticatorUser.objects.filter(user=obj)
 
@@ -584,6 +880,10 @@ class UserSerializer(CommonUserSerializer):
             ret['authenticators'] = obj.get_authenticator_ids()
             ret['authenticator_uid'] = ', '.join(obj.get_authenticator_uids())
             ret['associated_authenticators'] = obj.get_associated_authenticators()
+
+        # Include deprecation warnings if any were generated during validation
+        if hasattr(self, '_deprecation_warnings') and self._deprecation_warnings:
+            ret['warnings'] = [w['message'] for w in self._deprecation_warnings]
 
         return ret
 

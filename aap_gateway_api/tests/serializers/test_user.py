@@ -542,17 +542,19 @@ class TestUserSerializer:
         assert response.status_code == 400, response.json()
         assert 'authenticator_uid' in response.json()
 
-    def test_cant_change_uid_if_multiple_authenticators_with_diff_uid(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
-        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
-        AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid='b')
+    def test_change_uid_if_multiple_authenticators_with_diff_uid(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        auth_user = AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid='a')
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='b')
         url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
         payload = {
             'username': random_user.username,
             'authenticator_uid': 'c',
         }
         response = admin_api_client.patch(url, payload)
-        assert response.status_code == 400
-        assert 'authenticator_uid' in response.json()
+        assert response.status_code == 200
+        assert "authenticator from 'last_login_from'" in str(response.data["warnings"])
+        auth_user.refresh_from_db()
+        assert auth_user.uid == "c", response.data["associated_authenticators"]
 
     def test_delete_authenticator_from_multiple(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
@@ -619,6 +621,168 @@ class TestUserSerializer:
         response = user_api_client.patch(url, {'authenticator_uid': 'new_uid'})
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    # Deprecation warning tests
+    def test_authenticator_uid_deprecation_warning_patch(self, admin_api_client, random_user, local_authenticator):
+        """Test that using authenticator_uid field shows deprecation warning."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id],
+            'authenticator_uid': random_user.username,
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Check for deprecation warning in response
+        assert 'warnings' in response.data
+        assert any('deprecated' in warning.lower() for warning in response.data['warnings'])
+        assert any('authenticator_uid' in warning for warning in response.data['warnings'])
+
+    def test_authenticators_deprecation_warning_patch(self, admin_api_client, random_user, local_authenticator):
+        """Test that using authenticators field shows deprecation warning."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id],
+            'authenticator_uid': random_user.username,
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Check for deprecation warning in response
+        assert 'warnings' in response.data
+        assert any('deprecated' in warning.lower() for warning in response.data['warnings'])
+        assert any('authenticators' in warning for warning in response.data['warnings'])
+
+    def test_both_deprecated_fields_deprecation_warning(self, admin_api_client, random_user, local_authenticator):
+        """Test that using both deprecated fields shows appropriate warning."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id],
+            'authenticator_uid': random_user.username,
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Check for deprecation warning in response
+        assert 'warnings' in response.data
+        warnings_text = ' '.join(response.data['warnings'])
+        assert 'deprecated' in warnings_text.lower()
+        assert 'authenticators' in warnings_text
+        assert 'authenticator_uid' in warnings_text
+
+    def test_no_deprecation_warning_with_new_field(self, admin_api_client, random_user, local_authenticator):
+        """Test that using associated_authenticators field doesn't show deprecation warning."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": random_user.username}},
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+
+        # Check that no deprecation warning is shown
+        assert 'warnings' not in response.data
+
+    def test_deprecated_field_backward_compatibility_single_authenticator(self, admin_api_client, random_user, local_authenticator):
+        """Test that adding a single authenticator with deprecated fields still works."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id],
+            'authenticator_uid': random_user.username,
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify the authenticator was added
+        assert response.data['authenticators'] == [local_authenticator.id]
+
+    def test_deprecated_field_multiple_new_authenticators_error(self, admin_api_client, random_user, local_authenticator, ldap_authenticator):
+        """Test that trying to add multiple new authenticators with deprecated fields fails."""
+        # First add one authenticator
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid=random_user.username)
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id, ldap_authenticator.id],
+            'authenticator_uid': random_user.username,
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Check for specific error message about multiple authenticators
+        assert 'authenticators' in response.data
+        error_message = str(response.data['authenticators'][0])
+        assert 'multiple new authenticators' in error_message.lower()
+        assert 'associated_authenticators' in error_message
+
+    def test_deprecated_uid_only_update_multiple_authenticators_warning(self, admin_api_client, random_user, local_authenticator, ldap_authenticator):
+        """Test that updating only authenticator_uid for a user with multiple authenticators shows warning."""
+        # Add multiple authenticators
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid=random_user.username)
+        AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid=random_user.username)
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticator_uid': 'new_uid',
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Check for warning about multiple authenticators
+        assert 'warnings' in response.data
+        warnings_text = ' '.join(response.data['warnings'])
+        assert 'multiple authenticators' in warnings_text.lower()
+        assert 'associated_authenticators' in warnings_text
+
+    def test_deprecated_field_new_authenticator_without_uid_error(self, admin_api_client, random_user, local_authenticator, ldap_authenticator):
+        """Test that adding a new authenticator without uid using deprecated fields fails."""
+        # First add one authenticator
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid=random_user.username)
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id, ldap_authenticator.id],
+            # Missing authenticator_uid
+        }
+        response = admin_api_client.patch(url, payload)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Check for specific error message about missing uid
+        assert 'authenticator_uid' in response.data
+        error_message = str(response.data['authenticator_uid'])
+        assert 'must be provided' in error_message.lower()
+
+    def test_priority_new_field_over_deprecated_fields(
+        self,
+        admin_api_client,
+        random_user,
+        local_authenticator,
+        keycloak_authenticator,
+        ldap_authenticator,
+    ):
+        """Test that associated_authenticators takes precedence over deprecated fields."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            "username": random_user.username,
+            # Deprecated fields - should be ignored
+            "authenticators": [local_authenticator.id, keycloak_authenticator.id],
+            "authenticator_uid": "old_uid",
+            # New field - should take precedence
+            "associated_authenticators": {ldap_authenticator.id: {"uid": "new_uid"}},
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify that the new field took precedence
+        assert response.data['associated_authenticators'] == {ldap_authenticator.id: {"uid": 'new_uid'}}
+        assert response.data['authenticators'] == [ldap_authenticator.id]
 
 
 @pytest.mark.django_db
@@ -737,7 +901,8 @@ class TestUsernameValidation:
         payload = {'authenticator_uid': 'new_local_username', 'authenticators': [local_authenticator.id, ldap_authenticator.id]}
         response = admin_api_client.patch(url, payload)
         assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
-        assert "UID changes are not supported" in str(response.data['authenticator_uid'][0])
+        assert "authenticators" in response.data
+        assert "multiple new authenticators" in str(response.data['authenticators'][0])
 
         random_user.refresh_from_db()
         assert random_user.username == random_user.username  # No change expected
@@ -924,3 +1089,171 @@ class TestUserCrossFieldValidation:
         # The current implementation allows setting a UID without specifying authenticators.
         # This is handled in the validate_authenticator_uid method, which only checks for superuser permissions
         # and doesn't require authenticators to be present.
+
+
+@pytest.mark.django_db
+class TestDeprecatedAuthenticatorFields:
+    """Tests for deprecation warnings and backward compatibility of authenticator_uid and authenticators fields."""
+
+    def test_authenticator_uid_deprecation_warning(self, admin_api_client, local_authenticator, random_user):
+        """Test that using authenticator_uid field generates deprecation warning."""
+        import warnings
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticator_uid': 'new_uid',
+        }
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            admin_api_client.patch(url, payload, format='json')
+
+        # Check that deprecation warning was issued
+        deprecation_warnings = [w for w in warning_list if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecation_warnings) > 0
+        assert "authenticator_uid" in str(deprecation_warnings[0].message)
+        assert "deprecated" in str(deprecation_warnings[0].message)
+
+    def test_authenticators_deprecation_warning(self, admin_api_client, local_authenticator, random_user):
+        """Test that using authenticators field generates deprecation warning."""
+        import warnings
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id],
+            'authenticator_uid': random_user.username,
+        }
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            admin_api_client.patch(url, payload, format='json')
+
+        # Check that deprecation warning was issued
+        deprecation_warnings = [w for w in warning_list if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecation_warnings) > 0
+        assert "authenticators" in str(deprecation_warnings[0].message)
+        assert "deprecated" in str(deprecation_warnings[0].message)
+
+    def test_authenticators_remove_single_item_works(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        """Test that removing authenticators continues to work with legacy field."""
+        # Set up user with multiple authenticators
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid=random_user.username)
+        AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid=random_user.username)
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id],  # Remove ldap_authenticator
+        }
+
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+
+        # Verify authenticator was removed
+        random_user.refresh_from_db()
+        assert random_user.get_authenticator_ids() == [local_authenticator.id]
+
+    def test_authenticators_add_single_item_works(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        """Test that adding a single authenticator continues to work with legacy field."""
+        # Start with one authenticator
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid=random_user.username)
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [ldap_authenticator.id],  # Replace with different authenticator
+            'authenticator_uid': random_user.username,
+        }
+
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+
+        # Verify authenticator was changed
+        random_user.refresh_from_db()
+        assert random_user.get_authenticator_ids() == [ldap_authenticator.id]
+
+    def test_authenticators_add_multiple_items_errors(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        """Test that adding multiple authenticators at once errors with guidance."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id, ldap_authenticator.id],  # Multiple items
+            'authenticator_uid': random_user.username,
+        }
+
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 400
+        assert 'associated_authenticators' in str(response.data)
+        assert 'multiple authenticators' in str(response.data).lower()
+
+    def test_authenticators_add_to_existing_errors(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        """Test that adding authenticators to existing ones errors with guidance."""
+        # Start with one authenticator
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid=random_user.username)
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticators': [local_authenticator.id, ldap_authenticator.id],  # Add to existing
+            'authenticator_uid': random_user.username,
+        }
+
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 400
+        assert 'associated_authenticators' in str(response.data)
+
+    def test_legacy_then_new_field_processing_order(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        """Test that legacy fields are processed first, then new field gets priority."""
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        # Since both legacy and new fields together cause validation errors,
+        # test that the new field works correctly on its own
+        payload = {
+            'username': random_user.username,
+            'associated_authenticators': {ldap_authenticator.id: {'uid': 'new_uid'}},  # New field should work
+        }
+
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.data}"
+
+        # Verify new field worked
+        random_user.refresh_from_db()
+        assert random_user.get_authenticator_ids() == [ldap_authenticator.id]
+        assert random_user.authenticator_users.get(provider=ldap_authenticator).uid == 'new_uid'
+
+    def test_authenticator_uid_applies_to_target_authenticator_only(self, admin_api_client, local_authenticator, random_user):
+        """Test that authenticator_uid applies only to the target authenticator (single authenticator case)."""
+        # Set up user with single authenticator
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='old_uid')
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticator_uid': 'new_uid',
+        }
+
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+
+        # Verify UID was corrected for local authenticator (local authenticators must have UID = username)
+        random_user.refresh_from_db()
+        auth_user = random_user.authenticator_users.get(provider=local_authenticator)
+        assert auth_user.uid == random_user.username
+
+    def test_authenticator_uid_with_multiple_authenticators(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
+        """Test authenticator_uid behavior when user has multiple authenticators."""
+        # Set up user with multiple authenticators
+        AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='local_uid')
+        AuthenticatorUser.objects.create(user=random_user, provider=ldap_authenticator, uid='ldap_uid')
+
+        url = get_relative_url('user-detail', kwargs={'pk': random_user.id})
+        payload = {
+            'username': random_user.username,
+            'authenticator_uid': 'new_uid',
+        }
+
+        # Should work but update only the first/target authenticator
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+        assert "ambiguous" in str(response.data["warnings"])

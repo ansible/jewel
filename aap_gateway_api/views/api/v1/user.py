@@ -22,6 +22,8 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
+    deprecated = True
+    deprecated_message = "authenticator_uid and authenticators fields are deprecated and will be removed in a future release."
 
     def filter_queryset(self, qs):
         qs = visible_users(self.request.user, queryset=qs)
