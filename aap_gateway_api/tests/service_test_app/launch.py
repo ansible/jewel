@@ -96,7 +96,7 @@ def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secre
 
 def main():
     # TODO: Allow some of this stuff to be configured via cli args.
-    proc = launch_service("awx", "5630", dev_mode=True)
+    proc = launch_service("awx", "5630", dev_mode=True, setup_fixture="migration_tests_controller_user_roles")
     print("Running on localhost:5630, username:dev_admin, password:admin")
     while True:
         try:

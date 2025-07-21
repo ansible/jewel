@@ -1,9 +1,10 @@
 import logging
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
+from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -267,7 +268,11 @@ class Command(BaseCommand):
         self.migrate_controller_admin()
 
         for r_type in self.resource_types_to_migrate.keys():
+            # Can I capture the team mapping here?
             self.migrate_resource(r_type, service_slug)
+
+        # then pass it along
+        self.migrate_user_role_assignments(service_slug, service_type_name)
 
         self.stdout.write(f"Completed migration for service: {service_slug}")
         return True, None
@@ -684,6 +689,7 @@ class Command(BaseCommand):
         # Fetch the complete resource data from the upstream service (Controller/Hub/EDA)
         # This contains the full API response structure with metadata, ansible_id, service_id, resource_data, additional_data, etc.
         upstream_resource = self.client.get_resource(resource_ansible_id).json()
+        self.stdout.write(f"upstream_resource {upstream_resource}")
 
         # Extract and validate the core resource data from the upstream response
         # This is the clean, validated resource data ready for Gateway use
@@ -821,6 +827,7 @@ class Command(BaseCommand):
 
             for upstream_resource_item in results:
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
+                self.stdout.write(f"upstream resource item {upstream_resource_item} resource_context {resource_context}")
 
     def _sync_user_superuser_flag(self, upstream_resource: Dict[str, Any], validated_resource_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1011,3 +1018,187 @@ class Command(BaseCommand):
             self.stdout.write(f"Demoted {len(demoted_users)} users from superuser in {service_type}: {sorted(demoted_users)}")
         else:
             self.stdout.write(f"✓ No extra superusers found in {service_type}")
+
+    def _lookup_gateway_user(self, assignment: Dict[str, Any]) -> AbstractUser:
+        """
+        Look up a gateway user corresponding to a service user.
+
+        This method attempts to find a gateway user using either the service user's
+        ansible_id (preferred) or username (fallback). It provides detailed logging
+        and consistent error handling.
+
+        Args:
+            assignment: a Dict containing serialized assignment data from a
+                user_role_assignment, including the 'user_ansible_id'
+                and 'summary_fields' elements of a single user assignment.
+        Returns:
+            Gateway user matching the user referenced by the assignment data
+
+        Raises:
+            RuntimeError: If the user cannot be found in the gateway database
+        """
+        service_user_ansible_id = assignment.get('user_ansible_id', None)
+        service_user = assignment.get('summary_fields', {}).get('user', None)
+
+        try:
+            if service_user_ansible_id:
+                self.stdout.write(f"Role assignment references user's ansible_id '{service_user_ansible_id}', preferring ansible_id for gateway user lookup.")
+                gateway_user = Resource.objects.get(ansible_id=service_user_ansible_id).content_object
+            else:
+                self.stdout.write(
+                    f"Role assignment does not reference user's ansible_id, falling back to username '{service_user.get('username')}' for gateway user lookup."
+                )
+                gateway_user = User.objects.get(username=service_user.get('username'))
+        except Exception:
+            self.stderr.write(f"User {service_user.get('username')} not found in gateway database.")
+            raise RuntimeError("Stopping migration of user role assignments because assigned user is missing in gateway database.")
+
+        return gateway_user
+
+    def _lookup_gateway_content_object(self, assignment: Dict[str, Any]) -> Optional[Any]:
+        """
+        Look up a gateway content object corresponding to a service content object.
+
+        This method attempts to find a gateway content object using either the service object's
+        ansible_id (preferred) or by looking up the object by name and content type (fallback).
+        If no object ID is provided, it returns None (indicating service-wide assignment).
+
+        Args:
+            assignment: a Dict containing serialized assignment data from a
+                user_role_assignment, including the service_content_object details
+
+        Returns:
+            Gateway content object (Team or Organization), or None if assignment is global.
+
+        Raises:
+            RuntimeError: If the object cannot be found in the gateway database
+        """
+        service_content_object_ansible_id = assignment.get('object_ansible_id', None)
+        service_content_object_id = assignment.get('object_id', None)
+        service_content_object = assignment.get('summary_fields', {}).get('content_object', {})
+
+        try:
+            if service_content_object_ansible_id:
+                self.stdout.write(
+                    f"Role assignment references object's ansible_id '{service_content_object_ansible_id}'. "
+                    + "preferring ansible_id for gateway object lookup."
+                )
+                gateway_content_object = Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
+            elif service_content_object_id:
+                # We have an object id, so we know this assignment is for a specific object. However, that object id is not relevant to gateway,
+                # it's the remote id of the object in the service's database. So we need to resolve the object id in gateway's database.
+                self.stdout.write(f"Fetching ResourceType by {assignment.get('content_type')} with name {service_content_object.get('name')}")
+                resource_type = ResourceType.objects.get(name=assignment.get('content_type'))
+                # TODO: What if the resource is a Team? we need to know what org it belongs to.
+                gateway_content_object = resource_type.content_type.get_object_for_this_type(name=service_content_object.get('name'))
+            else:
+                # 'content_object' is None. That's valid and means this role assignment applies to the entire service (e.g.  not a specific team or org)
+                gateway_content_object = None
+        except Exception:
+            self.stderr.write(f"Object {assignment['content_type']} with name {service_content_object['name']} not found in gateway database.")
+            raise RuntimeError("Stopping migration of user role assignments because assigned user is missing in gateway database.")
+
+        return gateway_content_object
+
+    def _lookup_role_definition(self, service_slug: str, assignment: Dict[str, Any]):
+        """
+        For a service-specific role definition name in the assignment (e.g. Controller Team Member),
+        return the corresponding RoleDefinition for Platform
+        """
+
+        role_definition_name = assignment.get('summary_fields', {}).get('role_definition', {}).get('name', None)  # e.g. 'Organization Admin'
+        self.stdout.write(f"Fetching gateway role definition '{role_definition_name}. RoleDefinition count: {RoleDefinition.objects.count()}'")
+        role_definition = RoleDefinition.objects.get(name=role_definition_name)
+        self.stdout.write(f"Fetched gateway role definition '{role_definition}")
+        return role_definition
+
+    @staticmethod
+    def _format_fetched_assignment_for_logging(assignment: Dict[str, Any]) -> str:
+        summary_fields = assignment.get('summary_fields', {})
+        return (
+            f"username: {summary_fields.get('user', {}).get('username')}, "
+            f"object_type: {assignment.get('content_type')}, "
+            f"object_name: {summary_fields.get('content_object', {}).get('name')}, "
+            f"role_definition_name: {summary_fields.get('role_definition', {}).get('name')}"
+        )
+
+    def _format_migrated_assignment_for_logging(self, role_user_assignment: RoleUserAssignment) -> str:
+        return (
+            f"username: {role_user_assignment.user.username}, "
+            f"object_id: {role_user_assignment.object_id}, "
+            f"role_definition_name: {role_user_assignment.role_definition.name}"
+        )
+
+    def _get_role_definitions_to_migrate(self, service_type: str) -> List[str]:
+        ROLE_DEFINITION_FILTERS = {
+            # For controller, we want to migrate these 4 managed roles
+            DefaultServiceType.CONTROLLER.value: ['Platform Auditor', 'Organization Admin', 'Organization Member', 'Team Admin', 'Team Member'],
+            # For hub, we want to migrate this single managed role
+            DefaultServiceType.HUB.value: ['Team Member'],
+        }
+        return ROLE_DEFINITION_FILTERS.get(service_type, [])
+
+    def _fetch_role_user_assignments(self, service_slug: str, service_type_name: str) -> Iterator[Dict[str, Any]]:
+        """
+        Fetch all role_user_assignments from the service with pagination
+        """
+        role_definitions_to_migrate = self._get_role_definitions_to_migrate(service_type_name)
+        if not role_definitions_to_migrate:
+            # Nothing to fetch, bail out now
+            self.stdout.write(f"No role definitions to migrate for {service_slug} of type {service_type_name}, skipping...")
+            return
+
+        page = 1
+        total_count = None  # we will check this on each page to see if anything changed
+        while True:
+            self.stdout.write(f"Fetching page {page} of role_user_assignments from {service_slug}")
+            params = {'page': page, 'role_definition__name__in': ','.join(role_definitions_to_migrate)}
+            # This code successfully handles pagination, but API ignores the page_size parameter
+            # Note: This private method call in GWResourceAPIClient is temporary and will be obsoleted by AAP-48396
+            json_response = self.client._make_request("get", '../role_user_assignments/', params=params).json()
+            if total_count is None:
+                total_count = json_response.get('count', 0)
+            elif total_count != json_response.get('count', 0):
+                self.stderr.write(f"Error: RoleUserAssignments count changed from {total_count} to {json_response.get('count', 0)}")
+                raise RuntimeError("RoleUserAssignments count changed during migration")
+            for assignment in json_response.get('results', []):
+                yield assignment
+            if not json_response.get('next'):
+                break
+            page += 1
+
+    def migrate_user_role_assignments(self, service_slug: str, service_type_name: str) -> None:
+        """
+        Migrates the role_user_assignments from an individual service to platform-level role assignments
+
+        This method must run after Organizations/Teams/Users have been migrated. It migrates the role assignments,
+        so the subjects and objects of those assignments must exist.
+
+        It performs this migration by:
+
+        1. Querying the service's /role_user_assignments API for assignments corresponding to the known
+           list of Role Definitions (Organization Admin, Team Member, etc.) (pagination!)
+        2. Looking up the local (aap-gateway) user referenced in each assignment (do some grouping here)
+        3. Looking up the local (aap-gateway) role definition corresponding to the service definition (Controller Team Member -> Team Member)
+        4. Creating a RoleUserAssignment binding the gateway user to the gateway object and gateway role definition (or ignoring if it exists)
+        """
+
+        self.stdout.write(f"Migrating RoleUserAssignments from {service_slug} of type {service_type_name}")
+        assignments = self._fetch_role_user_assignments(service_slug, service_type_name)
+        self.stdout.write(f"Fetched role_user_assignments from {service_slug}")
+
+        for assignment in assignments:
+            self.stdout.write(f"Processing assignment in service {service_slug}: {self._format_fetched_assignment_for_logging(assignment)}")
+
+            # Lookup the role definition, user, and object
+            gateway_role_definition = self._lookup_role_definition(service_slug, assignment)
+            gateway_user = self._lookup_gateway_user(assignment)
+            gateway_content_object = self._lookup_gateway_content_object(assignment)
+
+            # Create the role user assignment in gateway
+            if gateway_content_object:
+                role_user_assignment = gateway_role_definition.give_permission(gateway_user, gateway_content_object)
+            else:
+                role_user_assignment = gateway_role_definition.give_global_permission(gateway_user)
+            message = "Created role user assignment"
+            self.stdout.write(f"{message}: {self._format_migrated_assignment_for_logging(role_user_assignment)}")  # type: ignore
