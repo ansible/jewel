@@ -148,6 +148,7 @@ class SettingPreferenceView(AnsibleBaseView):
     """
 
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
+    allow_service_token = True
 
     def get_serializer(self, *args, **kwargs):
         if not hasattr(self, 'serializer'):
