@@ -22,6 +22,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
         ('roleuserassignment-list', {}, ['get']),
         ('authenticator-list', {}, ['get', 'post', 'patch']),
         ('authenticatormap-list', {}, ['get', 'post', 'patch']),
+        ('setting-section-list', {'category_slug': 'all'}, ['get', 'put']),
     ]
 
     def authenticate(self, request):
