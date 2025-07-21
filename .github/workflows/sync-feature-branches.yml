@@ -1,13 +1,405 @@
+---
+# This workflow is used to sync feature branches to the default branch.
+#
+# Features:
+# - Automatically rebases feature branches from the default branch (devel)
+# - Handles merge conflicts gracefully without breaking the entire workflow
+# - Continues processing other branches even when conflicts occur
+# - Provides comprehensive error reporting and manual resolution guidance
+# - Tracks successful and failed branches separately
+# - Cleans up git state after failures to prevent cascade issues
+#
+# Steps:
+# 1. Checkout the repository (with full history)
+# 2. Configure Git (set bot credentials)
+# 3. Sync Feature Branches:
+#    a. Fetch all remote branches
+#    b. Identify feature branches (case-insensitive "Feature-" prefix)
+#    c. Update the default branch
+#    d. For each feature branch:
+#       - Check if already in sync (skip if so)
+#       - Rebase from default branch
+#       - Handle merge conflicts with proper cleanup
+#       - Push rebased branch (if successful)
+#       - Track success/failure with detailed error information
+#    e. Save sync results to JSON file for analysis
+# 4. Check for sync failures:
+#    a. Read sync results from previous step
+#    b. Generate comprehensive summary report with:
+#       - List of successfully synced branches
+#       - List of failed branches with error details
+#       - Manual resolution instructions for conflicts
+#       - Specific git commands to fix issues
+#    c. Exit with error if any branches failed (fails the workflow)
+#
+# Error Handling:
+# - Merge conflicts: Aborts rebase, cleans state, continues with other branches
+# - Git state errors: Resets repository to clean state
+# - Push conflicts: Reports branch protection or permission issues
+# - Provides specific resolution steps for each error type
+#
+# Output:
+# - Job fails completely if any branches cannot be synchronized
+# - Job succeeds only if all branches sync successfully
+# - Detailed logs show exactly which branches need manual intervention
+# - Comprehensive failure report with step-by-step resolution instructions
+
 name: Sync Feature Branches
 
 on:
   workflow_dispatch:
+    inputs:
+      default_branch:
+        description: 'Default branch to sync from'
+        required: false
+        default: 'devel'
+        type: string
+      dry_run:
+        description: 'Run in dry-run mode (no actual changes)'
+        required: false
+        default: false
+        type: boolean
   schedule:
-    - cron: '0 12,13,14,15,16,17,18,19,20,21,22,23 * * *'
+    # Every hour (at 42 minutes past each hour)
+    - cron: '42 * * * *'
+
+env:
+  DEFAULT_BRANCH: ${{ inputs.default_branch || 'devel' }}
+  DRY_RUN: ${{ inputs.dry_run || false }}
 
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Print Hello World
-        run: echo "Hello World"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GHA_FEATURE_BRANCHES_SYNC }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync Feature Branches
+        id: sync-branches
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GHA_FEATURE_BRANCHES_SYNC }}
+          script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+            
+            const DEFAULT_BRANCH = process.env.DEFAULT_BRANCH;
+            const DRY_RUN = process.env.DRY_RUN === 'true';
+            const FEATURE_PATTERN = /^feature-/i; // Case-insensitive Feature- prefix
+            
+            console.log(`Default branch: ${DEFAULT_BRANCH}`);
+            console.log(`Dry run mode: ${DRY_RUN}`);
+            
+            // Track failed branches and their errors
+            const failedBranches = [];
+            const successfulBranches = [];
+            
+            function runGitCommand(cmd) {
+              try {
+                console.log(`Running: ${cmd}`);
+                const result = execSync(cmd, { encoding: 'utf8' }).trim();
+                return result;
+              } catch (error) {
+                console.error(`Error running command: ${cmd}`);
+                console.error(error.message);
+                throw error;
+              }
+            }
+            
+            function cleanupGitState() {
+              try {
+                // Check if we're in the middle of a rebase
+                const gitStatus = execSync('git status --porcelain=v1', { encoding: 'utf8' });
+                const isRebasing = execSync('git status', { encoding: 'utf8' }).includes('rebase in progress');
+                
+                if (isRebasing) {
+                  console.log('  Aborting ongoing rebase...');
+                  execSync('git rebase --abort');
+                }
+                
+                // Reset any staged changes
+                if (gitStatus.trim()) {
+                  console.log('  Resetting staged changes...');
+                  execSync('git reset --hard HEAD');
+                }
+                
+                // Return to default branch
+                console.log(`  Returning to ${DEFAULT_BRANCH}...`);
+                execSync(`git checkout ${DEFAULT_BRANCH}`);
+                
+              } catch (cleanupError) {
+                console.error(`  Warning: Failed to cleanup git state: ${cleanupError.message}`);
+                // Force checkout as last resort
+                try {
+                  execSync(`git checkout --force ${DEFAULT_BRANCH}`);
+                } catch (forceError) {
+                  console.error(`  Critical: Cannot return to ${DEFAULT_BRANCH}: ${forceError.message}`);
+                }
+              }
+            }
+            
+            // Fetch all remote branches
+            console.log('Fetching all remote branches...');
+            runGitCommand('git fetch --all');
+            
+            // Get all remote branches
+            const remoteBranches = runGitCommand('git branch -r --format="%(refname:short)"')
+              .split('\n')
+              .filter(branch => branch && !branch.includes('HEAD'))
+              .map(branch => branch.replace('origin/', ''))
+              .filter(branch => FEATURE_PATTERN.test(branch));
+            
+            console.log(`Found ${remoteBranches.length} feature branches:`);
+            remoteBranches.forEach(branch => console.log(`  - ${branch}`));
+            
+            if (remoteBranches.length === 0) {
+              console.log('No feature branches found to sync');
+              return;
+            }
+            
+            // Update default branch
+            console.log(`\nUpdating ${DEFAULT_BRANCH} branch...`);
+            runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
+            runGitCommand(`git pull origin ${DEFAULT_BRANCH}`);
+            
+            // Process each feature branch
+            for (const branch of remoteBranches) {
+              console.log(`\nProcessing branch: ${branch}`);
+              
+              if (DRY_RUN) {
+                console.log(`  [DRY RUN] Would sync ${branch}`);
+                console.log(`  [DRY RUN] Would checkout ${branch}`);
+                console.log(`  [DRY RUN] Would check if ${branch} is in sync with ${DEFAULT_BRANCH}`);
+                console.log(`  [DRY RUN] Would rebase ${branch} from ${DEFAULT_BRANCH} (if needed)`);
+                console.log(`  [DRY RUN] Would push ${branch} to remote (if changed)`);
+                continue;
+              }
+              
+              try {
+                // Ensure we're on the default branch before starting
+                runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
+                
+                // Checkout the feature branch
+                console.log(`  Checking out ${branch}...`);
+                runGitCommand(`git checkout -B ${branch} origin/${branch}`);
+                
+                // Check if branch is already in sync with default branch
+                try {
+                  const mergeBase = runGitCommand(`git merge-base ${branch} ${DEFAULT_BRANCH}`);
+                  const defaultHead = runGitCommand(`git rev-parse ${DEFAULT_BRANCH}`);
+                  
+                  if (mergeBase === defaultHead) {
+                    console.log(`  ✓ Branch ${branch} is already in sync - skipping`);
+                    successfulBranches.push({ branch, status: 'already_in_sync' });
+                    continue;
+                  }
+                } catch (error) {
+                  console.log(`  Could not check sync status for ${branch}, proceeding with rebase`);
+                }
+                
+                // Rebase onto default branch
+                console.log(`  Rebasing ${branch} from ${DEFAULT_BRANCH}...`);
+                runGitCommand(`git rebase ${DEFAULT_BRANCH}`);
+                
+                // Push the rebased branch
+                console.log(`  Pushing ${branch} to remote...`);
+                runGitCommand(`git push origin ${branch} --force-with-lease`);
+                console.log(`  ✓ Successfully synced ${branch}`);
+                successfulBranches.push({ branch, status: 'synced' });
+                
+              } catch (error) {
+                console.error(`  ✗ Failed to sync ${branch}: ${error.message}`);
+                
+                // Determine the type of error for better reporting
+                let errorType = 'unknown';
+                let conflictedFiles = [];
+                
+                if (error.message.includes('could not apply') || error.message.includes('CONFLICT')) {
+                  errorType = 'merge_conflict';
+                  // Try to get conflicted files
+                  try {
+                    const statusOutput = execSync('git status --porcelain=v1', { encoding: 'utf8' });
+                    conflictedFiles = statusOutput
+                      .split('\n')
+                      .filter(line => line.startsWith('UU ') || line.includes('needs merge'))
+                      .map(line => line.substring(3).trim())
+                      .filter(file => file);
+                  } catch (statusError) {
+                    console.log(`    Could not determine conflicted files: ${statusError.message}`);
+                  }
+                } else if (error.message.includes('resolve your current index first')) {
+                  errorType = 'git_state_error';
+                } else if (error.message.includes('force-push') || error.message.includes('non-fast-forward')) {
+                  errorType = 'push_conflict';
+                }
+                
+                // Record the failure with detailed information
+                failedBranches.push({
+                  branch,
+                  errorType,
+                  errorMessage: error.message,
+                  conflictedFiles,
+                  timestamp: new Date().toISOString()
+                });
+                
+                // Cleanup git state for next iteration
+                console.log(`  Cleaning up git state after failure...`);
+                cleanupGitState();
+              }
+            }
+            
+            // Return to default branch
+            try {
+              runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
+            } catch (error) {
+              console.error(`Warning: Could not return to ${DEFAULT_BRANCH}: ${error.message}`);
+            }
+            
+            // Save results to files for the next step
+            const syncResults = {
+              totalBranches: remoteBranches.length,
+              successfulBranches,
+              failedBranches,
+              defaultBranch: DEFAULT_BRANCH,
+              timestamp: new Date().toISOString(),
+              dryRun: DRY_RUN
+            };
+            
+            fs.writeFileSync('sync-results.json', JSON.stringify(syncResults, null, 2));
+            
+            // Basic summary for this step
+            console.log(`\n📊 SYNC OPERATION COMPLETE`);
+            console.log(`Total branches processed: ${remoteBranches.length}`);
+            console.log(`Successful: ${successfulBranches.length}`);
+            console.log(`Failed: ${failedBranches.length}`);
+            
+            if (successfulBranches.length > 0) {
+              console.log(`\n✅ Successfully synced:`);
+              successfulBranches.forEach(({ branch, status }) => {
+                const statusText = status === 'already_in_sync' ? '(already in sync)' : '(rebased and pushed)';
+                console.log(`  ✓ ${branch} ${statusText}`);
+              });
+            }
+            
+            if (failedBranches.length > 0) {
+              console.log(`\n⚠️  Failed to sync:`);
+              failedBranches.forEach(({ branch, errorType }) => {
+                console.log(`  ✗ ${branch} (${errorType})`);
+              });
+              console.log(`\nDetailed failure analysis will be provided in the next step.`);
+            } else {
+              console.log(`\n🎉 All branches synchronized successfully!`);
+            }
+
+      - name: Check for sync failures
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read sync results
+            let syncResults;
+            try {
+              const resultsData = fs.readFileSync('sync-results.json', 'utf8');
+              syncResults = JSON.parse(resultsData);
+            } catch (error) {
+              console.error('❌ Could not read sync results file');
+              console.error(error.message);
+              process.exit(1);
+            }
+            
+            const { totalBranches, successfulBranches, failedBranches, defaultBranch, timestamp, dryRun } = syncResults;
+            
+            // Generate comprehensive failure report
+            console.log(`\n${'='.repeat(80)}`);
+            console.log('SYNC SUMMARY REPORT');
+            console.log(`${'='.repeat(80)}`);
+            console.log(`Timestamp: ${timestamp}`);
+            console.log(`Default branch: ${defaultBranch}`);
+            console.log(`Dry run mode: ${dryRun}`);
+            console.log(`Total branches processed: ${totalBranches}`);
+            console.log(`Successful: ${successfulBranches.length}`);
+            console.log(`Failed: ${failedBranches.length}`);
+            
+            if (successfulBranches.length > 0) {
+              console.log(`\n✅ SUCCESSFULLY SYNCED BRANCHES (${successfulBranches.length}):`);
+              successfulBranches.forEach(({ branch, status }) => {
+                const statusText = status === 'already_in_sync' ? '(already in sync)' : '(rebased and pushed)';
+                console.log(`  ✓ ${branch} ${statusText}`);
+              });
+            }
+            
+            if (failedBranches.length > 0) {
+              console.log(`\n❌ FAILED TO SYNC BRANCHES (${failedBranches.length}):`);
+              console.log('The following branches require manual intervention:\n');
+              
+              failedBranches.forEach(({ branch, errorType, errorMessage, conflictedFiles, timestamp }, index) => {
+                console.log(`${index + 1}. Branch: ${branch}`);
+                console.log(`   Error Type: ${errorType}`);
+                console.log(`   Timestamp: ${timestamp}`);
+                
+                switch (errorType) {
+                  case 'merge_conflict':
+                    console.log(`   Issue: Merge conflicts detected during rebase`);
+                    if (conflictedFiles.length > 0) {
+                      console.log(`   Conflicted Files:`);
+                      conflictedFiles.forEach(file => console.log(`     - ${file}`));
+                    }
+                    console.log(`   Resolution: Manually resolve conflicts and rebase`);
+                    console.log(`   Commands:`);
+                    console.log(`     git checkout ${branch}`);
+                    console.log(`     git rebase ${defaultBranch}`);
+                    console.log(`     # Resolve conflicts in the listed files`);
+                    console.log(`     git add .`);
+                    console.log(`     git rebase --continue`);
+                    console.log(`     git push origin ${branch} --force-with-lease`);
+                    break;
+                    
+                  case 'push_conflict':
+                    console.log(`   Issue: Push conflicts or force-push restrictions`);
+                    console.log(`   Resolution: Check branch protection rules or use different push strategy`);
+                    break;
+                    
+                  case 'git_state_error':
+                    console.log(`   Issue: Git repository in inconsistent state`);
+                    console.log(`   Resolution: Clean git state and retry manually`);
+                    break;
+                    
+                  default:
+                    console.log(`   Issue: Unexpected error occurred`);
+                    console.log(`   Resolution: Review error details and sync manually`);
+                }
+                
+                console.log(`   Original Error: ${errorMessage}`);
+                console.log('');
+              });
+              
+              console.log(`🔧 NEXT STEPS:`);
+              console.log(`1. Review the failed branches listed above`);
+              console.log(`2. For merge conflicts: manually resolve conflicts and complete the rebase`);
+              console.log(`3. For other errors: investigate the specific issue and retry`);
+              console.log(`4. Consider running the workflow again after manual fixes`);
+              console.log(`5. If issues persist, review branch protection rules and permissions`);
+              
+              console.log(`\n${'='.repeat(80)}`);
+              console.log(`❌ WORKFLOW FAILED: ${failedBranches.length} branches could not be synchronized`);
+              console.log(`${'='.repeat(80)}`);
+              
+              // Fail the workflow
+              process.exit(1);
+            } else {
+              console.log(`\n${'='.repeat(80)}`);
+              console.log(`🎉 WORKFLOW SUCCEEDED: All ${successfulBranches.length} branches synchronized successfully!`);
+              console.log(`${'='.repeat(80)}`);
+            }
