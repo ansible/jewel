@@ -158,7 +158,7 @@ def test_request_objects(loaded_apis):
                         # show up in OPTIONS params, just in the description.
                         continue
                     if loaded_apis.api_schemas[endpoint][action] == {}:
-                        # There are a couple of endpoints (legacy_auth for instance) that publish POST
+                        # There are a couple of endpoints that publish POST
                         # but have no parameters documented, skip these
                         continue
 

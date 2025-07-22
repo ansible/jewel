@@ -83,6 +83,7 @@ router.register(
     views.AdditionalRouteViewSet,
     basename='route',
 )
+
 router.register(
     r'authenticator_users',
     views.AuthenticatorUserViewSet,

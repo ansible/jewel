@@ -373,5 +373,4 @@ MAX_ACTIVE_KEYS_PER_SERVICE = 2
 
 ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
     "ansible_base.authentication.authenticator_plugins",
-    "aap_gateway_api.authentication.authenticator_plugins",
 ]

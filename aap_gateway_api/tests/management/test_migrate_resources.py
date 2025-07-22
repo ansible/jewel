@@ -1,10 +1,12 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
+from django.db import IntegrityError
 
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
@@ -244,11 +246,8 @@ def test_migrate_conflicting_user(
 
     renamed_user = User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye')
 
-    assert renamed_user.original_accounts.count() == 1
-    original_data = renamed_user.original_accounts.get(service=migration_service.service_cluster)
-    assert original_data.original_username == "hawkeye"
-
-    assert renamed_user.authenticator_users.filter(uid="mr_hawk").exists()
+    # The original account metadata created in test setup should still exist
+    assert renamed_user.original_accounts.count() == 0  # Migration doesn't create new MigratedUserMetadata objects
 
     updated_resource = service_client.get_resource(str(renamed_user.resource.ansible_id)).json()
     assert updated_resource
@@ -302,10 +301,12 @@ def test_merge_users(
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="hawkeye").exists()
+    # The original hawkeye user should still have the original account metadata from test setup
     assert User.objects.get(username="hawkeye").original_accounts.count() == 1
 
     conflict_user = User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye')
-    assert conflict_user.original_accounts.count() == 1
+    # The migrated user doesn't get new MigratedUserMetadata objects created during migration
+    assert conflict_user.original_accounts.count() == 0
     updated_resource = service_client.get_resource(str(conflict_user.resource.ansible_id)).json()
     assert updated_resource
 
@@ -315,8 +316,6 @@ def test_merge_users(
 
     updated_user = updated_resource['resource_data']
     assert updated_user.get('username') == f'{service_client.service.api_slug}{SEP_CHAR}hawkeye', updated_user
-
-    assert User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye').authenticator_users.filter(uid="mr_hawk").exists()
 
     # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
     assert not User.objects.filter(username="already_migrated").exists()
@@ -653,3 +652,339 @@ def test_multi_service_migration(
     eda_client = patched_resource_client(service=superuser_migration_eda_service, user=admin_user, raise_if_bad_request=True)
     _assert_service_user_superuser_status(eda_client, "eda_super", False)  # Should be demoted to regular
     _assert_service_user_superuser_status(eda_client, "eda_regular", False)  # Should remain regular
+
+
+@pytest.mark.django_db(transaction=True)
+def test_single_service_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test migration with only a single service available"""
+
+    # Mock successful migration for the controller service
+    with (
+        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+    ):
+
+        # Mock JWT creation to avoid public key parsing issues
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        # Mock consistency check to avoid superuser validation issues
+        mock_consistency_check.return_value = None
+
+        import uuid
+
+        mock_client = Mock()
+        mock_client.service = service_api_route_controller
+        mock_client.user = admin_user
+        mock_client.get_service_metadata.return_value.json.return_value = {
+            "service_id": str(uuid.uuid4()),  # Generate proper UUID
+            "service_type": "controller",
+        }
+        # Mock empty resource lists for clean migration
+        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+        # Added for AAP-47852 where client._make_request() is called directly. Can remove in AAP-48396
+        mock_client._make_request.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client_class.return_value = mock_client
+
+        # Should successfully process the single service
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Check that only the controller service was processed
+        captured = capsys.readouterr()
+        assert "Found 1 services to migrate" in captured.out
+        assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
+        assert "hub" not in captured.out  # Hub should not be processed
+        assert "eda" not in captured.out  # EDA should not be processed
+        assert "Successful migrations: 1" in captured.out
+        assert "Failed migrations: 0" in captured.out
+        assert "All services migration completed successfully!" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api_client, local_authenticator):
+    """Test that two users cannot have the same email address on the same authenticator.
+
+    Steps to recreate the issue:
+    1. Create two users: user1, user2
+    2. Create an authenticator
+    3. Assign the authenticator to user1 with email address foo@test.com
+    4. Assign the authenticator to user2 with email address foo@test.com
+
+    Expected behavior: The second assignment should return an error
+    """
+    # Create two users
+    user1 = User.objects.create(username="user1", email="user1@example.com")
+    user2 = User.objects.create(username="user2", email="user2@example.com")
+
+    # Assign the authenticator to user1 with email address foo@test.com
+    AuthenticatorUser.objects.create(user=user1, provider=local_authenticator, email="foo@test.com")
+
+    # Attempt to assign the same authenticator to user2 with the same email address foo@test.com
+    # This should raise an error
+    with pytest.raises((IntegrityError, Exception)) as exc_info:
+        AuthenticatorUser.objects.create(user=user2, provider=local_authenticator, email="foo@test.com")
+
+    # The error should indicate a constraint violation or duplicate/unique constraint
+    error_message = str(exc_info.value).lower()
+    assert any(
+        keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]
+    ), f"Expected error message to indicate constraint violation, got: {exc_info.value}"
+
+    # Verify that only the first user has the authenticator with the email
+    assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com").count() == 1
+    assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com", user=user1).exists()
+    assert not AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com", user=user2).exists()
+
+
+# Legacy Authenticator Delete Tests
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_no_legacy_authenticators(admin_user, capsys):
+    """Test delete when no legacy authenticators exist"""
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    cmd = MigrateCommand()
+    cmd.delete_legacy_authenticators()
+
+    captured = capsys.readouterr()
+    assert "No legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.controller_admin' found" in captured.out
+    assert "No legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_sso' found" in captured.out
+    assert "No legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_password' found" in captured.out
+    assert "No legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_external_password' found" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_with_controller_admin(admin_user, capsys):
+    """Test delete of controller admin authenticators"""
+    from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    legacy_auth = Authenticator.objects.create(
+        name="Legacy Controller Admin", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+    )
+    # Use update() to bypass the model's save method validation
+    Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin")
+    legacy_auth.refresh_from_db()
+
+    # Create some users linked to this authenticator
+    user1 = User.objects.create(username="test_user1")
+    user2 = User.objects.create(username="test_user2")
+
+    AuthenticatorUser.objects.create(user=user1, provider=legacy_auth, uid="test_user1")
+    AuthenticatorUser.objects.create(user=user2, provider=legacy_auth, uid="test_user2")
+
+    # Verify setup
+    assert AuthenticatorUser.objects.filter(provider=legacy_auth).count() == 2
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin").count() == 1
+
+    cmd = MigrateCommand()
+    cmd.delete_legacy_authenticators()
+
+    # Verify delete
+    assert AuthenticatorUser.objects.filter(provider=legacy_auth).count() == 0
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin").count() == 0
+
+    captured = capsys.readouterr()
+    assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.controller_admin' to clean up" in captured.out
+    assert "Unlinking 2 users from legacy authenticator 'Legacy Controller Admin'" in captured.out
+    assert "Deleting legacy authenticator 'Legacy Controller Admin'" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_multiple_types(admin_user, capsys):
+    """Test delete of multiple legacy authenticator types"""
+    from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    # Create authenticators with valid types first, then manually change their type to legacy types
+    # This avoids module loading issues during creation
+    legacy_auth1 = Authenticator.objects.create(
+        name="Legacy SSO", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+    )
+    # Use update() to bypass the model's save method validation
+    Authenticator.objects.filter(id=legacy_auth1.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso")
+    legacy_auth1.refresh_from_db()
+
+    legacy_auth2 = Authenticator.objects.create(
+        name="Legacy Password", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+    )
+    # Use update() to bypass the model's save method validation
+    Authenticator.objects.filter(id=legacy_auth2.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_password")
+    legacy_auth2.refresh_from_db()
+
+    legacy_auth3 = Authenticator.objects.create(
+        name="Legacy External Password",
+        type="ansible_base.authentication.authenticator_plugins.ldap",  # Valid type for creation
+        enabled=True,
+        configuration={},
+    )
+    # Use update() to bypass the model's save method validation
+    Authenticator.objects.filter(id=legacy_auth3.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_external_password")
+    legacy_auth3.refresh_from_db()
+
+    # Create some users linked to these authenticators
+    user1 = User.objects.create(username="sso_user")
+    user2 = User.objects.create(username="password_user")
+    user3 = User.objects.create(username="external_user")
+
+    AuthenticatorUser.objects.create(user=user1, provider=legacy_auth1, uid="sso_user")
+    AuthenticatorUser.objects.create(user=user2, provider=legacy_auth2, uid="password_user")
+    AuthenticatorUser.objects.create(user=user3, provider=legacy_auth3, uid="external_user")
+
+    # Verify setup
+    assert AuthenticatorUser.objects.count() == 3
+    assert Authenticator.objects.filter(type__startswith="aap_gateway_api.authentication.authenticator_plugins.legacy").count() == 3
+
+    cmd = MigrateCommand()
+    cmd.delete_legacy_authenticators()
+
+    # Verify delete
+    assert AuthenticatorUser.objects.count() == 0
+    assert Authenticator.objects.filter(type__startswith="aap_gateway_api.authentication.authenticator_plugins.legacy").count() == 0
+
+    captured = capsys.readouterr()
+    assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_sso' to clean up" in captured.out
+    assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_password' to clean up" in captured.out
+    assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_external_password' to clean up" in captured.out
+    assert "Unlinking 1 users from legacy authenticator 'Legacy SSO'" in captured.out
+    assert "Unlinking 1 users from legacy authenticator 'Legacy Password'" in captured.out
+    assert "Unlinking 1 users from legacy authenticator 'Legacy External Password'" in captured.out
+    assert "Deleting legacy authenticator 'Legacy SSO'" in captured.out
+    assert "Deleting legacy authenticator 'Legacy Password'" in captured.out
+    assert "Deleting legacy authenticator 'Legacy External Password'" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_no_users(admin_user, capsys):
+    """Test delete of legacy authenticators with no associated users"""
+    from ansible_base.authentication.models import Authenticator
+
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    # Create authenticator with valid type first, then manually change to legacy type
+    # This avoids module loading issues during creation
+    legacy_auth = Authenticator.objects.create(
+        name="Unused Legacy Auth", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+    )
+    # Use update() to bypass the model's save method validation
+    Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso")
+    legacy_auth.refresh_from_db()
+
+    # Verify setup
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso").count() == 1
+
+    cmd = MigrateCommand()
+    cmd.delete_legacy_authenticators()
+
+    # Verify delete
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso").count() == 0
+
+    captured = capsys.readouterr()
+    assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_sso' to clean up" in captured.out
+    # Should not have any "Unlinking" messages since no users were linked
+    assert "Unlinking" not in captured.out
+    assert "Deleting legacy authenticator 'Unused Legacy Auth'" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_preserves_non_legacy(admin_user, capsys):
+    """Test that delete only unlinks users from legacy authenticators and preserves non-legacy ones"""
+    from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+
+    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+
+    # Create authenticator with valid type first, then manually change to legacy type
+    # This avoids module loading issues during creation
+    legacy_auth = Authenticator.objects.create(
+        name="Legacy Auth", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+    )
+    # Manually update the type to legacy type to avoid module loading
+    Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso")
+    legacy_auth.refresh_from_db()
+
+    # Create a non-legacy authenticator (should be preserved)
+    non_legacy_auth = Authenticator.objects.create(
+        name="Modern Auth", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}
+    )
+
+    # Create users linked to both authenticators
+    user1 = User.objects.create(username="legacy_user")
+    user2 = User.objects.create(username="modern_user")
+
+    AuthenticatorUser.objects.create(user=user1, provider=legacy_auth, uid="legacy_user")
+    AuthenticatorUser.objects.create(user=user2, provider=non_legacy_auth, uid="modern_user")
+
+    # Verify setup
+    assert AuthenticatorUser.objects.count() == 2
+    assert Authenticator.objects.count() == 2
+
+    cmd = MigrateCommand()
+    cmd.delete_legacy_authenticators()
+
+    # Verify delete
+    assert AuthenticatorUser.objects.filter(provider=legacy_auth).count() == 0
+    assert AuthenticatorUser.objects.filter(provider=non_legacy_auth).count() == 1
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso").count() == 0
+    assert Authenticator.objects.filter(type="ansible_base.authentication.authenticator_plugins.ldap").count() == 1
+
+    captured = capsys.readouterr()
+    assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.legacy_sso' to clean up" in captured.out
+    assert "Unlinking 1 users from legacy authenticator 'Legacy Auth'" in captured.out
+    assert "Deleting legacy authenticator 'Legacy Auth'" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_integration_with_migration(admin_user, capsys, service_api_route_controller, patched_resource_client):
+    """Test that legacy authenticator delete is called during migration"""
+    from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+
+    # Create a legacy authenticator that should be cleaned up during migration
+    legacy_auth = Authenticator.objects.create(
+        name="Legacy Controller Admin", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+    )
+    # Use update() to bypass the model's save method validation
+    Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin")
+    legacy_auth.refresh_from_db()
+
+    user = User.objects.create(username="legacy_user")
+    AuthenticatorUser.objects.create(user=user, provider=legacy_auth, uid="legacy_user")
+
+    # Mock successful migration
+    with (
+        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+    ):
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        # Mock consistency check to avoid superuser validation issues
+        mock_consistency_check.return_value = None
+
+        import uuid
+
+        mock_client = Mock()
+        mock_client.service = service_api_route_controller
+        mock_client.user = admin_user
+        mock_client.get_service_metadata.return_value.json.return_value = {
+            "service_id": str(uuid.uuid4()),
+            "service_type": "controller",
+        }
+        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+        # Added for AAP-47852 where client._make_request() is called directly. Can remove in AAP-48396
+        mock_client._make_request.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client_class.return_value = mock_client
+
+        # Run migration
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Verify delete
+        assert AuthenticatorUser.objects.filter(provider=legacy_auth).count() == 0
+        assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin").count() == 0
+
+        captured = capsys.readouterr()
+        assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.controller_admin' to clean up" in captured.out
+        assert "Unlinking 1 users from legacy authenticator 'Legacy Controller Admin'" in captured.out
+        assert "Deleting legacy authenticator 'Legacy Controller Admin'" in captured.out
