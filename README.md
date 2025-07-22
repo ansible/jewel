@@ -217,6 +217,9 @@ The plumb playbook will:
 Once the playbook is done running tacacs+ should now be setup in your development environment. This server has the accounts listed on https://hub.docker.com/r/dchidell/docker-tacacs
 
 # Branching Strategy
+
+> NOTE: This will not be used for the `2.6` release. We were blocked by the lack of test pipelines for custom branches. We will work with the PDE team to add support for this for the `2.7` and future ones.
+
 We currently have 2 branches in aap-gateway:
 * `devel` (our development branch)
 * `stable-2.5` (our 2.5 release branch)
