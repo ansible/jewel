@@ -3,6 +3,11 @@ name: CI
 on:
   pull_request:
   push:
+    branches:
+      - devel
+env:
+  # Prevent SonarCloud from running on PRs from forks
+  TARGET_REPOSITORY: 'ansible-automation-platform/aap-gateway'
 jobs:
   tox:
     name: aap_gateway_api - ${{ matrix.tests.env }}
@@ -15,6 +20,7 @@ jobs:
     permissions:
       packages: write
       contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +81,7 @@ jobs:
         if: |
           matrix.tests.junit-xml-upload &&
           github.event_name == 'push' &&
-          github.repository == 'ansible-automation-platform/aap-gateway'
+          github.repository == env.TARGET_REPOSITORY
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -89,7 +95,8 @@ jobs:
                 pr_number: '0',
                 event_type: 'push',
                 commit_sha: context.sha,
-                repository: context.repo.owner + '/' + context.repo.repo
+                repository: context.repo.owner + '/' + context.repo.repo,
+                ci_run_id: context.runId.toString()
               }
             });
 
@@ -97,7 +104,7 @@ jobs:
         if: |
           matrix.tests.junit-xml-upload &&
           github.event_name == 'push' &&
-          github.repository == 'ansible-automation-platform/aap-gateway'
+          github.repository == env.TARGET_REPOSITORY
         continue-on-error: true
         run: >-
           curl -v --user "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}:${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}"

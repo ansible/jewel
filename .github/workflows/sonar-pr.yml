@@ -43,6 +43,10 @@ on:
         description: 'Repository name'
         required: true
         type: string
+      ci_run_id:
+        description: 'CI workflow run ID (for downloading coverage artifact)'
+        required: false
+        type: string
 permissions: read-all
 jobs:
   sonar:
@@ -54,14 +58,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Download coverage artifact (for workflow_run only)
+      # Download coverage artifact (for both workflow_run and workflow_dispatch)
       - name: Download coverage artifact
-        if: github.event_name == 'workflow_run'
+        if: |
+          github.event_name == 'workflow_run' ||
+          (github.event_name == 'workflow_dispatch' && inputs.ci_run_id != '')
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: CI
-          run_id: ${{ github.event.workflow_run.id }}
+          run_id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.ci_run_id }}
           name: coverage
 
       # Set PR number based on trigger type
@@ -104,16 +110,7 @@ jobs:
             
             # Check backport labels (only for PRs)
             if [ "${{ env.PR_NUMBER }}" != "0" ]; then
-              labels='${{ toJson(fromJson(steps.pr_info.outputs.data).labels) }}'
-              has_backport=$(echo "$labels" | jq -r 'any(.name | startswith("backport "))')
-              if [ "$has_backport" = "true" ]; then
-                backport_label_names=$(echo "$labels" | jq -r '.[] | select(.name | startswith("backport ")) | .name' | tr '\n' ',' | sed 's/,$//')
-                echo "├── Backport Label: ✅ Found ($backport_label_names)"
-                echo "└── Result: ⏭️ Skip - \"PR has backport label\""
-                exit 0
-              else
-                echo "├── Backport Label: ❌ None"
-              fi
+              echo "├── Backport Label: ➖ N/A (Skip check for workflow_dispatch)"
               
               # Check Python changes for PRs
               files=$(gh api repos/${{ env.REPO_NAME }}/pulls/${{ env.PR_NUMBER }}/files --jq '.[].filename')
@@ -132,6 +129,9 @@ jobs:
                 echo "├── Python Changes: ✅ Found ($python_count files)"
                 echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
               fi
+            else
+              echo "├── Backport Label: ➖ N/A (Not a PR)"
+              echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
             fi
           else
             # For push events, always proceed
@@ -152,7 +152,7 @@ jobs:
           echo "✅ All conditions met - proceeding with SonarCloud analysis"
 
       - name: Set PR info into env
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0'
+        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0' && steps.pr_info.outputs.data != ''
         run: |
           echo "PR_BASE=${{ fromJson(steps.pr_info.outputs.data).base.ref }}" >> $GITHUB_ENV
           echo "PR_HEAD=${{ fromJson(steps.pr_info.outputs.data).head.ref }}" >> $GITHUB_ENV
