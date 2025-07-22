@@ -12,7 +12,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
-from aap_gateway_api.models import DefaultServiceType, MigratedAuthenticatorMetadata, MigratedUserMetadata, ServiceAPIRoute, ServiceType
+from aap_gateway_api.models import DefaultServiceType, ServiceAPIRoute, ServiceType
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
@@ -264,7 +264,8 @@ class Command(BaseCommand):
             f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
         )
 
-        self.migrate_controller_admin()
+        # Delete the legacy authenticators after migration, along with their associated authenticatorusers
+        self.delete_legacy_authenticators()
 
         for r_type in self.resource_types_to_migrate.keys():
             self.migrate_resource(r_type, service_slug)
@@ -313,76 +314,48 @@ class Command(BaseCommand):
 
         return name
 
-    def create_user_migration_entry(self, user: Resource, initial_data: Dict[str, Any], additional_data: Dict[str, Any]) -> None:
+    def delete_legacy_authenticators(self) -> None:
         """
-        Create migration metadata entries for a migrated user.
+        Unlinks users from legacy authenticators that are no longer needed, then deletes those authenticators.
 
-        This method creates records to track the migration of a user from an upstream
-        service, including their authentication providers and legacy auth data.
+        This method does this by -
+        1. Unlinks legacy authenticators from all users (removes AuthenticatorUser entries)
+        2. Deletes legacy authenticators
 
-        Args:
-            user: Resource object representing the migrated user
-            initial_data: Basic user data (username, etc.)
-            additional_data: Extended user data including social auth information
-
-        Note:
-            Creates MigratedUserMetadata and MigratedAuthenticatorMetadata records
-            to preserve authentication state from the upstream service.
+        Legacy authenticators include:
+        - Controller admin authenticators (aap_gateway_api.authentication.authenticator_plugins.controller_admin)
+        - Any other authenticators that were used for legacy SSO functionality
         """
-        service_cluster = self.client.service.service_cluster
-        MigratedUserMetadata.objects.create(
-            user=user.content_object,
-            service=service_cluster,
-            original_username=initial_data["username"],
-        )
+        # List of legacy authenticator types unlink users from
+        # These may have existed in previous versions but the modules may no longer exist
+        legacy_authenticator_types = [
+            "aap_gateway_api.authentication.authenticator_plugins.controller_admin",
+            "aap_gateway_api.authentication.authenticator_plugins.legacy_sso",
+            "aap_gateway_api.authentication.authenticator_plugins.legacy_password",
+            "aap_gateway_api.authentication.authenticator_plugins.legacy_external_password",
+        ]
 
-        for social in additional_data["social_auth"]:
-            authenticator_meta, _ = MigratedAuthenticatorMetadata.objects.get_or_create(
-                type=MigratedAuthenticatorMetadata.LegacyAuthTypes.SSO,
-                django_backend=social["backend_type"],
-                sso_server=social["sso_server"].rstrip("/") if social["sso_server"] else None,
-                service=service_cluster,
-            )
+        for authenticator_type in legacy_authenticator_types:
+            # Find all authenticators of this type in the database
+            legacy_authenticators = Authenticator.objects.filter(type=authenticator_type).values('pk', 'name')
 
-            AuthenticatorUser.objects.create(
-                user=user.content_object,
-                provider=authenticator_meta.authenticator,
-                uid=social["uid"],
-            )
+            if not legacy_authenticators.exists():
+                self.stdout.write(f"No legacy authenticators of type '{authenticator_type}' found")
+                continue
 
-        if len(additional_data["social_auth"]) == 0:
-            authenticator_meta, _ = MigratedAuthenticatorMetadata.objects.get_or_create(
-                type=MigratedAuthenticatorMetadata.LegacyAuthTypes.PASSWORD,
-                service=service_cluster,
-            )
+            self.stdout.write(f"Found {legacy_authenticators.count()} legacy authenticators of type '{authenticator_type}' to clean up")
 
-            AuthenticatorUser.objects.create(provider=authenticator_meta.authenticator, uid=initial_data["username"], user=user.content_object)
+            for auth_data in legacy_authenticators:
+                auth_pk = auth_data['pk']
+                auth_name = auth_data['name']
+                user_count = AuthenticatorUser.objects.filter(provider__pk=auth_pk).count()
 
-    def migrate_controller_admin(self) -> None:
-        """
-        Set up controller admin authenticator for the current user if needed.
-
-        For Controller services, if the current user doesn't have a usable password,
-        this method creates a controller admin authenticator and associates it with
-        the user to enable authentication.
-
-        This is necessary because controller admin users may not have standard
-        password authentication configured.
-        """
-        service_type = self.client.service.service_cluster.service_type
-
-        if str(service_type) == "controller" and not self.client.user.has_usable_password():
-            authenticator, _ = Authenticator.objects.get_or_create(
-                type="aap_gateway_api.authentication.authenticator_plugins.controller_admin",
-                defaults={"enabled": True, "name": "controller admin password"},
-            )
-
-            if not self.client.user.authenticator_users.filter(provider=authenticator).exists():
-                AuthenticatorUser.objects.create(
-                    user=self.client.user,
-                    provider=authenticator,
-                    uid=self.client.user.username,
-                )
+                if user_count > 0:
+                    self.stdout.write(f"Unlinking {user_count} users from legacy authenticator '{auth_name}'")
+                    AuthenticatorUser.objects.filter(provider__pk=auth_pk).delete()
+                self.stdout.write(f"Deleting legacy authenticator '{auth_name}'")
+                Authenticator.objects.filter(pk=auth_pk).delete()
+                self.stdout.write(f"Deleted legacy authenticator '{auth_name}'")
 
     def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
         """
@@ -514,7 +487,7 @@ class Command(BaseCommand):
         updated_service_resource: Dict[str, Any],
         should_merge: bool,
         service_slug: str,
-    ) -> Tuple[bool, Optional[Resource]]:
+    ) -> bool:
         """
         Handle conflicts with existing resources in the gateway.
 
@@ -535,9 +508,7 @@ class Command(BaseCommand):
             service_slug: API slug for the service being migrated
 
         Returns:
-            Tuple of (create_gateway_resource, existing_resource)
-            - create_gateway_resource: True if a new Gateway resource should be created
-            - existing_resource: Existing Gateway resource if found, None otherwise
+            - create_gateway_resource (bool): True if a new Gateway resource should be created
         """
         """
         this method compares the incoming resource against the existing local resources using a set of unique fields.
@@ -550,8 +521,7 @@ class Command(BaseCommand):
          - updated_service_resource (dict): used to update the resource on the service
          - should_merge (bool): True if we should merge the resource in upstream with Gateway rather than creating a new one
         Returns:
-         - create_gateway_resource: True if we should create the resource in gateway, False otherwise
-         - existing_resource: the existing resource if there is one, else None
+         - create_gateway_resource (bool): True if we should create the resource in gateway, False otherwise
         """
 
         resource_type = resource_context["type"]
@@ -568,7 +538,7 @@ class Command(BaseCommand):
         try:
             existing_resource = LocalResourceModel.objects.select_related("resource").get(**unique_filter_kwargs).resource
         except LocalResourceModel.DoesNotExist:
-            return create_gateway_resource, None
+            return create_gateway_resource
 
         # if an existing resource is found
         resource_ansible_id = upstream_resource['ansible_id']
@@ -613,7 +583,7 @@ class Command(BaseCommand):
             updated_service_resource["resource_data"] = upstream_resource["resource_data"]
             logger.warning(f"Creating new {resource_type.name} with new name {upstream_resource['name']}.")
 
-        return create_gateway_resource, existing_resource
+        return create_gateway_resource
 
     def _get_filtered_resources(self, filters: Dict[str, Any], resource_type_name: str) -> List[Dict[str, Any]]:
         """
@@ -706,7 +676,7 @@ class Command(BaseCommand):
         should_merge = resource_context["merge_option"] if not user_partial_migration else False
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
-        create_gateway_resource, existing_resource = self._reconcile_existing_resource(
+        create_gateway_resource = self._reconcile_existing_resource(
             upstream_resource, resource_context, validated_resource_data, updated_service_resource, should_merge, service_slug
         )
 
@@ -715,17 +685,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             # determine the resource to use in Gateway
             if create_gateway_resource:
-                gw_resource = Resource.create_resource(resource_type, upstream_resource["resource_data"], **resource_creation_kwargs)
-            else:
-                gw_resource = existing_resource
-
-            # Connect legacy authentication for users, but do not connect any for the superuser
-            if user_partial_migration:
-                # Create the migration entry only if we are actually creating a gateway
-                # resource.  If we aren't we're updating an already existing user on
-                # the service.
-                if create_gateway_resource:
-                    self.create_user_migration_entry(gw_resource, validated_resource_data, upstream_resource["additional_data"])
+                Resource.create_resource(resource_type, upstream_resource["resource_data"], **resource_creation_kwargs)
 
             self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
 

@@ -2,7 +2,6 @@ import logging
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_plugin
-from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.abstract_models.user import AbstractDABUser
@@ -10,14 +9,12 @@ from ansible_base.lib.utils.models import user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from ansible_base.resource_registry.models.service_identifier import service_id
 from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, UNUSABLE_PASSWORD_SUFFIX_LENGTH, get_hashers_by_algorithm, identify_hasher, make_password
-from django.db import models, transaction
+from django.db import models
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.managers.user import UserUnmanagedManager
 
 logger = logging.getLogger('aap.gateway.models.user')
-
-LEGACY_AUTHENTICATOR = "aap_gateway_api.authentication.authenticator_plugins.legacy_user"
 
 
 def password_is_hashed(password):
@@ -214,70 +211,3 @@ class MigratedUserMetadata(CommonModel):
 
     class Meta:
         unique_together = [('user', 'service')]
-
-
-class LegacyAuthType(models.TextChoices):
-    PASSWORD = "legacy_password", _("Local")
-    SSO = "legacy_sso", _("SSO")
-    EXTERNAL_PASSWORD = "legacy_external_password", _("External Password")
-
-
-class MigratedAuthenticatorMetadata(CommonModel):
-    _authenticator_module = "aap_gateway_api.authentication.authenticator_plugins"
-
-    LegacyAuthTypes = LegacyAuthType
-
-    authenticator = models.OneToOneField(
-        Authenticator, on_delete=models.CASCADE, related_name="migrated_metadata", help_text=_("The authenticator this user is related to.")
-    )
-    type = models.CharField(max_length=32, choices=LegacyAuthType.choices, help_text=_("The type of legacy auth this user is from i.e. SSO, Local, etc."))
-    django_backend = models.CharField(max_length=256, null=True, help_text=_("The legacy backend type this user is associated with."))
-    sso_server = models.CharField(max_length=512, null=True, help_text=_("The URL of the SSO server, if this user is tied to an the SSO type."))
-    service = models.ForeignKey("ServiceCluster", on_delete=models.CASCADE, help_text=_("The service cluster this user came from."))
-
-    def save(self, *args, **kwargs) -> None:
-        with transaction.atomic():
-            if self.sso_server:
-                self.sso_server = self.sso_server.rstrip("/")
-            authenticator, _ = Authenticator.objects.get_or_create(
-                name=self.get_authenticator_name(),
-                type=self._authenticator_module + "." + self.type,
-                defaults={"enabled": True},
-            )
-
-            self.authenticator = authenticator
-
-            return super().save()
-
-    def get_authenticator_name(self):
-        name = [
-            self.type,
-        ]
-        if self.django_backend:
-            name.append(self.django_backend)
-        if self.sso_server:
-            name.append(self.sso_server)
-        return f"{self.service.service_type.name}: " + "-".join(name)
-
-    @classmethod
-    def get_authenticator_for_auth_code(cls, validated_token) -> Authenticator:
-        service = validated_token["service_cluster"]
-        payload = validated_token["token_data"]["payload"]
-
-        if payload["sso_server"] is not None:
-            kwargs = {
-                "type": cls.LegacyAuthTypes.SSO,
-                "django_backend": payload["sso_backend"],
-                "sso_server": payload["sso_server"].strip("/"),
-            }
-        else:
-            kwargs = {
-                "type": cls.LegacyAuthTypes.PASSWORD,
-            }
-
-        authenticator_meta, _ = cls.objects.get_or_create(
-            service=service,
-            **kwargs,
-        )
-
-        return authenticator_meta
