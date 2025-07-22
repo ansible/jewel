@@ -8,7 +8,6 @@
 ```yaml
 release: # (required) "2.5", "2.6", "2.7", "devel"
 backport: # (optional) "2.5", "2.6", "2.7"
-needs_feature_branch: false
 ```
 
 ## Type of Change
