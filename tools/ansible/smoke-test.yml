@@ -18,7 +18,7 @@
             body_format: json
             validate_certs: false
           register: gateway_ping
-          until: "gateway_ping is success and (gateway_ping.json.pong | to_datetime('%Y-%m-%d %H:%M:%S.%f'))"
+          until: "gateway_ping is success and gateway_ping.json.pong is defined and gateway_ping.json.pong != ''"
           retries: 10
 
         - include_vars:
