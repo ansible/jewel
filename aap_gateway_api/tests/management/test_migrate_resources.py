@@ -242,34 +242,35 @@ def test_migrate_conflicting_user(
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="natasha").exists()
     assert User.objects.filter(username="hawkeye").exists()
-    assert User.objects.filter(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye').exists()
 
-    renamed_user = User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye')
+    # With AAP-47840 implementation, conflicting users are merged instead of renamed
+    # So no renamed user with service prefix should be created
+    assert not User.objects.filter(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye').exists()
+
+    # The original hawkeye user should still exist (merged behavior)
+    hawkeye_user = User.objects.get(username="hawkeye")
 
     # The original account metadata created in test setup should still exist
-    assert renamed_user.original_accounts.count() == 0  # Migration doesn't create new MigratedUserMetadata objects
+    assert hawkeye_user.original_accounts.count() == 1  # Original metadata should remain
 
-    updated_resource = service_client.get_resource(str(renamed_user.resource.ansible_id)).json()
+    # With the new AAP-47840 merging behavior, the hawkeye user should be merged
+    # Check that the resource was properly updated
+    updated_resource = service_client.get_resource(str(hawkeye_user.resource.ansible_id)).json()
     assert updated_resource
 
-    # When merge_users=False, users should get partially migrated
-    assert updated_resource["is_partially_migrated"] is True
+    # With AAP-47840, users are fully migrated (is_partially_migrated=False)
+    assert updated_resource["is_partially_migrated"] is False
 
     # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
     assert not User.objects.filter(username="already_migrated").exists()
 
-    resources = service_client.list_resources(
-        {
-            "service_id": service_client.service.service_cluster.service_id,
-            "content_type__resource_type__name": "shared.user",
-            "not__name": admin_user.username,  # admin user will be merged, and thus get the gateway service_id
-        }
-    ).json()
+    # With merging behavior, the hawkeye user should have Gateway's service_id
+    assert hawkeye_user.resource.service_id != migration_service.service_cluster.service_id
 
-    # Check that the user's service ID's were not updated
-    assert resources["count"] == pre_sync_resources["count"]
+    from ansible_base.resource_registry.models import service_id
 
-    assert renamed_user.resource.service_id == migration_service.service_cluster.service_id
+    gateway_service_id = service_id()
+    assert str(hawkeye_user.resource.service_id) == gateway_service_id
 
 
 @pytest.mark.django_db(transaction=True)
@@ -301,21 +302,24 @@ def test_merge_users(
 
     # Check that users were migrated, they were created in the migration_tests script
     assert User.objects.filter(username="hawkeye").exists()
-    # The original hawkeye user should still have the original account metadata from test setup
-    assert User.objects.get(username="hawkeye").original_accounts.count() == 1
 
-    conflict_user = User.objects.get(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye')
-    # The migrated user doesn't get new MigratedUserMetadata objects created during migration
-    assert conflict_user.original_accounts.count() == 0
-    updated_resource = service_client.get_resource(str(conflict_user.resource.ansible_id)).json()
+    # With AAP-47840 merging behavior, no renamed user should be created
+    assert not User.objects.filter(username=f'{service_client.service.api_slug}{SEP_CHAR}hawkeye').exists()
+
+    # The original hawkeye user should still have the original account metadata from test setup
+    hawkeye_user = User.objects.get(username="hawkeye")
+    assert hawkeye_user.original_accounts.count() == 1
+
+    # Check that the hawkeye user was properly merged
+    updated_resource = service_client.get_resource(str(hawkeye_user.resource.ansible_id)).json()
     assert updated_resource
 
-    # Users always do oppionated merge_users=True behavior
-    # for any renamed user, we will set the partially migrated flag
-    assert updated_resource["is_partially_migrated"] is True
+    # With AAP-47840, users are fully migrated (is_partially_migrated=False)
+    assert updated_resource["is_partially_migrated"] is False
 
+    # The username should remain unchanged (no service prefix)
     updated_user = updated_resource['resource_data']
-    assert updated_user.get('username') == f'{service_client.service.api_slug}{SEP_CHAR}hawkeye', updated_user
+    assert updated_user.get('username') == 'hawkeye', updated_user
 
     # We set is_partially_migrated=True for this user in the fixture, so it should not get migrated
     assert not User.objects.filter(username="already_migrated").exists()
@@ -628,6 +632,7 @@ def test_multi_service_migration(
     assert "Gateway superusers: ['admin', 'controller_super']" in captured.out
     assert "Controller superusers: ['admin', 'controller_super']" in captured.out
     assert "Controller and Gateway superusers are consistent" in captured.out
+
     assert "Demoted user 'hub_super' from superuser in hub" in captured.out
     assert "Demoted 1 users from superuser in hub: ['hub_super']" in captured.out
 
@@ -988,3 +993,239 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
         assert "Found 1 legacy authenticators of type 'aap_gateway_api.authentication.authenticator_plugins.controller_admin' to clean up" in captured.out
         assert "Unlinking 1 users from legacy authenticator 'Legacy Controller Admin'" in captured.out
         assert "Deleting legacy authenticator 'Legacy Controller Admin'" in captured.out
+
+
+@pytest.fixture
+def comprehensive_migration_controller_service(service_api_route_controller):
+    """Launch a controller service with comprehensive migration test data."""
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="comprehensive_migration_controller")
+    yield service_api_route_controller
+    _kill_service(proc)
+
+
+@pytest.fixture
+def comprehensive_migration_hub_service(service_api_route_hub):
+    """Launch a hub service with comprehensive migration test data."""
+    proc = _launch_service(svc_route=service_api_route_hub, fixture="comprehensive_migration_hub", svc_type="galaxy")
+    yield service_api_route_hub
+    _kill_service(proc)
+
+
+@pytest.fixture
+def comprehensive_migration_eda_service(service_api_route_eda):
+    """Launch an EDA service with comprehensive migration test data."""
+    proc = _launch_service(svc_route=service_api_route_eda, fixture="comprehensive_migration_eda", svc_type="eda")
+    yield service_api_route_eda
+    _kill_service(proc)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_comprehensive_multi_service_migration(
+    comprehensive_migration_controller_service,
+    comprehensive_migration_hub_service,
+    comprehensive_migration_eda_service,
+    admin_user,
+    patched_resource_client,
+    capsys,
+):
+    """
+    Comprehensive test for AAP-47840 multi-service user migration covering all manual test scenarios:
+
+    Test Case 1: controller-only-user (Controller only)
+    Test Case 2: controller-hub-user (Controller + Hub)
+    Test Case 3: hub-eda-user (Hub + EDA)
+    Test Case 4: all-services-user (Controller + Hub + EDA)
+    """
+
+    controller_client = patched_resource_client(service=comprehensive_migration_controller_service, user=admin_user, raise_if_bad_request=True)
+    hub_client = patched_resource_client(service=comprehensive_migration_hub_service, user=admin_user, raise_if_bad_request=True)
+    eda_client = patched_resource_client(service=comprehensive_migration_eda_service, user=admin_user, raise_if_bad_request=True)
+
+    gateway_service_id = str(service_id())
+
+    # Verify initial state - no Gateway users exist initially
+    assert not User.objects.filter(username="controller-only-user").exists()
+    assert not User.objects.filter(username="controller-hub-user").exists()
+    assert not User.objects.filter(username="hub-eda-user").exists()
+    assert not User.objects.filter(username="all-services-user").exists()
+
+    # Run migration for all services
+    call_command("migrate_service_data", username=admin_user.username)
+
+    captured = capsys.readouterr()
+
+    # === Verify migration output ===
+    assert "Found 3 services to migrate" in captured.out
+    assert "Merging partially migrated users" in captured.out
+    assert "Successful migrations: 3" in captured.out
+    assert "Failed migrations: 0" in captured.out
+    assert "All services migration completed successfully!" in captured.out
+
+    # === Test Case 1: controller-only-user - Should only exist in Controller ===
+    # gateway user verification
+    gateway_user_list = User.objects.filter(username__endswith="controller-only-user")
+    assert gateway_user_list.count() == 1
+    gateway_user = User.objects.get(username="controller-only-user")
+    assert gateway_user.email == "controller@example.com"
+    assert gateway_user.first_name == "Controller"
+    assert gateway_user.last_name == "User"
+    assert gateway_user.resource.is_partially_migrated is False
+    assert str(gateway_user.resource.service_id) == gateway_service_id
+
+    # gateway resource verification
+    gateway_resource_list = Resource.objects.filter(name__endswith="controller-only-user")
+    assert gateway_resource_list.count() == 1
+    gateway_resource = gateway_resource_list.first()
+    assert str(gateway_resource.service_id) == gateway_service_id
+    assert gateway_resource.is_partially_migrated is False
+    gateway_resource_ansible_id = str(gateway_resource.ansible_id)
+
+    # controller resource verification
+    controller_resource_list = controller_client.list_resources(filters={"name__endswith": "controller-only-user"}).json()
+    assert controller_resource_list["count"] == 1
+    controller_resource = controller_client.get_resource(controller_resource_list["results"][0]["ansible_id"]).json()
+    assert controller_resource["ansible_id"] == gateway_resource_ansible_id
+    assert controller_resource["service_id"] == gateway_service_id
+    assert controller_resource["is_partially_migrated"] is False
+
+    # hub resource verification
+    hub_resource_list = hub_client.list_resources(filters={"name__endswith": "controller-only-user"}).json()
+    assert hub_resource_list["count"] == 0
+
+    # eda resource verification
+    eda_resource_list = eda_client.list_resources(filters={"name__endswith": "controller-only-user"}).json()
+    assert eda_resource_list["count"] == 0
+
+    # === Test Case 2: controller-hub-user - Should exist in Controller and Hub, NOT in EDA ===
+    # gateway user verification
+    gateway_user_list = User.objects.filter(username__endswith="controller-hub-user")
+    assert gateway_user_list.count() == 1
+    gateway_user = User.objects.get(username="controller-hub-user")
+    assert gateway_user.email == "multi@example.com"
+    assert gateway_user.first_name == "Multi"
+    assert gateway_user.last_name == "User"
+    assert gateway_user.resource.is_partially_migrated is False
+    assert str(gateway_user.resource.service_id) == gateway_service_id
+
+    # gateway resource verification
+    gateway_resource_list = Resource.objects.filter(name__endswith="controller-hub-user")
+    assert gateway_resource_list.count() == 1
+    gateway_resource = gateway_resource_list.first()
+    assert str(gateway_resource.service_id) == gateway_service_id
+    assert gateway_resource.is_partially_migrated is False
+    gateway_resource_ansible_id = str(gateway_resource.ansible_id)
+
+    # controller resource verification
+    controller_resource_list = controller_client.list_resources(filters={"name__endswith": "controller-hub-user"}).json()
+    assert controller_resource_list["count"] == 1
+    controller_resource = controller_client.get_resource(controller_resource_list["results"][0]["ansible_id"]).json()
+    assert controller_resource["ansible_id"] == gateway_resource_ansible_id
+    assert controller_resource["service_id"] == gateway_service_id
+    assert controller_resource["is_partially_migrated"] is False
+
+    # hub resource verification
+    hub_resource_list = hub_client.list_resources(filters={"name__endswith": "controller-hub-user"}).json()
+    assert hub_resource_list["count"] == 1
+    hub_resource = hub_client.get_resource(hub_resource_list["results"][0]["ansible_id"]).json()
+    assert hub_resource["ansible_id"] == gateway_resource_ansible_id
+    assert hub_resource["service_id"] == gateway_service_id
+    assert hub_resource["is_partially_migrated"] is False
+
+    # eda resource verification
+    eda_resource_list = eda_client.list_resources(filters={"name__endswith": "controller-hub-user"}).json()
+    assert eda_resource_list["count"] == 0
+
+    # === Test Case 3: hub-eda-user - Should exist in Hub and EDA, NOT in Controller ===
+    # gateway user verification
+    gateway_user_list = User.objects.filter(username__endswith="hub-eda-user")
+    assert gateway_user_list.count() == 1
+    gateway_user = User.objects.get(username="hub-eda-user")
+    assert gateway_user.email == "hubeda@example.com"
+    assert gateway_user.first_name == "HubEda"
+    assert gateway_user.last_name == "User"
+    assert gateway_user.resource.is_partially_migrated is False
+    assert str(gateway_user.resource.service_id) == gateway_service_id
+
+    # gateway resource verification
+    gateway_resource_list = Resource.objects.filter(name__endswith="hub-eda-user")
+    assert gateway_resource_list.count() == 1
+    gateway_resource = gateway_resource_list.first()
+    assert str(gateway_resource.service_id) == gateway_service_id
+    assert gateway_resource.is_partially_migrated is False
+    gateway_resource_ansible_id = str(gateway_resource.ansible_id)
+
+    # controller resource verification
+    controller_resource_list = controller_client.list_resources(filters={"name__endswith": "hub-eda-user"}).json()
+    assert controller_resource_list["count"] == 0
+
+    # hub resource verification
+    hub_resource_list = hub_client.list_resources(filters={"name__endswith": "hub-eda-user"}).json()
+    assert hub_resource_list["count"] == 1
+    hub_resource = hub_client.get_resource(hub_resource_list["results"][0]["ansible_id"]).json()
+    assert hub_resource["ansible_id"] == gateway_resource_ansible_id
+    assert hub_resource["service_id"] == gateway_service_id
+    assert hub_resource["is_partially_migrated"] is False
+
+    # eda resource verification
+    eda_resource_list = eda_client.list_resources(filters={"name__endswith": "hub-eda-user"}).json()
+    assert eda_resource_list["count"] == 1
+    eda_resource = eda_client.get_resource(eda_resource_list["results"][0]["ansible_id"]).json()
+    assert eda_resource["ansible_id"] == gateway_resource_ansible_id
+    assert eda_resource["service_id"] == gateway_service_id
+    assert eda_resource["is_partially_migrated"] is False
+
+    # === Test Case 4: all-services-user - Should exist in all services ===
+    # gateway user verification
+    gateway_user_list = User.objects.filter(username__endswith="all-services-user")
+    assert gateway_user_list.count() == 1
+    gateway_user = User.objects.get(username="all-services-user")
+    assert gateway_user.email == "allservices@example.com"
+    assert gateway_user.first_name == "AllServices"
+    assert gateway_user.last_name == "User"
+    assert gateway_user.resource.is_partially_migrated is False
+    assert str(gateway_user.resource.service_id) == gateway_service_id
+
+    # gateway resource verification
+    gateway_resource_list = Resource.objects.filter(name__endswith="all-services-user")
+    assert gateway_resource_list.count() == 1
+    gateway_resource = gateway_resource_list.first()
+    assert str(gateway_resource.service_id) == gateway_service_id
+    assert gateway_resource.is_partially_migrated is False
+    gateway_resource_ansible_id = str(gateway_resource.ansible_id)
+
+    # controller resource verification
+    controller_resource_list = controller_client.list_resources(filters={"name__endswith": "all-services-user"}).json()
+    assert controller_resource_list["count"] == 1
+    controller_resource = controller_client.get_resource(controller_resource_list["results"][0]["ansible_id"]).json()
+    assert controller_resource["ansible_id"] == gateway_resource_ansible_id
+    assert controller_resource["service_id"] == gateway_service_id
+    assert controller_resource["is_partially_migrated"] is False
+
+    # hub resource verification
+    hub_resource_list = hub_client.list_resources(filters={"name__endswith": "all-services-user"}).json()
+    assert hub_resource_list["count"] == 1
+    hub_resource = hub_client.get_resource(hub_resource_list["results"][0]["ansible_id"]).json()
+    assert hub_resource["ansible_id"] == gateway_resource_ansible_id
+    assert hub_resource["service_id"] == gateway_service_id
+    assert hub_resource["is_partially_migrated"] is False
+
+    # eda resource verification
+    eda_resource_list = eda_client.list_resources(filters={"name__endswith": "all-services-user"}).json()
+    assert eda_resource_list["count"] == 1
+    eda_resource = eda_client.get_resource(eda_resource_list["results"][0]["ansible_id"]).json()
+    assert eda_resource["ansible_id"] == gateway_resource_ansible_id
+    assert eda_resource["service_id"] == gateway_service_id
+    assert eda_resource["is_partially_migrated"] is False
+
+    # ==== Final validation - no partially migrated user in any service ====
+    gateway_resource_list = Resource.objects.filter(content_type__resource_type__name="shared.user", is_partially_migrated=True)
+    assert gateway_resource_list.count() == 0
+
+    controller_resource_list = controller_client.list_resources(filters={"is_partially_migrated": True}).json()
+    assert controller_resource_list["count"] == 0
+
+    hub_resource_list = hub_client.list_resources(filters={"is_partially_migrated": True}).json()
+    assert hub_resource_list["count"] == 0
+
+    eda_resource_list = eda_client.list_resources(filters={"is_partially_migrated": True}).json()
+    assert eda_resource_list["count"] == 0
