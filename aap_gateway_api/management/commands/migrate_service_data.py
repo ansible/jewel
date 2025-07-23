@@ -14,6 +14,7 @@ from django.db import models, transaction
 
 from aap_gateway_api.models import DefaultServiceType, ServiceAPIRoute, ServiceType
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
+from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
 User = get_user_model()
@@ -40,6 +41,13 @@ class Command(BaseCommand):
     Important: Users are never fully migrated - only the admin user is merged,
     while other users are partially migrated to preserve authentication state.
     """
+
+    # Service processing order - Controller first to establish priority for user merging
+    SERVICE_TYPE_ORDER = [
+        DefaultServiceType.CONTROLLER.value,
+        DefaultServiceType.HUB.value,
+        DefaultServiceType.EDA.value,
+    ]
 
     help = """Migrate Organizations and teams from existing AAP installations into the Gateway.
 
@@ -144,20 +152,15 @@ class Command(BaseCommand):
             raise CommandError(f"Username {username} does not exist")
 
         # Get all services with DefaultServiceType in exact order: controller, hub, eda
-        service_type_order = [
-            DefaultServiceType.CONTROLLER.value,
-            DefaultServiceType.HUB.value,
-            DefaultServiceType.EDA.value,
-        ]
-
         service_apis_dict = {
-            api.service_cluster.service_type.name: api for api in ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=service_type_order)
+            api.service_cluster.service_type.name: api
+            for api in ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=self.SERVICE_TYPE_ORDER)
         }
 
-        service_apis = [service_apis_dict[service_type] for service_type in service_type_order if service_type in service_apis_dict]
+        service_apis = [service_apis_dict[service_type] for service_type in self.SERVICE_TYPE_ORDER if service_type in service_apis_dict]
 
         if not service_apis:
-            raise CommandError(f"No services found with expected service types: {', '.join(service_type_order)}")
+            raise CommandError(f"No services found with expected service types: {', '.join(self.SERVICE_TYPE_ORDER)}")
 
         self.stdout.write(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}")
 
@@ -165,6 +168,10 @@ class Command(BaseCommand):
         migration_results = {}
         successful_services = []
         failed_services = []
+
+        # Merge all partially migrated users before proceeding with migration
+        self.stdout.write("\n=== Merging partially migrated users ===")
+        self._merge_partially_migrated_users(service_apis, user)
 
         # Process each service
         for service_api in service_apis:
@@ -667,13 +674,13 @@ class Command(BaseCommand):
 
         # 'shared.user' type is treated differently
         # If the user being migrated is not the current user (admin user), we need to check if we should partially migrate the user
-        user_partial_migration = bool(resource_context["type_name"] == "shared.user" and upstream_resource["name"] != self.client.user.username)
+        user_partial_migration = False
 
         resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource, user_partial_migration)
 
         # should_merge indicates the final merge action.
         # The default is the value passed into the merge option when running the command, which is True to indicate we are merging the admin user
-        should_merge = resource_context["merge_option"] if not user_partial_migration else False
+        should_merge = True
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
         create_gateway_resource = self._reconcile_existing_resource(
@@ -938,7 +945,7 @@ class Command(BaseCommand):
         client = GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
         filters = {
-            "service_id": service_api.service_cluster.service_id,
+            "service_id": str(service_id()),
             "content_type__resource_type__name": "shared.user",
         }
 
@@ -971,3 +978,167 @@ class Command(BaseCommand):
             self.stdout.write(f"Demoted {len(demoted_users)} users from superuser in {service_type}: {sorted(demoted_users)}")
         else:
             self.stdout.write(f"✓ No extra superusers found in {service_type}")
+
+    def _merge_partially_migrated_users(self, service_apis: List[ServiceAPIRoute], user: AbstractUser) -> None:
+        """
+        Merge all partially migrated users before starting the full migration.
+
+        This optimized method gets all users from Gateway and correlates them based on prefixes,
+        rather than making API calls to each service. This scales better with large user counts.
+
+        Args:
+            service_apis: List of service APIs to process
+            user: User to perform API calls as
+        """
+
+        # Step 1: Get all partially migrated users from Gateway database
+        # Partially migrated users have service_id != Gateway's service_id
+        self.stdout.write("Finding all partially migrated users in Gateway...")
+
+        gateway_service_id = service_id()
+        partially_migrated_resources = (
+            Resource.objects.filter(content_type__resource_type__name="shared.user").exclude(service_id=gateway_service_id).select_related('content_type')
+        )
+
+        total_partially_migrated_users = len(partially_migrated_resources)
+        self.stdout.write(f"  Found {total_partially_migrated_users} partially migrated user resources in Gateway")
+
+        if not partially_migrated_resources:
+            self.stdout.write("  No partially migrated users found in Gateway. Skipping.")
+            return
+
+        # Step 2: Group users by their service types based on service_id
+        self.stdout.write("Grouping users by their service types...")
+        service_id_to_type = {service_api.service_cluster.service_id: service_api.service_cluster.service_type.name for service_api in service_apis}
+
+        all_users = {}  # service_type -> [(username, user_object)]
+        for service_type in service_id_to_type.values():
+            all_users[service_type] = []
+
+        for resource in partially_migrated_resources:
+            user_instance = resource.content_object
+            username = user_instance.username
+
+            # Determine which service this user belongs to based on service_id
+            service_type = service_id_to_type.get(resource.service_id)
+            if service_type:
+                all_users[service_type].append((username, user_instance))
+            else:
+                raise RuntimeError(f"Unknown service_id {resource.service_id} for user {username}")
+
+        for service_type, users in all_users.items():
+            self.stdout.write(f"  Found {len(users)} partially migrated users from {service_type}")
+            for username, _ in users:
+                self.stdout.write(f"    - {username}")
+
+        # Step 3: Correlate users across services by removing service prefixes
+        self.stdout.write("Correlating users across services...")
+        user_groups = self._correlate_users_across_services(all_users)
+
+        self.stdout.write(f"  Found {len(user_groups)} user groups to merge")
+        for base_username, user_accounts in user_groups.items():
+            account_info = [f"{service_type}:{orig_username}" for service_type, _, orig_username in user_accounts]
+            self.stdout.write(f"    - user_groups[{base_username}]: {', '.join(account_info)}")
+
+        # Step 4: Merge users with Controller user as priority
+        self.stdout.write(f"Merging {total_partially_migrated_users} partially migrated users...")
+        total_merged = 0
+        for base_username, user_accounts in user_groups.items():
+            merged_count = self._merge_user_group(base_username, user_accounts)
+            total_merged += merged_count
+
+        self.stdout.write(f"Completed merging {total_merged} partially migrated users")
+
+        if total_merged != total_partially_migrated_users:
+            raise RuntimeError(f"Failed to merge all partially migrated users. Merged {total_merged} out of {total_partially_migrated_users} users.")
+
+    def _correlate_users_across_services(self, all_users: Dict[str, List[Tuple[str, AbstractUser]]]) -> Dict[str, List[Tuple[str, AbstractUser, str]]]:
+        """
+        Correlate users across services by identifying those that represent the same person.
+
+        Uses logic to strip service prefixes from usernames to identify related accounts.
+
+        Args:
+            all_users: Dictionary mapping service_type to list of (username, user_object) tuples
+
+        Returns:
+            Dictionary mapping base_username to list of (service_type, user_object, original_username) tuples
+        """
+        user_groups = {}  # base_username -> [(service_type, user_object, original_username)]
+
+        # Known service prefixes that may be added during 2.5 migration
+        # TODO: maybe fetch this from the services themselves
+        service_prefixes = ['galaxy_', 'eda_']
+
+        for service_type in self.SERVICE_TYPE_ORDER:
+            if service_type not in all_users:
+                continue
+            users = all_users[service_type]
+            for username, user_obj in users:
+                # Try to determine the base username by removing service prefixes
+                base_username = username
+
+                # Remove known service prefixes
+                for prefix in service_prefixes:
+                    if username.startswith(prefix):
+                        base_username = username[len(prefix) :]
+                        break
+
+                if base_username not in user_groups:
+                    user_groups[base_username] = []
+
+                user_groups[base_username].append((service_type, user_obj, username))
+
+        return user_groups
+
+    def _merge_user_group(self, base_username: str, user_accounts: List[Tuple[str, AbstractUser, str]]) -> int:
+        """
+        Merge a group of user accounts that represent the same person.
+
+        Controller user takes priority as the source of truth. Other users are merged into it.
+
+        Args:
+            base_username: The base username these accounts represent
+            user_accounts: List of (service_type, user_object, original_username) tuples
+
+        Returns:
+            Number of accounts that were merged (merged_into_main_account)
+        """
+
+        service_list = ", ".join([f"{service_type}: {orig_username}" for service_type, _, orig_username in user_accounts])
+        self.stdout.write(f"> Merging user group for '{base_username}' - {service_list}")
+
+        # Find Controller user to use as main account (source of truth)
+        main_user = user_accounts[0]
+        other_users = user_accounts[1:]
+
+        main_service_type, main_user_obj, main_username = main_user
+        self.stdout.write(f"  Using {main_service_type} user '{main_username}' as main account for '{base_username}'")
+
+        # Validate all users can be merged before starting any merges
+        merge_conflicts = []
+        for service_type, user_to_merge, merge_orig_username in other_users:
+            if not can_accounts_be_merged(main_user_obj, user_to_merge):
+                merge_conflicts.append(f"{service_type} user '{merge_orig_username}'")
+
+        if merge_conflicts:
+            self.stderr.write(f"  Cannot merge user group for '{base_username}' - conflicts detected:")
+            for conflict in merge_conflicts:
+                self.stderr.write(f"    - {conflict}")
+            return 0
+
+        # All users can be merged, proceed with merging
+        merged_count = 0
+        for service_type, user_to_merge, merge_orig_username in other_users:
+            self.stdout.write(f"  Merging {service_type} user '{merge_orig_username}' into {main_service_type} user '{main_username}'")
+            # Perform the merge using the existing link_account function
+            link_account(main_account=main_user_obj, to_merge=user_to_merge, preserve_authenticators=False)
+            merged_count += 1
+            self.stdout.write(f"  Successfully merged {service_type} user '{merge_orig_username}'")
+
+        self.stdout.write(f"  Migrating main user '{main_username}'")
+        migrate_account(main_user_obj)
+        self.stdout.write(f"  Successfully migrated main user '{main_username}'")
+        merged_count += 1
+
+        return merged_count
