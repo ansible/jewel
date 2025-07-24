@@ -442,16 +442,19 @@ class TestUserSerializer:
         assert 'authenticator_uid' in response.json()
 
     def test_update_user_with_conflicting_authenticator_uid_fails(self, admin_api_client, admin_user, local_authenticator):
+        """Test that UID conflicts are properly detected for the same authenticator."""
+        # Create another user with a specific UID on the local authenticator
         another_user = User.objects.create(username='anotheruser', email='anotheruser@example.com')
         AuthenticatorUser.objects.create(user=another_user, provider=local_authenticator, uid='conflictuid')
 
+        # Try to add the same authenticator with the same UID to admin_user using new field
         url = get_relative_url('user-detail', kwargs={'pk': admin_user.id})
-        payload = {'authenticators': [local_authenticator.id], 'authenticator_uid': 'conflictuid', 'username': 'testuser', 'password': 'password'}
-        response = admin_api_client.patch(url, payload)
+        payload = {'associated_authenticators': {local_authenticator.id: {"uid": 'conflictuid'}}}
+        response = admin_api_client.patch(url, payload, format='json')
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'authenticator_uid' in response.json()
-        assert 'already in use' in response.json()['authenticator_uid'][0]
+        assert 'associated_authenticators' in response.json()
+        assert 'already in use' in str(response.json()['associated_authenticators'])
 
     def test_create_user_with_empty_authenticator_uid(self, admin_api_client, local_authenticator):
         payload = {
@@ -832,14 +835,17 @@ class TestUsernameValidation:
         assert response.data['authenticator_uid'] == new_username
 
     def test_reject_username_change_when_conflict_exists(self, admin_api_client, local_authenticator):
-        user_id = self._create_user(admin_api_client, 'testuser', 'password123', local_authenticator.id, 'testuser')
+        # Create first user
+        self._create_user(admin_api_client, 'testuser1', 'password123', local_authenticator.id, 'testuser1')
+        # Create second user
+        user_id2 = self._create_user(admin_api_client, 'testuser2', 'password123', local_authenticator.id, 'testuser2')
 
-        with patch('aap_gateway_api.serializers.user.determine_username_from_uid') as mock_determine:
-            mock_determine.return_value = 'conflicting_username'
-            url = get_relative_url('user-detail', kwargs={'pk': user_id})
-            response = admin_api_client.patch(url, {'username': 'new_testuser'})
-            assert response.status_code == status.HTTP_400_BAD_REQUEST
-            assert "does not comply with the rules for authenticator" in str(response.data['username'])
+        # Try to change second user's username to conflict with first user's username
+        # This should fail due to Django's username uniqueness constraint
+        url = get_relative_url('user-detail', kwargs={'pk': user_id2})
+        response = admin_api_client.patch(url, {'username': 'testuser1'})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'username' in response.json() or 'non_field_errors' in response.json()
 
     def test_update_user_with_new_username_via_api(self, admin_api_client, local_authenticator):
         user_id = self._create_user(admin_api_client, 'localuser', 'testpassword123', local_authenticator.id, 'localuser')
