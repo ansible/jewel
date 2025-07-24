@@ -194,7 +194,7 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         for authenticator_user in self.authenticator_users.all():
             auth_type = get_authenticator_plugin(authenticator_user.provider.type).type
             if auth_type == 'local':
-                username = determine_username_from_uid(self.username, authenticator_user.provider)
+                username = determine_username_from_uid(uid=self.username, email=authenticator_user.email, authenticator=authenticator_user.provider)
                 authenticator_user.uid = username
                 authenticator_user.save()
 

@@ -5,7 +5,6 @@ from ansible_base.authentication.authenticator_plugins.utils import (
     get_authenticator_plugin,
 )
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
-from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
@@ -524,45 +523,6 @@ class UserSerializer(CommonUserSerializer):
             errors.setdefault('authenticator_uid', []).append(
                 ErrorDetail(_("Authenticator UID should be empty when removing all authenticators."), code='invalid')
             )
-
-    def validate_username(self, value):
-        """
-        1. Check if the username is being changed.
-        2. For each authenticator associated with the user, determine the expected username
-           based on the authenticator's rules and the new username value.
-        3. Raise a ValidationError if the new username doesn't match the expected username
-           for any associated authenticator.
-
-        This validation ensures that the new username complies with the rules of all
-        associated authenticators, including potential modifications (e.g., adding a hash)
-        to maintain uniqueness across the system.
-        """
-        user_instance = self.instance  # This will be None for creation
-        old_username = user_instance.username if user_instance else None
-
-        errors = []
-
-        if old_username and value != old_username:
-            for authenticator_user in user_instance.authenticator_users.all():
-                expected_username = determine_username_from_uid(value, authenticator_user.provider)
-
-                if expected_username != value:
-                    errors.append(
-                        ErrorDetail(
-                            _(
-                                "New username '%(value)s' does not comply with the rules for authenticator '%(auth)s'. "
-                                "The expected username would be '%(expected)s'. "
-                                "This may be due to conflicts with existing usernames or authenticator-specific rules."
-                            )
-                            % {'value': value, 'expected': expected_username, 'auth': authenticator_user.provider.name},
-                            code='invalid',
-                        )
-                    )
-
-        if errors:
-            raise ValidationError({'username': errors})
-
-        return value
 
     def _remove_authenticators(self, authenticators_to_remove, user_instance):
         """
