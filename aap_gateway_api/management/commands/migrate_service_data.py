@@ -925,18 +925,13 @@ class Command(BaseCommand):
         self.stdout.write(f"Controller superusers: {sorted(controller_superusers)}")
 
         # Check for mismatches
-        gateway_only = gateway_superusers - controller_superusers
         controller_only = controller_superusers - gateway_superusers
-
-        if gateway_only:
-            self.stderr.write(f"Error: Users are superusers in Gateway but not Controller: {sorted(gateway_only)}")
-            raise CommandError(f"Superuser inconsistency detected: Users {sorted(gateway_only)} are superusers in Gateway but not in Controller")
 
         if controller_only:
             self.stderr.write(f"Error: Users are superusers in Controller but not Gateway: {sorted(controller_only)}")
             raise CommandError(f"Superuser inconsistency detected: Users {sorted(controller_only)} are superusers in Controller but not in Gateway")
 
-        if not gateway_only and not controller_only:
+        if not controller_only:
             self.stdout.write("✓ Controller and Gateway superusers are consistent")
 
     def _demote_extra_superusers(self, service_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
