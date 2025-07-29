@@ -1,3 +1,4 @@
+from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from ansible_base.resource_registry.utils.service_backed_sso_pipeline import redirect_to_resource_server
 from django.conf import settings
@@ -43,6 +44,7 @@ def auth_sso(request):
 
 urlpatterns = [
     path("api/v1/", include(resource_api_urls)),
+    path('api/v1/', include(rbac_service_urls)),
     path("ping/", ping),
     path('login/', include('rest_framework.urls')),
     path('sso/', auth_sso),

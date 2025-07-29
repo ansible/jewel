@@ -1,0 +1,92 @@
+# django-ansible-base, RBAC and resource_registry highly involved here
+from ansible_base.rbac.api.views import RoleDefinitionViewSet, RoleTeamAssignmentViewSet, RoleUserAssignmentViewSet
+from django.db import transaction
+from requests.exceptions import HTTPError
+from rest_framework.exceptions import APIException
+
+from aap_gateway_api.models import ServiceAPIRoute
+
+# aap-gateway imports
+from aap_gateway_api.models.service_type import service_type_to_api_slug
+from aap_gateway_api.utils.resources_client import GWResourceAPIClient
+
+from .common import ResourceAllClientMixin, ResourceAPIUpdateMixin
+
+
+class GatewayRoleDefinitionViewSet(ResourceAPIUpdateMixin, RoleDefinitionViewSet):
+    pass
+
+
+class ProxyAPIException(APIException):
+    "If a service gave an error response, we wrap it up and pass it onto the client as if it was ours"
+
+    def __init__(self, detail, status_code):
+        self.detail = detail
+        self.status_code = status_code
+
+
+class AssignmentSyncMixin(ResourceAllClientMixin):
+    def _is_owned_by_gateway(self, role_definition):
+        """Any shared resource is owned by Gateway, return True in that case
+
+        Return True in the case of a component-specific role_definition.
+        This basically only applies to object-level roles.
+        """
+        if (role_definition is None) or (role_definition.content_type is None):
+            # System roles are used by galaxy_ng now, but are not object-level
+            # so they are still owned by Gateway
+            return True
+        # NOTE: right now "aap" is unused, but see aap_gateway_api.resource_api
+        # aap is the service_type for resources specific to Gateway only
+        return bool(role_definition.content_type.service in ('aap', 'shared'))
+
+    def get_direct_client(self, role_definition):
+        "This returns a single-service synchronous client, for service-specific assignments"
+        service_type = role_definition.content_type.service
+        service_name = service_type_to_api_slug(service_type)
+        service = ServiceAPIRoute.objects.get(api_slug=service_name)
+        return GWResourceAPIClient(service, raise_if_bad_request=True)
+
+    def remote_sync_assignment(self, assignment):
+        if self._is_owned_by_gateway(assignment.role_definition):
+            self._resources_client.sync_assignment(assignment)
+        else:
+            client = self.get_direct_client(assignment.role_definition)
+            try:
+                client.sync_assignment(assignment)
+            except HTTPError as e:
+                try:
+                    error_detail = e.response.json()
+                except Exception:
+                    error_detail = e.response.text
+                raise ProxyAPIException(detail=error_detail, status_code=e.response.status_code)
+
+    def remote_sync_unassignment(self, role_definition, actor, content_object):
+        if self._is_owned_by_gateway(role_definition):
+            self._resources_client.sync_unassignment(role_definition, actor, content_object)
+        else:
+            client = self.get_direct_client(role_definition)
+            try:
+                client.sync_unassignment(role_definition, actor, content_object)
+            except HTTPError as e:
+                try:
+                    error_detail = e.response.json()
+                except Exception:
+                    error_detail = e.response.text
+                raise ProxyAPIException(detail=error_detail, status_code=e.response.status_code)
+
+    @transaction.atomic  # just making it atomic
+    def perform_create(self, serializer):
+        return super().perform_create(serializer)
+
+    @transaction.atomic  # just making it atomic
+    def perform_destroy(self, assignment):
+        return super().perform_destroy(assignment)
+
+
+class GatewayRoleUserAssignmentViewSet(AssignmentSyncMixin, RoleUserAssignmentViewSet):
+    pass
+
+
+class GatewayRoleTeamAssignmentViewSet(AssignmentSyncMixin, RoleTeamAssignmentViewSet):
+    pass

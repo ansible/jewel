@@ -444,6 +444,12 @@ def patched_resource_client():
 
 
 @pytest.fixture
+def patched_load_rbac():
+    with patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'):
+        yield
+
+
+@pytest.fixture
 def simulated_controller_resource_api(patched_resource_client, service_api_route_controller):
     proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture=None)
     yield service_api_route_controller

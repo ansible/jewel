@@ -3,11 +3,12 @@ from collections import namedtuple
 from datetime import datetime, timedelta
 
 import jwt
+from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import RoleDefinition
 from ansible_base.resource_registry.models import Resource, service_id
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
 from django.db.models import F, Model, OuterRef
 
 from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
@@ -84,7 +85,7 @@ def create_signed_jwt(user, resource_api_actions=None):
 
     cached_objects_index = {}  # Entries like { <content_model>: {<ansible_id>: <array index integer> } } used to resolve ansible_ids to array indexes
     cached_content_types = {}  # Entries like { <content id integer>: <content_model> } used to resolve a content id to a model type
-    for content_type in ContentType.objects.all().values('id', 'model'):
+    for content_type in permission_registry.content_type_model.objects.all().values('id', 'model'):
         content_type_id = content_type['id']
         model = content_type['model']
         cached_content_types[content_type_id] = model
@@ -93,7 +94,7 @@ def create_signed_jwt(user, resource_api_actions=None):
     required_data = {}  # Entries like { <content_model>: { <ansible_id>|<id>: <required_data> } } Note: required_data could have references to ansible_ids
 
     # Populate the required_data for orgs
-    org_content_type_model = ContentType.objects.get_for_model(Organization).model
+    org_content_type_model = permission_registry.content_type_model.objects.get_for_model(Organization).model
     required_data[org_content_type_model] = {}
     for org in Organization.objects.all().values('id', 'name', 'resource__ansible_id'):
         org_id = org['id']
@@ -104,7 +105,7 @@ def create_signed_jwt(user, resource_api_actions=None):
     payload['objects'][org_content_type_model] = []
 
     # Populate the required_Data for teams
-    team_content_type_model = ContentType.objects.get_for_model(Team).model
+    team_content_type_model = permission_registry.content_type_model.objects.get_for_model(Team).model
     required_data[team_content_type_model] = {}
     for team in Team.objects.all().values('id', 'name', 'resource__ansible_id', 'organization__resource__ansible_id'):
         team_id = team['id']
@@ -155,7 +156,7 @@ def create_signed_jwt(user, resource_api_actions=None):
             payload['objects'][org_content_type_model].append(org_data)
 
     # See if the user has any global roles
-    for rd in RoleDefinition.objects.filter(content_type=None, user_assignments__user=user.pk):
+    for rd in RoleDefinition.objects.filter(content_type=None, user_assignments__user=user.pk, name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES):
         payload['global_roles'].append(rd.name)
 
     if resource_api_actions:
@@ -170,7 +171,11 @@ def get_user_object_roles(user: Model) -> list[tuple[str, str, int]]:
 
     This data is the role name joined with data about the resource"""
     resource_qs = Resource.objects.filter(object_id=OuterRef('object_id'), content_type=OuterRef('content_type')).values('ansible_id')
-    assignment_qs = user.role_assignments.filter(content_type__isnull=False).annotate(aid=resource_qs, rd_name=F('role_definition__name'))
+    assignment_qs = (
+        user.role_assignments.filter(content_type__isnull=False)
+        .annotate(aid=resource_qs, rd_name=F('role_definition__name'))
+        .filter(rd_name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES)
+    )
     return [(ra.rd_name, str(ra.aid), ra.content_type_id) for ra in assignment_qs]
 
 

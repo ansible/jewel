@@ -40,3 +40,26 @@ class DefaultServiceType(str, Enum):
     @staticmethod
     def is_default(name: str) -> bool:
         return any(svc.value == name for svc in DefaultServiceType)
+
+
+def service_type_to_api_slug(service_type: str) -> str:
+    """The resource registry config has a service_type param, and Gateway has API prefixes
+
+    This takes the service_type, from resource registry,
+    and it returns a string which is used to reference services in Gateway.
+
+    To put in terms of models, this converts the first part of
+        dab_resource_registry.ResourceType.name
+    split on the period, like awx.inventory
+    This same naming is reused by dab_rbac.DABContentType.service
+
+    And it returns what would go in
+        aap_gateway_api.ServiceType.service_api
+    """
+    # Preserve coercion of awx -> controller and galaxy -> hub
+    if service_type.casefold() == "awx".casefold():
+        return DefaultServiceType.CONTROLLER.value
+    elif service_type.casefold() == "galaxy".casefold():
+        return DefaultServiceType.HUB.value
+    else:
+        return service_type

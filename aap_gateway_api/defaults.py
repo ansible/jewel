@@ -341,7 +341,7 @@ WSGI_APPLICATION = 'aap_gateway_api.wsgi.application'
 
 
 # Override the ANSIBLE_BASE settings we want to
-ANSIBLE_BASE_ALLOW_CUSTOM_ROLES = False
+ANSIBLE_BASE_ALLOW_CUSTOM_ROLES = True
 ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = False
 ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
 ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
@@ -363,6 +363,9 @@ ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'org_admin': {},
     'org_member': {},
 }
+
+# Gateway overwrites the DAB RBAC views heavily so this is done by a custom URL include
+ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST = ['ansible_base.rbac']
 
 # This should not make a behavioral difference, but telling DAB that we do not
 # want to sync resources back to another server will silence some error logs we do not want

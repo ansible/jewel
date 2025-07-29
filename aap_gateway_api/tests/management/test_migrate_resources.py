@@ -114,7 +114,9 @@ def _assert_all_resources_synced(admin_api_client, service_api_route_controller,
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrate_with_ignored_flags(migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client, capsys):
+def test_migrate_with_ignored_flags(
+    migration_service, admin_user, admin_api_client, conflicting_org, conflicting_team, patched_resource_client, patched_load_rbac, capsys
+):
     """Test that deprecated flags are ignored with warnings and migration still works"""
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
 
@@ -149,6 +151,7 @@ def test_migrate_forced_merge_behavior(
     conflicting_org,
     conflicting_team,
     patched_resource_client,
+    patched_load_rbac,
 ):
     """Test that merge flags are ignored and behavior is always merge=True"""
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
@@ -180,6 +183,7 @@ def test_migrate_default_merge_behavior(
     conflicting_org,
     conflicting_team,
     patched_resource_client,
+    patched_load_rbac,
 ):
     """Test default merge behavior with no flags specified"""
     service_client = patched_resource_client(service=migration_service, user=admin_user, raise_if_bad_request=True)
@@ -203,6 +207,7 @@ def test_migrate_conflicting_user(
     admin_user,
     admin_api_client,
     patched_resource_client,
+    patched_load_rbac,
 ):
     # Check that users do not exist yet
     assert not User.objects.filter(username="natasha").exists()
@@ -279,6 +284,7 @@ def test_merge_users(
     admin_user,
     admin_api_client,
     patched_resource_client,
+    patched_load_rbac,
 ):
     # Create a conflict with a different service (we'll use a fake service ID for this conflict)
     from aap_gateway_api.models import ServiceCluster, ServiceType
@@ -330,6 +336,7 @@ def test_correcting_user_service_id(
     migration_service,
     admin_user,
     patched_resource_client,
+    patched_load_rbac,
 ):
     """Verify that a service user resource with the same ansible id but a differing
     service id from gateway's has its service id corrected to gateway's via migration.
@@ -388,7 +395,7 @@ def test_correcting_user_service_id(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrating_user_with_invalid_email(migration_service_invalid_users, admin_user):
+def test_migrating_user_with_invalid_email(migration_service_invalid_users, admin_user, patched_load_rbac):
     from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     # Since migration_service_invalid_users is the only DefaultServiceType service in this test,
@@ -407,7 +414,7 @@ def test_migrating_user_with_invalid_email(migration_service_invalid_users, admi
 
 
 @pytest.mark.django_db(transaction=True)
-def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, admin_user):
+def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, patched_load_rbac, admin_user):
     from django.core.management.base import CommandError
 
     from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
@@ -463,7 +470,10 @@ def test_service_processing_order(admin_user, capsys, service_api_route_controll
     """Test that services are processed in exact order: controller, hub, eda"""
 
     # Mock the client to fail early so we can see the processing order in stdout
-    with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class:
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
         mock_client = Mock()
         mock_client.get_service_metadata.side_effect = Exception("Test order tracking")
         mock_client_class.return_value = mock_client
@@ -480,7 +490,7 @@ def test_service_processing_order(admin_user, capsys, service_api_route_controll
         processing_lines = [line for line in output_lines if "Processing service:" in line]
 
         # Should have all three services processed in order - we check by service type, not api_slug
-        assert len(processing_lines) == 3
+        assert len(processing_lines) == 3, output_lines
         # Extract service objects to check their service type order
         assert service_api_route_controller.service_cluster.service_type.name == "controller"
         assert service_api_route_hub.service_cluster.service_type.name == "hub"
@@ -498,9 +508,10 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
 
     # Mock the client to succeed for controller but fail for hub
     with (
-        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
         patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
         patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
     ):
 
         from requests.exceptions import HTTPError
@@ -607,6 +618,7 @@ def test_multi_service_migration(
     service_api_route_eda,
     admin_user,
     patched_resource_client,
+    patched_load_rbac,
     capsys,
 ):
     """Comprehensive test for superuser migration functionality across all services"""
@@ -665,10 +677,11 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
 
     # Mock successful migration for the controller service
     with (
-        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
         patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
         patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
         patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
     ):
 
         # Mock JWT creation to avoid public key parsing issues
@@ -958,10 +971,11 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
 
     # Mock successful migration
     with (
-        patch('aap_gateway_api.management.commands.migrate_service_data.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
         patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
         patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
         patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
     ):
         mock_jwt.return_value = 'fake-jwt-token'
         mock_key.return_value = 'fake-key'
@@ -1026,6 +1040,7 @@ def test_comprehensive_multi_service_migration(
     comprehensive_migration_eda_service,
     admin_user,
     patched_resource_client,
+    patched_load_rbac,
     capsys,
 ):
     """

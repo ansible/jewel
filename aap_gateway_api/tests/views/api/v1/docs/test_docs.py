@@ -91,6 +91,10 @@ class ApiSpecs:
             ('/{ansible_id}/', '/dbc9d85d-af4a-48bb-87a1-d6384f32f3af/'),
             ('/%(name)s/', '/shared.user/'),
             ('/{name}/', '/shared.user/'),
+            ('/%(model_name)s/', '/inventory/'),
+            ('/{model_name}/', '/inventory/'),
+            ('/%(actor_pk)s/', '/1/'),
+            ('/{actor_pk}/', '/1/'),
         ]
         url = endpoint
         for rep in replacements:
@@ -186,7 +190,8 @@ def compare_types(api_type, doc_type):
     match api_type:
         # Not great, but field can be lots of things
         case "field":
-            return doc_type in ["string", "object", "integer", "boolean"]
+            # DRF many-related fields present as array type
+            return doc_type in ["string", "object", "integer", "boolean", "array"]
         case "datetime" | "slug" | "url" | "email":
             return doc_type in ["string"]
         case "list" | "multiple choice":

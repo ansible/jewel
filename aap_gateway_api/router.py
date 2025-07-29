@@ -1,6 +1,7 @@
 from ansible_base.lib.routers import AssociationResourceRouter
 
 from aap_gateway_api import views
+from aap_gateway_api.views.api.v1 import role as rbac_views
 from aap_gateway_api.views.api.v1.user import OrganizationRelatedUserViewSet, TeamRelatedUserViewSet
 
 router = AssociationResourceRouter()
@@ -94,3 +95,16 @@ router.register(
     views.AppUrlViewSet,
     basename='app_url',
 )
+
+# Add the Gateway-overwritten version of role definitions
+router.register(
+    r'role_definitions',
+    rbac_views.GatewayRoleDefinitionViewSet,
+    related_views={
+        'user_assignments': (rbac_views.GatewayRoleUserAssignmentViewSet, 'user_assignments'),
+        'team_assignments': (rbac_views.GatewayRoleTeamAssignmentViewSet, 'team_assignments'),
+    },
+    basename='roledefinition',
+)
+router.register(r'role_user_assignments', rbac_views.GatewayRoleUserAssignmentViewSet, basename='roleuserassignment')
+router.register(r'role_team_assignments', rbac_views.GatewayRoleTeamAssignmentViewSet, basename='roleteamassignment')
