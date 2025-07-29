@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
+from ansible_base.rbac.models import DABContentType, DABPermission
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -12,8 +13,9 @@ from django.contrib.auth.models import AbstractUser
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
-from aap_gateway_api.models import DefaultServiceType, ServiceAPIRoute, ServiceType
-from aap_gateway_api.utils.resources_client import GWResourceAPIClient
+from aap_gateway_api.models import ServiceAPIRoute, ServiceType
+from aap_gateway_api.models.service_type import DefaultServiceType, service_type_to_api_slug
+from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
 logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
@@ -145,6 +147,13 @@ class Command(BaseCommand):
                 "username",
             ],
         }
+        self.resource_types_to_migrate["shared.roledefinition"] = {
+            "merge": True,  # the JWT roles are already shared effectively
+            "type": ResourceType.objects.get(name="shared.roledefinition"),
+            "unique_fields": [
+                "name",
+            ],
+        }
 
         try:
             user = User.objects.get(username=username)
@@ -163,6 +172,9 @@ class Command(BaseCommand):
             raise CommandError(f"No services found with expected service types: {', '.join(self.SERVICE_TYPE_ORDER)}")
 
         self.stdout.write(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}")
+
+        # For RBAC management, load in types and permissions from all other components
+        self.load_types_and_permissions(service_apis, user)
 
         # Track migration results
         migration_results = {}
@@ -215,6 +227,38 @@ class Command(BaseCommand):
             self._ensure_superuser_consistency(service_apis, user)
             self.stdout.write("\nAll services migration completed successfully!")
 
+    def load_types_and_permissions(self, service_apis, user):
+        for service_api in service_apis:
+            service_slug = service_api.api_slug
+            client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
+            big_page_filter = {"page_size": "200"}
+
+            # Load types into system
+            response = client.list_role_types(filters=big_page_filter)
+
+            if response.status_code != 200:
+                raise RuntimeError(f'Service {service_slug} role types gave {response.status_code} code, data: {response.data}')
+
+            data = response.json()
+
+            if data['next']:
+                raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
+
+            DABContentType.objects.load_remote_objects(data['results'])
+
+            # Load permissions into system, these reference the types above
+            response = client.list_role_permissions(filters=big_page_filter)
+
+            if response.status_code != 200:
+                raise RuntimeError(f'Service {service_slug} permissions gave {response.status_code} code, data: {response.data}')
+
+            data = response.json()
+
+            if data['next']:
+                raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
+
+            DABPermission.objects.load_remote_objects(data['results'], update_managed=True)
+
     def _migrate_single_service(
         self,
         service_api: ServiceAPIRoute,
@@ -234,7 +278,7 @@ class Command(BaseCommand):
         """
         # TODO: switch user out for _system. Need to get more fine grained permissions in resources
         # api merged first.
-        self.client = GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
+        self.client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
         self.stdout.write("Starting migration")
 
@@ -242,13 +286,10 @@ class Command(BaseCommand):
         service_metadata = self.client.get_service_metadata().json()
 
         self.upstream_service_id = service_metadata["service_id"]
+        # Convert the service resource_registry type to the gateway name for the service
         # Preserve coercion of awx -> controller and galaxy -> hub
-        if service_metadata["service_type"].casefold() == "awx".casefold():
-            service_type_name = DefaultServiceType.CONTROLLER.value
-        elif service_metadata["service_type"].casefold() == "galaxy".casefold():
-            service_type_name = DefaultServiceType.HUB.value
-        else:
-            service_type_name = service_metadata["service_type"]
+        service_type_name = service_type_to_api_slug(service_metadata["service_type"])
+
         upstream_service_type = ServiceType.objects.filter(name=service_type_name).first()
         if upstream_service_type is None:
             error_msg = f"Migrations are not allowed for services of type {service_metadata['service_type']}"
@@ -895,7 +936,7 @@ class Command(BaseCommand):
         After migration, all resources have Gateway's service_id, so this validation
         checks that the shared resource registry has consistent superuser flags.
         """
-        client = GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
+        client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
 
         # Get all users from the shared resource registry (no service_id filter since
         # after migration all resources have Gateway's service_id)
@@ -937,7 +978,7 @@ class Command(BaseCommand):
     def _demote_extra_superusers(self, service_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
         """Demote superusers in Hub/EDA that are not superusers in Gateway."""
         service_type = service_api.service_cluster.service_type.name
-        client = GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
+        client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
         filters = {
             "service_id": str(service_id()),

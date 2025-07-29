@@ -1,6 +1,8 @@
 import logging
 
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
+from ansible_base.rbac.api.views import RoleMetadataView, TeamAccessViewSet, UserAccessViewSet
+from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from django.conf import settings
 from django.contrib import admin
@@ -13,11 +15,19 @@ from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverSe
 logger = logging.getLogger('aap.gateway.urls')
 
 
+user_access_view = UserAccessViewSet.as_view({'get': 'list'})
+team_access_view = TeamAccessViewSet.as_view({'get': 'list'})
+
+
 urlpatterns = [
     # Load base URLs first
     path('api/gateway/v1/', include(api_version_urls)),
     path('api/gateway/', include(api_urls)),
     path('', include(root_urls)),
+    # Extra DAB RBAC views that need to be included because we exclude it from api_version_urls
+    path(r'role_metadata/', RoleMetadataView.as_view(), name="role-metadata"),
+    path('api/gateway/v1/role_user_access/<str:model_name>/<int:pk>/', user_access_view, name="role-user-access"),
+    path('api/gateway/v1/role_team_access/<str:model_name>/<int:pk>/', team_access_view, name="role-team-access"),
     path('admin/', admin.site.urls),
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
@@ -48,6 +58,7 @@ urlpatterns = [
     # Social auth
     path('api/gateway/v1/', include(router.urls)),
     path('api/gateway/v1/', include(resource_api_urls)),
+    path('api/gateway/v1/', include(rbac_service_urls)),
 ]
 
 if getattr(settings, 'ENABLE_DJANGO_DEBUG_TOOLBAR', False):

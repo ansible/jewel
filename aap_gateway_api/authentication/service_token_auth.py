@@ -63,6 +63,8 @@ class ServiceTokenAuthentication(BaseAuthentication):
                 "create",
                 "update",
                 "destroy",
+                "assign",
+                "unassign",
             ]
 
             setattr(user, "resource_api_actions", allowed_actions)
