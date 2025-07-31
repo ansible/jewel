@@ -209,8 +209,8 @@ register(
     preference_name="LOGIN_REDIRECT_OVERRIDE",
     default='',
     required=False,
-    preference_type="url",
-    help_text=_("The URL to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
+    preference_type="absolute_path_or_url",
+    help_text=_("The URL or absolute path to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
     encrypted=False,
 )
 

@@ -1,5 +1,6 @@
 import logging
 import sys
+from pathlib import Path
 
 from ansible_base.lib.utils.validation import validate_image_data
 from cryptography.hazmat.primitives import serialization
@@ -30,6 +31,20 @@ class URLPreference(types.StringPreference):
             raise ValidationError(_("%(value)s is not a valid URL") % {"value": value})
 
         return value
+
+
+class AbsolutePathOrURLPreference(URLPreference):
+    def validate(self, value):
+        try:
+            super().validate(value)
+            return value
+        except ValidationError:
+            # If the super couldn't validate it, maybe its just a path
+            path = Path(value)
+            if path.is_absolute():
+                return value
+            else:
+                raise ValidationError(_("%(value)s is not a valid URL or absolute path") % {"value": value})
 
 
 class PEMPrivateKeyPreference(types.LongStringPreference):
