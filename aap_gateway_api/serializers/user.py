@@ -303,12 +303,31 @@ class UserSerializer(CommonUserSerializer):
         # Let cross-field validation handle all other scenarios
         return value
 
+    def stringify_dict_keys(self, data):
+        """
+        Recursively converts all dictionary keys in a nested structure to strings.
+        """
+        if isinstance(data, dict):
+            return {str(k): self.stringify_dict_keys(v) for k, v in data.items()}
+        if isinstance(data, list):
+            return [self.stringify_dict_keys(item) for item in data]
+        return data
+
     def validate_associated_authenticators(self, value):
         """
         Validate the associated_authenticators field by coordinating helper validations.
         """
         if not value:
             return {}
+
+        if self.instance:
+            existing_authenticators = self.instance.get_associated_authenticators() or {}
+            normalized_existing = self.stringify_dict_keys(existing_authenticators)
+            normalized_submitted = self.stringify_dict_keys(value)
+
+            # If fields are the same, we can return early
+            if normalized_existing == normalized_submitted:
+                return value
 
         if not self.is_superuser_making_request():
             raise serializers.ValidationError(_("Only superusers can manage associated_authenticators using this field."))
@@ -774,11 +793,10 @@ class UserSerializer(CommonUserSerializer):
         authenticator_uid = validated_data.pop('authenticator_uid', None)
         associated_authenticators = validated_data.pop('associated_authenticators', None)
 
-        # Update the User model with validated data
-        instance = super().update(instance, validated_data)
         # Handle authenticator changes
         self._update_users_authenticators(authenticators, authenticator_uid, associated_authenticators, instance)
-
+        # Update the User model with validated data
+        instance = super().update(instance, validated_data)
         # Refresh the instance from the database to ensure the response reflects any authenticator UID corrections
         instance.refresh_from_db()
         # Also clear the cached related objects to ensure fresh data
