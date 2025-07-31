@@ -322,3 +322,32 @@ def test_get_default_value_by_preference(register_preference, is_encrypted):
 
     preference = gateway_preference_registry.get('test_get_default', 'general')
     assert preferences.get_default_value_by_preference(preference, is_encrypted) == ENCRYPTED_STRING if is_encrypted else 'iam_default'
+
+
+def test_absolute_path_or_url_preference(register_preference, set_preference):
+    register_preference(
+        section="general",
+        preference_name="test_preference",
+        default="",
+        required=False,
+        encrypted=False,
+        preference_type="absolute_path_or_url",
+    )
+
+    set_preference("general", "test_preference", "/path/to/file")
+    assert preferences.get_preference_value("general", "test_preference") == "/path/to/file"
+
+    set_preference("general", "test_preference", "https://example.com")
+    assert preferences.get_preference_value("general", "test_preference") == "https://example.com"
+
+    with pytest.raises(ValidationError) as e:
+        set_preference("general", "test_preference", "not_a_url")
+    assert "not_a_url is not a valid URL or absolute path" in str(e.value)
+
+    with pytest.raises(ValidationError) as e:
+        set_preference("general", "test_preference", "not/an/absolute/path")
+    assert "not/an/absolute/path is not a valid URL or absolute path" in str(e.value)
+
+    with pytest.raises(ValidationError) as e:
+        set_preference("general", "test_preference", "mailto:test@example.com")
+    assert "mailto:test@example.com is not a valid URL or absolute path" in str(e.value)

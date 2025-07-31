@@ -122,3 +122,31 @@ def test_csrf_invalid_value_in_settings(register_preference, expected_log):
                 preference_type="CSRF_list",
                 help_text="This is a test preference",
             )
+
+
+@pytest.mark.parametrize(
+    "value, expected_error",
+    [
+        ("https://example.com", None),
+        ("/path/to/file", None),
+        ("not_a_url", "not_a_url is not a valid URL or absolute path"),
+        ("not/an/absolute/path", "not/an/absolute/path is not a valid URL or absolute path"),
+        ("http://example.com", None),
+        ("mailto:test@example.com", "mailto:test@example.com is not a valid URL or absolute path"),
+    ],
+)
+def test_absolute_path_or_url_preference(register_preference, set_preference, value, expected_error):
+    register_preference(
+        section="general",
+        preference_name="test_preference",
+        default="",
+        required=False,
+        encrypted=False,
+        preference_type="absolute_path_or_url",
+    )
+    if expected_error:
+        with pytest.raises(ValidationError) as e:
+            set_preference("general", "test_preference", value)
+        assert expected_error in str(e.value)
+    else:
+        set_preference("general", "test_preference", value)

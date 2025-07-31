@@ -13,6 +13,7 @@ from aap_gateway_api.fields.serializers import JSONListField
 from aap_gateway_api.preferences import gateway_preference_registry
 from aap_gateway_api.preferences.serializers import JSONString
 from aap_gateway_api.preferences.types import (
+    AbsolutePathOrURLPreference,
     CSRFListPreference,
     FloatRangePreference,
     IntRangePreference,
@@ -111,6 +112,7 @@ PREFERENCE_TYPE_CLASS_TO_SERIALIZER_FIELD_MAPPING = {
     types.TimePreference: serializers.TimeField,
     types.MultipleChoicePreference: serializers.MultipleChoiceField,
     URLPreference: serializers.URLField,
+    AbsolutePathOrURLPreference: serializers.URLField,
     PEMPrivateKeyPreference: serializers.CharField,
     IntRangePreference: serializers.IntegerField,
     FloatRangePreference: serializers.FloatField,
@@ -127,6 +129,7 @@ _PREFERENCE_TYPE_NAME_TO_CLASS_MAPPING = {
     "int": types.IntegerPreference,
     "bool": types.BooleanPreference,
     "url": URLPreference,
+    "absolute_path_or_url": AbsolutePathOrURLPreference,
     "pem_private_key": PEMPrivateKeyPreference,
     "image": MimeTypedImagePreference,
     "int_range": IntRangePreference,
