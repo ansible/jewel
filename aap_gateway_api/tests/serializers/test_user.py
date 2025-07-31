@@ -412,6 +412,23 @@ class TestUserSerializer:
             ]
         }
 
+    def test_associated_authenticator_does_not_block_full_api_request_if_unchanged(self, admin_api_client, user_api_client, user, local_authenticator):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        # Create a user with an associated authenticator
+        payload = {
+            'username': user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": user.username}},
+        }
+        response = admin_api_client.patch(url, payload, format='json')
+        assert response.status_code == 200
+        # Get the full response payload so we can update just a single field
+        full_payload = response.data
+        full_payload['first_name'] = 'NewFirstName'
+        # Make a request to the user's API client to update the user's first name, it should succeed
+        updated_response = user_api_client.patch(url, full_payload, format='json')
+        assert updated_response.status_code == 200
+        assert updated_response.data['first_name'] == full_payload['first_name']
+
     def test_add_authenticator_conflicting_uid_on_new_authenticator(self, admin_api_client, local_authenticator, ldap_authenticator, random_user):
         AuthenticatorUser.objects.create(user=random_user, provider=local_authenticator, uid='a')
         other_user = User.objects.create(username='testing')
@@ -1263,3 +1280,24 @@ class TestDeprecatedAuthenticatorFields:
         response = admin_api_client.patch(url, payload, format='json')
         assert response.status_code == 200
         assert "ambiguous" in str(response.data["warnings"])
+
+    def test_associated_authenticator_does_not_block_user_email_update(self, admin_api_client, user_api_client, user, local_authenticator):
+        user.email = f'{user.username}@example.com'
+        user.save()
+        user_api_client.login(username=user.username, password='password')
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        # Create a user with an associated authenticator
+        expected_payload = {
+            'username': user.username,
+            'associated_authenticators': {local_authenticator.id: {"uid": user.username, "email": user.email}},
+        }
+        response = admin_api_client.get(url, format='json')
+        assert response.status_code == 200
+        assert response.data['associated_authenticators'] == expected_payload['associated_authenticators']
+        # Get the full response payload so we can update just a single field
+        full_payload = response.data
+        full_payload['email'] = 'newemail@example.com'
+        # Make a request to the user's API client to update the user's email, it should succeed
+        updated_response = admin_api_client.patch(url, full_payload, format='json')
+        assert updated_response.status_code == 200
+        assert updated_response.data['email'] == full_payload['email']
