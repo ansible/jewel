@@ -734,6 +734,11 @@ class Command(BaseCommand):
             # determine the resource to use in Gateway
             if create_gateway_resource:
                 Resource.create_resource(resource_type, upstream_resource["resource_data"], **resource_creation_kwargs)
+                if (
+                    resource_context["type_name"] == "shared.user"
+                    and self.client.service.service_cluster.service_type.name == DefaultServiceType.CONTROLLER.value
+                ):
+                    self._set_use_controller_password_flag(upstream_resource)
 
             self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
 
@@ -829,6 +834,18 @@ class Command(BaseCommand):
 
             for upstream_resource_item in results:
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
+
+    def _set_use_controller_password_flag(self, upstream_resource: Dict[str, Any]) -> Dict[str, Any]:
+        username = upstream_resource["resource_data"]["username"]
+        try:
+            gateway_user = User.objects.get(username=username)
+            gateway_user.use_controller_password = True
+            gateway_user.save(update_fields=["use_controller_password"])
+            self.stdout.write(f"Set use_controller_password flag for Gateway user '{username}'")
+        except User.DoesNotExist:
+            # User was not updated as expected
+            self.stdout.write(f"Gateway user '{username}' was not updated with 'use_controller_password' flag")
+        return upstream_resource
 
     def _sync_user_superuser_flag(self, upstream_resource: Dict[str, Any], validated_resource_data: Dict[str, Any]) -> Dict[str, Any]:
         """

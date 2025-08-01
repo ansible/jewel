@@ -65,6 +65,13 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         help_text=_("Indicates if this user is managed by the system. It cannot be modified once created."),
     )
 
+    use_controller_password = models.BooleanField(
+        editable=False,
+        blank=True,
+        default=False,
+        help_text=_("Indicates if this user's password is managed by Controller. It cannot be modified once created."),
+    )
+
     # By default, skip managed users (use all_objects for all users queryset)
     objects = UserUnmanagedManager()
 
