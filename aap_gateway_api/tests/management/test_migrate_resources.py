@@ -1,3 +1,4 @@
+import uuid
 from unittest.mock import Mock, patch
 
 import pytest
@@ -8,6 +9,7 @@ from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from django.db import IntegrityError
 
+from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
@@ -50,6 +52,35 @@ def _kill_service(proc):
         print('')
         print('standard err:')
         print(str(stderr, encoding='utf-8'))
+
+
+def _setup_role_api_mocks(mock_client):
+    """Helper function to setup common role types and permissions API mocks"""
+    # Mock the list_role_types response
+    mock_types_response = Mock()
+    mock_types_response.status_code = 200
+    mock_types_response.json.return_value = {"next": None, "results": []}
+    mock_client.list_role_types.return_value = mock_types_response
+
+    # Mock the list_role_permissions response
+    mock_permissions_response = Mock()
+    mock_permissions_response.status_code = 200
+    mock_permissions_response.json.return_value = {"next": None, "results": []}
+    mock_client.list_role_permissions.return_value = mock_permissions_response
+
+
+def _setup_basic_service_client_mocks(mock_client, service_api, admin_user, service_id=None, service_type="controller"):
+    """Helper function to setup basic service client mocks with common configuration"""
+
+    mock_client.service = service_api
+    mock_client.user = admin_user
+    mock_client.get_service_metadata.return_value.json.return_value = {
+        "service_id": service_id or str(uuid.uuid4()),
+        "service_type": service_type,
+    }
+
+    # Setup role API mocks
+    _setup_role_api_mocks(mock_client)
 
 
 @pytest.fixture
@@ -396,7 +427,6 @@ def test_correcting_user_service_id(
 
 @pytest.mark.django_db(transaction=True)
 def test_migrating_user_with_invalid_email(migration_service_invalid_users, admin_user, patched_load_rbac):
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     # Since migration_service_invalid_users is the only DefaultServiceType service in this test,
     # the command will naturally process only that service
@@ -417,8 +447,6 @@ def test_migrating_user_with_invalid_email(migration_service_invalid_users, admi
 def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, patched_load_rbac, admin_user):
     from django.core.management.base import CommandError
 
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
-
     with patch.object(MigrateCommand, "update_resource_data") as mocked_update_resource_data_method:
         mocked_update_resource_data_method.return_value = None  # None indicates that its data could not be updated
 
@@ -437,9 +465,6 @@ def test_updating_resource_data_for_invalid_resource(migration_service_invalid_u
 
 @pytest.fixture
 def cmd(patched_resource_client):
-    # By using patched_resource_client fixture before importing this, the mock should remain active
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
-
     cmd = MigrateCommand()
     cmd.service_slug = 'controller'
     return cmd
@@ -521,8 +546,6 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
         mock_key.return_value = 'fake-key'
 
         def mock_client_factory(service_api, *args, **kwargs):
-            import uuid
-
             mock_client = Mock()
             mock_client.service = service_api
             mock_client.user = admin_user
@@ -690,15 +713,9 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         # Mock consistency check to avoid superuser validation issues
         mock_consistency_check.return_value = None
 
-        import uuid
-
         mock_client = Mock()
-        mock_client.service = service_api_route_controller
-        mock_client.user = admin_user
-        mock_client.get_service_metadata.return_value.json.return_value = {
-            "service_id": str(uuid.uuid4()),  # Generate proper UUID
-            "service_type": "controller",
-        }
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+
         # Mock empty resource lists for clean migration
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         # Added for AAP-47852 where client._make_request() is called directly. Can remove in AAP-48396
@@ -759,7 +776,6 @@ def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api
 @pytest.mark.django_db(transaction=True)
 def test_delete_legacy_authenticators_no_legacy_authenticators(admin_user, capsys):
     """Test delete when no legacy authenticators exist"""
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     cmd = MigrateCommand()
     cmd.delete_legacy_authenticators()
@@ -775,8 +791,6 @@ def test_delete_legacy_authenticators_no_legacy_authenticators(admin_user, capsy
 def test_delete_legacy_authenticators_with_controller_admin(admin_user, capsys):
     """Test delete of controller admin authenticators"""
     from ansible_base.authentication.models import Authenticator, AuthenticatorUser
-
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     legacy_auth = Authenticator.objects.create(
         name="Legacy Controller Admin", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
@@ -813,8 +827,6 @@ def test_delete_legacy_authenticators_with_controller_admin(admin_user, capsys):
 def test_delete_legacy_authenticators_multiple_types(admin_user, capsys):
     """Test delete of multiple legacy authenticator types"""
     from ansible_base.authentication.models import Authenticator, AuthenticatorUser
-
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     # Create authenticators with valid types first, then manually change their type to legacy types
     # This avoids module loading issues during creation
@@ -879,8 +891,6 @@ def test_delete_legacy_authenticators_no_users(admin_user, capsys):
     """Test delete of legacy authenticators with no associated users"""
     from ansible_base.authentication.models import Authenticator
 
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
-
     # Create authenticator with valid type first, then manually change to legacy type
     # This avoids module loading issues during creation
     legacy_auth = Authenticator.objects.create(
@@ -910,8 +920,6 @@ def test_delete_legacy_authenticators_no_users(admin_user, capsys):
 def test_delete_legacy_authenticators_preserves_non_legacy(admin_user, capsys):
     """Test that delete only unlinks users from legacy authenticators and preserves non-legacy ones"""
     from ansible_base.authentication.models import Authenticator, AuthenticatorUser
-
-    from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 
     # Create authenticator with valid type first, then manually change to legacy type
     # This avoids module loading issues during creation
@@ -981,8 +989,6 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
         mock_key.return_value = 'fake-key'
         # Mock consistency check to avoid superuser validation issues
         mock_consistency_check.return_value = None
-
-        import uuid
 
         mock_client = Mock()
         mock_client.service = service_api_route_controller
@@ -1244,3 +1250,329 @@ def test_comprehensive_multi_service_migration(
 
     eda_resource_list = eda_client.list_resources(filters={"is_partially_migrated": True}).json()
     assert eda_resource_list["count"] == 0
+
+
+# Tests for use_controller_password flag functionality
+@pytest.mark.django_db(transaction=True)
+def test_set_use_controller_password_flag_existing_user(capsys):
+    """Test that _set_use_controller_password_flag sets the flag on existing users"""
+
+    # Create a user without the flag set
+    test_user = User.objects.create(username="test_user", use_controller_password=False)
+    assert test_user.use_controller_password is False
+
+    # Create upstream resource data
+    upstream_resource = {
+        "resource_data": {
+            "username": "test_user",
+            "email": "test@example.com",
+            "first_name": "Test",
+            "last_name": "User",
+        }
+    }
+
+    cmd = MigrateCommand()
+    result = cmd._set_use_controller_password_flag(upstream_resource)
+
+    # Verify the flag was set
+    test_user.refresh_from_db()
+    assert test_user.use_controller_password is True
+
+    # Verify return value
+    assert result == upstream_resource
+
+    # Verify logging
+    captured = capsys.readouterr()
+    assert "Set use_controller_password flag for Gateway user 'test_user'" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_set_use_controller_password_flag_nonexistent_user(capsys):
+    """Test that _set_use_controller_password_flag handles nonexistent users gracefully"""
+
+    # Create upstream resource data for non-existent user
+    upstream_resource = {
+        "resource_data": {
+            "username": "nonexistent_user",
+            "email": "nonexistent@example.com",
+            "first_name": "Non",
+            "last_name": "Existent",
+        }
+    }
+
+    cmd = MigrateCommand()
+    result = cmd._set_use_controller_password_flag(upstream_resource)
+
+    # Verify no user was created
+    assert not User.objects.filter(username="nonexistent_user").exists()
+
+    # Verify return value
+    assert result == upstream_resource
+
+    # Verify logging
+    captured = capsys.readouterr()
+    assert "Gateway user 'nonexistent_user' was not updated with 'use_controller_password' flag" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_use_controller_password_flag_integration_with_migration(admin_user, capsys, service_api_route_controller):
+    """Test integration of use_controller_password flag setting during full migration"""
+
+    # Mock the resource client for controller
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._merge_partially_migrated_users') as mock_merge_users,
+    ):
+        # Mock JWT and key creation
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        mock_consistency_check.return_value = None
+        mock_merge_users.return_value = None
+
+        mock_client = Mock()
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+
+        # Mock a user resource to be migrated
+        mock_user_resource = {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "controller_user",
+            "resource_data": {
+                "username": "controller_user",
+                "email": "controller@example.com",
+                "first_name": "Controller",
+                "last_name": "User",
+                "is_superuser": False,
+            },
+            "resource_type": "shared.user",
+        }
+
+        # Mock the API responses with call counter to simulate resource processing
+        # Migration processes orgs, teams, then users - we need to mock all of them
+        call_counts = {"shared.organization": 0, "shared.team": 0, "shared.user": 0}
+
+        def mock_list_resources_response(*args, **kwargs):
+            filters = kwargs.get('filters', {})
+            resource_type = filters.get('content_type__resource_type__name')
+
+            if resource_type == 'shared.user':
+                call_counts['shared.user'] += 1
+                if call_counts['shared.user'] == 1:
+                    return Mock(json=lambda: {"count": 1, "results": [mock_user_resource]})
+                else:
+                    return Mock(json=lambda: {"count": 0, "results": []})
+            else:
+                # For organizations and teams, return empty immediately
+                return Mock(json=lambda: {"count": 0, "results": []})
+
+        mock_client.list_resources.side_effect = mock_list_resources_response
+        mock_client.get_resource.return_value.json.return_value = mock_user_resource
+        mock_client.update_resource.return_value = Mock()
+        # Add missing mock for potential direct API calls
+        mock_client._make_request.return_value.json.return_value = {"count": 0, "results": []}
+
+        mock_client_class.return_value = mock_client
+
+        # Run migration
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Verify that the user was created with use_controller_password=True
+        assert User.objects.filter(username="controller_user").exists()
+        controller_user = User.objects.get(username="controller_user")
+        assert controller_user.use_controller_password is True
+
+        # Verify logging
+        captured = capsys.readouterr()
+        assert "Set use_controller_password flag for Gateway user 'controller_user'" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_use_controller_password_flag_only_for_user_resources(admin_user, service_api_route_controller):
+    """Test that use_controller_password flag is only set for user resources, not organizations or teams"""
+
+    # Mock the resource client for controller
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._merge_partially_migrated_users') as mock_merge_users,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._set_use_controller_password_flag') as mock_set_flag,
+    ):
+        # Mock JWT and key creation
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        mock_consistency_check.return_value = None
+        mock_merge_users.return_value = None
+
+        mock_client = Mock()
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+
+        # Mock organization and user resources
+        mock_org_resource = {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "test_org",
+            "resource_data": {"name": "test_org"},
+            "resource_type": "shared.organization",
+        }
+
+        mock_user_resource = {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "test_user",
+            "resource_data": {
+                "username": "test_user",
+                "email": "user@example.com",
+                "first_name": "Test",
+                "last_name": "User",
+                "is_superuser": False,
+            },
+            "resource_type": "shared.user",
+        }
+
+        # Mock multiple list_resources calls for different resource types
+        # Use a call counter to simulate resources being processed and disappearing from subsequent queries
+        call_counts = {"shared.organization": 0, "shared.user": 0}
+
+        def mock_list_resources(*args, **kwargs):
+            filters = kwargs.get('filters', {})
+            resource_type = filters.get('content_type__resource_type__name')
+
+            if resource_type == 'shared.organization':
+                call_counts["shared.organization"] += 1
+                if call_counts["shared.organization"] == 1:
+                    return Mock(json=lambda: {"count": 1, "results": [mock_org_resource]})
+                else:
+                    return Mock(json=lambda: {"count": 0, "results": []})
+            elif resource_type == 'shared.user':
+                call_counts["shared.user"] += 1
+                if call_counts["shared.user"] == 1:
+                    return Mock(json=lambda: {"count": 1, "results": [mock_user_resource]})
+                else:
+                    return Mock(json=lambda: {"count": 0, "results": []})
+            else:
+                return Mock(json=lambda: {"count": 0, "results": []})
+
+        mock_client.list_resources.side_effect = mock_list_resources
+
+        def mock_get_resource(ansible_id):
+            if ansible_id == mock_org_resource["ansible_id"]:
+                return Mock(json=lambda: mock_org_resource)
+            elif ansible_id == mock_user_resource["ansible_id"]:
+                return Mock(json=lambda: mock_user_resource)
+            return Mock(json=lambda: {})
+
+        mock_client.get_resource.side_effect = mock_get_resource
+        mock_client.update_resource.return_value = Mock()
+
+        mock_client_class.return_value = mock_client
+
+        # Run migration
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Verify _set_use_controller_password_flag was called only for user resources
+        # It should be called once for the user resource, not for the organization
+        assert mock_set_flag.call_count == 1
+
+        # Verify it was called with the user resource
+        call_args = mock_set_flag.call_args[0][0]  # First argument of the first call
+        assert call_args["resource_data"]["username"] == "test_user"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_use_controller_password_flag_not_set_for_existing_users_during_merge(admin_user, service_api_route_controller):
+    """Test that use_controller_password flag handling works correctly when merging with existing users"""
+    # Create an existing user in Gateway (simulating a conflict scenario)
+    existing_user = User.objects.create(username="existing_user", use_controller_password=False)
+
+    # Mock the resource client for controller
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._merge_partially_migrated_users') as mock_merge_users,
+    ):
+        # Mock JWT and key creation
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        mock_consistency_check.return_value = None
+        mock_merge_users.return_value = None
+
+        mock_client = Mock()
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+
+        # Mock a user resource that will conflict with existing user
+        mock_user_resource = {
+            "ansible_id": existing_user.resource.ansible_id,  # Same ansible_id as existing user
+            "name": "existing_user",
+            "resource_data": {
+                "username": "existing_user",
+                "email": "existing@example.com",
+                "first_name": "Existing",
+                "last_name": "User",
+                "is_superuser": False,
+            },
+            "resource_type": "shared.user",
+        }
+
+        # Mock the API responses with call counter to simulate resource processing
+        # Migration processes orgs, teams, then users - we need to mock all of them
+        call_counts = {"shared.organization": 0, "shared.team": 0, "shared.user": 0}
+
+        def mock_list_resources_response(*args, **kwargs):
+            filters = kwargs.get('filters', {})
+            resource_type = filters.get('content_type__resource_type__name')
+
+            if resource_type == 'shared.user':
+                call_counts['shared.user'] += 1
+                if call_counts['shared.user'] == 1:
+                    return Mock(json=lambda: {"count": 1, "results": [mock_user_resource]})
+                else:
+                    return Mock(json=lambda: {"count": 0, "results": []})
+            else:
+                # For organizations and teams, return empty immediately
+                return Mock(json=lambda: {"count": 0, "results": []})
+
+        mock_client.list_resources.side_effect = mock_list_resources_response
+        mock_client.get_resource.return_value.json.return_value = mock_user_resource
+        mock_client.update_resource.return_value = Mock()
+        # Add missing mock for potential direct API calls
+        mock_client._make_request.return_value.json.return_value = {"count": 0, "results": []}
+
+        mock_client_class.return_value = mock_client
+
+        # Run migration
+        call_command("migrate_service_data", username=admin_user.username)
+
+        # Verify that the existing user has use_controller_password=False
+        existing_user.refresh_from_db()
+        assert existing_user.use_controller_password is False
+
+
+@pytest.mark.django_db(transaction=True)
+def test_use_controller_password_save_uses_update_fields():
+    """Test that _set_use_controller_password_flag uses update_fields for efficient saves"""
+
+    # Create a user without the flag set
+    User.objects.create(username="test_user", use_controller_password=False)
+
+    # Create upstream resource data
+    upstream_resource = {
+        "resource_data": {
+            "username": "test_user",
+            "email": "test@example.com",
+            "first_name": "Test",
+            "last_name": "User",
+        }
+    }
+
+    cmd = MigrateCommand()
+
+    # Patch the save method to verify update_fields is used
+    with patch.object(User, 'save') as mock_save:
+        cmd._set_use_controller_password_flag(upstream_resource)
+
+        # Verify save was called with update_fields
+        mock_save.assert_called_once_with(update_fields=["use_controller_password"])
