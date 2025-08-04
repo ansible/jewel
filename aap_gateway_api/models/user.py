@@ -2,6 +2,7 @@ import logging
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_plugin
+from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.abstract_models.user import AbstractDABUser
@@ -51,7 +52,7 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         'teams_administered',
         'authenticator_users',  # private model .This is not a model we want on the user endpoint. We actually pull this information up into the user payload
     ]
-    activity_stream_excluded_field_names = ['last_login']
+    activity_stream_excluded_field_names = ['last_login', 'last_login_from']
 
     encrypted_fields = ()  # handed as special case by UserSerializer
     PASSWORD_FIELDS = ["password"]  # Mark password fields so ansible_base.lib.rest_filters can properly block attempts to filter over password
@@ -74,6 +75,10 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
     # By default, skip managed users (use all_objects for all users queryset)
     objects = UserUnmanagedManager()
+
+    last_login_from = models.ForeignKey(
+        Authenticator, on_delete=models.SET_NULL, null=True, default=None, editable=False, help_text="The authenticator the user last logged in with"
+    )
 
     def __init__(self, *args, is_platform_auditor=False, **kwargs):
         super().__init__(*args, **kwargs)
