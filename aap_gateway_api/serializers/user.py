@@ -49,6 +49,15 @@ class UserSerializer(CommonUserSerializer):
         help_text=_("DEPRECATED: This field is deprecated and will be removed in a future version. Please use 'associated_authenticators' instead."),
     )
     associated_authenticators = serializers.JSONField(write_only=True, required=False)
+
+    last_login_from = serializers.SerializerMethodField(
+        help_text=_(
+            "Read-only field indicating the last authenticator used for successful login. "
+            "Value is null if user has never logged in. This field is automatically updated "
+            "on successful authentication. Cannot be set via API."
+        )
+    )
+
     is_platform_auditor = serializers.BooleanField(read_only=True)
     use_controller_password = serializers.BooleanField(required=False, read_only=True)
 
@@ -67,6 +76,7 @@ class UserSerializer(CommonUserSerializer):
             'first_name',
             'last_name',
             'last_login',
+            'last_login_from',
             'password',
             'is_superuser',
             'is_platform_auditor',
@@ -76,7 +86,7 @@ class UserSerializer(CommonUserSerializer):
             'managed',
             "use_controller_password",
         ]
-        read_only_fields = ["last_login", "is_platform_auditor", "use_controller_password"]
+        read_only_fields = ["last_login", "is_platform_auditor", "use_controller_password", "last_login_from"]
 
     def _add_deprecation_warning(self, field_name, message):
         """Add a deprecation warning for a field if not already added."""
@@ -208,18 +218,7 @@ class UserSerializer(CommonUserSerializer):
         if not user_instance:
             return None
 
-        # TODO: When AAP-48723 is implemented, use last_login_from field
-        # For now, fall back to the single authenticator if user has only one
-        authenticators = user_instance.authenticator_users.all()
-        if len(authenticators) == 1:
-            return authenticators.first().provider
-        elif len(authenticators) == 0:
-            return None
-        else:
-            # Multiple authenticators - would need last_login_from to determine which one
-            # For now, return the first one as a fallback
-            logger.warning(f"User {user_instance.username} has multiple authenticators but no last_login_from field available")
-            return authenticators.first().provider
+        return user_instance.last_login_from
 
     def validate_authenticator_uid(self, value: str) -> str:
         """
@@ -667,7 +666,7 @@ class UserSerializer(CommonUserSerializer):
             self._add_deprecation_warning(
                 "authenticator_uid_multiple",
                 "Updating 'authenticator_uid' for a user with multiple authenticators. "
-                "The change will be applied to the authenticator from 'last_login_from' if available, or the first authenticator as a fallback. "
+                "The change will be applied to the authenticator from 'last_login_from' if available. "
                 "Consider using 'associated_authenticators' instead for precise control.",
             )
 
@@ -829,6 +828,18 @@ class UserSerializer(CommonUserSerializer):
         self._update_users_authenticators(authenticators, authenticator_uid, associated_authenticators, new_user)
 
         return new_user
+
+    def get_last_login_from(self, obj):
+        """
+        Get the last_login_from field for the user.
+
+        Returns:
+            dict or None: Dictionary with authenticator details if user has logged in,
+                         None if user has never logged in
+        """
+        if obj.last_login_from:
+            return {'id': obj.last_login_from.id, 'name': obj.last_login_from.name, 'type': obj.last_login_from.type}
+        return None
 
     def to_representation(self, obj):
         ret = super(UserSerializer, self).to_representation(obj)
