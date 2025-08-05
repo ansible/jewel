@@ -1,7 +1,7 @@
 import logging
 
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
-from ansible_base.rbac.api.views import RoleMetadataView, TeamAccessViewSet, UserAccessViewSet
+from ansible_base.rbac.api.views import RoleMetadataView, TeamAccessAssignmentViewSet, TeamAccessViewSet, UserAccessAssignmentViewSet, UserAccessViewSet
 from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from django.conf import settings
@@ -17,6 +17,8 @@ logger = logging.getLogger('aap.gateway.urls')
 
 user_access_view = UserAccessViewSet.as_view({'get': 'list'})
 team_access_view = TeamAccessViewSet.as_view({'get': 'list'})
+user_access_assignment_view = UserAccessAssignmentViewSet.as_view({'get': 'list'})
+team_access_assignment_view = TeamAccessAssignmentViewSet.as_view({'get': 'list'})
 
 
 urlpatterns = [
@@ -28,6 +30,16 @@ urlpatterns = [
     path(r'role_metadata/', RoleMetadataView.as_view(), name="role-metadata"),
     path('api/gateway/v1/role_user_access/<str:model_name>/<int:pk>/', user_access_view, name="role-user-access"),
     path('api/gateway/v1/role_team_access/<str:model_name>/<int:pk>/', team_access_view, name="role-team-access"),
+    path(
+        'role_user_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
+        user_access_assignment_view,
+        name='role-user-access-assignments',
+    ),
+    path(
+        'role_team_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
+        team_access_assignment_view,
+        name='role-team-access-assignments',
+    ),
     path('admin/', admin.site.urls),
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
