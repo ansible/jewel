@@ -65,6 +65,7 @@ def network_manager_filter(http_filters=[], routes=[]):
                 ],
             },
             "use_remote_address": True,
+            "xff_num_trusted_hops": settings.XDS_XFF_NUM_TRUSTED_HOPS,
         },
     }
 
