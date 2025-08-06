@@ -41,7 +41,7 @@ exclude = ["aap_gateway_api.tests*"]
 "aap_gateway_api.static" = ["**"]
 
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm>=8"]
+requires = ["setuptools>=64", "setuptools_scm>=8,<9"]
 build-backend = 'setuptools.build_meta'
 
 [project.scripts]
