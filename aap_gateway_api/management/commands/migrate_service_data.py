@@ -1,10 +1,10 @@
 import logging
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
-from ansible_base.rbac.models import DABContentType, DABPermission
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -317,6 +317,8 @@ class Command(BaseCommand):
 
         for r_type in self.resource_types_to_migrate.keys():
             self.migrate_resource(r_type, service_slug)
+
+        self.migrate_user_role_assignments(service_slug, service_type_name)
 
         self.stdout.write(f"Completed migration for service: {service_slug}")
         return True, None
@@ -1195,3 +1197,124 @@ class Command(BaseCommand):
         merged_count += 1
 
         return merged_count
+
+    @staticmethod
+    def _format_fetched_assignment_for_logging(assignment: Dict[str, Any]) -> str:
+        return (
+            f"user_id: {assignment.get('user_ansible_id')}, "
+            f"object_type: {assignment.get('content_type')}, "
+            f"object_ansible_id: {assignment.get('object_ansible_id')}, "
+            f"role_definition_name: {assignment.get('role_definition')}"
+        )
+
+    @staticmethod
+    def _format_migrated_assignment_for_logging(role_user_assignment: RoleUserAssignment) -> str:
+        return (
+            f"username: {role_user_assignment.user.username}, "
+            f"object_id: {role_user_assignment.object_id}, "
+            f"role_definition_name: {role_user_assignment.role_definition.name}"
+        )
+
+    @staticmethod
+    def _get_role_definitions_to_migrate(service_type: str) -> List[str]:
+        ROLE_DEFINITION_FILTERS = {
+            # For controller, we want to migrate these 4 managed roles
+            DefaultServiceType.CONTROLLER.value: ['Platform Auditor', 'Organization Admin', 'Organization Member', 'Team Admin', 'Team Member'],
+            # For hub, we want to migrate this single managed role
+            DefaultServiceType.HUB.value: ['Team Member'],
+        }
+        return ROLE_DEFINITION_FILTERS.get(service_type, [])
+
+    def _fetch_role_user_assignments(self, service_slug: str, service_type_name: str) -> Iterator[Dict[str, Any]]:
+        """
+        Fetch all role_user_assignments from the service with pagination
+        """
+        role_definitions_to_migrate = self._get_role_definitions_to_migrate(service_type_name)
+        if not role_definitions_to_migrate:
+            # Nothing to fetch, bail out now
+            logger.info(f"No role definitions to migrate for {service_slug} of type {service_type_name}, skipping...")
+            return
+
+        page = 1
+        total_count = None  # we will check this on each page to see if anything changed
+        while True:
+            logger.info(f"Fetching page {page} of role_user_assignments from {service_slug}")
+            filters = {'page': page, 'role_definition__name__in': ','.join(role_definitions_to_migrate)}
+            # This code successfully handles pagination, but API ignores the page_size parameter
+            json_response = self.client.list_user_assignments(filters=filters).json()
+            if total_count is None:
+                total_count = json_response.get('count', 0)
+            elif total_count != json_response.get('count', 0):
+                self.stderr.write(f"Error: RoleUserAssignments count changed from {total_count} to {json_response.get('count', 0)}")
+                raise RuntimeError("RoleUserAssignments count changed during migration")
+            for assignment in json_response.get('results', []):
+                yield assignment
+            if not json_response.get('next'):
+                break
+            page += 1
+
+    def migrate_user_role_assignments(self, service_slug: str, service_type_name: str) -> None:
+        """
+        Migrates the role_user_assignments from an individual service to platform-level role assignments
+
+        This method must run after Organizations/Teams/Users have been migrated. It migrates the role assignments,
+        so the subjects and objects of those assignments must exist.
+
+        It performs this migration by:
+
+        1. Querying the service's role user assignments API for assignments corresponding to the known
+           list of Role Definitions (Organization Admin, Team Member, etc.)
+        2. Looking up the local (aap-gateway) user referenced in each assignment
+        3. Looking up the local (aap-gateway) role definition corresponding to the service definition
+        4. Giving permission on the local gateway object to the gateway user
+        """
+
+        self.stdout.write(f"Migrating RoleUserAssignments from {service_slug} of type {service_type_name}")
+        try:
+            assignments = self._fetch_role_user_assignments(service_slug, service_type_name)
+        except Exception:
+            self.stderr.write(f"Unable to fetch RoleUserAssignments from {service_slug}, skipping...")
+            return
+
+        for assignment in assignments:
+            self.stdout.write(f"Processing assignment in service {service_slug}: {self._format_fetched_assignment_for_logging(assignment)}")
+
+            # Lookup the role definition, user, and object
+            role_definition_name = assignment.get('role_definition')
+            service_user_ansible_id = assignment.get('user_ansible_id')
+            service_content_object_ansible_id = assignment.get('object_ansible_id')
+            content_type = assignment.get('content_type')
+
+            try:
+                try:
+                    gateway_role_definition = RoleDefinition.objects.get(name=role_definition_name)
+                except RoleDefinition.DoesNotExist:
+                    self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
+                    continue
+                try:
+                    gateway_user = Resource.objects.get(ansible_id=service_user_ansible_id).content_object
+                except Resource.DoesNotExist:
+                    self.stderr.write(f"Warning: Unable to find gateway user with ansible_id {service_user_ansible_id}, skipping assignment")
+                    continue
+                try:
+                    if service_content_object_ansible_id:
+                        gateway_content_object = Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
+                    else:
+                        # 'content_object' is None. That's valid and means this role assignment applies to the entire service (e.g.  not a specific team or org)
+                        gateway_content_object = None
+                except Resource.DoesNotExist:
+                    self.stderr.write(
+                        f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment"
+                    )
+                    continue
+            except Exception as e:
+                self.stderr.write(f"Error: Unable to process role user assignment, skipping: {str(e)}")
+                continue
+
+            # Create the role user assignment in gateway
+            if gateway_content_object:
+                role_user_assignment = gateway_role_definition.give_permission(gateway_user, gateway_content_object)
+            else:
+                role_user_assignment = gateway_role_definition.give_global_permission(gateway_user)
+            message = "Gave permission"
+            self.stdout.write(f"{message}: {self._format_migrated_assignment_for_logging(role_user_assignment)}")  # type: ignore
