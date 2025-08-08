@@ -31,12 +31,12 @@ urlpatterns = [
     path('api/gateway/v1/role_user_access/<str:model_name>/<int:pk>/', user_access_view, name="role-user-access"),
     path('api/gateway/v1/role_team_access/<str:model_name>/<int:pk>/', team_access_view, name="role-team-access"),
     path(
-        'role_user_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
+        'api/gateway/v1/role_user_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
         user_access_assignment_view,
         name='role-user-access-assignments',
     ),
     path(
-        'role_team_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
+        'api/gateway/v1/role_team_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
         team_access_assignment_view,
         name='role-team-access-assignments',
     ),
