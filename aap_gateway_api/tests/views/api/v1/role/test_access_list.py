@@ -50,7 +50,10 @@ def test_user_access_list(admin_api_client, organization, org_inv_admin):
         user_data[user_detail['username']] = user_detail['object_role_assignments']
         assert 'related' in user_detail
         assert 'details' in user_detail['related']
-        detail_resp = admin_api_client.get(user_detail['related']['details'])
+        # Gets coverage for URLs being included correctly
+        detail_url = user_detail['related']['details']
+        assert detail_url.startswith('/api/gateway/')
+        detail_resp = admin_api_client.get(detail_url)
         assert detail_resp.status_code == 200, detail_resp.data
         # This should have the same entries in a list view as the access list had in the assignments list
         assert detail_resp.data['count'] == len(user_detail['object_role_assignments'])
@@ -84,7 +87,9 @@ def test_team_access_list(admin_api_client, org_inv_admin, organization):
 
         assert 'related' in team_detail
         assert 'details' in team_detail['related']
-        detail_resp = admin_api_client.get(team_detail['related']['details'])
+        detail_url = team_detail['related']['details']
+        assert detail_url.startswith('/api/gateway/')
+        detail_resp = admin_api_client.get(detail_url)
         assert detail_resp.status_code == 200, detail_resp.data
         # This should have the same entries in a list view as the access list had in the assignments list
         assert detail_resp.data['count'] == len(team_detail['object_role_assignments'])
