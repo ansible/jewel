@@ -18,6 +18,11 @@ def test_jwt_token_org_ends_up_in_jwt_if_only_team_associated(admin_user, team, 
     assert len(decoded['objects']['organization']) == 1
     assert decoded['sub'] == str(admin_user.resource.ansible_id)
     assert decoded['service_id'] == str(admin_user.resource.service_id)
+    # Check that claims_hash is present and is a valid SHA-256 hash
+    assert 'claims_hash' in decoded
+    assert isinstance(decoded['claims_hash'], str)
+    assert len(decoded['claims_hash']) == 64
+    assert all(c in '0123456789abcdef' for c in decoded['claims_hash'])
 
 
 def test_jwt_token_encode_decode(admin_user, set_preference, rsa_keypair, organization, team):
@@ -38,6 +43,13 @@ def test_jwt_token_encode_decode(admin_user, set_preference, rsa_keypair, organi
     assert decoded["aud"] == "ansible-services"
     assert 'Platform Auditor' in decoded["global_roles"]
     assert 'Organization Member' in decoded['object_roles']
+
+    # Check that claims_hash is present and is a valid SHA-256 hash
+    assert 'claims_hash' in decoded
+    assert isinstance(decoded['claims_hash'], str)
+    assert len(decoded['claims_hash']) == 64
+    assert all(c in '0123456789abcdef' for c in decoded['claims_hash'])
+
     for content_type, role, ansible_id in [
         ('organization', RoleDefinition.objects.managed.org_member.name, organization.resource.ansible_id),
         ('team', RoleDefinition.objects.managed.team_admin.name, team.resource.ansible_id),
@@ -165,3 +177,60 @@ class TestUserObjectRoles:
         for object_type, object_list in decoded["objects"].items():
             unique_object_ids = set(obj_data["ansible_id"] for obj_data in object_list)
             assert len(unique_object_ids) == len(object_list), f"Duplicate found in {object_type} list"
+
+
+def test_jwt_token_claims_hash_deterministic(user, set_preference, rsa_keypair, organization, team):
+    """Test that the claims hash is deterministic for the same user permissions"""
+    RoleDefinition.objects.managed.org_member.give_permission(user, organization)
+    RoleDefinition.objects.managed.team_admin.give_permission(user, team)
+
+    set_preference("proxy", "jwt_private_key", rsa_keypair.private)
+    set_preference("proxy", "jwt_public_key", rsa_keypair.public)
+
+    # Create two tokens for the same user
+    jwt_token1 = create_signed_jwt(user)
+    jwt_token2 = create_signed_jwt(user)
+
+    decoded1 = decode_signed_jwt(jwt_token1)
+    decoded2 = decode_signed_jwt(jwt_token2)
+
+    # The claims hash should be identical (though exp timestamps will differ)
+    assert decoded1['claims_hash'] == decoded2['claims_hash']
+
+
+def test_jwt_token_claims_hash_changes_with_permissions(user, set_preference, rsa_keypair, organization):
+    """Test that the claims hash changes when user permissions change"""
+    set_preference("proxy", "jwt_private_key", rsa_keypair.private)
+    set_preference("proxy", "jwt_public_key", rsa_keypair.public)
+
+    # Create token with no permissions
+    jwt_token1 = create_signed_jwt(user)
+    decoded1 = decode_signed_jwt(jwt_token1)
+
+    # Add a permission
+    RoleDefinition.objects.managed.org_member.give_permission(user, organization)
+
+    # Create token with new permission
+    jwt_token2 = create_signed_jwt(user)
+    decoded2 = decode_signed_jwt(jwt_token2)
+
+    # The claims hash should be different
+    assert decoded1['claims_hash'] != decoded2['claims_hash']
+
+
+def test_jwt_token_with_resource_api_actions(user, set_preference, rsa_keypair):
+    """Test that resource_api_actions are included in the JWT token"""
+    set_preference("proxy", "jwt_private_key", rsa_keypair.private)
+    set_preference("proxy", "jwt_public_key", rsa_keypair.public)
+
+    resource_api_actions = ['list', 'retrieve', 'create', 'update', 'destroy']
+    jwt_token = create_signed_jwt(user, resource_api_actions=resource_api_actions)
+    decoded = decode_signed_jwt(jwt_token)
+
+    assert 'resource_api_actions' in decoded
+    assert set(decoded['resource_api_actions']) == set(resource_api_actions)  # order-agnostic check for extra safety
+
+    # Claims hash should still be present
+    assert 'claims_hash' in decoded
+    assert isinstance(decoded['claims_hash'], str)
+    assert len(decoded['claims_hash']) == 64

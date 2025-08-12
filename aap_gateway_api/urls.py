@@ -71,6 +71,8 @@ urlpatterns = [
     path('api/gateway/v1/', include(router.urls)),
     path('api/gateway/v1/', include(resource_api_urls)),
     path('api/gateway/v1/', include(rbac_service_urls)),
+    # JWT claims endpoint
+    path('api/gateway/v1/jwt_claims/<str:user_ansible_id>/', views.JWTClaimsView.as_view(), name='jwt-claims-view'),
 ]
 
 if getattr(settings, 'ENABLE_DJANGO_DEBUG_TOOLBAR', False):

@@ -70,6 +70,18 @@ class ServiceTokenAuthentication(BaseAuthentication):
             setattr(user, "resource_api_actions", allowed_actions)
             return True
 
+        # Allow services to access JWT claims for any user
+        # Note: This can't be added to authorized_paths because the authorized_paths mechanism
+        # requires specific kwargs to generate URLs via get_relative_url() and we can't use
+        # wildcards to accept any user slug in the URL pattern
+        if request.path.startswith('/api/gateway/v1/jwt_claims/') and request.method.lower() == 'get':
+            # Set the resource_api_actions based on what's in the token
+            # This is used by the JWT claims view permission check
+            # If no actions are set, default to allowing retrieve
+            if not hasattr(user, 'resource_api_actions'):
+                setattr(user, 'resource_api_actions', ['retrieve'])
+            return True
+
         for path_info in self.authorized_paths:
             if len(path_info) != 3:
                 logger.error(f"Invalid tuple in authorized_paths: {path_info}, it should have 3 components")
