@@ -128,7 +128,7 @@ FLAGS = {
     # Private feature flag for cloud.redhat.com; DO NOT ENABLE FOR CUSTOMERS until after testing is completed for EPIC AAP-34094
     'FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE': [{'condition': 'boolean', 'value': False}],
     # Makes attribute (name/value) and group (name) comparisons case insensitive
-    'FEATURE_CASE_INSENSITIVE_AUTH_MAPS': [{'condition': 'boolean', 'value': False}],
+    'FEATURE_CASE_INSENSITIVE_AUTH_MAPS': [{'condition': 'boolean', 'value': True}],
 }
 
 # Time in seconds that the gateway access tokens are valid for, can be overridden
