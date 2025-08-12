@@ -95,6 +95,8 @@ class ApiSpecs:
             ('/{model_name}/', '/inventory/'),
             ('/%(actor_pk)s/', '/1/'),
             ('/{actor_pk}/', '/1/'),
+            ('/%(user_ansible_id)s/', '/1/'),
+            ('/{user_ansible_id}/', '/1/'),
         ]
         url = endpoint
         for rep in replacements:
