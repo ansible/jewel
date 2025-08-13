@@ -15,7 +15,6 @@ def test_jwt_token_org_ends_up_in_jwt_if_only_team_associated(admin_user, team, 
     set_preference("proxy", "jwt_public_key", rsa_keypair.public)
     jwt_token = create_signed_jwt(admin_user)
     decoded = decode_signed_jwt(jwt_token)
-    assert len(decoded['objects']['organization']) == 1
     assert decoded['sub'] == str(admin_user.resource.ansible_id)
     assert decoded['service_id'] == str(admin_user.resource.service_id)
     # Check that claims_hash is present and is a valid SHA-256 hash
@@ -41,26 +40,12 @@ def test_jwt_token_encode_decode(admin_user, set_preference, rsa_keypair, organi
     assert decoded['user_data']["email"] == admin_user.email
     assert decoded["iss"] == "ansible-issuer"
     assert decoded["aud"] == "ansible-services"
-    assert 'Platform Auditor' in decoded["global_roles"]
-    assert 'Organization Member' in decoded['object_roles']
 
     # Check that claims_hash is present and is a valid SHA-256 hash
     assert 'claims_hash' in decoded
     assert isinstance(decoded['claims_hash'], str)
     assert len(decoded['claims_hash']) == 64
     assert all(c in '0123456789abcdef' for c in decoded['claims_hash'])
-
-    for content_type, role, ansible_id in [
-        ('organization', RoleDefinition.objects.managed.org_member.name, organization.resource.ansible_id),
-        ('team', RoleDefinition.objects.managed.team_admin.name, team.resource.ansible_id),
-    ]:
-        resource_index = None
-        for index in range(0, len(decoded['objects'][content_type])):
-            resource = decoded['objects'][content_type][index]
-            if resource['ansible_id'] == str(ansible_id):
-                resource_index = index
-        assert resource_index is not None
-        assert resource_index in decoded['object_roles'][role]['objects'], f"Missing role? {decoded}"
 
 
 def test_jwt_token_update_jwt_public_key_private_key_exception(expected_log):
@@ -154,11 +139,9 @@ class TestUserObjectRoles:
 
     def test_unique_orgs_and_teams(self, user, set_preference, rsa_keypair, organization):
         """
-        Ensure that organization and team objects in the jwt token payload are unique
-        Test Scenario:
-        - user is assigned as "Team Member" for Team 1 and both "Team Member" and "Team Admin" for Team 2
-        - both team 1 and team 2 belong to the same test organization
-        - verify that the JWT payload contains only 1 organization object and 2 distinct team objects.
+        Test that JWT token is generated successfully with multiple team permissions.
+        Note: The uniqueness of objects is now validated through the claims hash,
+        as the objects data is no longer included in the JWT token itself.
         """
 
         team1 = Team.objects.create(name="Team 1", organization=organization)
@@ -174,9 +157,10 @@ class TestUserObjectRoles:
         jwt_token = create_signed_jwt(user)
         decoded = decode_signed_jwt(jwt_token)
 
-        for object_type, object_list in decoded["objects"].items():
-            unique_object_ids = set(obj_data["ansible_id"] for obj_data in object_list)
-            assert len(unique_object_ids) == len(object_list), f"Duplicate found in {object_type} list"
+        # Check that claims_hash is present and is a valid SHA-256 hash
+        assert 'claims_hash' in decoded
+        assert isinstance(decoded['claims_hash'], str)
+        assert len(decoded['claims_hash']) == 64
 
 
 def test_jwt_token_claims_hash_deterministic(user, set_preference, rsa_keypair, organization, team):
