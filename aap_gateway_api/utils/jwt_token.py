@@ -34,31 +34,12 @@ def create_signed_jwt(user, resource_api_actions=None):
             "email": user.email,
             "is_superuser": user.is_superuser,
         },
-        "objects": {
-            "<object_content_type (i.e. organization)>": [ <- Each entry holds an array of anything needed to create the object type
-                {
-                    <ansible_id>: <value>,
-                    <name>: <value>,
-                }, ...
-            ]
-            "<object_content_type (i.e. team)>": [
-                {
-                    <ansible_id>: <value>,
-                    <name>: <value>,
-                    <organization>: <index of organization from objects.organization above>
-                },
-                ...
-            ]
-        "object_roles": {
-            "<role name>": {
-                "content_type": (entry pointer object above),
-                "objects": [<index of organization from objects.organization above>],
-            },
-            ...
-        },
-        "global_roles": ["<role name>", ...],
         "claims_hash": "<sha256 hash of claims>",
     }
+
+    Note: The claims data (objects, object_roles, global_roles) is no longer included
+    in the JWT token to reduce size. Services should use the JWT claims API endpoint
+    (/api/gateway/v1/jwt_claims/<user_ansible_id>) to retrieve the full claims data.
     """
 
     due_date = datetime.now() + timedelta(seconds=get_preference_value("proxy", "gateway_access_token_expiration"))
@@ -85,9 +66,6 @@ def create_signed_jwt(user, resource_api_actions=None):
             "email": user.email,
             "is_superuser": user.is_superuser,
         },
-        "objects": user_claims['objects'],
-        "object_roles": user_claims['object_roles'],
-        "global_roles": user_claims['global_roles'],
         "claims_hash": claims_hash,
     }
 
