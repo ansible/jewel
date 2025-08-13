@@ -1828,3 +1828,113 @@ def test_use_controller_password_save_uses_update_fields():
 
         # Verify save was called with update_fields
         mock_save.assert_called_once_with(update_fields=["use_controller_password"])
+
+
+# Parameterized tests for _ensure_controller_gateway_superusers method
+@pytest.mark.parametrize(
+    "gateway_users,controller_users,expected_promotions,expected_errors,expected_output",
+    [
+        # Test case: User exists in Gateway but needs promotion
+        (
+            [("controller_super_user", False)],  # (username, is_superuser)
+            [("admin", True), ("controller_super_user", True)],  # Controller superusers
+            ["controller_super_user"],  # Users that should be promoted
+            [],  # No errors expected
+            ["Promoted Gateway user 'controller_super_user' to superuser to match Controller status"],
+        ),
+        # Test case: User missing from Gateway (migration failure)
+        (
+            [],  # No users created in Gateway
+            [("admin", True), ("missing_user", True)],  # Controller superusers
+            [],  # No promotions
+            ["missing_user"],  # Users that should trigger error
+            ["Error: Users ['missing_user'] are superusers in Controller but don't exist in Gateway"],
+        ),
+        # Test case: Consistent superusers
+        (
+            [],  # Only admin exists (from fixture)
+            [("admin", True)],  # Only admin is superuser in Controller
+            [],  # No promotions needed
+            [],  # No errors
+            ["Controller and Gateway superusers are consistent"],
+        ),
+        # Test case: Mixed scenario - some promotion, some missing
+        (
+            [("needs_promotion", False)],  # User exists but not superuser
+            [("admin", True), ("needs_promotion", True), ("missing_user", True)],
+            ["needs_promotion"],  # This user should be promoted
+            ["missing_user"],  # This user should trigger error
+            [
+                "Promoted Gateway user 'needs_promotion' to superuser to match Controller status",
+                "Error: Users ['missing_user'] are superusers in Controller but don't exist in Gateway",
+            ],
+        ),
+    ],
+)
+@pytest.mark.django_db
+def test_ensure_controller_gateway_superusers_scenarios(
+    gateway_users, controller_users, expected_promotions, expected_errors, expected_output, admin_user, capsys, service_api_route_controller
+):
+    """Parameterized test for _ensure_controller_gateway_superusers method scenarios"""
+
+    # Setup Gateway users
+    created_users = {}
+    for username, is_superuser in gateway_users:
+        created_users[username] = User.objects.create(username=username, is_superuser=is_superuser)
+
+    gateway_superusers = {"admin"}  # admin is always superuser from fixture
+    cmd = MigrateCommand()
+
+    # Mock client with Controller superusers
+    mock_client = Mock()
+
+    # Mock list_resources response (returns items with ansible_id)
+    list_results = []
+    get_resource_responses = {}
+
+    for i, (username, is_superuser) in enumerate(controller_users):
+        ansible_id = f"ansible-id-{i}"
+        list_results.append({"ansible_id": ansible_id})
+        # Mock get_resource response for each user
+        get_resource_responses[ansible_id] = {"resource_data": {"username": username, "is_superuser": is_superuser}}
+
+    mock_client.list_resources.return_value.json.return_value = {"count": len(controller_users), "results": list_results, "next": None}  # No pagination
+
+    # Mock get_resource to return the appropriate response for each ansible_id
+    def mock_get_resource(ansible_id):
+        mock_response = Mock()
+        mock_response.json.return_value = get_resource_responses[ansible_id]
+        return mock_response
+
+    mock_client.get_resource.side_effect = mock_get_resource
+
+    with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient', return_value=mock_client):
+
+        if expected_errors:
+            # Test error scenarios
+            from django.core.management.base import CommandError
+
+            with pytest.raises(CommandError) as exc_info:
+                cmd._ensure_controller_gateway_superusers(service_api_route_controller, gateway_superusers, admin_user)
+
+            # Verify error message contains expected users
+            error_message = str(exc_info.value)
+            assert "Migration failure detected" in error_message
+            for missing_user in expected_errors:
+                assert missing_user in error_message
+
+        else:
+            # Test success scenarios
+            cmd._ensure_controller_gateway_superusers(service_api_route_controller, gateway_superusers, admin_user)
+
+        # Verify promotions happened
+        for username in expected_promotions:
+            user = created_users[username]
+            user.refresh_from_db()
+            assert user.is_superuser is True, f"User {username} should have been promoted to superuser"
+
+        # Verify expected output messages
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        for expected_msg in expected_output:
+            assert expected_msg in output, f"Expected message '{expected_msg}' not found in output"

@@ -942,18 +942,28 @@ class Command(BaseCommand):
 
         # Validate Controller ↔ Gateway consistency
         if controller_api:
-            self._validate_controller_gateway_superusers(controller_api, gateway_superusers, user)
+            self._ensure_controller_gateway_superusers(controller_api, gateway_superusers, user)
 
         # Demote superusers in Hub/EDA that are not superusers in Gateway
         for service_api in hub_eda_apis:
             self._demote_extra_superusers(service_api, gateway_superusers, user)
 
-    def _validate_controller_gateway_superusers(self, controller_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
+    def _ensure_controller_gateway_superusers(self, controller_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
         """
-        Validate that Controller and Gateway superusers match exactly.
+        Ensure that Controller and Gateway superusers are consistent by promoting users as needed.
 
-        After migration, all resources have Gateway's service_id, so this validation
-        checks that the shared resource registry has consistent superuser flags.
+        This method validates superuser consistency between Controller and Gateway after migration.
+        Users who are superusers in Controller but not in Gateway are automatically promoted.
+        If users are missing from Gateway entirely, this indicates a migration failure.
+
+        Args:
+            controller_api: ServiceAPIRoute for the Controller service
+            gateway_superusers: Set of usernames who are superusers in Gateway
+            user: User to perform API calls as
+
+        Raises:
+            CommandError: If users are superusers in Controller but don't exist in Gateway
+                         (indicating migration failure)
         """
         client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
 
@@ -988,8 +998,21 @@ class Command(BaseCommand):
         controller_only = controller_superusers - gateway_superusers
 
         if controller_only:
-            self.stderr.write(f"Error: Users are superusers in Controller but not Gateway: {sorted(controller_only)}")
-            raise CommandError(f"Superuser inconsistency detected: Users {sorted(controller_only)} are superusers in Controller but not in Gateway")
+            self.stdout.write(f"Found {len(controller_only)} users who are superusers in Controller but not Gateway: {sorted(controller_only)}")
+            # Promote these users to superuser in Gateway
+            missing_users = []
+            for username in controller_only:
+                try:
+                    gateway_user = User.objects.get(username=username)
+                    gateway_user.is_superuser = True
+                    gateway_user.save()
+                    self.stdout.write(f"Promoted Gateway user '{username}' to superuser to match Controller status")
+                except User.DoesNotExist:
+                    missing_users.append(username)
+
+            if missing_users:
+                self.stderr.write(f"Error: Users {sorted(missing_users)} are superusers in Controller but don't exist in Gateway")
+                raise CommandError(f"Migration failure detected: Users {sorted(missing_users)} should have been migrated but are missing from Gateway")
 
         if not controller_only:
             self.stdout.write("✓ Controller and Gateway superusers are consistent")
