@@ -1,12 +1,13 @@
 import logging
 
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
+from ansible_base.lib.utils.converters import IntOrUUIDConverter
 from ansible_base.rbac.api.views import RoleMetadataView, TeamAccessAssignmentViewSet, TeamAccessViewSet, UserAccessAssignmentViewSet, UserAccessViewSet
 from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from django.conf import settings
 from django.contrib import admin
-from django.urls import include, path, re_path
+from django.urls import include, path, re_path, register_converter
 
 from aap_gateway_api import views
 from aap_gateway_api.router import router
@@ -20,6 +21,7 @@ team_access_view = TeamAccessViewSet.as_view({'get': 'list'})
 user_access_assignment_view = UserAccessAssignmentViewSet.as_view({'get': 'list'})
 team_access_assignment_view = TeamAccessAssignmentViewSet.as_view({'get': 'list'})
 
+register_converter(IntOrUUIDConverter, "int_or_uuid")
 
 urlpatterns = [
     # Load base URLs first
@@ -28,15 +30,15 @@ urlpatterns = [
     path('', include(root_urls)),
     # Extra DAB RBAC views that need to be included because we exclude it from api_version_urls
     path(r'role_metadata/', RoleMetadataView.as_view(), name="role-metadata"),
-    path('api/gateway/v1/role_user_access/<str:model_name>/<int:pk>/', user_access_view, name="role-user-access"),
-    path('api/gateway/v1/role_team_access/<str:model_name>/<int:pk>/', team_access_view, name="role-team-access"),
+    path('api/gateway/v1/role_user_access/<str:model_name>/<int_or_uuid:pk>/', user_access_view, name="role-user-access"),
+    path('api/gateway/v1/role_team_access/<str:model_name>/<int_or_uuid:pk>/', team_access_view, name="role-team-access"),
     path(
-        'api/gateway/v1/role_user_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
+        'api/gateway/v1/role_user_access/<str:model_name>/<int_or_uuid:pk>/<str:actor_pk>/',
         user_access_assignment_view,
         name='role-user-access-assignments',
     ),
     path(
-        'api/gateway/v1/role_team_access/<str:model_name>/<int:pk>/<str:actor_pk>/',
+        'api/gateway/v1/role_team_access/<str:model_name>/<int_or_uuid:pk>/<str:actor_pk>/',
         team_access_assignment_view,
         name='role-team-access-assignments',
     ),
