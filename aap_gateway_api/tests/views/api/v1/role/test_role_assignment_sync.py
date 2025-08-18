@@ -360,6 +360,19 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
 class TestAssignmentSyncMixinMethods:
     """Tests for specific methods in AssignmentSyncMixin"""
 
+    def get_assignment_url(self):
+        return get_relative_url('roleuserassignment-list')
+
+    @pytest.fixture
+    def regular_user(self):
+        return User.objects.create(username='testuser')
+
+    @pytest.fixture
+    def http_port(self):
+        """Mock HTTP port needed by ServiceAPIRoute"""
+        http_port, _ = HTTPPort.objects.get_or_create(name='api-port', defaults={'number': 8000, 'is_api_port': True, 'use_https': False})
+        return http_port
+
     @pytest.fixture
     def viewset_instance(self):
         """Create a mock viewset instance to test mixin methods"""
@@ -418,3 +431,126 @@ class TestAssignmentSyncMixinMethods:
         mock_client_class.assert_called_once_with(mock_service, raise_if_bad_request=True)
 
         assert result == mock_client_class.return_value
+
+    @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
+    @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
+    def test_get_direct_client_galaxy_service_maps_correctly(self, mock_service_get, mock_client_class, viewset_instance):
+        """Test get_direct_client correctly maps galaxy service to galaxy api_slug after fix for AAP-51363"""
+        mock_service = Mock()
+        mock_service_get.return_value = mock_service
+
+        mock_role_def = Mock()
+        mock_role_def.content_type.service = 'galaxy'
+
+        result = viewset_instance.get_direct_client(mock_role_def)
+
+        # After fix, galaxy service should map to galaxy api_slug, not hub
+        mock_service_get.assert_called_once_with(api_slug='galaxy')
+        mock_client_class.assert_called_once_with(mock_service, raise_if_bad_request=True)
+
+        assert result == mock_client_class.return_value
+
+    @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
+    @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
+    def test_get_direct_client_awx_service_maps_to_controller(self, mock_service_get, mock_client_class, viewset_instance):
+        """Test get_direct_client correctly maps awx service to controller api_slug"""
+        mock_service = Mock()
+        mock_service_get.return_value = mock_service
+
+        mock_role_def = Mock()
+        mock_role_def.content_type.service = 'awx'
+
+        result = viewset_instance.get_direct_client(mock_role_def)
+
+        # AWX service should still map to controller api_slug
+        mock_service_get.assert_called_once_with(api_slug='controller')
+        mock_client_class.assert_called_once_with(mock_service, raise_if_bad_request=True)
+
+        assert result == mock_client_class.return_value
+
+    @pytest.fixture
+    def galaxy_role_definition(self):
+        """Role definition for galaxy service resources (hub collection)"""
+        # Create content type for galaxy service
+        ct, created = DABContentType.objects.get_or_create(
+            service='galaxy',
+            model='collection',
+            defaults={
+                'id': max(DABContentType.objects.values_list('id', flat=True)) + 1,
+                'app_label': 'galaxy',
+                'api_slug': 'galaxy.collection',
+                'pk_field_type': 'integer',
+            },
+        )
+        if not created:
+            ct.service = 'galaxy'  # Ensure service is galaxy
+            ct.save()
+
+        # Create role definition for galaxy resources
+        role_def, created = RoleDefinition.objects.get_or_create(
+            name='Galaxy Collection Role', content_type=ct, defaults={'description': 'A galaxy collection-specific role'}
+        )
+        return role_def
+
+    @pytest.fixture
+    def galaxy_service_api_route(self, http_port):
+        """Mock service API route for galaxy service"""
+        service_type, created = ServiceType.objects.get_or_create(name='galaxy', defaults={'service_index_path': '/pulp/api/v3/'})
+        service_cluster, created = ServiceCluster.objects.get_or_create(name='galaxy-cluster', defaults={'service_type': service_type})
+        service_api_route, created = ServiceAPIRoute.objects.get_or_create(
+            api_slug='galaxy',
+            defaults={
+                'name': 'galaxy-service',
+                'service_cluster': service_cluster,
+                'gateway_path': '/galaxy/',
+                'http_port': http_port,
+                'service_port': 8080,
+                'is_service_https': False,
+            },
+        )
+        return service_api_route
+
+    @pytest.fixture
+    def mock_galaxy_collection(self, galaxy_role_definition):
+        """Mock galaxy collection object using RemoteObject for service-specific tests"""
+        return RemoteObject(object_id=456, content_type=galaxy_role_definition.content_type)
+
+    @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
+    @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
+    def test_create_assignment_galaxy_service_role_aap_51363_fix(
+        self,
+        mock_service_get,
+        mock_direct_client_class,
+        admin_api_client,
+        regular_user,
+        mock_galaxy_collection,
+        galaxy_role_definition,
+        galaxy_service_api_route,
+    ):
+        """Test creating role assignment for galaxy service role (AAP-51363 fix)
+
+        This test reproduces the original bug scenario where:
+        1. Role definition has content_type.service = 'galaxy'
+        2. service_type_to_api_slug('galaxy') should return 'galaxy' (not 'hub')
+        3. ServiceAPIRoute.objects.get(api_slug='galaxy') should succeed
+        """
+        mock_service_get.return_value = galaxy_service_api_route
+        mock_direct_client = Mock()
+        mock_direct_client_class.return_value = mock_direct_client
+
+        data = {'user': regular_user.id, 'object_id': mock_galaxy_collection.object_id, 'role_definition': galaxy_role_definition.id}
+
+        response = admin_api_client.post(self.get_assignment_url(), data)
+
+        assert response.status_code == 201
+
+        # Verify assignment was created
+        assignment = RoleUserAssignment.objects.get(user=regular_user, object_id=mock_galaxy_collection.object_id, role_definition=galaxy_role_definition)
+        assert assignment is not None
+
+        # Verify ServiceAPIRoute lookup used 'galaxy' api_slug (not 'hub')
+        mock_service_get.assert_called_once_with(api_slug='galaxy')
+
+        # Verify direct client was used for service-specific role
+        mock_direct_client_class.assert_called_once_with(galaxy_service_api_route, raise_if_bad_request=True)
+        mock_direct_client.sync_assignment.assert_called_once_with(assignment)
