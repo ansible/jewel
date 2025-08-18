@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceType
-from aap_gateway_api.models.service_type import DefaultServiceType, service_type_to_api_slug
+from aap_gateway_api.models.service_type import DefaultServiceType, get_service_type_name
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
@@ -288,7 +288,7 @@ class Command(BaseCommand):
         self.upstream_service_id = service_metadata["service_id"]
         # Convert the service resource_registry type to the gateway name for the service
         # Preserve coercion of awx -> controller and galaxy -> hub
-        service_type_name = service_type_to_api_slug(service_metadata["service_type"])
+        service_type_name = get_service_type_name(service_metadata["service_type"])
 
         upstream_service_type = ServiceType.objects.filter(name=service_type_name).first()
         if upstream_service_type is None:
