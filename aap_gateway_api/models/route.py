@@ -10,7 +10,7 @@ from flags.state import flag_enabled
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
-from aap_gateway_api.models.service_type import DefaultServiceType
+from aap_gateway_api.models.service_type import DefaultServiceType, StreamingServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
 
 API_PREFIX = "/api/"
@@ -211,6 +211,10 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             },
             "typed_per_filter_config": {},
         }
+
+        if StreamingServiceType.is_streaming_service(self.service_cluster.service_type.name):
+            cfg["route"]["idle_timeout"] = f"{get_preference_value('proxy', 'stream_idle_timeout')}s"
+            cfg["route"]["timeout"] = f"{get_preference_value('proxy', 'max_stream_duration')}s"
 
         if self.service_cluster.upstream_hostname:
             cfg["route"]["host_rewrite_literal"] = self.service_cluster.upstream_hostname

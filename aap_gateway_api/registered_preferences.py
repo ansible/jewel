@@ -132,6 +132,30 @@ register(
 )
 
 register(
+    section="proxy",
+    preference_name="stream_idle_timeout",
+    default=60,
+    required=True,
+    preference_type="int",
+    help_text=_(
+        "Timeout in seconds for idle streaming connections (e.g., AAP Lightspeed chatbot). Stream is closed if no data is transmitted within this period."
+    ),
+    encrypted=False,
+)
+
+register(
+    section="proxy",
+    preference_name="max_stream_duration",
+    default=3600,
+    required=True,
+    preference_type="int",
+    help_text=_(
+        "Maximum total duration in seconds for streaming connections (e.g., AAP Lightspeed chatbot). Stream is closed after this time regardless of activity."
+    ),
+    encrypted=False,
+)
+
+register(
     section="local_login",
     preference_name="password_min_length",
     default=0,
