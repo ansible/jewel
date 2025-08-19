@@ -52,10 +52,11 @@ class CSRFSerializer(JSONSerializer):
 
         valid_values = []
         for url in getattr(settings, 'CSRF_TRUSTED_ORIGINS', []):
-            if invalid_reason := check_csrf_origin(url) is None:
+            invalid_reason = check_csrf_origin(url)
+            if invalid_reason is None:
                 valid_values.append(url)
             else:
-                logger.error(f"CSRF_TRUSTED_ORIGINS has an invalid value {invalid_reason}")
+                logger.error(f"CSRF_TRUSTED_ORIGINS has an invalid value: {invalid_reason}")
 
         return valid_values + ret
 
