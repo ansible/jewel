@@ -320,9 +320,11 @@ register(
     required=False,
     preference_type="bool",
     help_text=_(
-        "For security reasons, users from external auth providers (LDAP, SAML, SSO, Radius, and others) "
-        "are not allowed to create OAuth2 tokens. To change this behavior, enable this setting. "
-        "Existing tokens will not be deleted when this setting is toggled off."
+        "Enabling this feature allows users who log in via an external provider (e.g., LDAP, SAML) "
+        "to create OAuth 2.0 tokens for use with the AAP API. "
+        "An AAP token’s lifecycle is managed independently from the external authentication session. "
+        "Refer to the 'Manage OAuth2 token creation for external users' section in the "
+        "Red Hat Ansible documentation for details."
     ),
     encrypted=False,
     label=_('Allow external users to create OAuth2 tokens'),
