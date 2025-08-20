@@ -157,7 +157,7 @@ class _ExternalAuth:
             get_db_connection_status('default', timeout)
             return None
         except Exception as e:
-            return self._return_no_auth_with_reason(f'Unable to connect to database: {type(e).__name__}')
+            return self._return_no_auth_with_reason(f'Unable to connect to database: {type(e).__name__}', http_status_code=503)
 
     def get_jwt_for_user(self, user):
         if jwt := JWTSessionCache.get(user.pk):
