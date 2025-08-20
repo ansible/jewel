@@ -45,3 +45,16 @@ class Team(AbstractTeam):
         blank=True,
         help_text="The list of admins for this team",
     )
+
+
+class TestPermissionObject(CommonModel):
+    class Meta:
+        default_permissions = ('view',)
+
+    organization = models.ForeignKey(
+        Organization,
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE,
+        related_name="testpermissionobjects",
+    )

@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'ansible_base.jwt_consumer',
+    'ansible_base.rbac',
     'ansible_base.resource_registry',
     'service_test_app',
     'social_django',
@@ -170,7 +171,7 @@ REST_FRAMEWORK = {
         'ansible_base.rest_filters.rest_framework.order_backend.OrderByBackend',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 5,
+    'PAGE_SIZE': int(os.environ.get("REST_FRAMEWORK_PAGE_SIZE", "100")),
 }
 
 AUTH_USER_MODEL = 'service_test_app.User'
@@ -221,3 +222,10 @@ SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL = 'https://keycloak.example.com/auth/real
 ENABLE_SERVICE_BACKED_SSO = True
 
 RESOURCE_SERVER_SYNC_ENABLED = False
+
+ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
+ANSIBLE_BASE_RBAC_MODEL_REGISTRY = {
+    "service_test_app.Organization": {"parent_field_name": None},
+    "service_test_app.Team": {"parent_field_name": "organization"},
+    "service_test_app.TestPermissionObject": {"parent_field_name": "organization"},
+}

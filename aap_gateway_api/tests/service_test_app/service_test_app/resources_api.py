@@ -1,7 +1,8 @@
 import os
 
+from ansible_base.rbac.models import RoleDefinition
 from ansible_base.resource_registry.registry import ResourceConfig, ServiceAPIConfig, SharedResource
-from ansible_base.resource_registry.shared_types import OrganizationType, TeamType, UserType
+from ansible_base.resource_registry.shared_types import OrganizationType, RoleDefinitionType, TeamType, UserType
 from service_test_app.models import Organization, Team, User
 
 
@@ -19,4 +20,5 @@ RESOURCE_LIST = (
         Organization,
         shared_resource=SharedResource(serializer=OrganizationType, is_provider=False),
     ),
+    ResourceConfig(RoleDefinition, shared_resource=SharedResource(serializer=RoleDefinitionType, is_provider=False)),
 )

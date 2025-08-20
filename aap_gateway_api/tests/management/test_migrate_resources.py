@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleUserAssignment
+from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
@@ -36,10 +36,10 @@ def conflicting_team(conflicting_org):
     team.delete()
 
 
-def _launch_service(svc_route: Route, fixture: str, svc_type: str = "awx"):
+def _launch_service(svc_route: Route, fixture: str, svc_type: str = "awx", page_size=None):
     port = svc_route.service_port
     key = svc_route.service_cluster.generate_key()
-    return launch_service(service_type=svc_type, port=port, setup_fixture=fixture, secret_key=key.secret)
+    return launch_service(service_type=svc_type, port=port, setup_fixture=fixture, secret_key=key.secret, page_size=page_size)
 
 
 def _kill_service(proc):
@@ -560,6 +560,7 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
                 # Mock successful migration workflow
                 mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
                 mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
+                mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
             else:
                 # Hub fails
                 mock_client.get_service_metadata.side_effect = HTTPError("Mock HTTP error")
@@ -721,6 +722,7 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         # Mock empty resource lists for clean migration
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
         mock_client_class.return_value = mock_client
 
         # Should successfully process the single service
@@ -1000,6 +1002,7 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
         }
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
         mock_client_class.return_value = mock_client
 
         # Run migration
@@ -1253,38 +1256,46 @@ def test_comprehensive_multi_service_migration(
 
 
 @pytest.fixture
-def migration_service_controller_user_roles_paginated(patched_resource_client, service_api_route_controller):
-    """Launch a controller service with controller-specific user role assignment test data that requires pagination"""
-    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_user_roles_pagination")
+def migration_service_controller_roles_paginated(patched_resource_client, service_api_route_controller):
+    """Launch a controller service with controller-specific role assignment test data that requires pagination"""
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles_pagination", page_size=10)
     yield service_api_route_controller
     _kill_service(proc)
 
 
 @pytest.fixture
-def migration_service_controller_user_roles(patched_resource_client, service_api_route_controller):
-    """Launch a controller service with controller-specific user role assignment test data"""
-    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_user_roles")
+def migration_service_controller_roles(patched_resource_client, service_api_route_controller):
+    """Launch a controller service with controller-specific role assignment test data"""
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles")
     yield service_api_route_controller
     _kill_service(proc)
 
 
 @pytest.fixture
-def migration_service_controller_user_roles_duplicate_teams(patched_resource_client, service_api_route_controller):
-    """Launch a controller service with controller-specific user role assignment test data across duplicate team names"""
-    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_user_roles_duplicate_teams")
+def migration_service_controller_roles_duplicate_teams(patched_resource_client, service_api_route_controller):
+    """Launch a controller service with controller-specific role assignment test data across duplicate team names"""
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles_duplicate_teams")
     yield service_api_route_controller
     _kill_service(proc)
 
 
 @pytest.fixture
-def migration_service_hub_user_roles(patched_resource_client, service_api_route_hub):
-    """Launch a hub service with hub-specific user role assignment test data"""
-    proc = _launch_service(svc_route=service_api_route_hub, fixture="migration_tests_hub_user_roles", svc_type="galaxy")
+def migration_service_controller_roles_remoteobject(patched_resource_client, service_api_route_controller):
+    """Launch a controller service with controller-specific role assignment test data across duplicate team names"""
+    proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles_remoteobject")
+    yield service_api_route_controller
+    _kill_service(proc)
+
+
+@pytest.fixture
+def migration_service_hub_roles(patched_resource_client, service_api_route_hub):
+    """Launch a hub service with hub-specific role assignment test data"""
+    proc = _launch_service(svc_route=service_api_route_hub, fixture="migration_tests_hub_roles", svc_type="galaxy")
     yield service_api_route_hub
     _kill_service(proc)
 
 
-def _assignment_exists(username, role_definition_name, object_name) -> bool:
+def _user_assignment_exists(username, role_definition_name, object_name) -> bool:
     """Helper function to check if an assignment exists in gateway post-migration"""
     assignment = RoleUserAssignment.objects.filter(user__username=username, role_definition__name=role_definition_name).first()
     if assignment:
@@ -1297,14 +1308,14 @@ def _assignment_exists(username, role_definition_name, object_name) -> bool:
 
 
 @pytest.mark.django_db()
-def test_controller_user_role_assignment_migration(migration_service_controller_user_roles, admin_user, admin_api_client, patched_resource_client):
+def test_controller_role_assignment_migration(migration_service_controller_roles, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in controller are migrated"""
 
-    # migration_service_controller_user_roles creates users in controller with org admin, org member, team admin, team member
-    service_client = patched_resource_client(service=migration_service_controller_user_roles, user=admin_user, raise_if_bad_request=True)
+    # migration_service_controller_roles creates users in controller with org admin, org member, team admin, team member
+    service_client = patched_resource_client(service=migration_service_controller_roles, user=admin_user, raise_if_bad_request=True)
 
     call_command("migrate_service_data", username=admin_user.username)
-    _assert_all_resources_synced(admin_api_client, migration_service_controller_user_roles, service_client)
+    _assert_all_resources_synced(admin_api_client, migration_service_controller_roles, service_client)
 
     for assignment in (
         ('controller-organization-admin', 'Organization Admin', 'controller-admin-organization'),
@@ -1312,66 +1323,77 @@ def test_controller_user_role_assignment_migration(migration_service_controller_
         ('controller-team-admin', 'Team Admin', 'controller-admin-team'),
         ('controller-team-member', 'Team Member', 'controller-member-team'),
         ('controller-platform-auditor', 'Platform Auditor', None),
+        ('controller-dummy-user', 'controller-dummy-role', 'controller-dummy-organization'),
     ):
-        assert _assignment_exists(assignment[0], assignment[1], assignment[2])
-
-    # Assert that other role assignments are not migrated
-    for assignment in (('controller-dummy-user', 'role-no-migrate', 'controller-dummy-organization'),):
-        assert not _assignment_exists(assignment[0], assignment[1], assignment[2])
+        assert _user_assignment_exists(assignment[0], assignment[1], assignment[2])
 
 
 @pytest.mark.django_db()
-def test_controller_user_role_assignment_migration_paginated(
-    migration_service_controller_user_roles_paginated, admin_user, admin_api_client, patched_resource_client
-):
+def test_controller_role_assignment_migration_paginated(migration_service_controller_roles_paginated, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in controller are migrated with pagination"""
 
-    # migration_service_controller_user_roles creates users in controller with org admin, org member, team admin, team member
+    # migration_service_controller_roles_paginated creates 40 assignments and sets the page size low to force pagination
     assert RoleUserAssignment.objects.filter(user__username='many-assignments-user').count() == 0
     call_command("migrate_service_data", username=admin_user.username)
     assert RoleUserAssignment.objects.filter(user__username='many-assignments-user').count() == 40
 
 
 @pytest.mark.django_db()
-def test_controller_user_role_assignment_migration_duplicate_team_names(
-    migration_service_controller_user_roles_duplicate_teams, admin_user, admin_api_client, patched_resource_client
+def test_controller_role_assignment_migration_duplicate_team_names(
+    migration_service_controller_roles_duplicate_teams, admin_user, admin_api_client, patched_resource_client
 ):
     """Test that role assignments in controller are migrated when duplicate team names exist"""
 
-    # migration_service_controller_user_roles creates users in controller with org admin, org member, team admin, team member
     assert RoleUserAssignment.objects.filter(user__username='duplicate-teams-user').count() == 0
     call_command("migrate_service_data", username=admin_user.username)
-    # Check that these apply to both teams, maybe member for one and admin for the other?
     assert RoleUserAssignment.objects.filter(user__username='duplicate-teams-user').count() == 2
 
 
 @pytest.mark.django_db()
-def test_hub_user_role_assignment_migration(migration_service_hub_user_roles, admin_user, admin_api_client, patched_resource_client):
+def test_controller_role_assignment_remoteobject(migration_service_controller_roles_remoteobject, admin_user, admin_api_client, patched_resource_client):
+    """Test that role assignments in controller are migrated when they reference remote objects"""
+    assert RoleUserAssignment.objects.filter(user__username='test-user').count() == 0
+    assert RoleTeamAssignment.objects.filter(team__name='test-team').count() == 0
+    call_command("migrate_service_data", username=admin_user.username)
+    assert RoleUserAssignment.objects.filter(user__username='test-user').count() == 1
+    # Confirm that the migrated assignment's RoleDefinition references a RemoteObject
+    rd = RoleUserAssignment.objects.get(user__username='test-user').role_definition
+    assert issubclass(rd.content_type.model_class(), RemoteObject)
+
+
+@pytest.mark.django_db()
+def test_hub_role_assignment_migration(migration_service_hub_roles, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in hub are migrated"""
 
-    # migration_service_controller_user_roles creates users in controller with org admin, org member, team admin, team member
-    service_client = patched_resource_client(service=migration_service_hub_user_roles, user=admin_user, raise_if_bad_request=True)
+    service_client = patched_resource_client(service=migration_service_hub_roles, user=admin_user, raise_if_bad_request=True)
 
     call_command("migrate_service_data", username=admin_user.username)
-    _assert_all_resources_synced(admin_api_client, migration_service_hub_user_roles, service_client)
+    _assert_all_resources_synced(admin_api_client, migration_service_hub_roles, service_client)
 
-    # For hub, only team member should be migrated
-    for assignment in (('hub-team-member', 'Team Member', 'hub-member-team'),):
-        assert _assignment_exists(assignment[0], assignment[1], assignment[2])
-
-    # Assert that other role assignments are not migrated from hub
+    # For hub, team member should be migrated, as should the dummy role.
     for assignment in (
+        ('hub-team-member', 'Team Member', 'hub-member-team'),
+        ('hub-dummy-user', 'hub-dummy-role', 'hub-dummy-organization'),
+    ):
+        assert _user_assignment_exists(assignment[0], assignment[1], assignment[2])
+
+    # Assert that other platform role assignments are not migrated from hub
+    for assignment in (
+        # We don't create these first two, so they should not be present
         ('hub-organization-admin', 'Organization Admin', 'hub-admin-organization'),
         ('hub-organization-member', 'Organization Member', 'hub-member-organization'),
+        # We create Team Admin in the fixture but it should only be migrated from Controller.
+        # Hub django migrations for 2.6 should be changing Team Admins to Team Members
+        # before we migrate, but we still want to be sure that we're not elevating hub admin roles
+        # to platform admin roles during migration
         ('hub-team-admin', 'Team Admin', 'hub-admin-team'),
-        ('hub-dummy-user', 'role-no-migrate', 'hub-dummy-organization'),
     ):
-        assert not _assignment_exists(assignment[0], assignment[1], assignment[2])
+        assert not _user_assignment_exists(assignment[0], assignment[1], assignment[2])
 
 
 # Tests for role user assignment handling when objects don't exist in Gateway DB
 @pytest.mark.django_db()
-def test_user_role_assignment_migration_skips_user_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
+def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
     # Mock successful migration
     with (
         patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
@@ -1399,6 +1421,7 @@ def test_user_role_assignment_migration_skips_user_not_found(admin_user, capsys,
             "count": 0,
             "results": [{"object_ansible_id": None, "content_type": None, "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}],
         }
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1411,7 +1434,7 @@ def test_user_role_assignment_migration_skips_user_not_found(admin_user, capsys,
 
 
 @pytest.mark.django_db()
-def test_user_role_assignment_migration_skips_role_definition_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
+def test_role_assignment_migration_skips_role_definition_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
     # Mock successful migration
     with (
         patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
@@ -1446,6 +1469,7 @@ def test_user_role_assignment_migration_skips_role_definition_not_found(admin_us
                 }
             ],
         }
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1458,7 +1482,7 @@ def test_user_role_assignment_migration_skips_role_definition_not_found(admin_us
 
 
 @pytest.mark.django_db()
-def test_user_role_assignment_migration_skips_object_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
+def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
     # Mock successful migration
     with (
         patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
@@ -1494,6 +1518,7 @@ def test_user_role_assignment_migration_skips_object_not_found(admin_user, capsy
                 }
             ],
         }
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1624,6 +1649,7 @@ def test_use_controller_password_flag_integration_with_migration(admin_user, cap
         mock_client.get_resource.return_value.json.return_value = mock_user_resource
         mock_client.update_resource.return_value = Mock()
         mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
 
         mock_client_class.return_value = mock_client
 
@@ -1718,6 +1744,7 @@ def test_use_controller_password_flag_only_for_user_resources(admin_user, servic
         mock_client.get_resource.side_effect = mock_get_resource
         mock_client.update_resource.return_value = Mock()
         mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
 
         mock_client_class.return_value = mock_client
 
@@ -1792,6 +1819,7 @@ def test_use_controller_password_flag_not_set_for_existing_users_during_merge(ad
         mock_client.get_resource.return_value.json.return_value = mock_user_resource
         mock_client.update_resource.return_value = Mock()
         mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
 
         mock_client_class.return_value = mock_client
 
