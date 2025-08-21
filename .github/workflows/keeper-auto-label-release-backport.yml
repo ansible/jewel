@@ -22,8 +22,8 @@ jobs:
 
     env:
       # Define accepted release and backport values
-      ACCEPTED_RELEASES: '["2.5", "2.6", "2.7", "devel"]'
-      ACCEPTED_BACKPORTS: '["2.5", "2.6", "2.7"]'
+      ACCEPTED_RELEASES: '["2.5", "2.6", "2.7", "2.8", "devel"]'
+      ACCEPTED_BACKPORTS: '["2.5", "2.6", "2.7", "2.8"]'
 
     steps:
       - name: Parse YAML from PR description and add labels
