@@ -2,7 +2,7 @@
     "version": "0.1.4",
     "artifact": {
         "type": "aap-candidate",
-        "version": "2.5",
+        "version": "2.6",
         "builds": []
     },
     "scenario": {

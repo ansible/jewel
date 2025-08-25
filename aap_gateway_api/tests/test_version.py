@@ -6,7 +6,7 @@ from aap_gateway_api.version import get_aap_version, get_api_version
 
 
 def test_get_api_version_from_version_file():
-    expected_version = "2.5.0"
+    expected_version = "2.6.0"
     with mock.patch("importlib.metadata.version", side_effect=Exception), mock.patch("builtins.open", return_value=StringIO(expected_version)):
         assert get_api_version() == expected_version
 
