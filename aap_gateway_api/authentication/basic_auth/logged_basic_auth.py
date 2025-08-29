@@ -27,7 +27,7 @@ class LoggedBasicAuthentication(authentication.BasicAuthentication):
 
 class LoggedBasicAuthenticationScheme(OpenApiAuthenticationExtension):
     target_class = 'aap_gateway_api.authentication.basic_auth.logged_basic_auth.LoggedBasicAuthentication'
-    name = 'Basic Authentication'
+    name = 'Basic_Authentication'
 
     def get_security_definition(self, auto_schema):
         return {
