@@ -315,7 +315,7 @@ services:
 
 {% if enabled_containers['ldap'] | bool %}
   ldap:
-    image: bitnami/openldap:{{ ldap_image_version }}
+    image: bitnamilegacy/openldap:{{ ldap_image_version }}
     container_name: aap_gw_ldap_1
     hostname: ldap
     user: "${UID:-1000}"
