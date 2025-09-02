@@ -327,6 +327,21 @@ register(
 )
 
 register(
+    section="configuration",
+    preference_name="ORG_ADMINS_CAN_SEE_ALL_USERS",
+    default=True,
+    required=False,
+    preference_type="bool",
+    help_text=_(
+        'Controls whether any Organization Admin can view all users and teams, '
+        'even those not associated with their Organization. '
+        'When enabled, organization admins can view all users, even users not associated with their organizations. '
+        'When disabled, organization admins can only see users from their own organizations, '
+    ),
+    encrypted=False,
+)
+
+register(
     section="oauth2_provider",
     preference_name="ALLOW_OAUTH2_FOR_EXTERNAL_USERS",
     default=False,

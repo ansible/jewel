@@ -459,22 +459,51 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
         finally:
             organizations[0].remove_admin(user)  # Org 1
 
-    def test_permissions(self, user_api_client, user, users, teams, organizations):
+    def test_permissions(self, user_api_client, user, users, teams, organizations, set_preference):
+        """Test org admin permissions with ORG_ADMINS_CAN_SEE_ALL_USERS=False"""
+        # Explicitly set to False to test security-first behavior
+        set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False)
         with self.org_admin_scope(organizations, user):
             self._test_permissions(user_api_client, user, users, teams, organizations)
 
     def _test_list(self, user_api_client, user, users, teams, organizations):
-        """Org Admin sees all users"""
+        """Org Admin sees users from organizations they can view (default behavior)"""
         url = get_relative_url("user-list")
         response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
         assert response.status_code == 200
 
-        cnt = User.objects.count()
-        assert response.data['count'] == cnt
+        # With ORG_ADMINS_CAN_SEE_ALL_USERS=False (default), org admin only sees:
+        # - Users from organizations they can view (their own org members)
+        # - Superusers (always visible)
+        # - Themselves (always visible)
+        expected_users = set([user.id])  # The admin user themselves
+
+        # Add users from the organization they admin
+        same_org = organizations[0]
+        expected_users.update([u.id for u in users[same_org]])
+
+        # Add superusers
+        for u in User.objects.filter(is_superuser=True):
+            expected_users.add(u.id)
+
+        actual_user_ids = set([u['id'] for u in response.data['results']])
+        assert actual_user_ids == expected_users
 
     def _test_detail(self, user_api_client, user, users, teams, organizations):
-        """Org Admin sees all users"""
-        self._test_detail_see_all(user_api_client, users, teams, organizations)
+        """Org Admin sees users from organizations they can view (default behavior)"""
+        # Test that org admin can see users from their own organization
+        same_org = organizations[0]
+        for same_org_member in users[same_org]:
+            url = get_relative_url("user-detail", kwargs={"pk": same_org_member.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 200, f"{self.ROLE_NAME} should see {same_org_member}"
+
+        # Test that org admin cannot see users from other organizations by default
+        different_org = organizations[1]
+        for different_org_member in users[different_org]:
+            url = get_relative_url("user-detail", kwargs={"pk": different_org_member.pk})
+            response = user_api_client.get(url)
+            assert response.status_code == 404, f"{self.ROLE_NAME} should not see {different_org_member} when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
 
     def _test_create(self, user_api_client, user, users, teams, organizations):
         """Org Admin can create user"""
@@ -494,11 +523,11 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
         # Org Admin can update Org Admin of the same org
         self._test_update_one(user_api_client, users[same_org][1], status_code=200)
 
-        # Org Admin can't update Team Members of org's team, if they are not Org Members in the same time
-        self._test_update_one(user_api_client, users[team_in_same_org][0], status_code=403)
+        # Org Admin can't see Team Members of org's team if they are not Org Members (404, not 403)
+        self._test_update_one(user_api_client, users[team_in_same_org][0], status_code=404)
 
-        # Org Admin can't update Org Member of different org
-        self._test_update_one(user_api_client, users[different_org][0], status_code=403)
+        # Org Admin can't see Org Member of different org (404, not 403)
+        self._test_update_one(user_api_client, users[different_org][0], status_code=404)
 
         # When Org Member became also Org Member of different org, Org Admin can't update
         different_org.add_member(users[same_org][0])
@@ -523,11 +552,11 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
         # Org Admin can delete Org Admin of the same org
         self._test_delete_one(user_api_client, users[same_org][1], status_code=204)
 
-        # Org Admin can't delete Team Members of org's team, if they are not Org Members in the same time
-        self._test_delete_one(user_api_client, users[team_in_same_org][0], status_code=403)
+        # Org Admin can't see Team Members of org's team if they are not Org Members (404, not 403)
+        self._test_delete_one(user_api_client, users[team_in_same_org][0], status_code=404)
 
-        # Org Admin can't delete Org Member of different org
-        self._test_delete_one(user_api_client, users[different_org][0], status_code=403)
+        # Org Admin can't see Org Member of different org (404, not 403)
+        self._test_delete_one(user_api_client, users[different_org][0], status_code=404)
 
         # When Org Member became also Org Member of different org, Org Admin can't delete
         different_org.add_member(users[same_org][2])
@@ -540,6 +569,47 @@ class TestUserOrgAdminPermissions(TestUserPermissionsBase):
         self._test_delete_one(user_api_client, users[same_org][2], status_code=403)
         users[same_org][2].is_superuser = False
         users[same_org][2].save()
+
+    @pytest.mark.parametrize("setting_value,expected_behavior", [(True, "can_see_all"), (False, "limited_visibility")])
+    def test_permissions_with_setting_variations(self, user_api_client, user, users, teams, organizations, set_preference, setting_value, expected_behavior):
+        """Test org admin permissions with different ORG_ADMINS_CAN_SEE_ALL_USERS values"""
+        set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', setting_value)
+
+        with self.org_admin_scope(organizations, user):
+            # Test user list visibility
+            url = get_relative_url("user-list")
+            response = user_api_client.get(url, {"order_by": "username", "page_size": 100})
+            assert response.status_code == 200
+
+            if expected_behavior == "can_see_all":
+                # When True: org admin should see all users
+                cnt = User.objects.count()
+                assert response.data['count'] == cnt, f"Org Admin should see all {cnt} users when ORG_ADMINS_CAN_SEE_ALL_USERS=True"
+            else:
+                # When False: org admin should see limited users (themselves, their org members, and superusers)
+                expected_users = set([user.id])  # The admin user themselves
+                same_org = organizations[0]
+                expected_users.update([u.id for u in users[same_org]])
+                for u in User.objects.filter(is_superuser=True):
+                    expected_users.add(u.id)
+
+                actual_user_ids = set([u['id'] for u in response.data['results']])
+                assert actual_user_ids == expected_users
+                assert response.data['count'] < User.objects.count(), "Org Admin should see limited users when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
+
+            # Test detail view for users from different organizations
+            different_org = organizations[5]
+            different_org_member = users[different_org][0]
+            url = get_relative_url("user-detail", kwargs={"pk": different_org_member.pk})
+            response = user_api_client.get(url)
+
+            if expected_behavior == "can_see_all":
+                assert response.status_code == 200, f"Org Admin should see {different_org_member} when ORG_ADMINS_CAN_SEE_ALL_USERS=True"
+                # Note: Even when ORG_ADMINS_CAN_SEE_ALL_USERS=True, org admins still can't update users
+                # from different organizations - they can only VIEW them
+                # This is expected behavior - the preference only affects visibility, not modification permissions
+            else:
+                assert response.status_code == 404, f"Org Admin should not see {different_org_member} when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
 
 
 @pytest.mark.django_db

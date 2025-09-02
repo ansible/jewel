@@ -1,6 +1,5 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
-from django.test import override_settings
 
 from aap_gateway_api.models import User
 from aap_gateway_api.tests.views.api.v1.conftest import api_get_and_assert
@@ -119,7 +118,10 @@ def test_organization_delete_permissions(admin_api_client, user_api_client, user
     assert response.status_code == 404
 
 
-def test_organization_association_permissions(user_api_client, user, user_factory, organization, org_member_rd):
+def test_organization_association_permissions(user_api_client, user, user_factory, organization, org_member_rd, set_preference):
+    # Set preference to test security-first approach
+    set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False)
+
     user2 = user_factory("Test User 2")
     user3 = user_factory("Test User 3")
 
@@ -153,20 +155,29 @@ def test_organization_association_permissions(user_api_client, user, user_factor
             assert organization.admins.count() == 0
 
         # User is Org Admin
-        # => Can associate
+        # => Can associate users they can see (security-first approach)
+        # With ORG_ADMINS_CAN_SEE_ALL_USERS=False (explicitly set), org admins can only see users
+        # from organizations they manage, plus superusers and themselves
         organization.remove_member(user)
         organization.add_admin(user)
 
         assert organization.users.count() == 0, assoc_type
         assert organization.admins.count() == 1, assoc_type
-        response = user_api_client.post(url, data={"instances": [user.pk, user2.pk, user3.pk]})
+
+        # Org admin can associate themselves (always visible)
+        response = user_api_client.post(url, data={"instances": [user.pk]})
         assert response.status_code == 204
+
+        # Org admin cannot associate users they can't see (user2, user3 are not in any org the admin manages)
+        response = user_api_client.post(url, data={"instances": [user2.pk, user3.pk]})
+        assert response.status_code == 400  # Bad request because users are not visible for association
+
         if assoc_type == 'users':
-            assert organization.users.count() == 3
+            assert organization.users.count() == 1  # Only user was associated
             assert organization.admins.count() == 1
         else:
             assert organization.users.count() == 0
-            assert organization.admins.count() == 3
+            assert organization.admins.count() == 1  # Only user was associated
 
         # Cleanup
         for u in [user, user2, user3]:
@@ -308,10 +319,12 @@ class TestOrganizationOptions:
         assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for superuser"
 
 
-@override_settings(ORG_ADMINS_CAN_SEE_ALL_USERS=False)
 @pytest.mark.django_db
 @pytest.mark.parametrize("api_type", ["old", "new"])
-def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization, api_type):
+def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization, api_type, set_preference):
+    # Set preference to test security-first approach
+    set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False)
+
     other_user = User.objects.create(username='another-user')
     org_admin_rd.give_permission(user, organization)
 

@@ -151,7 +151,11 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
                 assert set(self._get_ids(response.data['results'])) == set([admin.id for admin in admins])
 
     @pytest.mark.parametrize("api_type", ["old_api", "rbac_api"])
-    def test_team_associate_members(self, user_type, user, user_factory, organization, team, api_type):
+    @pytest.mark.parametrize("org_admins_can_see_all", [True, False])
+    def test_team_associate_members(self, user_type, user, user_factory, organization, team, api_type, org_admins_can_see_all, set_preference):
+        # Set the preference to test both functional (True) and security-first (False) approaches
+        set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', org_admins_can_see_all)
+
         rando = user_factory('rando')
 
         if api_type == "old_api":
@@ -167,18 +171,25 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
             response = self.api_client.post(url, data=data)
 
         # Results have to be the same using RBAC API or deprecated API
-        if user_type in ['org_admin', 'superuser']:
-            # org admin and superuser can add
+        if user_type == 'superuser':
+            # Superuser can always add users (global view permission)
+            assert team.users.filter(id=rando.id).exists()
+            assert response.status_code == success_code, response.data
+        elif user_type == 'org_admin' and org_admins_can_see_all:
+            # With functional approach (True), org admins can see and associate all users
             assert team.users.filter(id=rando.id).exists()
             assert response.status_code == success_code, response.data
         else:
-            # user can not add rando as a member due to not being able to view that user
+            # Other users (or org admins with security-first approach) can't add users they can't see
             assert not team.users.filter(id=rando.id).exists()
 
             if user_type == 'user':
                 assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
             elif user_type == 'org_member':
                 assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
+            elif user_type == 'org_admin':
+                # With security-first approach (False), org admins can't associate users they can't see
+                assert response.status_code == 400, response.data
             elif user_type == 'team_member':
                 assert response.status_code == (403 if api_type == 'old_api' else 400), response.data
             elif user_type == 'platform_auditor':
