@@ -314,6 +314,19 @@ register(
 )
 
 register(
+    section="configuration",
+    preference_name="MANAGE_ORGANIZATION_AUTH",
+    default=True,
+    required=False,
+    preference_type="bool",
+    help_text=_(
+        'Controls whether any Organization Admin has the privileges to create and manage users and teams. '
+        'You may want to disable this ability if you are using an LDAP or SAML integration.'
+    ),
+    encrypted=False,
+)
+
+register(
     section="oauth2_provider",
     preference_name="ALLOW_OAUTH2_FOR_EXTERNAL_USERS",
     default=False,
