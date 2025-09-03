@@ -16,6 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceType
+from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 from aap_gateway_api.models.service_type import DefaultServiceType, get_service_type_name
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
@@ -232,6 +233,12 @@ class Command(BaseCommand):
         else:
             # Validate superuser consistency across all services
             self._ensure_superuser_consistency(service_apis, user)
+
+            self.stdout.write("\n=== Re-enabling service authentication ===")
+            # Mark migration as completed
+            MigrateServiceDataHasRan.mark_migration_completed()
+            self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
+
             self.stdout.write("\nAll services migration completed successfully!")
 
     def load_types_and_permissions(self, service_apis, user):

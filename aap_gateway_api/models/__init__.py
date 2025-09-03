@@ -3,6 +3,7 @@ from aap_gateway_api.models.user import User, MigratedUserMetadata  # noqa: 401 
 
 from ansible_base.rbac import permission_registry
 
+from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan  # noqa: 401
 from aap_gateway_api.models.organization import Organization  # noqa: 401
 from aap_gateway_api.models.preference import Preference  # noqa: 401
 from aap_gateway_api.models.route import Route  # noqa: 401

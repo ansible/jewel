@@ -18,6 +18,7 @@ from rest_framework.test import APIClient
 from aap_gateway_api.models import (
     AdditionalRoute,
     DefaultServiceType,
+    MigrateServiceDataHasRan,
     Preference,
     ServiceAPIRoute,
     ServiceCluster,
@@ -517,3 +518,14 @@ def keycloak_authenticator(db):
     )
     yield authenticator
     delete_authenticator(authenticator)
+
+
+@pytest.fixture(autouse=True)
+def migrate_service_data_completed(db):
+    """
+    Fixture to automatically set MigrateServiceDataHasRan to True for all testing purposes.
+    This allows service authentication to work in tests by marking the
+    migrate_service_data command as completed.
+    """
+    # Mark migration as completed
+    MigrateServiceDataHasRan.mark_migration_completed()

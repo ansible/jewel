@@ -4,12 +4,24 @@ from ansible_base.lib.utils.response import get_relative_url
 from django.core.exceptions import ValidationError
 from django.urls import NoReverseMatch
 from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import APIException
 
+from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 from aap_gateway_api.utils.service_token import validate_service_token
 
 logger = logging.getLogger('aap.gateway.authentication.service_token_auth')
 
 service_token_header = "X-ANSIBLE-SERVICE-AUTH"
+
+
+class MigrateDataNotCompleteError(APIException):
+    """
+    Exception raised when migration has not completed but service authentication is attempted.
+    """
+
+    status_code = 423
+    default_detail = 'Service authentication is locked until migrate_service_data is complete.'
+    default_code = 'migrate_service_data_not_complete'
 
 
 class ServiceTokenAuthentication(BaseAuthentication):
@@ -30,6 +42,11 @@ class ServiceTokenAuthentication(BaseAuthentication):
 
         if token is None:
             return None
+
+        # Check if migration has completed before allowing service authentication
+        if not MigrateServiceDataHasRan.has_migration_completed():
+            logger.info("Service authentication attempted but migrate_service_data has not completed.")
+            raise MigrateDataNotCompleteError()
 
         try:
             token_data = validate_service_token(token)
