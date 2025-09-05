@@ -153,21 +153,20 @@ dev-up: gateway-up awx-up eda-server-up .eda-server-change-password-hack hub-ser
 	else \
 		make .awx-settings-hack ; \
 		$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh controller controller/v2/ping/ ; \
-		docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=controller --username="$(GW_ADMIN_USERNAME)"  --merge-organizations=true ; \
 	fi;
 	if [[ "$(EDA_REPO)" == "skip" ]]; then \
 		echo "Skipping EDA server actions" ; \
 	else \
 		$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh EDA eda/v1/status/ ; \
-		docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=eda --username="$(GW_ADMIN_USERNAME)" --merge-organizations=true ; \
 	fi;
 	if [[ "$(HUB_REPO)" == "skip" ]]; then \
 		echo "Skipping Hub actions" ; \
 	else \
 		make .hub-settings-hack ; \
 		$(AAP_DEV_DIR)/aap-service-cluster-up-check.sh hub galaxy/pulp/api/v3/status/ ; \
-		docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --api-slug=galaxy --username="$(GW_ADMIN_USERNAME)" --merge-organizations=true ; \
 	fi;
+	docker exec -it aap_gw_1 aap-gateway-manage migrate_service_data --username="$(GW_ADMIN_USERNAME)" ; \
+
 
 ## Remove all running containers from "service-mesh" network
 disconnect-service-mesh-network:
