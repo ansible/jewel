@@ -5,7 +5,6 @@ import requests
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
-from rest_framework.test import APIClient
 
 from aap_gateway_api.models import HTTPPort, Organization, ServiceAPIRoute, ServiceCluster, ServiceType, Team, User
 
@@ -13,17 +12,6 @@ from aap_gateway_api.models import HTTPPort, Organization, ServiceAPIRoute, Serv
 @pytest.mark.django_db
 class TestAssignmentSyncMixin:
     """Tests for AssignmentSyncMixin focusing on resource client mocking"""
-
-    @pytest.fixture
-    def api_client(self):
-        return APIClient()
-
-    @pytest.fixture
-    def superuser(self):
-        user = User.objects.create(username='admin', is_superuser=True)
-        user.set_password('password')
-        user.save()
-        return user
 
     @pytest.fixture
     def regular_user(self):
@@ -97,11 +85,6 @@ class TestAssignmentSyncMixin:
         )
         return service_api_route
 
-    @pytest.fixture
-    def authenticated_client(self, api_client, superuser):
-        api_client.force_authenticate(user=superuser)
-        return api_client
-
 
 @pytest.mark.django_db
 class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
@@ -114,14 +97,14 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
         return get_relative_url('roleuserassignment-detail', kwargs={'pk': assignment_id})
 
     @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
-    def test_create_assignment_gateway_owned_role(self, mock_client_class, authenticated_client, regular_user, organization, gateway_role_definition):
+    def test_create_assignment_gateway_owned_role(self, mock_client_class, admin_api_client, regular_user, organization, gateway_role_definition):
         """Test creating role assignment for gateway-owned role definition"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
         data = {'user': regular_user.id, 'object_id': organization.id, 'role_definition': gateway_role_definition.id}
 
-        response = authenticated_client.post(self.get_assignment_url(), data)
+        response = admin_api_client.post(self.get_assignment_url(), data)
 
         assert response.status_code == 201
 
@@ -136,7 +119,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
     @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
     def test_create_assignment_service_specific_role(
-        self, mock_service_get, mock_direct_client_class, authenticated_client, regular_user, mock_inventory, service_role_definition, service_api_route
+        self, mock_service_get, mock_direct_client_class, admin_api_client, regular_user, mock_inventory, service_role_definition, service_api_route
     ):
         """Test creating role assignment for service-specific role definition"""
         mock_service_get.return_value = service_api_route
@@ -145,7 +128,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
 
         data = {'user': regular_user.id, 'object_id': mock_inventory.object_id, 'role_definition': service_role_definition.id}
 
-        response = authenticated_client.post(self.get_assignment_url(), data)
+        response = admin_api_client.post(self.get_assignment_url(), data)
 
         assert response.status_code == 201
 
@@ -160,7 +143,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
     @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
     def test_create_assignment_service_http_error(
-        self, mock_service_get, mock_direct_client_class, authenticated_client, regular_user, organization, service_role_definition, service_api_route
+        self, mock_service_get, mock_direct_client_class, admin_api_client, regular_user, organization, service_role_definition, service_api_route
     ):
         """Test HTTP error handling when creating service-specific assignment"""
         mock_service_get.return_value = service_api_route
@@ -178,7 +161,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
 
         data = {'user': regular_user.id, 'object_id': organization.id, 'role_definition': service_role_definition.id}
 
-        response = authenticated_client.post(self.get_assignment_url(), data)
+        response = admin_api_client.post(self.get_assignment_url(), data)
 
         # Should return 400 with the proxied error
         assert response.status_code == 400
@@ -187,7 +170,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
     @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
     def test_create_assignment_service_http_error_no_json(
-        self, mock_service_get, mock_direct_client_class, authenticated_client, regular_user, organization, service_role_definition, service_api_route
+        self, mock_service_get, mock_direct_client_class, admin_api_client, regular_user, organization, service_role_definition, service_api_route
     ):
         """Test HTTP error handling when service returns non-JSON error"""
         mock_service_get.return_value = service_api_route
@@ -206,14 +189,14 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
 
         data = {'user': regular_user.id, 'object_id': organization.id, 'role_definition': service_role_definition.id}
 
-        response = authenticated_client.post(self.get_assignment_url(), data)
+        response = admin_api_client.post(self.get_assignment_url(), data)
 
         # Should return 500 with the text error
         assert response.status_code == 500
         assert response.data == {'detail': 'Internal Server Error'}
 
     @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
-    def test_delete_assignment_gateway_owned_role(self, mock_client_class, authenticated_client, regular_user, organization, gateway_role_definition):
+    def test_delete_assignment_gateway_owned_role(self, mock_client_class, admin_api_client, regular_user, organization, gateway_role_definition):
         """Test deleting role assignment for gateway-owned role definition"""
         # Create assignment first
         assignment = gateway_role_definition.give_permission(regular_user, organization)
@@ -221,7 +204,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        response = authenticated_client.delete(self.get_assignment_detail_url(assignment.id))
+        response = admin_api_client.delete(self.get_assignment_detail_url(assignment.id))
 
         assert response.status_code == 204
 
@@ -235,7 +218,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
     @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
     def test_delete_assignment_service_specific_role(
-        self, mock_service_get, mock_direct_client_class, authenticated_client, regular_user, mock_inventory, service_role_definition, service_api_route
+        self, mock_service_get, mock_direct_client_class, admin_api_client, regular_user, mock_inventory, service_role_definition, service_api_route
     ):
         """Test deleting role assignment for service-specific role definition"""
         # Create assignment first - use direct DB creation to avoid validation
@@ -245,7 +228,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
         mock_direct_client = Mock()
         mock_direct_client_class.return_value = mock_direct_client
 
-        response = authenticated_client.delete(self.get_assignment_detail_url(assignment.id))
+        response = admin_api_client.delete(self.get_assignment_detail_url(assignment.id))
 
         assert response.status_code == 204
 
@@ -268,14 +251,14 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
         return get_relative_url('roleteamassignment-detail', kwargs={'pk': assignment_id})
 
     @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
-    def test_create_team_assignment_gateway_owned_role(self, mock_client_class, authenticated_client, team, organization, gateway_role_definition):
+    def test_create_team_assignment_gateway_owned_role(self, mock_client_class, admin_api_client, team, organization, gateway_role_definition):
         """Test creating team role assignment for gateway-owned role definition"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
         data = {'team': team.id, 'object_id': organization.id, 'role_definition': gateway_role_definition.id}
 
-        response = authenticated_client.post(self.get_assignment_url(), data)
+        response = admin_api_client.post(self.get_assignment_url(), data)
 
         assert response.status_code == 201
 
@@ -290,7 +273,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
     @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
     def test_create_team_assignment_service_specific_role(
-        self, mock_service_get, mock_direct_client_class, authenticated_client, team, mock_inventory, service_role_definition, service_api_route
+        self, mock_service_get, mock_direct_client_class, admin_api_client, team, mock_inventory, service_role_definition, service_api_route
     ):
         """Test creating team role assignment for service-specific role definition"""
         mock_service_get.return_value = service_api_route
@@ -299,7 +282,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
 
         data = {'team': team.id, 'object_id': mock_inventory.object_id, 'role_definition': service_role_definition.id}
 
-        response = authenticated_client.post(self.get_assignment_url(), data)
+        response = admin_api_client.post(self.get_assignment_url(), data)
 
         assert response.status_code == 201
 
@@ -312,7 +295,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
         mock_direct_client.sync_assignment.assert_called_once_with(assignment)
 
     @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
-    def test_delete_team_assignment_gateway_owned_role(self, mock_client_class, authenticated_client, team, organization, gateway_role_definition):
+    def test_delete_team_assignment_gateway_owned_role(self, mock_client_class, admin_api_client, team, organization, gateway_role_definition):
         """Test deleting team role assignment for gateway-owned role definition"""
         # Create assignment first
         assignment = gateway_role_definition.give_permission(team, organization)
@@ -320,7 +303,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        response = authenticated_client.delete(self.get_assignment_detail_url(assignment.id))
+        response = admin_api_client.delete(self.get_assignment_detail_url(assignment.id))
 
         assert response.status_code == 204
 
@@ -334,7 +317,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
     @patch('aap_gateway_api.models.ServiceAPIRoute.objects.get')
     def test_delete_team_assignment_service_specific_role(
-        self, mock_service_get, mock_direct_client_class, authenticated_client, team, mock_inventory, service_role_definition, service_api_route
+        self, mock_service_get, mock_direct_client_class, admin_api_client, team, mock_inventory, service_role_definition, service_api_route
     ):
         """Test deleting team role assignment for service-specific role definition"""
         # Create assignment first
@@ -344,7 +327,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
         mock_direct_client = Mock()
         mock_direct_client_class.return_value = mock_direct_client
 
-        response = authenticated_client.delete(self.get_assignment_detail_url(assignment.id))
+        response = admin_api_client.delete(self.get_assignment_detail_url(assignment.id))
 
         assert response.status_code == 204
 
