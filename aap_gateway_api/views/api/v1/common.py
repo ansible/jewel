@@ -89,7 +89,7 @@ class ResourceAPIUpdateMixin(ResourceAllClientMixin):
     @transaction.atomic
     def perform_destroy(self, instance):
         ansible_id = instance.resource.ansible_id
-        instance.delete()
+        super().perform_destroy(instance)  # Covers parent validation (e.g., managed role checks)
         self._resources_client.delete_resource(ansible_id)
 
     @transaction.atomic
@@ -98,7 +98,10 @@ class ResourceAPIUpdateMixin(ResourceAllClientMixin):
         serializer_class = original.resource.content_type.resource_type.serializer_class
         original_hash = hash_serializer_data(original, serializer_class)
 
-        updated = serializer.save()
+        super().perform_update(serializer)  # Covers parent validation (e.g., managed role checks)
+
+        # Get updated instance from serializer after parent save
+        updated = serializer.instance
         new_hash = hash_serializer_data(updated, serializer_class)
 
         if original_hash != new_hash:
