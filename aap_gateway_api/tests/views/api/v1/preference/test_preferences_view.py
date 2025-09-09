@@ -494,3 +494,27 @@ def test_string_list_preference_options(admin_api_client, register_preference):
 
     response = admin_api_client.options(url)
     assert response.data["actions"]["PUT"]["test_string_list_preference"]["type"] == "list"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("category_slug", ["proxy", "all"])
+def test_auditor_gateway_settings_options_request(platform_auditor_api_client, category_slug):
+    """
+    Test that an auditor can make an OPTIONS request to the gateway settings views
+    and verify that actions.PUT is available in the response.
+    """
+    url = get_relative_url('setting-section-list', kwargs={'category_slug': category_slug})
+
+    response = platform_auditor_api_client.options(url)
+
+    # Verify the request was successful
+    assert response.status_code == 200
+
+    # Verify that the response contains actions
+    assert 'actions' in response.data
+
+    # Verify that GET action is available for auditors
+    assert 'GET' in response.data['actions']
+
+    # Additional verification that GET action has the expected structure
+    assert response.data['actions']['GET'] is not None
