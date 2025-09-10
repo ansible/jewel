@@ -1,5 +1,9 @@
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from django.core.exceptions import PermissionDenied
+from django.http import Http404
+from rest_framework import exceptions
 from rest_framework.metadata import SimpleMetadata
+from rest_framework.request import clone_request
 
 from aap_gateway_api.fields.serializers import JSONListField
 
@@ -13,6 +17,34 @@ class SettingsPreferenceMetadata(SimpleMetadata):
         super().__init__()
         # Add some additional type annotations for UI to use to select the correct form widgets
         self.label_lookup[JSONListField] = "list"
+
+    def determine_actions(self, request, view):
+        """
+        For the settings view we return information to communicate what fields are
+        available, and their data-type
+        """
+        actions = {}
+        # We add 'GET' method below as our only change from the superclass
+        for method in {'GET', 'PUT', 'POST'} & set(view.allowed_methods):
+            view.request = clone_request(request, method)
+            try:
+                # Test global permissions
+                if hasattr(view, 'check_permissions'):
+                    view.check_permissions(view.request)
+                # Test object permissions
+                if method == 'PUT' and hasattr(view, 'get_object'):
+                    view.get_object()
+            except (exceptions.APIException, PermissionDenied, Http404):
+                pass
+            else:
+                # If user has appropriate permissions for the view, include
+                # appropriate metadata about the fields that should be supplied.
+                serializer = view.get_serializer()
+                actions[method] = self.get_serializer_info(serializer)
+            finally:
+                view.request = request
+
+        return actions
 
     def get_field_info(self, field):
         """
