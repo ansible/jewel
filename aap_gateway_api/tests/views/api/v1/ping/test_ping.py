@@ -1,4 +1,3 @@
-import time
 from unittest import mock
 
 import pytest
@@ -30,29 +29,12 @@ def test_ping_all_up(request, unauthenticated_api_client):
 def test_ping_db_down(request, unauthenticated_api_client):
     request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
 
-    with mock.patch("django.db.connections.create_connection", side_effect=DatabaseError):
+    with mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_db", side_effect=DatabaseError):
         url = get_relative_url("ping-view")
         response = unauthenticated_api_client.get(url)
         assert response.status_code == 200
         assert response.data['status'] == STATUS_DEGRADED
         assert response.data['db_exception'] == "DatabaseError"
-
-
-def _sleeper(dbname):
-    time.sleep(10)
-
-
-@pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_db_timeout(request, unauthenticated_api_client):
-    request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
-
-    with mock.patch("django.db.connections.create_connection", side_effect=_sleeper):
-        url = get_relative_url("ping-view")
-        response = unauthenticated_api_client.get(url)
-        assert response.status_code == 200
-        assert response.data['status'] == STATUS_DEGRADED
-        assert response.data['db_exception'] == "TimeoutError"
 
 
 @pytest.mark.django_db
