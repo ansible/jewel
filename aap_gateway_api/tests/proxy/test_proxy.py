@@ -1,4 +1,3 @@
-import time
 from json import dumps
 from os import linesep
 from unittest import mock
@@ -165,28 +164,6 @@ class TestExternalAuth:
         # assert permission denied
         assert response.status.code == 7
 
-    def test_check_bad_db(self, ext_auth):
-        from django.db import DatabaseError
-
-        request = Request()
-
-        with mock.patch("django.db.connections.create_connection", side_effect=DatabaseError('DB_error')):
-            response = ext_auth.Check(request, None)
-
-        # assert permission denied
-        assert response.status.code == 7
-
-    def _sleeper(self, dbname):
-        time.sleep(10)
-
-    def test_check_db_timeout(self, ext_auth):
-        request = Request()
-
-        with mock.patch("django.db.connections.create_connection", side_effect=self._sleeper):
-            response = ext_auth.Check(request, None)
-
-        assert response.status.code == 7
-
     @pytest.mark.parametrize(
         "accept_type,body,expected_type",
         [
@@ -206,6 +183,12 @@ class TestExternalAuth:
         for header in response.denied_response.headers:
             if header.header.key == 'content-type':
                 assert expected_type == header.header.value
+
+    def test_no_auth_required(self, ext_auth, expected_log):
+        request = Request(path="/static/favicon.ico")
+        response = ext_auth.Check(request, None)
+        assert response.status.code == 0
+        assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
 
     def test_check_internal_route_unauthenticated(self, ext_auth):
         request = Request(is_internal_route="t")
@@ -258,6 +241,7 @@ class TestExternalAuth:
             ):
                 response = ext_auth.Check(request, None)
         for header in expected_headers:
+            print(f"Testing header {header}.  Present? {any(x for x in response.ok_response.headers if x.header.key == header)}")
             assert any(x for x in response.ok_response.headers if x.header.key == header)
 
     @pytest.mark.parametrize(

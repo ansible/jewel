@@ -156,6 +156,18 @@ register(
 )
 
 register(
+    section="proxy",
+    preference_name="trusted_header_timeout",
+    default=1000,
+    required=True,
+    preference_type="int_range",
+    help_text=_("The validity period (in milliseconds) for the trusted header."),
+    encrypted=False,
+    min_value=100,
+    max_value=10000,
+)
+
+register(
     section="local_login",
     preference_name="password_min_length",
     default=0,

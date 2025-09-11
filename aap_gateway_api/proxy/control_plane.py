@@ -3,7 +3,6 @@ import logging
 import time
 import uuid
 from io import BytesIO
-from typing import Optional
 
 from ansible_base.authentication.middleware import AuthenticatorBackendMiddleware
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
@@ -26,7 +25,6 @@ from rest_framework.settings import api_settings
 
 from aap_gateway_api.models import ServiceCluster
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
-from aap_gateway_api.utils.db import get_db_connection_status
 
 from .service_auth import ServiceAuthHelper
 
@@ -98,6 +96,7 @@ class _ExternalAuth:
         # Remove original authorization header unless we're overriding it so the service does not see it
         headers_to_remove = [] if any(x for x in self.headers if x.header.key == 'Authorization') else ['Authorization']
 
+        self._add_trusted_proxy_header()
         response = external_auth_pb2.OkHttpResponse(
             headers=self.headers,
             headers_to_remove=headers_to_remove,
@@ -109,6 +108,7 @@ class _ExternalAuth:
     def _return_no_authentication_required(self):
         # This endpoint did not require authentication so no logs required
         logger.debug(f"No JWT authentication required for {self.request_id} {self.request_path}")
+        self._add_trusted_proxy_header()
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
     def _return_not_authenticated(self):
@@ -119,6 +119,7 @@ class _ExternalAuth:
         # that doesn't require authentication. The final decision on whether or
         # not to accept the request is up to the service.
         self._log_process_time()
+        self._add_trusted_proxy_header()
         return external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse(headers=self.headers))
 
     def _return_no_auth_with_reason(self, reason, html_body=None, code=7, http_status_code=403):
@@ -147,17 +148,20 @@ class _ExternalAuth:
         logger.error(f"CSRF verification failure for {self.request_id} - {reason}")
         return self._return_no_auth_with_reason(reason=reason, html_body=csrf_failure(self.drf_request, reason).content)
 
-    def _can_read_from_db(self) -> Optional[external_auth_pb2.CheckResponse]:
-        # This is overkill if we have CONN_HEALTH_CHECK=True in the settings
-        # But just incase we will also do our own detection
-        timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
-        # We need to close out old connections here to prevent accidental usage of obsolete database connections
+    def _ensure_db_availability(self) -> None:
+        # Formerly we did a new connection and test read from the DB, but it did not perform
+        # well or increase robustness reliably.  Consequently this function is intended to
+        # close any stale/broken DB connections on each authentication cycle to avoid issues.
+        # We set CONN_HEALTH_CHECKS=True by default, which should also help.
         close_old_connections()
+
+    def _add_trusted_proxy_header(self) -> None:
         try:
-            get_db_connection_status('default', timeout)
-            return None
-        except Exception as e:
-            return self._return_no_auth_with_reason(f'Unable to connect to database: {type(e).__name__}', http_status_code=503)
+            self.headers.append(
+                HeaderValueOption(header=HeaderValue(key='x-trusted-proxy', value=generate_x_trusted_proxy_header(get_jwt_rsa_key()))),
+            )
+        except Exception:
+            logger.exception("Failed to generate x-trusted-proxy")
 
     def get_jwt_for_user(self, user):
         if jwt := JWTSessionCache.get(user.pk):
@@ -206,6 +210,7 @@ class _ExternalAuth:
     def Check(self, request, context):
         self.start_time = time.time()
 
+        self.headers = []
         self.service_type = request.attributes.context_extensions["service_type"]
         self.auth_type = request.attributes.context_extensions["auth_type"]
 
@@ -229,17 +234,8 @@ class _ExternalAuth:
             logger.exception(e)
             raise
 
-        connection_response = self._can_read_from_db()
-        if connection_response is not None:
-            return connection_response
-
-        self.headers = []
-        try:
-            self.headers.append(
-                HeaderValueOption(header=HeaderValue(key='x-trusted-proxy', value=generate_x_trusted_proxy_header(get_jwt_rsa_key()))),
-            )
-        except Exception:
-            logger.exception("Failed to generate x-trusted-proxy")
+        # Close any old DB connections
+        self._ensure_db_availability()
 
         self.request_path = request.attributes.request.http.path
         self.is_internal_route = self.is_route_internal(request)
