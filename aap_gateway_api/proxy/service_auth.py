@@ -7,7 +7,7 @@ from django.conf import settings
 from aap_gateway_api.models import ServiceCluster
 from aap_gateway_api.utils.preferences import SettingNotSetException, TooManyPreferencesException, get_setting
 
-logger = logging.getLogger("aap_gateway_api.proxy.service_auth")
+logger = logging.getLogger("aap.gateway.proxy.service_auth")
 
 
 class ServiceAuthHelper:

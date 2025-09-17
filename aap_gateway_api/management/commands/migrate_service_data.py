@@ -21,7 +21,7 @@ from aap_gateway_api.models.service_type import DefaultServiceType, get_service_
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
-logger = logging.getLogger('aap_gateway_api.management.commands.migrate_service_data')
+logger = logging.getLogger('aap.gateway.management.commands.migrate_service_data')
 User = get_user_model()
 
 

@@ -6,7 +6,7 @@ from dynamic_preferences.serializers import BaseSerializer
 
 from aap_gateway_api.utils.requests import check_csrf_origin
 
-logger = logging.getLogger("aap.aap_gateway_api.preferences.serializers")
+logger = logging.getLogger("aap.gateway.preferences.serializers")
 
 
 class JSONString(str):
