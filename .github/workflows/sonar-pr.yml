@@ -25,6 +25,10 @@ on:
       - CI
     types:
       - completed
+  push:
+    branches:
+      - devel
+      - 'stable-*'
   workflow_dispatch:
     inputs:
       pr_number:
@@ -54,9 +58,10 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') ||
-      (github.event_name == 'workflow_dispatch')
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/devel' || startsWith(github.ref, 'refs/heads/stable-')))
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       # Download coverage artifact (for both workflow_run and workflow_dispatch)
       - name: Download coverage artifact
@@ -79,6 +84,13 @@ jobs:
             echo "EVENT_TYPE=pull_request" >> $GITHUB_ENV
             echo "COMMIT_SHA=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
             echo "REPO_NAME=${{ github.event.repository.full_name }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Direct push to long-lived branch
+            echo "PR_NUMBER=0" >> $GITHUB_ENV
+            echo "EVENT_TYPE=push" >> $GITHUB_ENV
+            echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+            echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
+            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
           else
             # Use inputs for workflow_dispatch
             echo "PR_NUMBER=${{ inputs.pr_number }}" >> $GITHUB_ENV
@@ -103,21 +115,21 @@ jobs:
         run: |
           echo "🔍 SonarCloud Analysis Decision Summary"
           echo "========================================"
-          
+
           # Check CI Event type
           if [ "${{ env.EVENT_TYPE }}" = "pull_request" ]; then
             echo "├── CI Event: ✅ Pull Request"
-            
+
             # Check backport labels (only for PRs)
             if [ "${{ env.PR_NUMBER }}" != "0" ]; then
               echo "├── Backport Label: ➖ N/A (Skip check for workflow_dispatch)"
-              
+
               # Check Python changes for PRs
               files=$(gh api repos/${{ env.REPO_NAME }}/pulls/${{ env.PR_NUMBER }}/files --jq '.[].filename')
-              
+
               # Get file extensions for summary
               extensions=$(echo "$files" | sed 's/.*\.//' | sort | uniq | tr '\n' ',' | sed 's/,$//')
-              
+
               # Check if any Python files were changed
               python_files=$(echo "$files" | grep '\.py$' || true)
               if [ -z "$python_files" ]; then
@@ -136,6 +148,7 @@ jobs:
           else
             # For push events, always proceed
             echo "├── CI Event: ✅ Push"
+            echo "├── Branch: ${{ env.BRANCH_NAME || 'Unknown' }}"
             echo "├── Backport Label: ➖ N/A (Push event)"
             echo "├── Python Changes: ➖ N/A (Full codebase scan)"
             echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
@@ -196,8 +209,19 @@ jobs:
             -Dsonar.pullrequest.base=${{ env.PR_BASE }}
             ${{ env.SONAR_INCLUSIONS && format('-Dsonar.inclusions={0}', env.SONAR_INCLUSIONS) || '' }}
 
-      - name: SonarCloud Scan (Push)
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'push'
+      - name: SonarCloud Scan (Long-lived Branch)
+        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'push' && env.BRANCH_NAME != ''
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
+        with:
+          args: >
+            -Dsonar.scm.revision=${{ env.COMMIT_SHA }}
+            -Dsonar.branch.name=${{ env.BRANCH_NAME }}
+
+      - name: SonarCloud Scan (Push - fallback)
+        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'push' && env.BRANCH_NAME == ''
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
