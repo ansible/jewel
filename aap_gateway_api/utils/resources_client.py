@@ -18,7 +18,7 @@ from aap_gateway_api.utils.preferences import get_preference_value
 
 ResourceRequestBody = DABResourceRequestBody
 
-logger = logging.getLogger('aap_gateway_api.utils.resource_api_client')
+logger = logging.getLogger('aap.gateway.utils.resource_api_client')
 
 
 class GWResourceAPIClient(DABResourceAPIClient):

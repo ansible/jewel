@@ -10,7 +10,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from aap_gateway_api.models import ServiceAPIRoute, User
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient, ResourceRequestBody
 
-logger = logging.getLogger('aap_gateway_api.utils.user_migration')
+logger = logging.getLogger('aap.gateway.utils.user_migration')
 
 
 def can_accounts_be_merged(main_account: User, to_merge: User) -> bool:

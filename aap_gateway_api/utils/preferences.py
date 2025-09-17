@@ -27,7 +27,7 @@ from aap_gateway_api.preferences.types import (
 gateway_preference_manager = gateway_preference_registry.manager()
 separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARATOR', '__')
 
-logger = logging.getLogger("aap_gateway_api.utils.preferences")
+logger = logging.getLogger("aap.gateway.utils.preferences")
 
 
 class TooManyPreferencesException(Exception):
