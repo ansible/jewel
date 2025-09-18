@@ -6,9 +6,8 @@
 - How does this change address the issue?
 
 ```yaml
-release: # (required) "2.5", "2.6", "2.7", "2.8", "devel"
-backport: # (optional) "2.5", "2.6", "2.7", "2.8"
-needs_feature_branch: false
+release: # (required) "2.5" OR "2.6" OR "2.7" OR "devel"
+backport: # (optional) ["2.5", "2.6", "devel"]
 ```
 
 ## Type of Change

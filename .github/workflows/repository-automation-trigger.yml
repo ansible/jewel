@@ -1,0 +1,96 @@
+---
+name: "Repository Automation: Trigger"
+# Simplified trigger workflow - creates minimal artifact and triggers workflow_run event
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled]
+  pull_request:
+    types: [opened, synchronize, edited, ready_for_review, labeled, unlabeled]
+
+# No special permissions required - this runs on forks with default GITHUB_TOKEN
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Create Minimal Metadata
+        env:
+          PR_BODY: '${{ github.event.pull_request.body }}'
+          PR_TITLE: '${{ github.event.pull_request.title }}'
+          PR_HEAD_REF: '${{ github.event.pull_request.head.ref }}'
+          PR_BASE_REF: '${{ github.event.pull_request.base.ref }}'
+        run: |
+          echo "🚀 Creating minimal metadata for workflow_run event"
+          echo "Event: ${{ github.event_name }}.${{ github.event.action }}"
+          echo "Number: ${{ github.event.pull_request.number || github.event.issue.number }}"
+          echo "Repository: ${{ github.repository }}"
+          
+          mkdir -p ./pr-metadata
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # Create base64 encoded metadata to prevent JSON parsing issues with special characters
+            TITLE_B64=$(echo -n '$PR_TITLE' | base64 -w 0)
+            BODY_B64=$(echo -n '$PR_BODY' | base64 -w 0)
+            
+            cat > ./pr-metadata/metadata.json << EOF
+          {
+            "type": "pull_request",
+            "event_action": "${{ github.event.action }}",
+            "number": ${{ github.event.pull_request.number }},
+            "title_base64": "$TITLE_B64",
+            "body_base64": "$BODY_B64",
+            "state": "${{ github.event.pull_request.state }}",
+            "encoding": {
+              "title": "base64",
+              "body": "base64"
+            },
+            "head": {
+              "ref": "$PR_HEAD_REF",
+              "sha": "${{ github.event.pull_request.head.sha }}"
+            },
+            "base": {
+              "ref": "$PR_BASE_REF",
+              "sha": "${{ github.event.pull_request.base.sha }}"
+            },
+            "author": {
+              "login": "${{ github.event.pull_request.user.login }}",
+              "id": ${{ github.event.pull_request.user.id }}
+            }
+          }
+          EOF
+          elif [ "${{ github.event_name }}" == "issues" ]; then
+            # Create base64 encoded metadata to prevent JSON parsing issues with special characters
+            TITLE_B64=$(echo -n '$PR_TITLE' | base64 -w 0)
+            BODY_B64=$(echo -n '$PR_BODY' | base64 -w 0)
+            
+            cat > ./pr-metadata/metadata.json << EOF
+          {
+            "type": "issue",
+            "event_action": "${{ github.event.action }}",
+            "number": ${{ github.event.issue.number }},
+            "title_base64": "$TITLE_B64",
+            "body_base64": "$BODY_B64",
+            "state": "${{ github.event.issue.state }}",
+            "encoding": {
+              "title": "base64",
+              "body": "base64"
+            },
+            "author": {
+              "login": "${{ github.event.issue.user.login }}",
+              "id": ${{ github.event.issue.user.id }}
+            }
+          }
+          EOF
+          fi
+          
+          echo "✅ Minimal metadata created"
+
+      - name: Store Metadata as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-metadata
+          path: pr-metadata/metadata.json
+          retention-days: 1
