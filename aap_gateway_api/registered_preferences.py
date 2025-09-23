@@ -12,6 +12,7 @@ register(
     preference_type="string",
     help_text=_("The header name to push from the proxy to the backend service. WARNING: if this is changed, backends must be updated to compensate!"),
     encrypted=False,
+    label=_('Gateway Token Name'),
 )
 
 register(
@@ -22,6 +23,7 @@ register(
     preference_type="int",
     help_text=_("How long the access tokens are valid for."),
     encrypted=False,
+    label=_('Gateway Access Token Expiration'),
 )
 
 register(
@@ -36,6 +38,7 @@ register(
         "however it can increase the chance the token would expire while being used."
     ),
     encrypted=False,
+    label=_('JWT Expiration Buffer in Seconds'),
 )
 
 register(
@@ -46,6 +49,7 @@ register(
     preference_type="bool",
     help_text=_("Enable basic auth to the gateway API."),
     encrypted=False,
+    label=_('Gateway Basic Auth Enabled'),
 )
 
 register(
@@ -56,6 +60,7 @@ register(
     preference_type="url",
     help_text=_("The URL to the gateway proxy layer."),
     encrypted=False,
+    label=_('Gateway Proxy URL'),
 )
 
 register(
@@ -66,6 +71,7 @@ register(
     preference_type="bool",
     help_text=_("Ignore certificate to the gateway proxy layer."),
     encrypted=False,
+    label=_('Gateway Proxy URL Ignore Certificate'),
 )
 
 register(
@@ -77,6 +83,7 @@ register(
     help_text=_("The JWT private key."),
     encrypted=True,
     on_update=lambda preference, old, new: update_jwt_public_key(new),
+    label=_('JWT Private Key'),
 )
 
 register(
@@ -88,6 +95,7 @@ register(
     help_text=_("The JWT public key (read-only)."),
     encrypted=False,
     read_only=True,
+    label=_('JWT Public Key'),
 )
 
 register(
@@ -98,6 +106,7 @@ register(
     preference_type="int",
     help_text=_("The timeout (in seconds) for the status endpoint to wait when trying to connect to a backend."),
     encrypted=False,
+    label=_('Status Endpoint Backend Timeout in Seconds'),
 )
 
 register(
@@ -108,6 +117,7 @@ register(
     preference_type="bool",
     help_text=_("Should SSL certificates of the services be verified when calling individual nodes for statuses."),
     encrypted=False,
+    label=_('Status Endpoint Backend Verify'),
 )
 
 register(
@@ -119,6 +129,7 @@ register(
     help_text=_("The timeout (in seconds) before the resource client will drop requests after forming connections."),
     encrypted=False,
     min_value=0.0,
+    label=_('Resource Client Request Timeout'),
 )
 
 register(
@@ -129,6 +140,7 @@ register(
     preference_type="int",
     help_text=_("The timeout (in seconds) before the proxy will report a timeout and generate a 504."),
     encrypted=False,
+    label=_('Request Timeout'),
 )
 
 register(
@@ -141,6 +153,7 @@ register(
         "Timeout in seconds for idle streaming connections (e.g., AAP Lightspeed chatbot). Stream is closed if no data is transmitted within this period."
     ),
     encrypted=False,
+    label=_('Stream Idle Timeout'),
 )
 
 register(
@@ -153,6 +166,7 @@ register(
         "Maximum total duration in seconds for streaming connections (e.g., AAP Lightspeed chatbot). Stream is closed after this time regardless of activity."
     ),
     encrypted=False,
+    label=_('Maximum Stream Duration'),
 )
 
 register(
@@ -165,6 +179,7 @@ register(
     encrypted=False,
     min_value=100,
     max_value=10000,
+    label=_('Trusted Header Timeout'),
 )
 
 register(
@@ -177,7 +192,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Password minimum length'),
+    label=_('Minimum number of characters in local password'),
 )
 
 register(
@@ -190,7 +205,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Password minimum numerical digits'),
+    label=_('Minimum number of numerical digits in local password'),
 )
 
 register(
@@ -203,7 +218,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Password minimum uppercase letters'),
+    label=_('Minimum number of uppercase characters in local password'),
 )
 
 register(
@@ -216,7 +231,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Password minimum special characters'),
+    label=_('Minimum number of special characters in local password'),
 )
 
 register(
@@ -227,7 +242,7 @@ register(
     preference_type="bool",
     help_text=_("Can a superuser account save an insecure password."),
     encrypted=False,
-    label=_('Allow system administrators to set insecure user passwords'),
+    label=_('Allow Platform Admins to Set Insecure User Passwords'),
 )
 
 register(
@@ -238,6 +253,7 @@ register(
     preference_type="bool",
     help_text=_("Enabling this setting will tell social auth to use the full email as username instead of the full name."),
     encrypted=False,
+    label=_('Use Email address for usernames'),
 )
 
 register(
@@ -248,6 +264,7 @@ register(
     preference_type="absolute_path_or_url",
     help_text=_("The URL or absolute path to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
     encrypted=False,
+    label=_('Login redirect override URL'),
 )
 
 register(
@@ -258,6 +275,7 @@ register(
     preference_type="longstring",
     help_text=_("Provide specific information (such as a legal notice or a disclaimer) to a text box in the login modal."),
     encrypted=False,
+    label=_('Custom Login Information'),
 )
 
 register(
@@ -280,6 +298,7 @@ register(
     # We are copying this over directly from AWX to match their settings
     min_value=60,
     max_value=30000000000,  # approx 1,000 years, higher values give OverflowError
+    label=_('Session Cookie Age'),
 )
 
 register(
@@ -290,6 +309,7 @@ register(
     preference_type="int",
     help_text=_("The default number of items to show on a list page."),
     encrypted=False,
+    label=_('Default Page Size'),
 )
 
 register(
@@ -300,6 +320,7 @@ register(
     preference_type="int",
     help_text=_("The maximum number of items allowed on a list page."),
     encrypted=False,
+    label=_('Maximum Page Size'),
 )
 
 
@@ -311,6 +332,7 @@ register(
     preference_type="CSRF_list",
     help_text=_("List of CSRF trusted origin URLs. Note, if there are values in Djangos CSRF_TRUSTED_ORIGIN, they will always appear in this list."),
     encrypted=False,
+    label=_('CSRF Trusted Origins List'),
 )
 
 register(
@@ -323,6 +345,7 @@ register(
     encrypted=False,
     read_only=True,
     settings_bound=True,
+    label=_('Deployment Type'),
 )
 
 register(
@@ -336,6 +359,7 @@ register(
         'You may want to disable this ability if you are using an LDAP or SAML integration.'
     ),
     encrypted=False,
+    label=_('Organization Admins Can Manage Users and Teams'),
 )
 
 register(
@@ -351,6 +375,7 @@ register(
         'When disabled, organization admins can only see users from their own organizations, '
     ),
     encrypted=False,
+    label=_('All Users Visible to Organization Admins'),
 )
 
 register(
@@ -367,7 +392,7 @@ register(
         "Red Hat Ansible documentation for details."
     ),
     encrypted=False,
-    label=_('Allow external users to create OAuth2 tokens'),
+    label=_('Allow External Users to Create OAuth2 Tokens'),
 )
 
 register(
@@ -378,6 +403,7 @@ register(
     preference_type="bool",
     help_text=_("Enables the service to gather data on automation and send it to Automation Analytics."),
     encrypted=False,
+    label=_('Gather Insights data for Automation Analytics'),
 )
 
 register(
@@ -388,6 +414,7 @@ register(
     preference_type="url",
     help_text=_("This setting is used to to configure the upload URL for data collection for Automation Analytics."),
     encrypted=False,
+    label=_('Automation Analytics upload URL'),
 )
 
 register(
@@ -398,6 +425,7 @@ register(
     preference_type="string",
     help_text=_("This username is used to send data to Automation Analytics/"),
     encrypted=False,
+    label=_('Red Hat Hybrid Cloud Console Username'),
 )
 
 register(
@@ -408,6 +436,7 @@ register(
     preference_type="string",
     help_text=_("This password is used to send data to Automation Analytics.'"),
     encrypted=True,
+    label=_('Red Hat Hybrid Cloud Console Password'),
 )
 
 register(
@@ -418,6 +447,7 @@ register(
     preference_type="string",
     help_text=_("This username is used to retrieve subscription and content information."),
     encrypted=False,
+    label=_('Subscriptions Username'),
 )
 
 register(
@@ -428,6 +458,7 @@ register(
     preference_type="string",
     help_text=_("This password is used to retrieve subscription and content information.'"),
     encrypted=True,
+    label=_('Subscriptions Password'),
 )
 
 register(
@@ -441,6 +472,7 @@ register(
     preference_type="int_range",
     help_text=_("The maximum number of items allowed on a list page"),
     encrypted=False,
+    label=_('Automation Analytics Gather Interval'),
 )
 
 register(
@@ -453,6 +485,7 @@ register(
     encrypted=False,
     read_only=True,
     settings_bound=True,
+    label=_('Notification RSS Feed URL'),
 )
 
 register(
@@ -464,4 +497,5 @@ register(
     help_text=_("Enable or disable user notifications"),
     encrypted=False,
     read_only=False,
+    label=_('Notification RSS Feed Enabled'),
 )
