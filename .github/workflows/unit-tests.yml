@@ -1,0 +1,167 @@
+---
+name: Unit Tests
+on:
+  pull_request:
+  push:
+    branches:
+      - devel
+env:
+  # Only upload JUnit xml files if we are this repo:
+  TARGET_REPOSITORY: 'ansible/jewel'
+jobs:
+  unit-test:
+    name: ${{ matrix.batch.name }}
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+    permissions:
+      packages: write
+      contents: read
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        batch:
+          - name: "Service-dependent tests"
+            python-version: "3.11"
+            processes: 1  # this is required to be single threaded because the mock service can't do parallelization at this time
+            test-filter:
+              aap_gateway_api/tests/management/test_migrate_resources.py
+              aap_gateway_api/tests/utils/test_crud_resource_in_services.py
+            artifact-suffix: "service"
+          - name: "Views tests"
+            python-version: "3.11"
+            processes: auto
+            test-filter: aap_gateway_api/tests/views/
+            artifact-suffix: "views"
+          - name: "Remaining tests"
+            python-version: "3.11"
+            processes: auto
+            test-filter: >-
+              aap_gateway_api/tests/
+              --ignore=aap_gateway_api/tests/views/
+              --ignore=aap_gateway_api/tests/management/test_migrate_resources.py
+              --ignore=aap_gateway_api/tests/utils/test_crud_resource_in_services.py
+            artifact-suffix: "remaining"
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install build requirements
+        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
+
+      - name: Install python ${{ matrix.batch.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.batch.python-version }}
+
+      - name: Install tox
+        run: pip${{ matrix.batch.python-version }} install tox tox-docker requests
+
+      - name: Checkout DAB branch if needed
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/scripts/get_dab_for_pr.py
+
+      - name: Run tests
+        env:
+          PYTEST_NUM_PROCESSES: ${{ matrix.batch.processes }}
+        run: tox -e py311 -- ${{ matrix.batch.test-filter }} -v --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.batch.artifact-suffix }}
+          path: coverage-${{ matrix.batch.artifact-suffix }}.xml
+
+      - name: Upload junit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.batch.artifact-suffix }}
+          path: junit-${{ matrix.batch.artifact-suffix }}.xml
+
+  merge-and-upload:
+    name: Merge coverage and upload results
+    runs-on: ubuntu-latest
+    needs: unit-test
+    if: needs.unit-test.result == 'success'
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install merge tools
+        run: pip install coverage junitparser
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Download all junit artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: junit-*
+          merge-multiple: true
+
+      - name: Merge coverage files
+        run: |
+          # Combine coverage files
+          coverage combine coverage-*.xml || echo "Coverage combine failed, using first file"
+          # If combine fails, merge manually or use the largest coverage file
+          if [ -f .coverage ]; then
+            coverage xml -o coverage.xml
+          else
+            # Fallback: use the remaining tests coverage (likely most comprehensive)
+            cp coverage-remaining.xml coverage.xml || cp coverage-*.xml coverage.xml
+          fi
+
+      - name: Merge junit files
+        run: |
+          python3 -c "
+          from junitparser import JUnitXml
+          import glob
+          import os
+
+          junit_files = glob.glob('junit-*.xml')
+          if not junit_files:
+              print('No junit files found')
+              exit(1)
+
+          # Start with the first file
+          merged = JUnitXml.fromfile(junit_files[0])
+          print(f'Starting with {junit_files[0]}')
+
+          # Merge remaining files
+          for junit_file in junit_files[1:]:
+              if os.path.exists(junit_file):
+                  print(f'Merging {junit_file}')
+                  xml = JUnitXml.fromfile(junit_file)
+                  merged += xml
+
+          # Write merged result
+          merged.write('aap-gateway-test-results.xml')
+          print('Merged junit files successfully')
+          "
+
+      - name: Inject PR number into coverage.xml
+        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage.xml
+
+      - name: Upload final coverage as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+      - name: Upload final junit as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aap-gateway-test-results
+          path: aap-gateway-test-results.xml

@@ -1,6 +1,5 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
-from django.core.cache import cache
 from django.test import override_settings
 from flags.state import flag_enabled
 
@@ -67,7 +66,7 @@ class TestCacheBehavior:
             assert flag_enabled('FLAG_1', request=response.wsgi_request)
             assert not flag_enabled('FLAG_2', request=response.wsgi_request)
 
-    def test_cache_expiry(self, admin_api_client):
+    def test_cache_expiry(self, admin_api_client, isolated_cache):
         """Test cache expiration behavior"""
         test_settings = {'EXPIRING_FLAG': [{'condition': 'boolean', 'value': True}]}
 
@@ -78,7 +77,7 @@ class TestCacheBehavior:
             assert flag_enabled('EXPIRING_FLAG', request=response.wsgi_request)
 
             # Clear cache to simulate expiration
-            cache.clear()
+            isolated_cache.clear()
 
             # Should re-fetch from settings
             response = admin_api_client.get(url)

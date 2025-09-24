@@ -59,3 +59,15 @@ aap_gateway_dev
 
 # Ignore migrate_service_data_25.py
 aap_gateway_api/management/commands/migrate_service_data_25.py
+
+# Ignore files that the dev environment might create
+.bash_history
+.cache
+.dotnet
+.gitconfig
+.ipython
+.python_history
+.ssh
+
+# Ignore CLAUDE_USER.md this is user based preferences for CLAUDE
+CLAUDE_USER.md

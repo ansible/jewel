@@ -237,29 +237,35 @@ class TestRoute:
         ],
     )
     @pytest.mark.django_db
-    def test_xds_route_config_timeout_by_service_type(self, service_type_name, expected_timeout, expected_idle_timeout, set_preference):
+    def test_xds_route_config_timeout_by_service_type(self, service_type_name, expected_timeout, expected_idle_timeout, preference_manager):
         """Test that route timeout configuration varies by service type"""
         # Set up all timeout preferences
-        set_preference('proxy', 'request_timeout', 30)
-        set_preference('proxy', 'stream_idle_timeout', 120)
-        set_preference('proxy', 'max_stream_duration', 7200)
+        with preference_manager.set_multiple(
+            {
+                ('proxy', 'request_timeout'): 30,
+                ('proxy', 'stream_idle_timeout'): 120,
+                ('proxy', 'max_stream_duration'): 7200,
+            }
+        ):
+            # Create service type and cluster
+            service_type, _ = ServiceType.objects.get_or_create(name=service_type_name)
+            service_cluster, _ = ServiceCluster.objects.get_or_create(name=service_type_name, service_type=service_type)
 
-        # Create service type and cluster
-        service_type, _ = ServiceType.objects.get_or_create(name=service_type_name)
-        service_cluster, _ = ServiceCluster.objects.get_or_create(name=service_type_name, service_type=service_type)
+            # Create route
+            route = ServiceAPIRoute(
+                gateway_path=f'/api/{service_type_name}/',
+                service_path='/api/',
+                envoy_cluster_name=f'{service_type_name}-cluster',
+                service_cluster=service_cluster,
+            )
 
-        # Create route
-        route = ServiceAPIRoute(
-            gateway_path=f'/api/{service_type_name}/', service_path='/api/', envoy_cluster_name=f'{service_type_name}-cluster', service_cluster=service_cluster
-        )
+            routes = route.get_xds_route_config()
+            assert len(routes) == 1
 
-        routes = route.get_xds_route_config()
-        assert len(routes) == 1
+            # Check timeout configuration
+            assert routes[0]["route"]["timeout"] == expected_timeout
 
-        # Check timeout configuration
-        assert routes[0]["route"]["timeout"] == expected_timeout
-
-        if expected_idle_timeout:
-            assert routes[0]["route"]["idle_timeout"] == expected_idle_timeout
-        else:
-            assert "idle_timeout" not in routes[0]["route"]
+            if expected_idle_timeout:
+                assert routes[0]["route"]["idle_timeout"] == expected_idle_timeout
+            else:
+                assert "idle_timeout" not in routes[0]["route"]

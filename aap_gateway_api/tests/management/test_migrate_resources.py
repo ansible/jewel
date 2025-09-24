@@ -85,14 +85,14 @@ def _setup_basic_service_client_mocks(mock_client, service_api, admin_user, serv
 
 
 @pytest.fixture
-def migration_service(patched_resource_client, service_api_route_controller):
+def migration_service(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests")
     yield service_api_route_controller
     _kill_service(proc)
 
 
 @pytest.fixture
-def migration_service_invalid_users(patched_resource_client, service_api_route_controller):
+def migration_service_invalid_users(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_invalid_users")
     yield service_api_route_controller
     _kill_service(proc)
@@ -1256,7 +1256,7 @@ def test_comprehensive_multi_service_migration(
 
 
 @pytest.fixture
-def migration_service_controller_roles_paginated(patched_resource_client, service_api_route_controller):
+def migration_service_controller_roles_paginated(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     """Launch a controller service with controller-specific role assignment test data that requires pagination"""
     proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles_pagination", page_size=10)
     yield service_api_route_controller
@@ -1264,7 +1264,7 @@ def migration_service_controller_roles_paginated(patched_resource_client, servic
 
 
 @pytest.fixture
-def migration_service_controller_roles(patched_resource_client, service_api_route_controller):
+def migration_service_controller_roles(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     """Launch a controller service with controller-specific role assignment test data"""
     proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles")
     yield service_api_route_controller
@@ -1272,7 +1272,7 @@ def migration_service_controller_roles(patched_resource_client, service_api_rout
 
 
 @pytest.fixture
-def migration_service_controller_roles_duplicate_teams(patched_resource_client, service_api_route_controller):
+def migration_service_controller_roles_duplicate_teams(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     """Launch a controller service with controller-specific role assignment test data across duplicate team names"""
     proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles_duplicate_teams")
     yield service_api_route_controller
@@ -1280,7 +1280,7 @@ def migration_service_controller_roles_duplicate_teams(patched_resource_client, 
 
 
 @pytest.fixture
-def migration_service_controller_roles_remoteobject(patched_resource_client, service_api_route_controller):
+def migration_service_controller_roles_remoteobject(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     """Launch a controller service with controller-specific role assignment test data across duplicate team names"""
     proc = _launch_service(svc_route=service_api_route_controller, fixture="migration_tests_controller_roles_remoteobject")
     yield service_api_route_controller
@@ -1288,7 +1288,7 @@ def migration_service_controller_roles_remoteobject(patched_resource_client, ser
 
 
 @pytest.fixture
-def migration_service_hub_roles(patched_resource_client, service_api_route_hub):
+def migration_service_hub_roles(patched_resource_client, service_api_route_hub, ensure_jwt_keys):
     """Launch a hub service with hub-specific role assignment test data"""
     proc = _launch_service(svc_route=service_api_route_hub, fixture="migration_tests_hub_roles", svc_type="galaxy")
     yield service_api_route_hub

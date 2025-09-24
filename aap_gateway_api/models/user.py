@@ -6,7 +6,7 @@ from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.utils.authentication import determine_username_from_uid
 from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.abstract_models.user import AbstractDABUser
-from ansible_base.lib.utils.models import user_summary_fields
+from ansible_base.lib.utils.models import is_system_user, user_summary_fields
 from ansible_base.resource_registry.fields import AnsibleResourceField
 from ansible_base.resource_registry.models.service_identifier import service_id
 from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, UNUSABLE_PASSWORD_SUFFIX_LENGTH, get_hashers_by_algorithm, identify_hasher, make_password
@@ -140,6 +140,12 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         # If the system auditor role was set on unsaved object, apply it now that it is saved
         if is_new_user and hasattr(self, '_is_platform_auditor'):
             self.apply_platform_auditor_membership(self._is_platform_auditor)
+
+    def delete(self, *args, **kwargs):
+        # Prevent the system user from ever being deleted
+        if is_system_user(self):
+            raise ValueError("The system user cannot be deleted")
+        super().delete(*args, **kwargs)
 
     def logout(self):
         logger.debug(f"Logging out user {self.username} from any active backends")

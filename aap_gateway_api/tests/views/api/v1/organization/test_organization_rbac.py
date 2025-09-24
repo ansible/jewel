@@ -118,71 +118,70 @@ def test_organization_delete_permissions(admin_api_client, user_api_client, user
     assert response.status_code == 404
 
 
-def test_organization_association_permissions(user_api_client, user, user_factory, organization, org_member_rd, set_preference):
+def test_organization_association_permissions(user_api_client, user, user_factory, organization, org_member_rd, preference_manager):
     # Set preference to test security-first approach
-    set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False)
+    with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False):
+        user2 = user_factory("Test User 2")
+        user3 = user_factory("Test User 3")
 
-    user2 = user_factory("Test User 2")
-    user3 = user_factory("Test User 3")
+        urls_assoc = dict(
+            users=get_relative_url("organization-users-associate", kwargs={"pk": organization.pk}),
+            admins=get_relative_url("organization-admins-associate", kwargs={"pk": organization.pk}),
+        )
 
-    urls_assoc = dict(
-        users=get_relative_url("organization-users-associate", kwargs={"pk": organization.pk}),
-        admins=get_relative_url("organization-admins-associate", kwargs={"pk": organization.pk}),
-    )
+        for assoc_type in ['users', 'admins']:
+            url = urls_assoc[assoc_type]
 
-    for assoc_type in ['users', 'admins']:
-        url = urls_assoc[assoc_type]
+            assert organization.users.count() == 0, assoc_type  # the user themselves
+            assert organization.admins.count() == 0, assoc_type
+            #
+            # No membership
+            #  => can't see organization, can't associate
+            response = user_api_client.post(url, data={"instances": [user.pk]})
+            assert response.status_code == 404, f"Adding self to '{assoc_type}' shouldn't be allowed"
+            response = user_api_client.post(url, data={"instances": [user2.pk]})
+            assert response.status_code == 404, f"Adding user2 to '{assoc_type}' shouldn't be allowed"
+            #
+            # User is Org Member
+            # => can't associate
+            organization.add_member(user)
+            response = user_api_client.post(url, data={"instances": [user2.pk]})
+            assert response.status_code == 403
+            if assoc_type == 'users':
+                assert organization.users.count() == 1
+                assert organization.users.first() == user
+            else:
+                assert organization.admins.count() == 0
 
-        assert organization.users.count() == 0, assoc_type  # the user themselves
-        assert organization.admins.count() == 0, assoc_type
-        #
-        # No membership
-        #  => can't see organization, can't associate
-        response = user_api_client.post(url, data={"instances": [user.pk]})
-        assert response.status_code == 404, f"Adding self to '{assoc_type}' shouldn't be allowed"
-        response = user_api_client.post(url, data={"instances": [user2.pk]})
-        assert response.status_code == 404, f"Adding user2 to '{assoc_type}' shouldn't be allowed"
-        #
-        # User is Org Member
-        # => can't associate
-        organization.add_member(user)
-        response = user_api_client.post(url, data={"instances": [user2.pk]})
-        assert response.status_code == 403
-        if assoc_type == 'users':
-            assert organization.users.count() == 1
-            assert organization.users.first() == user
-        else:
-            assert organization.admins.count() == 0
+            # User is Org Admin
+            # => Can associate users they can see (security-first approach)
+            # With ORG_ADMINS_CAN_SEE_ALL_USERS=False (explicitly set), org admins can only see users
+            # from organizations they manage, plus superusers and themselves
+            organization.remove_member(user)
+            organization.add_admin(user)
 
-        # User is Org Admin
-        # => Can associate users they can see (security-first approach)
-        # With ORG_ADMINS_CAN_SEE_ALL_USERS=False (explicitly set), org admins can only see users
-        # from organizations they manage, plus superusers and themselves
-        organization.remove_member(user)
-        organization.add_admin(user)
+            assert organization.users.count() == 0, assoc_type
+            assert organization.admins.count() == 1, assoc_type
 
-        assert organization.users.count() == 0, assoc_type
-        assert organization.admins.count() == 1, assoc_type
+            # Org admin can associate themselves (always visible)
+            response = user_api_client.post(url, data={"instances": [user.pk]})
+            assert response.status_code == 204
 
-        # Org admin can associate themselves (always visible)
-        response = user_api_client.post(url, data={"instances": [user.pk]})
-        assert response.status_code == 204
+            # Org admin cannot associate users they can't see (user2, user3 are not in any org the admin manages)
+            response = user_api_client.post(url, data={"instances": [user2.pk, user3.pk]})
+            assert response.status_code == 400  # Bad request because users are not visible for association
 
-        # Org admin cannot associate users they can't see (user2, user3 are not in any org the admin manages)
-        response = user_api_client.post(url, data={"instances": [user2.pk, user3.pk]})
-        assert response.status_code == 400  # Bad request because users are not visible for association
+            if assoc_type == 'users':
+                assert organization.users.count() == 1  # Only user was associated
+                assert organization.admins.count() == 1
+            else:
+                assert organization.users.count() == 0
+                assert organization.admins.count() == 1  # Only user was associated
 
-        if assoc_type == 'users':
-            assert organization.users.count() == 1  # Only user was associated
-            assert organization.admins.count() == 1
-        else:
-            assert organization.users.count() == 0
-            assert organization.admins.count() == 1  # Only user was associated
-
-        # Cleanup
-        for u in [user, user2, user3]:
-            organization.remove_member(u)
-            organization.remove_admin(u)
+            # Cleanup
+            for u in [user, user2, user3]:
+                organization.remove_member(u)
+                organization.remove_admin(u)
 
 
 def test_organization_disassociation_permissions(user_api_client, user, user_factory, organization, org_member_rd):
@@ -321,37 +320,36 @@ class TestOrganizationOptions:
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("api_type", ["old", "new"])
-def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization, api_type, set_preference):
+def test_admin_add_permission(user_api_client, user, org_member_rd, org_admin_rd, organization, api_type, preference_manager):
     # Set preference to test security-first approach
-    set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False)
+    with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', False):
+        other_user = User.objects.create(username='another-user')
+        org_admin_rd.give_permission(user, organization)
 
-    other_user = User.objects.create(username='another-user')
-    org_admin_rd.give_permission(user, organization)
+        if api_type == 'old':
+            # Method 1 for adding user as admin of organization - use deprecated association endpoint
+            # denied because user can not see other_user
+            url = get_relative_url('organization-admins-associate', kwargs={'pk': organization.pk})
+            r = user_api_client.post(url, data={'instances': [other_user.id]})
+            assert r.status_code == 400
+            assert 'does not exist' in str(r.data)
+        else:
+            # Method 2 for adding user as admin of organization - use DAB RBAC API
+            # denied because user can not see other_user
+            url = get_relative_url('roleuserassignment-list')
+            r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_member_rd.id})
+            assert r.status_code == 400
+            assert 'does not exist' in str(r.data)
 
-    if api_type == 'old':
-        # Method 1 for adding user as admin of organization - use deprecated association endpoint
-        # denied because user can not see other_user
-        url = get_relative_url('organization-admins-associate', kwargs={'pk': organization.pk})
-        r = user_api_client.post(url, data={'instances': [other_user.id]})
-        assert r.status_code == 400
-        assert 'does not exist' in str(r.data)
-    else:
-        # Method 2 for adding user as admin of organization - use DAB RBAC API
-        # denied because user can not see other_user
-        url = get_relative_url('roleuserassignment-list')
-        r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_member_rd.id})
-        assert r.status_code == 400
-        assert 'does not exist' in str(r.data)
+        # If user can see other_user, then action can complete successfully
+        org_member_rd.give_permission(other_user, organization)
 
-    # If user can see other_user, then action can complete successfully
-    org_member_rd.give_permission(other_user, organization)
-
-    if api_type == 'old':
-        url = get_relative_url('organization-admins-associate', kwargs={'pk': organization.pk})
-        r = user_api_client.post(url, data={'instances': [other_user.id]})
-        assert r.status_code == 204
-    else:
-        url = get_relative_url('roleuserassignment-list')
-        r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_admin_rd.id})
-        assert r.status_code == 201
-    assert other_user.has_obj_perm(organization, 'change')
+        if api_type == 'old':
+            url = get_relative_url('organization-admins-associate', kwargs={'pk': organization.pk})
+            r = user_api_client.post(url, data={'instances': [other_user.id]})
+            assert r.status_code == 204
+        else:
+            url = get_relative_url('roleuserassignment-list')
+            r = user_api_client.post(url, data={'object_id': organization.pk, 'user': other_user.id, 'role_definition': org_admin_rd.id})
+            assert r.status_code == 201
+        assert other_user.has_obj_perm(organization, 'change')

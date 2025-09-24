@@ -19,14 +19,13 @@ def test_logged_basic_auth(logger, unauthenticated_api_client, organization, adm
     assert logger.info.call_args[0][0] == expected
 
 
-def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, admin_user, settings, set_preference):
-    set_preference("proxy", "gateway_basic_auth_enabled", False)
-
-    client = unauthenticated_api_client
-    client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:password".encode("utf-8")).decode("utf-8"))
-    url = get_relative_url("organization-list")
-    response = client.get(url)
-    assert response.status_code == 401
+def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, admin_user, settings, preference_manager):
+    with preference_manager.set("proxy", "gateway_basic_auth_enabled", False):
+        client = unauthenticated_api_client
+        client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:password".encode("utf-8")).decode("utf-8"))
+        url = get_relative_url("organization-list")
+        response = client.get(url)
+        assert response.status_code == 401
 
 
 # There is really no better way to do this. I tried. Really hard.
@@ -42,10 +41,10 @@ def test_logged_basic_auth_invalid(unauthenticated_api_client):
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [LoggedBasicAuthentication])
-def test_logged_basic_auth_invalid_disabled(unauthenticated_api_client, set_preference):
-    set_preference("proxy", "gateway_basic_auth_enabled", False)
-    client = unauthenticated_api_client
-    client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
-    url = get_relative_url("organization-list")
-    response = client.get(url)
-    assert response.status_code == 401
+def test_logged_basic_auth_invalid_disabled(unauthenticated_api_client, preference_manager):
+    with preference_manager.set("proxy", "gateway_basic_auth_enabled", False):
+        client = unauthenticated_api_client
+        client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
+        url = get_relative_url("organization-list")
+        response = client.get(url)
+        assert response.status_code == 401

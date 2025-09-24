@@ -152,70 +152,69 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
 
     @pytest.mark.parametrize("api_type", ["old_api", "rbac_api"])
     @pytest.mark.parametrize("org_admins_can_see_all", [True, False])
-    def test_team_associate_members(self, user_type, user, user_factory, organization, team, api_type, org_admins_can_see_all, set_preference):
+    def test_team_associate_members(self, user_type, user, user_factory, organization, team, api_type, org_admins_can_see_all, preference_manager):
         # Set the preference to test both functional (True) and security-first (False) approaches
-        set_preference('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', org_admins_can_see_all)
+        with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', org_admins_can_see_all):
+            rando = user_factory('rando')
 
-        rando = user_factory('rando')
-
-        if api_type == "old_api":
-            success_code = 204
-            url = get_relative_url('team-users-associate', kwargs={'pk': team.pk})
-            # data to add rando as a member
-            data = {'instances': [rando.id]}
-            response = self.api_client.post(url, data=data)
-        else:
-            success_code = 201
-            url = get_relative_url('roleuserassignment-list')
-            data = {'object_id': team.pk, 'user': rando.id, 'role_definition': team.member_rd.id}
-            response = self.api_client.post(url, data=data)
-
-        # Results have to be the same using RBAC API or deprecated API
-        if user_type == 'superuser':
-            # Superuser can always add users (global view permission)
-            assert team.users.filter(id=rando.id).exists()
-            assert response.status_code == success_code, response.data
-        elif user_type == 'org_admin' and org_admins_can_see_all:
-            # With functional approach (True), org admins can see and associate all users
-            assert team.users.filter(id=rando.id).exists()
-            assert response.status_code == success_code, response.data
-        else:
-            # Other users (or org admins with security-first approach) can't add users they can't see
-            assert not team.users.filter(id=rando.id).exists()
-
-            if user_type == 'user':
-                assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
-            elif user_type == 'org_member':
-                assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
-            elif user_type == 'org_admin':
-                # With security-first approach (False), org admins can't associate users they can't see
-                assert response.status_code == 400, response.data
-            elif user_type == 'team_member':
-                assert response.status_code == (403 if api_type == 'old_api' else 400), response.data
-            elif user_type == 'platform_auditor':
-                assert response.status_code == 403, response.data
+            if api_type == "old_api":
+                success_code = 204
+                url = get_relative_url('team-users-associate', kwargs={'pk': team.pk})
+                # data to add rando as a member
+                data = {'instances': [rando.id]}
+                response = self.api_client.post(url, data=data)
             else:
+                success_code = 201
+                url = get_relative_url('roleuserassignment-list')
+                data = {'object_id': team.pk, 'user': rando.id, 'role_definition': team.member_rd.id}
+                response = self.api_client.post(url, data=data)
+
+            # Results have to be the same using RBAC API or deprecated API
+            if user_type == 'superuser':
+                # Superuser can always add users (global view permission)
+                assert team.users.filter(id=rando.id).exists()
+                assert response.status_code == success_code, response.data
+            elif user_type == 'org_admin' and org_admins_can_see_all:
+                # With functional approach (True), org admins can see and associate all users
+                assert team.users.filter(id=rando.id).exists()
+                assert response.status_code == success_code, response.data
+            else:
+                # Other users (or org admins with security-first approach) can't add users they can't see
+                assert not team.users.filter(id=rando.id).exists()
+
+                if user_type == 'user':
+                    assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
+                elif user_type == 'org_member':
+                    assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
+                elif user_type == 'org_admin':
+                    # With security-first approach (False), org admins can't associate users they can't see
+                    assert response.status_code == 400, response.data
+                elif user_type == 'team_member':
+                    assert response.status_code == (403 if api_type == 'old_api' else 400), response.data
+                elif user_type == 'platform_auditor':
+                    assert response.status_code == 403, response.data
+                else:
+                    assert response.status_code == 400, response.data
+
+            # Team admin can add member when s/he sees him/her
+            if user_type == 'team_admin':
+                organization.add_member(rando)
+                # user still don't see rando so criteria for adding team member is met
+                response = self.api_client.post(url, data=data)
+                assert not team.users.filter(id=rando.id).exists()
                 assert response.status_code == 400, response.data
 
-        # Team admin can add member when s/he sees him/her
-        if user_type == 'team_admin':
-            organization.add_member(rando)
-            # user still don't see rando so criteria for adding team member is met
-            response = self.api_client.post(url, data=data)
-            assert not team.users.filter(id=rando.id).exists()
-            assert response.status_code == 400, response.data
+                organization.add_member(user)
+                # user now see rando (and is admin of the team) so criteria for adding team member is met
+                response = self.api_client.post(url, data=data)
+                assert team.users.filter(id=rando.id).exists()
+                assert response.status_code == success_code, response.data
 
-            organization.add_member(user)
-            # user now see rando (and is admin of the team) so criteria for adding team member is met
-            response = self.api_client.post(url, data=data)
-            assert team.users.filter(id=rando.id).exists()
-            assert response.status_code == success_code, response.data
-
-        # Org member cannot add other org member although (s)he sees him/her
-        elif user_type == 'org_member':
-            organization.add_member(rando)
-            # user now see rando, but is not a team admin so criteria for adding team member isn't met
-            response = self.api_client.post(url, data=data)
-            assert not team.users.filter(id=rando.id).exists()
-            # Note: the old API might return also 400
-            assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
+            # Org member cannot add other org member although (s)he sees him/her
+            elif user_type == 'org_member':
+                organization.add_member(rando)
+                # user now see rando, but is not a team admin so criteria for adding team member isn't met
+                response = self.api_client.post(url, data=data)
+                assert not team.users.filter(id=rando.id).exists()
+                # Note: the old API might return also 400
+                assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
