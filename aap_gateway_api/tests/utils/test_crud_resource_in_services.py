@@ -54,6 +54,7 @@ def test_organizations_are_updated(
     admin_api_client,
     patched_resource_client,
     patched_all_services_resource_client,
+    ensure_jwt_keys,
 ):
     org_name = "My test org"
     url = get_relative_url("organization-list")

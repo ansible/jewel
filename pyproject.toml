@@ -78,6 +78,8 @@ per-file-ignores = """
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
 addopts = "--strict-markers --reuse-db --create-db --migrations -s -vvv"
 pythonpath = ". aap_gateway_api"
+markers = [
+]
 
 [tool.tox]
 legacy_tox_ini = """
@@ -88,10 +90,11 @@ legacy_tox_ini = """
         check
         check-migrations
         check-oauth2-permissions
+        check-help-text
         py311
     labels =
         test = py311
-        check = check, check-migrations, check-oauth2-permissions
+        check = check, check-migrations, check-oauth2-permissions, check-help-text
         lint = flake8, black, isort
 
     [docker:db]
@@ -114,8 +117,7 @@ legacy_tox_ini = """
         psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
-        pytest --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
-        #pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
+        pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
     allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
@@ -161,6 +163,21 @@ legacy_tox_ini = """
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check --deploy --tag oauth2_permissions
+
+    [testenv:check-help-text]
+    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    setenv =
+        PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
+        GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
+        DATABASE_ENGINE = django.db.backends.dummy
+    deps =
+        -r{toxinidir}/requirements/requirements.txt
+        -r{toxinidir}/requirements/requirements_git.txt
+        -r{toxinidir}/requirements/requirements_test.txt
+        psycopg[binary]
+    commands =
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
+        python3 -m aap_gateway_api help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore
 
     [testenv:flake8]
     deps =

@@ -1,0 +1,87 @@
+# JUnit Upload Workflow for aap-gateway
+#
+# This workflow runs on every pull request and push to the repository.
+#
+# Steps overview:
+# 1. Download coverage data from Unit Tests workflow
+# 2. Check for backport labels (skip if found)
+# 3. Check for Python file changes (skip if none)
+# 4. Extract PR info and set environment
+# 5. Run SonarCloud analysis with quality gate
+#
+
+name: JUnit Upload
+on:
+  workflow_run:
+    workflows:
+      - Unit Tests
+    types:
+      - completed
+  push:
+    branches:
+      - devel
+      - 'stable-*'
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Commit SHA'
+        required: true
+        type: string
+      repository:
+        description: 'Repository name'
+        required: true
+        type: string
+      ci_run_id:
+        description: 'CI workflow run ID (for downloading coverage artifact)'
+        required: false
+        type: string
+permissions: read-all
+jobs:
+  sonar:
+    name: Upload JUnit XML test results
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/devel' || startsWith(github.ref, 'refs/heads/stable-')))
+    steps:
+      - uses: actions/checkout@v5
+
+      # Download coverage artifact (for both workflow_run and workflow_dispatch)
+      - name: Download results artifact
+        if: |
+          github.event_name == 'workflow_run' ||
+          (github.event_name == 'workflow_dispatch' && inputs.ci_run_id != '')
+        uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: Unit Tests
+          run_id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.ci_run_id }}
+          name: aap-gateway-test-results
+
+      # Set PR number based on trigger type
+      - name: Set COMMIT_SHA and REPO_NAME based on trigger type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Extract from coverage.xml for workflow_run
+            echo "COMMIT_SHA=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
+            echo "REPO_NAME=${{ github.event.repository.full_name }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Direct push to long-lived branch
+            echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+            echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
+          else
+            # Use inputs for workflow_dispatch
+            echo "COMMIT_SHA=${{ inputs.commit_sha }}" >> $GITHUB_ENV
+            echo "REPO_NAME=${{ inputs.repository }}" >> $GITHUB_ENV
+          fi
+
+      - name: Upload jUnit XML test results
+        continue-on-error: true
+        run: >-
+          curl -v --user "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}:${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}"
+          --form "xunit_xml=@aap-gateway-test-results.xml"
+          --form "component_name=aap-gateway"
+          --form "git_commit_sha=${{ env.COMMIT_SHA }}"
+          --form "git_repository_url=https://github.com/${{ env.REPO_NAME }}"
+          "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_URL }}/api/results/upload/"

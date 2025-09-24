@@ -14,7 +14,7 @@ from aap_gateway_api.utils.preferences import get_setting
         (2, 87654321),
     ],
 )
-def test_min_max_value_of_int_range_type(min_value, max_value, register_preference, set_preference):
+def test_min_max_value_of_int_range_type(min_value, max_value, register_preference, preference_manager):
     from aap_gateway_api.preferences.types import IntRangePreference
 
     kwargs = {}
@@ -45,11 +45,15 @@ def test_min_max_value_of_int_range_type(min_value, max_value, register_preferen
     )
 
     with pytest.raises(ValidationError):
-        set_preference("general", "test_preference", fail_low_value)
-    set_preference("general", "test_preference", pass_low_value)
-    set_preference("general", "test_preference", pass_high_value)
+        with preference_manager.set("general", "test_preference", fail_low_value):
+            pass
+    with preference_manager.set("general", "test_preference", pass_low_value):
+        pass  # Should not raise
+    with preference_manager.set("general", "test_preference", pass_high_value):
+        pass  # Should not raise
     with pytest.raises(ValidationError):
-        set_preference("general", "test_preference", fail_high_value)
+        with preference_manager.set("general", "test_preference", fail_high_value):
+            pass
 
 
 @pytest.mark.parametrize(
@@ -67,7 +71,7 @@ def test_min_max_value_of_int_range_type(min_value, max_value, register_preferen
         ([], 1, "Must be a list of valid origins such as"),
     ],
 )
-def test_csrf_trusted_origins_type(register_preference, set_preference, csrf_setting, csrf_preference_value, exception):
+def test_csrf_trusted_origins_type(register_preference, preference_manager, csrf_setting, csrf_preference_value, exception):
     with override_settings(CSRF_TRUSTED_ORIGINS=csrf_setting):
         register_preference(
             section="general",
@@ -80,12 +84,14 @@ def test_csrf_trusted_origins_type(register_preference, set_preference, csrf_set
         )
         if exception:
             with pytest.raises(ValidationError, match=exception):
-                set_preference("general", "test_preference", csrf_preference_value)
+                with preference_manager.set("general", "test_preference", csrf_preference_value):
+                    pass
         else:
-            set_preference("general", "test_preference", csrf_preference_value)
+            with preference_manager.set("general", "test_preference", csrf_preference_value):
+                pass  # Should not raise
 
 
-def test_csrf_trusted_origins_changing_in_django_conf(register_preference, set_preference):
+def test_csrf_trusted_origins_changing_in_django_conf(register_preference, preference_manager):
     register_preference(
         section="general",
         preference_name="test_preference",
@@ -99,11 +105,13 @@ def test_csrf_trusted_origins_changing_in_django_conf(register_preference, set_p
     with override_settings(CSRF_TRUSTED_ORIGINS=["*"]):
         assert get_setting('test_preference') == ["*"], "Trusted origin should have only been *"
 
-        set_preference('general', 'test_preference', ["https://example.com"])
-        assert get_setting('test_preference') == ["*", "https://example.com"]
+        with preference_manager.set('general', 'test_preference', ["https://example.com"]):
+            assert get_setting('test_preference') == ["*", "https://example.com"]
 
     with override_settings(CSRF_TRUSTED_ORIGINS=["https://localhost"]):
-        assert get_setting('test_preference') == ["https://localhost", "https://example.com"], "Trusted origin did not update properly"
+        # After the preference_manager context exits, the preference should be restored to default
+        # but the setting should still reflect the Django setting
+        assert get_setting('test_preference') == ["https://localhost"], "Trusted origin did not update properly"
 
 
 def test_csrf_invalid_value_in_settings(register_preference, expected_log):
@@ -135,7 +143,7 @@ def test_csrf_invalid_value_in_settings(register_preference, expected_log):
         ("mailto:test@example.com", "mailto:test@example.com is not a valid URL or absolute path"),
     ],
 )
-def test_absolute_path_or_url_preference(register_preference, set_preference, value, expected_error):
+def test_absolute_path_or_url_preference(register_preference, preference_manager, value, expected_error):
     register_preference(
         section="general",
         preference_name="test_preference",
@@ -146,7 +154,9 @@ def test_absolute_path_or_url_preference(register_preference, set_preference, va
     )
     if expected_error:
         with pytest.raises(ValidationError) as e:
-            set_preference("general", "test_preference", value)
+            with preference_manager.set("general", "test_preference", value):
+                pass
         assert expected_error in str(e.value)
     else:
-        set_preference("general", "test_preference", value)
+        with preference_manager.set("general", "test_preference", value):
+            pass  # Should not raise

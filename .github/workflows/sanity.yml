@@ -6,23 +6,43 @@ on:
   pull_request:
   push:
 jobs:
-  help_text:
-    name: Help Text Check
+  tox:
+    name: aap_gateway_api - ${{ matrix.tests.env }}
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
     permissions:
-      packages: read
+      packages: write
       contents: read
+      actions: write
     strategy:
       fail-fast: false
-    env:
-      HEADLESS: "yes"
+      matrix:
+        tests:
+          - env: check
+            python-version: "3.11"
+          - env: check-migrations
+            python-version: "3.11"
+          - env: check-oauth2-permissions
+            python-version: "3.11"
+          - env: check-help-text
+            python-version: "3.11"
     steps:
-      - name: Install make
-        run: sudo apt install make
+      - uses: actions/checkout@v3
 
-      - uses: actions/checkout@v4
+      - name: Install build requirements
+        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
+
+      - name: Install python ${{ matrix.tests.python-version }}
+        uses: actions/setup-python@v4
         with:
-          show-progress: false
+          python-version: ${{ matrix.tests.python-version }}
+
+      - name: Install tox
+        run: pip${{ matrix.tests.python-version }} install tox tox-docker requests
 
       - name: Checkout DAB branch if needed
         env:
@@ -30,8 +50,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tools/scripts/get_dab_for_pr.py
 
-      - name: Build the dev environment
-        run: make docker-compose-build
-
-      - name: Run help text check
-        run: docker compose -f tools/generated/docker-compose.yml run gateway1 aap-gateway-manage help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore
+      - name: Run tox
+        run: tox -e ${{ matrix.tests.env }}

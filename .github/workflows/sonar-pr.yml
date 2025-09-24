@@ -3,7 +3,7 @@
 # This workflow runs on every pull request and push to the repository.
 #
 # Steps overview:
-# 1. Download coverage data from CI workflow
+# 1. Download coverage data from Unit Tests workflow
 # 2. Check for backport labels (skip if found)
 # 3. Check for Python file changes (skip if none)
 # 4. Extract PR info and set environment
@@ -22,7 +22,7 @@ name: SonarCloud
 on:
   workflow_run:
     workflows:
-      - CI
+      - Unit Tests
     types:
       - completed
   push:
@@ -71,7 +71,7 @@ jobs:
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: CI
+          workflow: Unit Tests
           run_id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.ci_run_id }}
           name: coverage
 

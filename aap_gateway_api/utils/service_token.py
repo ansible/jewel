@@ -32,8 +32,7 @@ def validate_service_token(token, required_type=None) -> ValidatedToken:
     try:
         unverified_service_id = jwt.decode(
             token,
-            options={"verify_signature": False},
-            required=["iss", "exp"],
+            options={"verify_signature": False, "require": ["iss", "exp"]},
         )["iss"]
     except jwt.exceptions.PyJWTError as pje:
         raise ValidationError(_("Token is not a valid JWT: %(exception)s") % {"exception": pje})

@@ -25,7 +25,6 @@ from aap_gateway_api.models import (
     ServiceNode,
     ServiceType,
     UIPluginRoute,
-    User,
 )
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
@@ -44,23 +43,85 @@ def pytest_configure():
         pass
 
 
+# set_preference fixture has been REMOVED!
+# All tests have been migrated to use preference_manager for better isolation and cleanup.
+#
+# If you need to set preferences in tests, use:
+# - preference_manager.set("section", "name", value) for single preferences
+# - preference_manager.set_multiple({("section", "name"): value}) for multiple preferences
+
+
 @pytest.fixture
-def set_preference(db):
+def preference_manager(db):
     """
-    This fixture allows you to set preference values for a test and then
-    revert all preferences to their original values after the test is
-    complete.
+    Advanced preference management fixture that can handle multiple preferences
+    and provides both context manager and direct setting capabilities.
+
+    Usage:
+        def test_password_validation(preference_manager):
+            # Set multiple preferences at once
+            with preference_manager.set_multiple({
+                ("local_login", "password_min_upper"): 2,
+                ("local_login", "password_min_special"): 2,
+                ("local_login", "password_min_length"): 8,
+            }):
+                # All preferences are set, test code here
+                pass
+            # All preferences automatically restored
+
+        def test_single_preference(preference_manager):
+            # Or use for single preference (simpler syntax)
+            with preference_manager.set("local_login", "password_min_upper", 2):
+                # Test code here
+                pass
     """
-    from aap_gateway_api.models import Preference
-    from aap_gateway_api.utils.preferences import update_preference_value
+    from contextlib import contextmanager
 
-    def _set_preference(section, name, value):
-        update_preference_value(section, name, value)
+    from django.core.cache import cache
 
-    old_prefs = Preference.objects.all()
-    yield _set_preference
-    for pref in old_prefs:
-        update_preference_value(pref.section, pref.name, pref.value)
+    from aap_gateway_api.preferences import gateway_preference_registry
+    from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
+
+    class PreferenceManager:
+        @contextmanager
+        def set(self, section, name, value):
+            """Set a single preference with automatic cleanup."""
+            with self.set_multiple({(section, name): value}):
+                yield
+
+        @contextmanager
+        def set_multiple(self, preferences_dict):
+            """
+            Set multiple preferences with automatic cleanup.
+
+            Args:
+                preferences_dict: Dict with (section, name) tuples as keys and values as values
+                                 e.g., {("local_login", "password_min_upper"): 2}
+            """
+            original_values = {}
+
+            # Capture original values
+            for (section, name), value in preferences_dict.items():
+                try:
+                    original_values[(section, name)] = get_preference_value(section, name, encrypted=False)
+                except Exception:
+                    original_values[(section, name)] = None
+
+            try:
+                # Set all new values
+                for (section, name), value in preferences_dict.items():
+                    update_preference_value(section, name, value)
+                yield
+            finally:
+                # Restore all original values and clear cache
+                for (section, name), original_value in original_values.items():
+                    if original_value is not None:
+                        update_preference_value(section, name, original_value)
+
+                    cache_key = gateway_preference_registry.manager().get_cache_key(section, name)
+                    cache.delete(cache_key)
+
+    return PreferenceManager()
 
 
 @pytest.fixture
@@ -77,15 +138,69 @@ def register_preference(db):
     kwargs_cache = {}
 
     def _register_preference(**kwargs):
+        from django.core.cache import cache
+
         kwargs_cache.update(kwargs)
         ret = register(**kwargs)
         key = get_preference_key(kwargs["section"], kwargs["preference_name"])
+
+        # Clear any existing cache entry for this preference to prevent type conflicts
+        cache_key = gateway_preference_registry.manager().get_cache_key(kwargs["section"], kwargs["preference_name"])
+        cache.delete(cache_key)
+
         gateway_preference_registry.manager()[key]  # Register the preference in the database
         return ret
 
     yield _register_preference
-    del gateway_preference_registry[kwargs_cache["section"]][kwargs_cache["preference_name"]]
-    Preference.objects.filter(section=kwargs_cache["section"], name=kwargs_cache["preference_name"]).delete()
+
+    # Cleanup: safely remove the preference
+    if kwargs_cache:
+        try:
+            del gateway_preference_registry[kwargs_cache["section"]][kwargs_cache["preference_name"]]
+        except KeyError:
+            # Already removed or never existed
+            pass
+        Preference.objects.filter(section=kwargs_cache["section"], name=kwargs_cache["preference_name"]).delete()
+
+
+@pytest.fixture
+def ensure_jwt_keys():
+    """
+    Function-scoped fixture to ensure JWT keys are set up for service tests.
+    This prevents authentication issues in service tests and works with pytest-xdist.
+    """
+    # Add debug logging for CI
+    import os
+
+    from django.db import transaction
+
+    from aap_gateway_api.utils.jwt_token import generate_jwt_keypair
+    from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
+
+    if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+        worker = os.getenv('PYTEST_XDIST_WORKER', 'main')
+        print(f"ensure_jwt_keys fixture called (worker: {worker})")
+
+    try:
+        with transaction.atomic():
+            public_key = get_preference_value("proxy", "jwt_public_key", encrypted=False)
+            if not public_key or public_key == '':
+                # Generate keys once for the entire test session
+                key_pair = generate_jwt_keypair()
+                update_preference_value("proxy", "jwt_private_key", key_pair.private)
+                update_preference_value("proxy", "jwt_public_key", key_pair.public)
+                if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+                    print(f"Generated new JWT keys (worker: {worker})")
+                return key_pair.public
+            else:
+                if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+                    print(f"Using existing JWT keys (worker: {worker})")
+            return public_key
+    except Exception as e:
+        # If setup fails, return None - will be handled by individual tests
+        if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+            print(f"JWT key setup failed (worker: {worker}): {e}")
+        return None
 
 
 @pytest.fixture
@@ -451,30 +566,31 @@ def patched_load_rbac():
 
 
 @pytest.fixture
-def simulated_controller_resource_api(patched_resource_client, service_api_route_controller):
+def simulated_controller_resource_api(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture=None)
     yield service_api_route_controller
     proc.kill()
 
 
 @pytest.fixture
-def simmulated_hub_resource_api(patched_resource_client, service_api_route_hub):
+def simmulated_hub_resource_api(patched_resource_client, service_api_route_hub, ensure_jwt_keys):
     proc = launch_service("galaxy", service_api_route_hub.service_port, setup_fixture=None)
     yield service_api_route_hub
     proc.kill()
 
 
 @pytest.fixture
-def simulated_eda_resource_api(patched_resource_client, service_api_route_eda):
+def simulated_eda_resource_api(patched_resource_client, service_api_route_eda, ensure_jwt_keys):
     proc = launch_service("eda", service_api_route_eda.service_port, setup_fixture=None)
     yield service_api_route_eda
     proc.kill()
 
 
 @pytest.fixture
-def system_user(db, settings, no_log_messages):
-    with no_log_messages():
-        user_obj, _created = User.all_objects.get_or_create(username=settings.SYSTEM_USERNAME)
+def system_user(db, settings, no_log_messages, django_user_model):
+    # The system user should be created by the migrations so we never want to try and create it here.
+    # Use all_objects manager to include managed users (system user is managed=True)
+    user_obj = django_user_model.all_objects.get(username=settings.SYSTEM_USERNAME)
     yield user_obj
 
 
@@ -518,6 +634,44 @@ def keycloak_authenticator(db):
     )
     yield authenticator
     delete_authenticator(authenticator)
+
+
+@pytest.fixture
+def isolated_cache():
+    """
+    Provides cache access with automatic cleanup before and after each test.
+
+    Worker isolation is handled automatically by WorkerIsolatedRedisCache backend.
+    This fixture provides:
+    - Test cleanup (prevents cache pollution between tests)
+    - Explicit dependencies (makes cache usage clear in test signatures)
+    - Future extensibility (easy to add cache setup/teardown if needed)
+    """
+    from django.core.cache import cache
+
+    # Clean up before the test to ensure fresh state
+    cache.clear()
+
+    yield cache
+
+    # Clean up after the test to prevent pollution
+    cache.clear()
+
+
+@pytest.fixture
+def transactional_db():
+    """
+    Provides a transactional database for tests that need complete isolation.
+    Use this for tests that modify global state or need stronger isolation guarantees.
+    """
+    from django.db import transaction
+
+    # Force a transaction rollback after the test
+    with transaction.atomic():
+        # Create a savepoint that will be rolled back
+        sid = transaction.savepoint()
+        yield
+        transaction.savepoint_rollback(sid)
 
 
 @pytest.fixture(autouse=True)

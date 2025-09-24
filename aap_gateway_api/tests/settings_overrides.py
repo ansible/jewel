@@ -20,10 +20,10 @@ DATABASES = {
     }
 }
 
-# Mock the redis cache with fakeredis
+# Mock the redis cache with fakeredis and worker isolation
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "BACKEND": "aap_gateway_api.tests.cache_backends.WorkerIsolatedRedisCache",
         "LOCATION": "redis://localhost:6379",
         "OPTIONS": {
             "connection_class": FakeConnection,
@@ -34,8 +34,6 @@ CACHES = {
 for logger in LOGGING["loggers"]:  # noqa: F405
     LOGGING["loggers"][logger]["level"] = "ERROR"  # noqa: F405
 
-# Caching breaks unit tests because:
-#   1. we don't have anything that will clear the cache on a per-test basis
-#   2. even if we did, we have tests running in parallel so we would need each thread to have its own cache
-# Neither are insurmountable but we haven't solved it
-DYNAMIC_PREFERENCES['ENABLE_CACHE'] = False  # noqa: F405
+# Caching is now supported in tests with proper worker isolation via WorkerIsolatedRedisCache
+# Each pytest-xdist worker gets its own cache prefix, and cache.clear() only clears that worker's keys
+DYNAMIC_PREFERENCES['ENABLE_CACHE'] = True  # noqa: F405

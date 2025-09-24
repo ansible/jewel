@@ -33,17 +33,25 @@ class TestUserSerializer:
             ('password_min_special', 2, '*#()!#(@!', None),
         ],
     )
-    def test_password_constraints(self, admin_api_client, user, set_preference, pref_name, pref_value, password, error_substr):
+    def test_password_constraints(self, admin_api_client, user, preference_manager, pref_name, pref_value, password, error_substr):
         url = get_relative_url('user-detail', kwargs={'pk': user.id})
-        for preference_name in ['password_min_length', 'password_min_digits', 'password_min_upper', 'password_min_special']:
-            set_preference('local_login', preference_name, 0)
-        set_preference('local_login', pref_name, pref_value)
-        response = admin_api_client.patch(url, {'password': password})
-        if error_substr is None:
-            assert response.status_code == 200
-        else:
-            assert response.status_code == 400
-            assert error_substr in response.data['password'][0]
+
+        # Set all password preferences, ensuring others are 0 and the target preference has the test value
+        preferences = {
+            ("local_login", "password_min_length"): 0,
+            ("local_login", "password_min_digits"): 0,
+            ("local_login", "password_min_upper"): 0,
+            ("local_login", "password_min_special"): 0,
+            ("local_login", pref_name): pref_value,
+        }
+
+        with preference_manager.set_multiple(preferences):
+            response = admin_api_client.patch(url, {'password': password})
+            if error_substr is None:
+                assert response.status_code == 200
+            else:
+                assert response.status_code == 400
+                assert error_substr in response.data['password'][0]
 
     @pytest.mark.parametrize(
         'password, expected_password_field',
@@ -96,18 +104,22 @@ class TestUserSerializer:
         ],
     )
     @mock.patch('aap_gateway_api.serializers.user.logger')
-    def test_password_constraints_superuser_exemption(self, logger, admin_api_client, user, set_preference, allow_admins_to_set_insecure, expected_status):
-        set_preference('local_login', 'password_min_length', 10)
-        set_preference('local_login', 'allow_admins_to_set_insecure', allow_admins_to_set_insecure)
-        url = get_relative_url('user-detail', kwargs={'pk': user.id})
-        response = admin_api_client.patch(url, {'password': '123456789'})
+    def test_password_constraints_superuser_exemption(self, logger, admin_api_client, user, preference_manager, allow_admins_to_set_insecure, expected_status):
+        with preference_manager.set_multiple(
+            {
+                ("local_login", "password_min_length"): 10,
+                ("local_login", "allow_admins_to_set_insecure"): allow_admins_to_set_insecure,
+            }
+        ):
+            url = get_relative_url('user-detail', kwargs={'pk': user.id})
+            response = admin_api_client.patch(url, {'password': '123456789'})
 
-        assert response.status_code == expected_status
+            assert response.status_code == expected_status
 
-        if expected_status == 200:
-            logger.warning.assert_called_with(f'User admin was allowed to save an insecure password for user {user.id}')
-        else:
-            logger.warning.assert_not_called()
+            if expected_status == 200:
+                logger.warning.assert_called_with(f'User admin was allowed to save an insecure password for user {user.id}')
+            else:
+                logger.warning.assert_not_called()
 
     def test_users_resource_summary_fields(self, admin_api_client, user):
         url = get_relative_url("user-detail", kwargs={"pk": user.pk})

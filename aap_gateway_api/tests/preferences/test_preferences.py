@@ -36,9 +36,10 @@ def test_get_preference_value_exceptions():
     assert str(e.value) == "You must pass get_preference_value a section and a name"
 
 
-def test_preference_with_invalid_url(set_preference):
+def test_preference_with_invalid_url(preference_manager):
     with pytest.raises(ValidationError) as e:
-        set_preference("proxy", "gateway_proxy_url", "monkey://banana")
+        with preference_manager.set("proxy", "gateway_proxy_url", "monkey://banana"):
+            pass  # The validation error should occur during setup
     assert str(e.value.message) == "monkey://banana is not a valid URL"
 
 
@@ -324,7 +325,7 @@ def test_get_default_value_by_preference(register_preference, is_encrypted):
     assert preferences.get_default_value_by_preference(preference, is_encrypted) == ENCRYPTED_STRING if is_encrypted else 'iam_default'
 
 
-def test_absolute_path_or_url_preference(register_preference, set_preference):
+def test_absolute_path_or_url_preference(register_preference, preference_manager):
     register_preference(
         section="general",
         preference_name="test_preference",
@@ -334,20 +335,23 @@ def test_absolute_path_or_url_preference(register_preference, set_preference):
         preference_type="absolute_path_or_url",
     )
 
-    set_preference("general", "test_preference", "/path/to/file")
-    assert preferences.get_preference_value("general", "test_preference") == "/path/to/file"
+    with preference_manager.set("general", "test_preference", "/path/to/file"):
+        assert preferences.get_preference_value("general", "test_preference") == "/path/to/file"
 
-    set_preference("general", "test_preference", "https://example.com")
-    assert preferences.get_preference_value("general", "test_preference") == "https://example.com"
+    with preference_manager.set("general", "test_preference", "https://example.com"):
+        assert preferences.get_preference_value("general", "test_preference") == "https://example.com"
 
     with pytest.raises(ValidationError) as e:
-        set_preference("general", "test_preference", "not_a_url")
+        with preference_manager.set("general", "test_preference", "not_a_url"):
+            pass  # The validation error should occur during setup
     assert "not_a_url is not a valid URL or absolute path" in str(e.value)
 
     with pytest.raises(ValidationError) as e:
-        set_preference("general", "test_preference", "not/an/absolute/path")
+        with preference_manager.set("general", "test_preference", "not/an/absolute/path"):
+            pass  # The validation error should occur during setup
     assert "not/an/absolute/path is not a valid URL or absolute path" in str(e.value)
 
     with pytest.raises(ValidationError) as e:
-        set_preference("general", "test_preference", "mailto:test@example.com")
+        with preference_manager.set("general", "test_preference", "mailto:test@example.com"):
+            pass  # The validation error should occur during setup
     assert "mailto:test@example.com is not a valid URL or absolute path" in str(e.value)
