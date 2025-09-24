@@ -149,6 +149,7 @@ def register(
     preference_type="string",
     help_text=_("No help text specified"),
     read_only=False,
+    label=None,
     on_update=None,
     settings_bound=False,
     **kwargs,
@@ -178,6 +179,7 @@ def register(
         "field_type": type_class,
         "help_text": help_text,
         "read_only": read_only,
+        "label": label,
         "on_update": on_update,
         "settings_bound": settings_bound,
     }
