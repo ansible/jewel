@@ -168,7 +168,7 @@ container-startup-podman.yml: tools/configs/container-startup-podman.yml
 
 ## Generate all files from generate-source playbook
 tools/generated/sources: tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 container-startup.yml
-	ansible-galaxy install -r requirements/requirements.yml
+	ansible-galaxy install --force -r requirements/requirements.yml
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
