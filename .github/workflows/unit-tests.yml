@@ -2,9 +2,10 @@
 name: Unit Tests
 on:
   pull_request:
-  push:
+  push:    # This is triggered on a PR being merged into devel or a stable branch
     branches:
       - devel
+      
 env:
   # Only upload JUnit xml files if we are this repo:
   TARGET_REPOSITORY: 'ansible/jewel'
@@ -12,6 +13,7 @@ jobs:
   unit-test:
     name: ${{ matrix.batch.name }}
     runs-on: ubuntu-latest
+    if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
     services:
       redis:
         image: redis
@@ -47,13 +49,13 @@ jobs:
               --ignore=aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "remaining"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install build requirements
         run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
 
       - name: Install python ${{ matrix.batch.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.batch.python-version }}
 
@@ -71,6 +73,10 @@ jobs:
           PYTEST_NUM_PROCESSES: ${{ matrix.batch.processes }}
         run: tox -e py311 -- ${{ matrix.batch.test-filter }} -v --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
 
+      - name: Inject PR number into coverage file
+        if: github.event_name == 'pull_request'
+        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage-${{ matrix.batch.artifact-suffix }}.xml
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -84,44 +90,28 @@ jobs:
           path: junit-${{ matrix.batch.artifact-suffix }}.xml
 
   merge-and-upload:
-    name: Merge coverage and upload results
+    name: Merge junit and upload results
     runs-on: ubuntu-latest
     needs: unit-test
-    if: needs.unit-test.result == 'success'
+    if: |
+      needs.unit-test.result == 'success' &&
+      (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install merge tools
-        run: pip install coverage junitparser
-
-      - name: Download all coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-*
-          merge-multiple: true
+        run: pip install junitparser
 
       - name: Download all junit artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: junit-*
           merge-multiple: true
-
-      - name: Merge coverage files
-        run: |
-          # Combine coverage files
-          coverage combine coverage-*.xml || echo "Coverage combine failed, using first file"
-          # If combine fails, merge manually or use the largest coverage file
-          if [ -f .coverage ]; then
-            coverage xml -o coverage.xml
-          else
-            # Fallback: use the remaining tests coverage (likely most comprehensive)
-            cp coverage-remaining.xml coverage.xml || cp coverage-*.xml coverage.xml
-          fi
 
       - name: Merge junit files
         run: |
@@ -150,15 +140,6 @@ jobs:
           merged.write('aap-gateway-test-results.xml')
           print('Merged junit files successfully')
           "
-
-      - name: Inject PR number into coverage.xml
-        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage.xml
-
-      - name: Upload final coverage as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.xml
 
       - name: Upload final junit as artifact
         uses: actions/upload-artifact@v4

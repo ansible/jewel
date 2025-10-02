@@ -15,7 +15,7 @@ permissions:
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Create Minimal Metadata
         env:
@@ -23,69 +23,85 @@ jobs:
           PR_TITLE: '${{ github.event.pull_request.title }}'
           PR_HEAD_REF: '${{ github.event.pull_request.head.ref }}'
           PR_BASE_REF: '${{ github.event.pull_request.base.ref }}'
+          ISSUE_TITLE: '${{ github.event.issue.title }}'
+          ISSUE_BODY: '${{ github.event.issue.body }}'
+          EVENT_NAME: '${{ github.event_name }}'
+          EVENT_ACTION: '${{ github.event.action }}'
+          PR_OR_ISSUE_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
+          REPOSITORY: '${{ github.repository }}'
+          PR_NUMBER: '${{ github.event.pull_request.number }}'
+          PR_STATE: '${{ github.event.pull_request.state }}'
+          PR_HEAD_SHA: '${{ github.event.pull_request.head.sha }}'
+          PR_BASE_SHA: '${{ github.event.pull_request.base.sha }}'
+          PR_USER_LOGIN: '${{ github.event.pull_request.user.login }}'
+          PR_USER_ID: '${{ github.event.pull_request.user.id }}'
+          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          ISSUE_STATE: '${{ github.event.issue.state }}'
+          ISSUE_USER_LOGIN: '${{ github.event.issue.user.login }}'
+          ISSUE_USER_ID: '${{ github.event.issue.user.id }}'
         run: |
           echo "🚀 Creating minimal metadata for workflow_run event"
-          echo "Event: ${{ github.event_name }}.${{ github.event.action }}"
-          echo "Number: ${{ github.event.pull_request.number || github.event.issue.number }}"
-          echo "Repository: ${{ github.repository }}"
-          
+          echo "Event: $EVENT_NAME.$EVENT_ACTION"
+          echo "Number: $PR_OR_ISSUE_NUMBER"
+          echo "Repository: $REPOSITORY"
+
           mkdir -p ./pr-metadata
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
+          if [ "$EVENT_NAME" == "pull_request" ]; then
             # Create base64 encoded metadata to prevent JSON parsing issues with special characters
             TITLE_B64=$(echo -n '$PR_TITLE' | base64 -w 0)
             BODY_B64=$(echo -n '$PR_BODY' | base64 -w 0)
-            
+
             cat > ./pr-metadata/metadata.json << EOF
           {
             "type": "pull_request",
-            "event_action": "${{ github.event.action }}",
-            "number": ${{ github.event.pull_request.number }},
+            "event_action": "$EVENT_ACTION",
+            "number": $PR_NUMBER,
             "title_base64": "$TITLE_B64",
             "body_base64": "$BODY_B64",
-            "state": "${{ github.event.pull_request.state }}",
+            "state": "$PR_STATE",
             "encoding": {
               "title": "base64",
               "body": "base64"
             },
             "head": {
               "ref": "$PR_HEAD_REF",
-              "sha": "${{ github.event.pull_request.head.sha }}"
+              "sha": "$PR_HEAD_SHA"
             },
             "base": {
               "ref": "$PR_BASE_REF",
-              "sha": "${{ github.event.pull_request.base.sha }}"
+              "sha": "$PR_BASE_SHA"
             },
             "author": {
-              "login": "${{ github.event.pull_request.user.login }}",
-              "id": ${{ github.event.pull_request.user.id }}
+              "login": "$PR_USER_LOGIN",
+              "id": $PR_USER_ID
             }
           }
           EOF
-          elif [ "${{ github.event_name }}" == "issues" ]; then
+          elif [ "$EVENT_NAME" == "issues" ]; then
             # Create base64 encoded metadata to prevent JSON parsing issues with special characters
-            TITLE_B64=$(echo -n '$PR_TITLE' | base64 -w 0)
-            BODY_B64=$(echo -n '$PR_BODY' | base64 -w 0)
-            
+            TITLE_B64=$(echo -n '$ISSUE_TITLE' | base64 -w 0)
+            BODY_B64=$(echo -n '$ISSUE_BODY' | base64 -w 0)
+
             cat > ./pr-metadata/metadata.json << EOF
           {
             "type": "issue",
-            "event_action": "${{ github.event.action }}",
-            "number": ${{ github.event.issue.number }},
+            "event_action": "$EVENT_ACTION",
+            "number": $ISSUE_NUMBER,
             "title_base64": "$TITLE_B64",
             "body_base64": "$BODY_B64",
-            "state": "${{ github.event.issue.state }}",
+            "state": "$ISSUE_STATE",
             "encoding": {
               "title": "base64",
               "body": "base64"
             },
             "author": {
-              "login": "${{ github.event.issue.user.login }}",
-              "id": ${{ github.event.issue.user.id }}
+              "login": "$ISSUE_USER_LOGIN",
+              "id": $ISSUE_USER_ID
             }
           }
           EOF
           fi
-          
+
           echo "✅ Minimal metadata created"
 
       - name: Store Metadata as Artifact

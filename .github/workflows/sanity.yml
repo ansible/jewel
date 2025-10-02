@@ -31,13 +31,13 @@ jobs:
           - env: check-help-text
             python-version: "3.11"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install build requirements
         run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
 
       - name: Install python ${{ matrix.tests.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.tests.python-version }}
 
