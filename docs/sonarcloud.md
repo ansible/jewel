@@ -70,47 +70,123 @@ For CI-based analysis, parameters can be set in the `sonar-project.properties` f
 ## 📌 GitHub Actions Integration  
 There are two GitHub Actions workflows that handle the integration of SonarCloud into the AAP-Gateway CI/CD pipeline:  
 
-SonarCloud analysis on PRs to private repositories requires a special setup because PR workflows don’t have access to secrets. To solve this, we trigger the SonarCloud workflow (`sonar-pr.yml`) after the main CI workflow completes. This workflow runs in the upstream repository context, so it has access to the necessary secrets and can report results back to the PR.
+SonarCloud analysis on PRs to private repositories requires a special setup because PR workflows don't have access to secrets. To solve this, we trigger the SonarCloud workflow (`sonar-pr.yml`) after the Unit Tests workflow completes. This workflow runs in the upstream repository context, so it has access to the necessary secrets and can report results back to the PR.
 
-### 🔹 **1. CI Workflow**
-File: [`.github/workflows/ci.yml`](https://github.com/ansible/aap-gateway/blob/devel/.github/workflows/ci.yml)  
-Trigger: Runs on push and pull requests  
+### 🔹 **1. Unit Tests Workflow**
+File: [`.github/workflows/unit-tests.yml`](https://github.com/ansible/aap-gateway/blob/devel/.github/workflows/unit-tests.yml)
+Trigger: Runs on pull requests and push to `devel`/`stable-*` branches
 
-- The CI workflow first using `tox` with `pytest` and `pytest-cov` to run tests while measuring code coverage and generating coverage report `coverage.xml`.
-- **`coverage.xml`** is then uploaded as an artifact to be used by the `sonar-pr.yml` workflow.  
-  📚 GitHub Docs: [Storing & Sharing Data from a Workflow](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/storing-and-sharing-data-from-a-workflow)
+- The Unit Tests workflow runs tests in parallel batches using `tox` with `pytest` and `pytest-cov`
+- Each batch generates its own coverage report: `coverage-views.xml`, `coverage-service.xml`, `coverage-remaining.xml`
+- For PRs, the PR number is injected into each coverage file as an XML comment for later extraction
+- All individual coverage artifacts are uploaded separately to preserve parallel test results
+- Triggers the SonarCloud workflow via `workflow_run` event upon successful completion
 
-- SonarCloud Scan (on push only, **not** PR): Here, SonarCloud analysis is run only on *direct pushes* to the upstream repository (e.g. when a PR is merged). This step is skipped otherwise.
+📚 GitHub Docs: [Storing & Sharing Data from a Workflow](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/storing-and-sharing-data-from-a-workflow)
 
-### 🔹 **2. SonarCloud PR Workflow**
+### 🔹 **2. SonarCloud Analysis Workflow**
 File: [`.github/workflows/sonar-pr.yml`](https://github.com/ansible/aap-gateway/blob/devel/.github/workflows/sonar-pr.yml)  
-Trigger: Runs after the CI workflow successfully completes on a pull request  
+Trigger: Runs after the Unit Tests workflow successfully completes (via `workflow_run`)  
 
-- Downloads the `coverage.xml` artifact from the CI workflow.
-- Retrieves PR metadata, including the base branch.
-- Runs SonarCloud scan analysis on the PR.
+This workflow is split into two focused jobs for better maintainability:
+
+#### **Job 1: sonar-pr-analysis** (for PRs)
+- Triggered when Unit Tests completes on `pull_request` events
+- Downloads all individual coverage artifacts (`coverage-*.xml`) from the Unit Tests workflow
+- Extracts PR number from coverage files (injected by Unit Tests workflow)
+- Retrieves PR metadata (base branch, head branch) via GitHub API
+- Fetches list of all changed files in the PR
+- Runs SonarCloud PR analysis on all changed files (Python, YAML, JSON, Markdown, etc.)
+- Passes all coverage files to SonarCloud for comprehensive coverage reporting
+- Quality gate focuses on new/changed code in the PR
+
+#### **Job 2: sonar-branch-analysis** (for long-lived branches)
+- Triggered when Unit Tests completes on `push` events to `devel`/`stable-*`
+- Downloads all individual coverage artifacts (`coverage-*.xml`) from the Unit Tests workflow
+- Runs SonarCloud branch analysis on the full codebase
+- Passes all coverage files to SonarCloud for comprehensive coverage reporting
+- Quality gate focuses on overall project health
+
+**Key Benefits:**
+- ✅ **Eliminates coverage race conditions** - SonarCloud always runs after tests complete
+- ✅ **Sequential execution** - Coverage data is always available when analysis runs  
+- ✅ **Focused jobs** - Clear separation between PR analysis and branch analysis
+- ✅ **Improved reliability** - No more missing coverage data on branch pushes
+- ✅ **Better maintainability** - Simpler conditional logic within each job
 
 
 > [!NOTE]
-> *It is important to notice the use of `workflow_run` instead of `pull_request` on trigger condition.*
+> **Why `workflow_run` Instead of Direct Triggers?**
 > 
-> GitHub Actions workflows triggered by `pull_request` run in the context of the forked repository, which does not have access to secrets (e.g., the SonarCloud secrets).
+> Our architecture uses `workflow_run` exclusively to trigger SonarCloud analysis, which provides several key benefits:
 >
-> By using `workflow_run`:
-> - The CI workflow first runs and generates a coverage report.
-> - The Sonar PR workflow then executes SonarCloud analysis with the correct permissions, since `workflow_run` runs in the context of the upstream repository (which has access to secrets).
+> **Security:** GitHub Actions workflows triggered by `pull_request` run in the context of the forked repository, which does not have access to secrets (e.g., the SonarCloud tokens). By using `workflow_run`, the SonarCloud workflow runs in the upstream repository context with access to secrets.
+>
+> **Reliability:** The `workflow_run` approach ensures SonarCloud analysis always runs **after** Unit Tests completes successfully, guaranteeing that coverage data is available. This eliminates race conditions that occurred with parallel execution.
+>
+> **Flow:**
+> 1. Unit Tests workflow runs and generates coverage report
+> 2. `workflow_run` event triggers SonarCloud workflow upon Unit Tests success  
+> 3. SonarCloud workflow downloads coverage artifact and performs analysis
 > 
 > 📚 GitHub Docs: 
 > - [`workflow_run` event in GitHub Actions](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#workflow_run)
 > - [Using secrets in a workflow](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#using-secrets-in-a-workflow)
 
+### 🔹 **Workflow Architecture Diagram**
 
- **📌 Summary: Why Two Workflows?**
+The following diagram illustrates how the fork PR workflow maintains security while enabling SonarCloud analysis:
 
-| **Workflow**     | **Trigger**       | **Runs SonarCloud?** | **Access to Secrets?** |
-|------------------|------------------|----------------------|------------------------|
-| `ci.yml`        | Push, PR          | ✅ **Only on push**  | ❌ **Not on PRs** (forks lack access) |
-| `sonar-pr.yml`  | After CI success  | ✅ **Only on PRs**   | ✅ **Has access to secrets** |
+```mermaid
+graph TB
+    subgraph "🔒 Upstream Repository (ansible/aap-gateway)"
+        upstream[("📦 Upstream Repo<br/>(Has Secrets)")]
+        sonar["⚡ sonar-pr.yml<br/>triggered by workflow_run<br/>✅ Has SONAR_TOKEN"]
+        coverage_artifact["📊 Coverage Artifact<br/>(from Unit Tests)"]
+    end
+
+    subgraph "🍴 Forked Repository (contributor/aap-gateway)"
+        fork[("📦 Forked Repo<br/>(No Secrets)")]
+        pr["📝 Pull Request"]
+        unit_tests["🧪 unit-tests.yml<br/>triggered by pull_request<br/>❌ No Secrets"]
+    end
+
+    fork -->|"1. Create PR"| pr
+    pr -->|"2. Triggers pull_request event"| unit_tests
+    unit_tests -->|"3. Runs tests in fork context<br/>(no access to secrets)"| unit_tests
+    unit_tests -->|"4. Generates coverage.xml"| coverage_artifact
+    unit_tests -.->|"5. On success, fires<br/>workflow_run event"| sonar
+    sonar -->|"6. Downloads artifact"| coverage_artifact
+    sonar -->|"7. Runs analysis with<br/>SONAR_TOKEN + coverage"| upstream
+
+    style fork fill:#e1f5ff
+    style upstream fill:#fff4e1
+    style unit_tests fill:#ffe1e1
+    style sonar fill:#e1ffe1
+    style pr fill:#f0f0f0
+```
+
+**Key Security Boundaries:**
+- 🔴 **Fork Context (No Secrets)**: Unit tests run in the fork's context where secrets are not available
+- 🟢 **Upstream Context (With Secrets)**: SonarCloud runs in the upstream repository with access to SONAR_TOKEN
+- 🔵 **Artifact Bridge**: Coverage data flows from fork to upstream via artifacts (safe, non-executable data)
+
+This architecture ensures that:
+- Forks cannot access sensitive tokens
+- Code from forks is tested before analysis
+- SonarCloud always has required credentials
+- Coverage data is always available when analysis runs
+
+ **📌 Summary: Workflow Architecture**
+
+| **Workflow**         | **Trigger**                    | **Purpose**                | **Access to Secrets?** |
+|---------------------|-------------------------------|---------------------------|------------------------|
+| `unit-tests.yml`   | Push, PR                      | Run tests & generate coverage | ❌ **Not on PRs** (forks lack access) |
+| `sonar-pr.yml`     | After Unit Tests completes   | SonarCloud analysis        | ✅ **Has access to secrets** |
+
+**Flow:**
+- **For PRs**: `pull_request` → `unit-tests.yml` → `workflow_run` → `sonar-pr-analysis` job  
+- **For Branches**: `push` → `unit-tests.yml` → `workflow_run` → `sonar-branch-analysis` job
 
 
 ## 🛠️ Debugging SonarCloud Issues

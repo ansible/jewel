@@ -9,7 +9,7 @@ jobs:
       HEADLESS: "yes"
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Spin up the dev env
         run: cd aap-dev && make dev-up

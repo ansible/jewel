@@ -1,18 +1,27 @@
-# SonarCloud PR Workflow for aap-gateway
+# SonarCloud Analysis Workflow for aap-gateway
 #
-# This workflow runs on every pull request and push to the repository.
+# This workflow runs SonarCloud analysis triggered by Unit Tests workflow completion.
+# It is split into two separate jobs for clarity and maintainability:
 #
-# Steps overview:
-# 1. Download coverage data from Unit Tests workflow
-# 2. Check for backport labels (skip if found)
-# 3. Check for Python file changes (skip if none)
-# 4. Extract PR info and set environment
-# 5. Run SonarCloud analysis with quality gate
+# FLOW: Unit Tests completes → workflow_run triggers this workflow → appropriate job runs
+#
+# JOB 1: sonar-pr-analysis (for PRs)
+# - Triggered by: workflow_run (Unit Tests on pull_request)
+# - Steps: Download coverage → Get PR info → Get changed files → Run SonarCloud PR analysis
+# - Scans: All changed files in the PR (Python, YAML, JSON, etc.)
+# - Quality gate: Focuses on new/changed code in PR only
+#
+# JOB 2: sonar-branch-analysis (for long-lived branches)
+# - Triggered by: workflow_run (Unit Tests on push to devel/stable-*)
+# - Steps: Download coverage → Run SonarCloud branch analysis
+# - Scans: Full codebase
+# - Quality gate: Focuses on overall project health
+#
+# This ensures coverage data is always available from Unit Tests before analysis runs.
 #
 # What files are scanned:
-# - All Python files (.py) in the repository
-# - Excludes: tests, scripts, dev environments, external collections
-# - Quality gate focuses on new/changed code in PR only
+# - All files in the repository that SonarCloud can analyze
+# - Excludes: tests, scripts, dev environments, external collections (see sonar-project.properties)
 
 
 # With much help from:
@@ -20,184 +29,147 @@
 # https://community.sonarsource.com/t/how-to-use-sonarcloud-with-a-forked-repository-on-github/7363/32
 name: SonarCloud
 on:
-  workflow_run:
+  workflow_run:   # This is triggered by unit-tests being completed.
     workflows:
       - Unit Tests
     types:
       - completed
-  push:
-    branches:
-      - devel
-      - 'stable-*'
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'PR number (for push events, use 0)'
-        required: true
-        type: string
-      event_type:
-        description: 'Event type (push or pull_request)'
-        required: true
-        type: string
-      commit_sha:
-        description: 'Commit SHA'
-        required: true
-        type: string
-      repository:
-        description: 'Repository name'
-        required: true
-        type: string
-      ci_run_id:
-        description: 'CI workflow run ID (for downloading coverage artifact)'
-        required: false
-        type: string
 permissions: read-all
 jobs:
-  sonar:
-    name: Upload to SonarCloud
+  sonar-pr-analysis:
+    name: SonarCloud PR Analysis
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') ||
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'push' && (github.ref == 'refs/heads/devel' || startsWith(github.ref, 'refs/heads/stable-')))
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.repository == 'ansible-automation-platform/aap-gateway' || github.repository == 'ansible-automation-platform/aap-gateway-debug')
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      # Download coverage artifact (for both workflow_run and workflow_dispatch)
-      - name: Download coverage artifact
-        if: |
-          github.event_name == 'workflow_run' ||
-          (github.event_name == 'workflow_dispatch' && inputs.ci_run_id != '')
+      # Download all individual coverage artifacts from Unit Tests workflow
+      - name: Download coverage artifacts
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: Unit Tests
-          run_id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.ci_run_id }}
-          name: coverage
+          run_id: ${{ github.event.workflow_run.id }}
+          pattern: coverage-*
 
-      # Set PR number based on trigger type
-      - name: Set PR number and event type
+      # Extract PR metadata from workflow_run event
+      - name: Set PR metadata and prepare files for analysis
+        env:
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO_NAME: ${{ github.event.repository.full_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # Extract from coverage.xml for workflow_run
-            echo "PR_NUMBER=$(grep -m 1 '<!-- PR' coverage.xml | awk '{print $3}')" >> $GITHUB_ENV
-            echo "EVENT_TYPE=pull_request" >> $GITHUB_ENV
-            echo "COMMIT_SHA=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
-            echo "REPO_NAME=${{ github.event.repository.full_name }}" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            # Direct push to long-lived branch
-            echo "PR_NUMBER=0" >> $GITHUB_ENV
-            echo "EVENT_TYPE=push" >> $GITHUB_ENV
-            echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
-            echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
-            echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          # Find all downloaded coverage XML files
+          coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
+          echo "Found coverage files: $coverage_files"
+          echo "COVERAGE_PATHS=$coverage_files" >> $GITHUB_ENV
+
+          # Extract PR number from first coverage.xml file found
+          first_coverage=$(find . -name "coverage-*.xml" -type f | head -1)
+          if [ -f "$first_coverage" ]; then
+            PR_NUMBER=$(grep -m 1 '<!-- PR' "$first_coverage" | awk '{print $3}' || echo "")
           else
-            # Use inputs for workflow_dispatch
-            echo "PR_NUMBER=${{ inputs.pr_number }}" >> $GITHUB_ENV
-            echo "EVENT_TYPE=${{ inputs.event_type }}" >> $GITHUB_ENV
-            echo "COMMIT_SHA=${{ inputs.commit_sha }}" >> $GITHUB_ENV
-            echo "REPO_NAME=${{ inputs.repository }}" >> $GITHUB_ENV
+            PR_NUMBER=""
           fi
 
-      - name: Get PR info
-        if: env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0'
-        uses: octokit/request-action@v2.x
-        id: pr_info
-        with:
-          route: GET /repos/{repo}/pulls/{number}
-          repo: ${{ env.REPO_NAME }}
-          number: ${{ env.PR_NUMBER }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Print SonarCloud Analysis Decision Summary
-        id: print_summary
-        run: |
           echo "🔍 SonarCloud Analysis Decision Summary"
           echo "========================================"
+          echo "├── CI Event: ✅ Pull Request"
+          echo "├── PR Number from coverage.xml: #${PR_NUMBER:-<not found>}"
 
-          # Check CI Event type
-          if [ "${{ env.EVENT_TYPE }}" = "pull_request" ]; then
-            echo "├── CI Event: ✅ Pull Request"
+          if [ -z "$PR_NUMBER" ]; then
+            echo "##[error]❌ FATAL: PR number not found in coverage.xml"
+            echo "##[error]This job requires a PR number to run PR analysis."
+            echo "##[error]The unit-tests workflow should have injected the PR number into coverage.xml."
+            exit 1
+          fi
 
-            # Check backport labels (only for PRs)
-            if [ "${{ env.PR_NUMBER }}" != "0" ]; then
-              echo "├── Backport Label: ➖ N/A (Skip check for workflow_dispatch)"
+          # Get PR metadata from GitHub API
+          PR_DATA=$(gh api "repos/$REPO_NAME/pulls/$PR_NUMBER")
+          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
+          PR_HEAD=$(echo "$PR_DATA" | jq -r '.head.ref')
 
-              # Check Python changes for PRs
-              files=$(gh api repos/${{ env.REPO_NAME }}/pulls/${{ env.PR_NUMBER }}/files --jq '.[].filename')
+          # Print summary
+          echo "🔍 SonarCloud Analysis Decision Summary"
+          echo "========================================"
+          echo "├── CI Event: ✅ Pull Request"
+          echo "├── PR Number: #$PR_NUMBER"
+          echo "├── Base Branch: $PR_BASE"
+          echo "├── Head Branch: $PR_HEAD"
+          echo "├── Repo: $REPO_NAME"
 
-              # Get file extensions for summary
-              extensions=$(echo "$files" | sed 's/.*\.//' | sort | uniq | tr '\n' ',' | sed 's/,$//')
+          # Export to GitHub env for later steps
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "PR_BASE=$PR_BASE" >> $GITHUB_ENV
+          echo "PR_HEAD=$PR_HEAD" >> $GITHUB_ENV
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
 
-              # Check if any Python files were changed
-              python_files=$(echo "$files" | grep '\.py$' || true)
-              if [ -z "$python_files" ]; then
-                echo "├── Python Changes: ❌ None (.$extensions only)"
-                echo "└── Result: ⏭️ Skip - \"No Python code changes detected\""
-                exit 0
-              else
-                python_count=$(echo "$python_files" | wc -l)
-                echo "├── Python Changes: ✅ Found ($python_count files)"
-                echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
-              fi
+          # Get all changed files from PR (with error handling)
+          files=""
+          if [ -n "$PR_NUMBER" ]; then
+            if gh api repos/$REPO_NAME/pulls/$PR_NUMBER/files --jq '.[].filename' > /tmp/pr_files.txt 2>/tmp/pr_error.txt; then
+              files=$(cat /tmp/pr_files.txt)
             else
-              echo "├── Backport Label: ➖ N/A (Not a PR)"
-              echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
+              echo "├── Changed Files: ⚠️  Could not fetch (likely test repo or PR not found)"
+              if [ -f coverage.xml ] && [ -s coverage.xml ]; then
+                echo "├── Coverage Data: ✅ Available"
+              else
+                echo "├── Coverage Data: ⚠️  Not available"
+              fi
+              echo "└── Result: ✅ Running SonarCloud analysis (full scan)"
+              # No files = no inclusions filter = full scan
+              exit 0
             fi
           else
-            # For push events, always proceed
-            echo "├── CI Event: ✅ Push"
-            echo "├── Branch: ${{ env.BRANCH_NAME || 'Unknown' }}"
-            echo "├── Backport Label: ➖ N/A (Push event)"
-            echo "├── Python Changes: ➖ N/A (Full codebase scan)"
-            echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
+            echo "├── PR Number: ⚠️  Not available"
+            if [ -f coverage.xml ] && [ -s coverage.xml ]; then
+              echo "├── Coverage Data: ✅ Available"
+            else
+              echo "├── Coverage Data: ⚠️  Not available"
+            fi
+            echo "└── Result: ✅ Running SonarCloud analysis (full scan)"
+            exit 0
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if analysis should proceed
-        id: check_proceed
-        run: |
-          # This step only runs if we got past the summary step
-          # which means all conditions are met for analysis
-          echo "proceed=true" >> $GITHUB_OUTPUT
-          echo "✅ All conditions met - proceeding with SonarCloud analysis"
+          # Get file extensions and count for summary
+          extensions=$(echo "$files" | sed 's/.*\.//' | sort | uniq | tr '\n' ',' | sed 's/,$//')
+          file_count=$(echo "$files" | wc -l)
+          echo "├── Changed Files: $file_count file(s) (.${extensions})"
 
-      - name: Set PR info into env
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0' && steps.pr_info.outputs.data != ''
-        run: |
-          echo "PR_BASE=${{ fromJson(steps.pr_info.outputs.data).base.ref }}" >> $GITHUB_ENV
-          echo "PR_HEAD=${{ fromJson(steps.pr_info.outputs.data).head.ref }}" >> $GITHUB_ENV
+          # Check if coverage.xml exists and has content
+          if [ -f coverage.xml ] && [ -s coverage.xml ]; then
+            echo "├── Coverage Data: ✅ Available"
+          else
+            echo "├── Coverage Data: ⚠️  Not available (analysis will proceed without coverage)"
+          fi
 
-      - name: Get changed Python files for Sonar
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0'
-        run: |
-          files=$(gh api repos/${{ env.REPO_NAME }}/pulls/${{ env.PR_NUMBER }}/files --jq '.[].filename')
+          # Prepare file list for Sonar
           echo "All changed files in PR:"
           echo "$files"
-          python_files=$(echo "$files" | grep '\.py$' || true)
-          if [ -n "$python_files" ]; then
-            echo "Changed Python files:"
-            echo "$python_files"
-            # Convert to comma-separated list for sonar.inclusions
-            inclusions=$(echo "$python_files" | tr '\n' ',' | sed 's/,$//')
-            echo "SONAR_INCLUSIONS=$inclusions" >> $GITHUB_ENV
-            echo "Will scan these Python files: $inclusions"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Add base branch (for PRs)
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0'
+          # Convert to comma-separated list for sonar.inclusions
+          if [ -n "$files" ]; then
+            inclusions=$(echo "$files" | tr '\n' ',' | sed 's/,$//')
+            echo "SONAR_INCLUSIONS=$inclusions" >> $GITHUB_ENV
+            echo "└── Result: ✅ Will scan these files: $inclusions"
+          else
+            echo "└── Result: ✅ Running SonarCloud analysis"
+          fi
+
+      - name: Add base branch
+        if: env.PR_NUMBER != ''
         run: |
           gh pr checkout ${{ env.PR_NUMBER }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: SonarCloud Scan (Pull Request)
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'pull_request' && env.PR_NUMBER != '0'
-        uses: SonarSource/sonarqube-scan-action@v5
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
@@ -207,25 +179,54 @@ jobs:
             -Dsonar.pullrequest.key=${{ env.PR_NUMBER }}
             -Dsonar.pullrequest.branch=${{ env.PR_HEAD }}
             -Dsonar.pullrequest.base=${{ env.PR_BASE }}
+            -Dsonar.python.coverage.reportPaths=${{ env.COVERAGE_PATHS }}
             ${{ env.SONAR_INCLUSIONS && format('-Dsonar.inclusions={0}', env.SONAR_INCLUSIONS) || '' }}
 
-      - name: SonarCloud Scan (Long-lived Branch)
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'push' && env.BRANCH_NAME != ''
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
-        with:
-          args: >
-            -Dsonar.scm.revision=${{ env.COMMIT_SHA }}
-            -Dsonar.branch.name=${{ env.BRANCH_NAME }}
+  sonar-branch-analysis:
+    name: SonarCloud Branch Analysis
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      (github.repository == 'ansible-automation-platform/aap-gateway' || github.repository == 'ansible-automation-platform/aap-gateway-debug')
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: SonarCloud Scan (Push - fallback)
-        if: steps.check_proceed.outputs.proceed == 'true' && env.EVENT_TYPE == 'push' && env.BRANCH_NAME == ''
-        uses: SonarSource/sonarqube-scan-action@v5
+      # Download all individual coverage artifacts from Unit Tests workflow (optional for branch pushes)
+      - name: Download coverage artifacts
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: Unit Tests
+          run_id: ${{ github.event.workflow_run.id }}
+          pattern: coverage-*
+
+      - name: Print SonarCloud Analysis Summary
+        env:
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # Find all downloaded coverage XML files
+          coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
+          echo "Found coverage files: $coverage_files"
+          echo "COVERAGE_PATHS=$coverage_files" >> $GITHUB_ENV
+
+          echo "🔍 SonarCloud Analysis Summary"
+          echo "=============================="
+          echo "├── CI Event: ✅ Push (via workflow_run)"
+          echo "├── Branch: $BRANCH_NAME"
+          echo "├── Coverage Files: ${coverage_files:-none}"
+          echo "├── Python Changes: ➖ N/A (Full codebase scan)"
+          echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
         with:
           args: >
-            -Dsonar.scm.revision=${{ env.COMMIT_SHA }}
+            -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }}
+            -Dsonar.branch.name=${{ github.event.workflow_run.head_branch }}
+            ${{ env.COVERAGE_PATHS && format('-Dsonar.python.coverage.reportPaths={0}', env.COVERAGE_PATHS) || '' }}

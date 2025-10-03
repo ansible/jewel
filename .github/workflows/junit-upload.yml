@@ -1,13 +1,12 @@
 # JUnit Upload Workflow for aap-gateway
 #
-# This workflow runs on every pull request and push to the repository.
+# This workflow is triggered by the Unit Tests workflow completion on the devel branch.
+# Test results must be uploaded for each commit merged into the repository's main default branch.
 #
 # Steps overview:
-# 1. Download coverage data from Unit Tests workflow
-# 2. Check for backport labels (skip if found)
-# 3. Check for Python file changes (skip if none)
-# 4. Extract PR info and set environment
-# 5. Run SonarCloud analysis with quality gate
+# 1. Download JUnit results from Unit Tests workflow
+# 2. Extract commit and repository information
+# 3. Upload JUnit XML test results (production) or show command (debug repo)
 #
 
 name: JUnit Upload
@@ -17,71 +16,63 @@ on:
       - Unit Tests
     types:
       - completed
-  push:
-    branches:
-      - devel
-      - 'stable-*'
-  workflow_dispatch:
-    inputs:
-      commit_sha:
-        description: 'Commit SHA'
-        required: true
-        type: string
-      repository:
-        description: 'Repository name'
-        required: true
-        type: string
-      ci_run_id:
-        description: 'CI workflow run ID (for downloading coverage artifact)'
-        required: false
-        type: string
 permissions: read-all
 jobs:
-  sonar:
+  junit-upload:
     name: Upload JUnit XML test results
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') ||
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'push' && (github.ref == 'refs/heads/devel' || startsWith(github.ref, 'refs/heads/stable-')))
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'devel' &&
+      (github.repository == 'ansible-automation-platform/aap-gateway' || github.repository == 'ansible-automation-platform/aap-gateway-debug')
     steps:
-      - uses: actions/checkout@v5
-
-      # Download coverage artifact (for both workflow_run and workflow_dispatch)
+      # Download JUnit results from workflow_run
       - name: Download results artifact
-        if: |
-          github.event_name == 'workflow_run' ||
-          (github.event_name == 'workflow_dispatch' && inputs.ci_run_id != '')
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: Unit Tests
-          run_id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.ci_run_id }}
+          run_id: ${{ github.event.workflow_run.id }}
           name: aap-gateway-test-results
 
-      # Set PR number based on trigger type
-      - name: Set COMMIT_SHA and REPO_NAME based on trigger type
+      # Set COMMIT_SHA and REPO_NAME from workflow_run
+      - name: Set COMMIT_SHA and REPO_NAME
+        env:
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_REPO_NAME: ${{ github.event.repository.full_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # Extract from coverage.xml for workflow_run
-            echo "COMMIT_SHA=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
-            echo "REPO_NAME=${{ github.event.repository.full_name }}" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            # Direct push to long-lived branch
-            echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
-            echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
-          else
-            # Use inputs for workflow_dispatch
-            echo "COMMIT_SHA=${{ inputs.commit_sha }}" >> $GITHUB_ENV
-            echo "REPO_NAME=${{ inputs.repository }}" >> $GITHUB_ENV
-          fi
+          echo "COMMIT_SHA=$WORKFLOW_RUN_HEAD_SHA" >> $GITHUB_ENV
+          echo "REPO_NAME=$WORKFLOW_RUN_REPO_NAME" >> $GITHUB_ENV
 
-      - name: Upload jUnit XML test results
-        continue-on-error: true
+      - name: Upload jUnit XML test results (Production)
+        if: github.repository == 'ansible-automation-platform/aap-gateway'
+        env:
+          UPLOAD_USER: ${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}
+          UPLOAD_PASSWORD: ${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}
+          UPLOAD_URL: ${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_URL }}
         run: >-
-          curl -v --user "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}:${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}"
+          curl -v --fail-with-body
+          --user "${UPLOAD_USER}:${UPLOAD_PASSWORD}"
           --form "xunit_xml=@aap-gateway-test-results.xml"
           --form "component_name=aap-gateway"
           --form "git_commit_sha=${{ env.COMMIT_SHA }}"
           --form "git_repository_url=https://github.com/${{ env.REPO_NAME }}"
-          "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_URL }}/api/results/upload/"
+          "${UPLOAD_URL}"
+
+      - name: Show upload command (Debug Repository)
+        if: github.repository == 'ansible-automation-platform/aap-gateway-debug'
+        run: |
+          echo "🔍 Debug mode: Would have uploaded test results with the following parameters:"
+          echo "  Component: aap-gateway"
+          echo "  Commit SHA: ${{ env.COMMIT_SHA }}"
+          echo "  Repository: https://github.com/${{ env.REPO_NAME }}"
+          echo "  Test Results File: aap-gateway-test-results.xml"
+          echo ""
+          echo "Command structure (credentials redacted):"
+          echo "  curl -v --fail-with-body \\"
+          echo "    --user \"<UPLOAD_USER>:<UPLOAD_PASSWORD>\" \\"
+          echo "    --form \"xunit_xml=@aap-gateway-test-results.xml\" \\"
+          echo "    --form \"component_name=aap-gateway\" \\"
+          echo "    --form \"git_commit_sha=${{ env.COMMIT_SHA }}\" \\"
+          echo "    --form \"git_repository_url=https://github.com/${{ env.REPO_NAME }}\" \\"
+          echo "    \"<UPLOAD_URL>\""
