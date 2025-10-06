@@ -69,5 +69,5 @@ aap_gateway_api/management/commands/migrate_service_data_25.py
 .python_history
 .ssh
 
-# Ignore CLAUDE_USER.md this is user based preferences for CLAUDE
-CLAUDE_USER.md
+# Ignore AGENTS_USER.md this is user based preferences for CLAUDE
+AGENTS_USER.md
