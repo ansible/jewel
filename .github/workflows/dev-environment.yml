@@ -1,0 +1,154 @@
+---
+# Dev Environment Tests Workflow for aap-gateway
+# Any tests that require the dev environment to be running should be in here.
+#
+# This workflow runs dev environment tests triggered by Sanity workflow completion.
+#
+# FLOW: Sanity completes on PR → workflow_run triggers this workflow → tests run
+#
+# This ensures sanity checks pass before running expensive dev environment tests which require secrets.
+name: Dev environment tests
+env:
+  LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
+on:
+  workflow_run:   # This is triggered by Sanity being completed.
+    workflows:
+      - Sanity
+    types:
+      - completed
+permissions: read-all
+jobs:
+  dev-env-tests:
+    name: ${{ matrix.test.name }}
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    env:
+      HEADLESS: "yes"
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - name: Smoke-test dev env
+            type: smoke
+          - name: Collection completeness test
+            type: completeness
+    steps:
+      - name: Download PR metadata artifact
+        uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: Sanity
+          run_id: ${{ github.event.workflow_run.id }}
+          name: pr-metadata
+          path: pr-metadata
+
+      # Checkout the PR code to test
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set PR metadata and protect against fork attacks
+        env:
+          REPO_NAME: ${{ github.event.repository.full_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f pr-metadata/pr-number.txt ]; then
+            echo "##[error]❌ FATAL: pr-number.txt not found in pr-metadata artifact"
+            echo "##[error]The Sanity workflow should have created this file."
+            exit 1
+          fi
+
+          if [ ! -f pr-metadata/pr-body.txt ]; then
+            echo "##[error]❌ FATAL: pr-body.txt not found in pr-metadata artifact"
+            echo "##[error]The Sanity workflow should have created this file."
+            exit 1
+          fi
+
+          PR_NUMBER=$(cat pr-metadata/pr-number.txt)
+          echo "Found PR number from artifact: $PR_NUMBER"
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+
+          echo "PR_BODY<<EOF" >> $GITHUB_ENV
+          cat pr-metadata/pr-body.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          # Get PR metadata from GitHub API
+          PR_DATA=$(gh api "repos/$REPO_NAME/pulls/$PR_NUMBER")
+          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
+          PR_HEAD_REPO=$(echo "$PR_DATA" | jq -r '.head.repo.full_name')
+          echo "PR_BASE=$PR_BASE" >> $GITHUB_ENV
+          echo "Successfully loaded PR metadata (target branch: $PR_BASE)"
+
+          # Security check: Is this PR from a fork or from the main repo?
+          # Forks are untrusted (external contributors)
+          # Main repo PRs are trusted (contributors with write access)
+          echo ""
+          echo "🔒 Security Check"
+          echo "=================="
+          echo "Base repo: $REPO_NAME"
+          echo "PR head repo: $PR_HEAD_REPO"
+          
+          if [ "$PR_HEAD_REPO" != "$REPO_NAME" ]; then
+            echo "⚠️  PR is from a FORK - using trusted base branch scripts for security"
+            echo ""
+            echo "Replacing scripts that access secrets with trusted versions from $PR_BASE:"
+            git fetch origin "$PR_BASE"
+            git checkout "origin/$PR_BASE" -- tools/scripts/get_dab_for_pr.py
+            git checkout "origin/$PR_BASE" -- tools/scripts/get_collection_for_pr.py
+            echo "  ✅ get_dab_for_pr.py (accesses GH_TOKEN)"
+            echo "  ✅ get_collection_for_pr.py (accesses GITHUB_TOKEN)"
+            echo ""
+            echo "Note: Changes to these scripts in this PR will NOT be tested."
+            echo "If this PR modifies these scripts, they must be reviewed and tested manually."
+          else
+            echo "✅ PR is from MAIN REPO - trusted contributor, using PR's versions of all scripts"
+            echo "   All files from PR (including any script changes) will be tested"
+          fi
+
+      - name: Checkout DAB branch if needed
+        env:
+          PR_BODY: ${{ env.PR_BODY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/scripts/get_dab_for_pr.py
+
+      - name: Clone the ansible.platform collection
+        env:
+          PR_BODY: ${{ env.PR_BODY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/scripts/get_collection_for_pr.py 2>&1
+
+      - name: Install make
+        run: sudo apt install make
+
+      - name: Install python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install requirements for completeness test
+        run: pip3.11 install --upgrade -r ansible-platform/requirements/requirements_dev.txt ansible-core
+
+      - name: Start the dev environment
+        run: COMPOSE_UP_OPTS='-d' make docker-compose
+
+      - name: Run smoke test
+        if: matrix.test.type == 'smoke'
+        run: |
+          ansible-playbook -v tools/ansible/smoke-test.yml \
+            -e repo_root=$(pwd) \
+            -e gateway_vars=$(readlink -f container-startup.yml) \
+            --skip-tags start_dev_environment,dump_container_logs
+
+      - name: Copy container-startup.yml to ansible-platform
+        if: matrix.test.type == 'completeness'
+        run: cp container-startup.yml ansible-platform
+
+      - name: Perform completeness tests
+        if: matrix.test.type == 'completeness'
+        run: make collection-test-completeness
+        working-directory: ansible-platform
+
+      - name: Dump the container logs on failure
+        run: docker compose -f tools/generated/docker-compose.yml logs
+        if: failure()

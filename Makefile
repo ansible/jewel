@@ -2,7 +2,7 @@ SHELL=/bin/bash
 
 # Prefer python 3.11 but take python3 if 3.11 is not installed
 PYTHON := $(notdir $(shell for i in python3.11 python3; do command -v $$i; done|sed 1q))
-CHECK_SYNTAX_FILES ?= aap_gateway_api/ aap-dev/ ansible_platform_collection/
+CHECK_SYNTAX_FILES ?= aap_gateway_api/ aap-dev/
 RM ?= /bin/rm
 UID := $(shell id -u)
 TOX_ARGS ?= ""
@@ -12,15 +12,11 @@ COMPOSE_UP_OPTS ?=
 ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
 GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
-ANSIBLE_CONFIG ?= tools/ansible/ansible.cfg
-export ANSIBLE_CONFIG
 
 .PHONY: PYTHON_VERSION clean git_hooks_config \
 	check lint check_black check_flake8 check_isort \
 	docker-compose plumb update_django_ansible_base_hash \
-	collection-install collection-test collection-docs \
-	collection-lint collection-sanity  collection-test-completeness \
-        collection-test-integration-check
+	collection
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -167,11 +163,23 @@ container-startup-podman.yml: tools/configs/container-startup-podman.yml
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup-podman.yml > ./container-startup.yml
 
 ## Generate all files from generate-source playbook
-tools/generated/sources: tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 container-startup.yml
+tools/generated/sources: collection tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 container-startup.yml
 	ansible-galaxy install --force -r requirements/requirements.yml
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
+
+collection:
+	@if [ -d ansible.platform ]; then \
+		echo "Installing collection from ansible.platform"; \
+		cd ansible.platform; \
+		ansible-galaxy collection build . --force; \
+		ansible-galaxy collection install ansible-platform-*.tar.gz --force; \
+		cd ..; \
+	else \
+		echo "Installing collection from github"; \
+		ansible-galaxy collection install git@github.com:ansible/ansible.platform.git; \
+	fi;
 
 ## Build the docker containers
 docker-compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
@@ -247,54 +255,6 @@ cleanup-services: tools/generated/proxy.yml collection-install
 ## Plumb the sidecar containers
 plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
-
-## Install the collection locally on your machine
-collection-install:
-	ansible-galaxy collection install ansible_platform_collection --force
-
-## Run the collection tests
-collection-test: collection-install
-	$(eval ADMIN_PW=$(shell awk '/gateway_admin_password/{print $$2}' container-startup.yml | xargs echo))
-	echo 'gateway_password: $(ADMIN_PW)' > \
-	  /tmp/collections/ansible_collections/ansible/platform/tests/integration/integration_config.yml
-	cd /tmp/collections/ansible_collections/ansible/platform && \
-	  ansible-test integration --venv --requirements --coverage
-
-## Run the collection sanity tests
-collection-sanity: collection-install
-	cd /tmp/collections/ansible_collections/ansible/platform && \
-	ansible-test sanity
-
-## Run the collections test-integration check to see if all modules have integration tests
-collection-test-integration-check:
-	./ansible_platform_collection/tests/test_integration_check.py
-
-## Run the collections test-completness check
-collection-test-completeness:
-	./ansible_platform_collection/tests/test_completeness.py
-
-## Run the collections docs check
-collection-docs: collection-install
-	@RC=0 ; \
-	for file_name in $$(ls ansible_platform_collection/plugins/modules/*.py) ; do \
-            module=$$(echo $${file_name} | sed 's:^.*/::' | sed 's:\..*::') ; \
-            ansible-doc -M ansible_platform_collection/plugins/modules $${module} 1> /dev/null ; \
-            RC=$$(( RC + $$? )) ; \
-	done ; \
-	for file_name in $$(ls ansible_platform_collection/plugins/lookup/*.py) ; do \
-            module=$$(echo $${file_name} | sed 's:^.*/::' | sed 's:\..*::') ; \
-            ansible-doc -M ansible_platform_collection/plugins/lookup -t lookup $${module} 1> /dev/null ; \
-            RC=$$(( RC + $$? )) ; \
-	done ; \
-	if [[ $$RC -eq 0 ]] ; then echo "Doc Passed" ; else echo "Docs Failed" ; fi ; \
-	exit $$RC
-
-## Run the collection lint check
-collection-lint: collection-install
-	# ansible-lint gets its settings from ansible_platform_collection/.ansible-lint
-	cd ansible_platform_collection && ansible-lint
-
-
 
 # Hygiene
 # --------------------------------------

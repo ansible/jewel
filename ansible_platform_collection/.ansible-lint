@@ -1,7 +1,0 @@
----
-profile: production
-exclude_paths:
-  - 'changelogs/'
-parseable: true
-use_default_rules: true
-...

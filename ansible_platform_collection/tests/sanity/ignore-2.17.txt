@@ -1,1 +1,0 @@
-tests/test_completeness.py pylint!skip # Don't pylint test_completness

@@ -1,10 +1,27 @@
 ---
+# Sanity checks for aap-gateway
+#
+# This workflow runs sanity checks for aap-gateway.
+# These tests do not need the collection or dev environment to be running.
+#
+# FLOW: PR is created → sanity checks run -> Downstream workflows run (i.e. dev-environment tests)
+#
+# This ensures the PR is valid before running expensive dev environment tests which require secrets.
+#
+# Steps:
+# 1. Checkout the repository
+# 2. Install build requirements
+# 3. Install python
+# 4. Install tox
+# 5. Checkout DAB branch if needed
+# 6. Run tox
+# 7. Create PR metadata artifact
+# 8. Upload PR metadata artifact
 name: Sanity
 env:
   LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
 on:
   pull_request:
-  push:
 jobs:
   tox:
     name: aap_gateway_api - ${{ matrix.tests.env }}
@@ -52,3 +69,25 @@ jobs:
 
       - name: Run tox
         run: tox -e ${{ matrix.tests.env }}
+
+  create-pr-metadata:
+    name: Create PR metadata artifact
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Create PR metadata file
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          mkdir -p pr-metadata
+          printf '%s\n' "$PR_NUMBER" > pr-metadata/pr-number.txt
+          printf '%s' "$PR_BODY" > pr-metadata/pr-body.txt
+          echo "Created PR metadata for PR #$PR_NUMBER"
+
+      - name: Upload PR metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-metadata
+          path: pr-metadata/
+          retention-days: 1

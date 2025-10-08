@@ -1,3 +1,0 @@
----
-trivial:
-  - "Ensure idempotent cases are correctly handled in AAPModule create_if_needed() method when auto_exit is disabled."
