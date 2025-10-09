@@ -1,5 +1,5 @@
 # django-ansible-base, RBAC and resource_registry highly involved here
-from ansible_base.rbac.api.serializers import RoleDefinitionSerializer
+from ansible_base.rbac.api.serializers import RoleDefinitionSerializer, RoleTeamAssignmentSerializer
 from ansible_base.rbac.api.views import RoleDefinitionViewSet, RoleTeamAssignmentViewSet, RoleUserAssignmentViewSet
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
@@ -52,6 +52,41 @@ class GatewayRoleDefinitionSerializer(RoleDefinitionSerializer):
 
 class GatewayRoleDefinitionViewSet(ResourceAPIUpdateMixin, RoleDefinitionViewSet):
     serializer_class = GatewayRoleDefinitionSerializer
+
+
+class GatewayRoleTeamAssignmentSerializer(RoleTeamAssignmentSerializer):
+    """Custom serializer with Galaxy-specific validation for team role assignments
+
+    Teams can only be assigned roles where all permissions are in the 'galaxy' service.
+    """
+
+    def validate(self, attrs):
+        """Validate that team role assignments only use galaxy-only roles"""
+        # Call parent validation first
+        attrs = super().validate(attrs)
+
+        # Get the role_definition being assigned
+        role_definition = attrs.get('role_definition')
+
+        if role_definition and (role_definition.content_type is None):
+            # Check if all permissions for this role are in the galaxy service
+            non_galaxy_permissions = []
+
+            for permission in role_definition.permissions.all():
+                if permission.content_type.service != 'galaxy':
+                    non_galaxy_permissions.append(f"'{permission.codename}' (service: {permission.content_type.service})")
+
+            if non_galaxy_permissions:
+                permissions_list = ", ".join(non_galaxy_permissions)
+                raise ValidationError(
+                    _(
+                        "Teams can only be assigned roles where all permissions are for the 'galaxy' service. "
+                        "Role '%(role)s' has non-galaxy permissions: %(permissions)s"
+                    )
+                    % {"role": role_definition.name, "permissions": permissions_list}
+                )
+
+        return attrs
 
 
 class ProxyAPIException(APIException):
@@ -126,4 +161,4 @@ class GatewayRoleUserAssignmentViewSet(AssignmentSyncMixin, RoleUserAssignmentVi
 
 
 class GatewayRoleTeamAssignmentViewSet(AssignmentSyncMixin, RoleTeamAssignmentViewSet):
-    pass
+    serializer_class = GatewayRoleTeamAssignmentSerializer
