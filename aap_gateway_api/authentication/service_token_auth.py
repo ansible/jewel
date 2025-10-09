@@ -35,6 +35,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
         ('authenticator-list', {}, ['get', 'post', 'patch']),
         ('authenticatormap-list', {}, ['get', 'post', 'patch']),
         ('setting-section-list', {'category_slug': 'all'}, ['get', 'put']),
+        ('ca_certificate-list', {}, ['get', 'post', 'delete', 'patch']),
     ]
 
     def authenticate(self, request):

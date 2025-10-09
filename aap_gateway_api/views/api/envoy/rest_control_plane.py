@@ -18,6 +18,10 @@ from envoy.extensions.filters.http.lua.v3 import lua_pb2  # noqa: 401
 from envoy.extensions.access_loggers.stream.v3 import stream_pb2  # noqa: 401
 from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: 401
 from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: 401
+from envoy.service.secret.v3 import sds_pb2, sds_pb2_grpc  # noqa: 401
+from envoy.extensions.transport_sockets.tls.v3.secret_pb2 import Secret
+from aap_gateway_api.models.ca_certificate import CACertificate
+from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
 from drf_spectacular.utils import extend_schema
 
 # isort: on
@@ -70,3 +74,19 @@ class ListenerDiscoverServiceView(XDSView):
         listeners = [x.get_xds_listener_config() for x in self.get_qs(request, HTTPPort, "envoy_listener_name")]
 
         return Response(self.get_xds_response(Listener, listeners))
+
+
+class SecretDiscoverServiceView(XDSView):
+    # SDS endpoint has no authentication (by design for internal Envoy access)
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, format=None):
+        secret_resource = self._collect_db_ca_certs()
+        return Response(self.get_xds_response(Secret, [secret_resource]))
+
+    def _collect_db_ca_certs(self) -> dict:
+        certs = [cert.pem_data for cert in CACertificate.objects.all()]
+        cert_data = "\n".join(certs)
+
+        return {"name": SDS_SECRET_CONFIG_NAME, "validation_context": {"trusted_ca": {"inline_string": cert_data}}}

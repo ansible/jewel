@@ -62,6 +62,7 @@ Common Fields:
 - `enable_gateway_auth`: if this is false, envoy will not try to authenticate the request. If it is true, envoy will attempt to authenticate the request, but won't block unauthenticated requests from being proxied to the service.
 - `order`: order in which the route should be resolved in. This determines precedence if two paths overlap.
 - `node_tags`: determines the set of nodes in the service cluster to send requests to.
+- `enable_mtls`: sets mutual tls on the route.
 
 ### Route Examples
 

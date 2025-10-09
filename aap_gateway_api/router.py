@@ -108,3 +108,8 @@ router.register(
 )
 router.register(r'role_user_assignments', rbac_views.GatewayRoleUserAssignmentViewSet, basename='roleuserassignment')
 router.register(r'role_team_assignments', rbac_views.GatewayRoleTeamAssignmentViewSet, basename='roleteamassignment')
+router.register(
+    r'ca_certificates',
+    views.CACertificateViewSet,
+    basename='ca_certificate',
+)

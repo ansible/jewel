@@ -1,5 +1,7 @@
 from django.conf import settings
 
+SDS_SECRET_CONFIG_NAME = "validation_context_sds"
+
 
 def path_rewrite_filter():
     return {
@@ -76,7 +78,27 @@ def transport_socket():
         "typed_config": {
             "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext",
             "common_tls_context": {
-                "tls_certificates": [{"certificate_chain": {"filename": settings.GATEWAY_CERT_FILE}, "private_key": {"filename": settings.GATEWAY_KEY_FILE}}]
+                "tls_certificates": [
+                    {
+                        "certificate_chain": {"filename": settings.GATEWAY_CERT_FILE},
+                        "private_key": {"filename": settings.GATEWAY_KEY_FILE},
+                    }
+                ],
+                "validation_context_sds_secret_config": {
+                    "name": SDS_SECRET_CONFIG_NAME,
+                    "sds_config": _rest_sds_config(),
+                },
             },
         },
+    }
+
+
+def _rest_sds_config() -> dict:
+    return {
+        "api_config_source": {
+            "api_type": "REST",
+            "transport_api_version": "V3",
+            "cluster_names": settings.SDS_CLUSTER_NAMES,
+            "refresh_delay": settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION,
+        }
     }

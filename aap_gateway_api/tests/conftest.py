@@ -1,3 +1,4 @@
+import hashlib
 import multiprocessing
 import os
 import random
@@ -17,6 +18,7 @@ from rest_framework.test import APIClient
 
 from aap_gateway_api.models import (
     AdditionalRoute,
+    CACertificate,
     DefaultServiceType,
     MigrateServiceDataHasRan,
     Preference,
@@ -683,3 +685,24 @@ def migrate_service_data_completed(db):
     """
     # Mark migration as completed
     MigrateServiceDataHasRan.mark_migration_completed()
+
+
+@pytest.fixture
+def ca_certificate(randname):
+    random_name = randname("Test CA Certificate")
+    pem_data = "abcdef"
+    sha256 = hashlib.sha256(pem_data.encode('utf-8')).hexdigest()
+    cert = CACertificate.objects.create(name=random_name, pem_data=pem_data, sha256=sha256)
+    yield cert
+    cert.delete()
+
+
+@pytest.fixture
+def multiple_ca_certificates(randname):
+    certs = []
+    for certinfo in [{'name': randname('First'), 'pem_data': 'abcdef'}, {'name': randname('Second'), 'pem_data': 'xyz'}]:
+        sha256 = hashlib.sha256(certinfo['pem_data'].encode('utf-8')).hexdigest()
+        certs.append(CACertificate.objects.create(name=certinfo['name'], pem_data=certinfo['pem_data'], sha256=sha256))
+    yield certs
+    for cert in certs:
+        cert.delete()
