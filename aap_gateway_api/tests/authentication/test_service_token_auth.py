@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
+from http import HTTPStatus
 from unittest import mock
 
 import jwt
@@ -298,3 +299,16 @@ def test_validate_methods(allowed_methods, call_method, expected_result):
 
     with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', side_effect=['/resource_api', '/junk']):
         assert token_auth.is_user_authorized(request, None, None, None) == expected_result
+
+
+def test_ca_certificate_with_service_token_auth(service_jwt_client, ca_certificate):
+    """Test that CA certificate endpoints work with service token authentication."""
+    # Test list endpoint
+    list_url = get_relative_url('ca_certificate-list')
+    response = service_jwt_client.get(list_url)
+    assert response.status_code == HTTPStatus.OK
+
+    # Test detail endpoint
+    detail_url = get_relative_url('ca_certificate-detail', kwargs={'pk': ca_certificate.id})
+    response = service_jwt_client.get(detail_url)
+    assert response.status_code == HTTPStatus.OK

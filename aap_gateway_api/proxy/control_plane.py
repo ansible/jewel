@@ -23,6 +23,7 @@ from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
+from aap_gateway_api.common.authentication import SERVICE_TOKEN_AUTH_STRING
 from aap_gateway_api.models import ServiceCluster
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
 
@@ -184,7 +185,7 @@ class _ExternalAuth:
             user = None
 
         if self.is_internal_route:
-            if self.drf_request.auth != "ServiceTokenAuthentication":
+            if self.drf_request.auth != SERVICE_TOKEN_AUTH_STRING:
                 return self._return_no_auth_with_reason("User is not authorized to reach internal route", code=16, http_status_code=401)
             elif self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
                 return self._return_no_authentication_required()

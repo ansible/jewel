@@ -1,5 +1,6 @@
 import hashlib
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
@@ -8,6 +9,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from rest_framework import status
+from rest_framework.test import APIRequestFactory
+
+from aap_gateway_api.common.authentication import SERVICE_TOKEN_AUTH_STRING
+from aap_gateway_api.permissions import ServiceTokenAuthOnly
 
 
 class TestCACertificateViews:
@@ -264,3 +269,51 @@ class TestCACertificateViews:
 
         assert found_cert is not None
         assert found_cert['name'] == 'filter-test-cert'
+
+    def test_service_token_auth_only_permission_allows_service_token_auth(self):
+        """Test that ServiceTokenAuthOnly permission allows requests with ServiceTokenAuthentication."""
+        permission = ServiceTokenAuthOnly()
+        factory = APIRequestFactory()
+        request = factory.get('/ca_certificates/')
+
+        # Mock authenticated user and set auth to SERVICE_TOKEN_AUTH_STRING
+        request.user = Mock()
+        request.user.is_authenticated = True
+        request.auth = SERVICE_TOKEN_AUTH_STRING
+
+        view = Mock()
+
+        # Should allow access
+        assert permission.has_permission(request, view) is True
+
+    def test_service_token_auth_only_permission_rejects_other_auth(self):
+        """Test that ServiceTokenAuthOnly permission rejects requests without ServiceTokenAuthentication."""
+        permission = ServiceTokenAuthOnly()
+        factory = APIRequestFactory()
+        request = factory.get('/ca_certificates/')
+
+        # Mock authenticated user but with different auth type
+        request.user = Mock()
+        request.user.is_authenticated = True
+        request.auth = "SomeOtherAuthType"
+
+        view = Mock()
+
+        # Should reject access
+        assert permission.has_permission(request, view) is False
+
+    def test_service_token_auth_only_permission_rejects_unauthenticated(self):
+        """Test that ServiceTokenAuthOnly permission rejects unauthenticated requests."""
+        permission = ServiceTokenAuthOnly()
+        factory = APIRequestFactory()
+        request = factory.get('/ca_certificates/')
+
+        # Mock unauthenticated user
+        request.user = Mock()
+        request.user.is_authenticated = False
+        request.auth = SERVICE_TOKEN_AUTH_STRING
+
+        view = Mock()
+
+        # Should reject access
+        assert permission.has_permission(request, view) is False

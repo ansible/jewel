@@ -6,6 +6,7 @@ from django.urls import NoReverseMatch
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import APIException
 
+from aap_gateway_api.common.authentication import SERVICE_TOKEN_AUTH_STRING
 from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 from aap_gateway_api.utils.service_token import validate_service_token
 
@@ -58,7 +59,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
 
             if self.is_user_authorized(request, user, service, payload):
                 logger.warning(f"User is authorized to access {request.path}.")
-                return (user, 'ServiceTokenAuthentication')
+                return (user, SERVICE_TOKEN_AUTH_STRING)
             else:
                 logger.warning(f"User not authorized to access {request.path}.")
                 return None
