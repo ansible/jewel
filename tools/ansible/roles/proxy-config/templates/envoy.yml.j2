@@ -11,7 +11,7 @@ dynamic_resources:
       cluster_names:
         - gateway-control-plane-rest
       refresh_delay:
-        seconds: 5
+        seconds: {{ xds_refresh_delay_seconds | default(60) }}
 
   lds_config:
     resource_api_version: V3
@@ -21,7 +21,7 @@ dynamic_resources:
       cluster_names:
         - gateway-control-plane-rest
       refresh_delay:
-        seconds: 5
+        seconds: {{ xds_refresh_delay_seconds | default(60) }}
 
 static_resources:
   clusters:

@@ -6,6 +6,8 @@ gateway_validate_certs: False
 gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 'localhost'
+# This is the delay between envoy refreshing the xDS configuration
+xds_refresh_delay_seconds: 60
 # enable_django_debug_toolbar: True
 
 # What services are enabled in your local environment
