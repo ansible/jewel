@@ -18,6 +18,7 @@ from django.db import models, transaction
 from aap_gateway_api.models import ServiceAPIRoute, ServiceType
 from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 from aap_gateway_api.models.service_type import DefaultServiceType, get_service_type_name
+from aap_gateway_api.models.user import password_is_usable
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
@@ -550,7 +551,6 @@ class Command(BaseCommand):
         resource_context: Dict[str, Any],
         validated_resource_data: Dict[str, Any],
         updated_service_resource: Dict[str, Any],
-        should_merge: bool,
         service_slug: str,
     ) -> bool:
         """
@@ -558,39 +558,23 @@ class Command(BaseCommand):
 
         This method implements the core logic for handling cases where a resource
         being migrated conflicts with an existing resource in the Gateway. It supports
-        three scenarios:
+        two (not mutually-exclusive) scenarios:
 
         1. Same ansible_id: Update existing resource with correct service_id
-        2. Merge enabled: Link upstream resource to existing Gateway resource
-        3. No merge: Create new resource with unique name
+        2. (Merge) Link upstream resource to existing Gateway resource
 
         Args:
             upstream_resource: Complete resource data from upstream service
             resource_context: Static data about the resource type
             validated_resource_data: Validated resource data
             updated_service_resource: Data for updating upstream resource
-            should_merge: Whether to merge with existing resources
             service_slug: API slug for the service being migrated
 
         Returns:
             - create_gateway_resource (bool): True if a new Gateway resource should be created
         """
-        """
-        this method compares the incoming resource against the existing local resources using a set of unique fields.
-        Based on whether a match is found and whether a merge is requested, it prepares the `updated_service_resource`
-        to reflect the appropriate migration or merge behavior
-        Args:
-         - upstream_resource (dict): complete resource object from upstream service
-         - resource_context (dict): contains the static data related to the current resource item
-         - validated_resource_data (dict): validated data for the incoming resource, based on its shared resource type serializer.
-         - updated_service_resource (dict): used to update the resource on the service
-         - should_merge (bool): True if we should merge the resource in upstream with Gateway rather than creating a new one
-        Returns:
-         - create_gateway_resource (bool): True if we should create the resource in gateway, False otherwise
-        """
 
         resource_type = resource_context["type"]
-        resource_type_name_field = resource_context["type_name_field"]
         unique_fields = resource_context["unique_fields"]
         LocalResourceModel = resource_context["LocalResourceModel"]
         create_gateway_resource = True  # default
@@ -622,31 +606,16 @@ class Command(BaseCommand):
                 updated_service_resource["resource_data"] = local_data
                 logger.warning(f"Updating already-merged {resource_type.name} with name {upstream_resource['name']}.")
 
-        # case 2: merge flag is set. We only set upstream metadata and ansible_id to be the same as gateway's
+        # case 2: merge: We only set upstream metadata and ansible_id to be the same as gateway's
         # don't set anything on the gateway
-        if should_merge:
-            create_gateway_resource = False
-            updated_service_resource.update(
-                {
-                    "ansible_id": existing_resource.ansible_id,
-                    "resource_data": local_data,
-                }
-            )
-            logger.warning(f"Merging {resource_type.name} with conflicting name {upstream_resource['name']}.")
-
-        # case 3: different ansible_id and not merging. We are not correcting the service-side of the same resource.
-        # We change the name of the resource and update it on the upstream service
-        # Create a new resource in the Gateway with the updated name
-        elif str(existing_resource.ansible_id) != resource_ansible_id:
-            new_name = self.get_new_resource_name(upstream_resource["name"], unique_filter_kwargs, LocalResourceModel, resource_type_name_field, service_slug)
-            upstream_resource["resource_data"][resource_type_name_field] = new_name
-            # For users that are renamed due to conflicts, they should not be superusers
-            # This prevents partially migrated users from inheriting superuser status
-            # This is temporary and should be deleted after implementing https://issues.redhat.com/browse/AAP-47840 to fully merge user on migrations
-            if resource_type.name == "shared.user":
-                upstream_resource["resource_data"]["is_superuser"] = False
-            updated_service_resource["resource_data"] = upstream_resource["resource_data"]
-            logger.warning(f"Creating new {resource_type.name} with new name {upstream_resource['name']}.")
+        create_gateway_resource = False
+        updated_service_resource.update(
+            {
+                "ansible_id": existing_resource.ansible_id,
+                "resource_data": local_data,
+            }
+        )
+        logger.warning(f"Merging {resource_type.name} with conflicting name {upstream_resource['name']}.")
 
         return create_gateway_resource
 
@@ -736,13 +705,9 @@ class Command(BaseCommand):
 
         resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource, user_partial_migration)
 
-        # should_merge indicates the final merge action.
-        # The default is the value passed into the merge option when running the command, which is True to indicate we are merging the admin user
-        should_merge = True
-
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
         create_gateway_resource = self._reconcile_existing_resource(
-            upstream_resource, resource_context, validated_resource_data, updated_service_resource, should_merge, service_slug
+            upstream_resource, resource_context, validated_resource_data, updated_service_resource, service_slug
         )
 
         # Run this as a transaction so that if the REST call to update the resource on the service fails
@@ -758,6 +723,48 @@ class Command(BaseCommand):
                     self._set_use_controller_password_flag(upstream_resource)
 
             self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
+
+    def _correct_users_use_controller_password(self, resource_type_name: str) -> None:
+        """
+        If we're operating against controller and dealing with shared.users correct
+        the state of the gateway users' use_controller_password which may have been
+        left in an incorrect state as a consequence of multiple upgrades and the users
+        not having logged in between one upgrade and the next.
+        """
+        # A migration following the progression of 2.4 to 2.5 to 2.6 can leave
+        # a shared.user in a situation where they cannot log in on 2.6.
+        # This only happens in the situation where a 2.4 deployment was upgraded
+        # to 2.5 and the user never logged in to 2.5.
+        #
+        # Any user on controller which has the service id of gateway may be in the
+        # above state.  We will correct, if necessary, the gateway user's ability
+        # to use its controller's password.
+        #
+        # We can't handle correcting this situation as part of the agnostic
+        # migration processing as that excludes anything that does not match
+        # the upstream service's service id.
+
+        if self.client.service.service_cluster.service_type.name == DefaultServiceType.CONTROLLER.value and resource_type_name == "shared.user":
+            # Filter for resources with gateway's service id.
+            api_call_filters = {
+                "service_id": str(service_id()),
+                "is_partially_migrated": "false",
+                "content_type__resource_type__name": resource_type_name,
+            }
+
+            page = 1
+            while True:
+                data = self.client.list_resources(filters={**api_call_filters, "page": page}).json()
+
+                for user_item in data["results"]:
+                    if user_item["name"] == settings.SYSTEM_USERNAME:
+                        continue
+
+                    self._set_gateway_user_use_controller_password_flag(user_item["name"])
+
+                if not data.get("next"):
+                    break
+                page += 1
 
     """
     Before migration, we need to send requests to upstream services and acquire resources data.
@@ -828,6 +835,9 @@ class Command(BaseCommand):
             "LocalResourceModel": resource_type.content_type.model_class(),
         }
 
+        # Correct users' use_controller_password, if appropriate.
+        self._correct_users_use_controller_password(resource_type_name)
+
         # Each resource that gets updated in the Gateway will change the service ID to Gateway's (except for 'shared.user'), and
         # will cause the migrated resources to be filtered out of the server response.
         # 'shared.user' resource type can also be filtered out by setting the 'is_partially_migrated' flag to true
@@ -852,16 +862,37 @@ class Command(BaseCommand):
             for upstream_resource_item in results:
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
 
-    def _set_use_controller_password_flag(self, upstream_resource: Dict[str, Any]) -> Dict[str, Any]:
-        username = upstream_resource["resource_data"]["username"]
+    def _set_gateway_user_use_controller_password_flag(self, username: str) -> None:
         try:
             gateway_user = User.objects.get(username=username)
-            gateway_user.use_controller_password = True
-            gateway_user.save(update_fields=["use_controller_password"])
-            self.stdout.write(f"Set use_controller_password flag for Gateway user '{username}'")
+            # As this code is only invoked when dealing with a shared.user involving controller
+            # if the user meets the following, inclusive, conditions:
+            #   - isn't already marked as using the controller password
+            #   - the user has never logged in
+            #   - the user's password is not usable
+            # we mark it to use the controller password.
+            #
+            # Note that if, prior to upgrade to 2.6, the controller user
+            # account was disabled marking the user to use the controller
+            # password simply results in an attempt to use the disabled
+            # password from controller.  I.e., the disabling of the user
+            # account remains in force.
+            self.stdout.write(f"Gateway user {gateway_user}")
+            self.stdout.write(f"\t use controller password {gateway_user.use_controller_password}")
+            self.stdout.write(f"\t last login {gateway_user.last_login}")
+            self.stdout.write(f"\t password {password_is_usable(gateway_user.password)}")
+            if not gateway_user.use_controller_password and not gateway_user.last_login and not password_is_usable(gateway_user.password):
+                gateway_user.use_controller_password = True
+                gateway_user.save(update_fields=["use_controller_password"])
+                self.stdout.write(f"Set use_controller_password flag for Gateway user '{username}'")
         except User.DoesNotExist:
             # User was not updated as expected
             self.stdout.write(f"Gateway user '{username}' was not updated with 'use_controller_password' flag")
+
+    def _set_use_controller_password_flag(self, upstream_resource: Dict[str, Any]) -> Dict[str, Any]:
+        self._set_gateway_user_use_controller_password_flag(
+            upstream_resource["resource_data"]["username"],
+        )
         return upstream_resource
 
     def _sync_user_superuser_flag(self, upstream_resource: Dict[str, Any], validated_resource_data: Dict[str, Any]) -> Dict[str, Any]:
