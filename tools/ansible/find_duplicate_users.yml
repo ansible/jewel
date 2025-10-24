@@ -1,0 +1,159 @@
+---
+#
+# Usage: ansible-playbook find_duplicate_users.yml -eaap_password=<superuser password> -eaap_hostname=<aap-url>
+#
+# Additional Arguments:
+#   aap_hostname=<url to gateway>
+#   aap_username=<superuser user name> (Default is admin)
+#   aap_password=<superuser user password>
+#   aap_validate_certs=<true/false> (Default is True)
+#
+- name: Find gateway users with duplicate emails in 2.6
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_hostname: ''
+    aap_username: 'admin'
+    aap_password: ''
+    aap_validate_certs: true
+
+  tasks:
+    - name: Load users and authenticators through the API
+      ansible.builtin.set_fact:
+        users: >-
+          {{
+            query('ansible.platform.gateway_api', 'users',
+                  return_all=True, return_objects=True,
+                  host=aap_hostname, username=aap_username,
+                  password=aap_password, verify_ssl=aap_validate_certs)
+          }}
+        authenticators: >-
+          {{
+            query('ansible.platform.gateway_api', 'authenticators',
+                  return_all=True, return_objects=True,
+                  host=aap_hostname, username=aap_username,
+                  password=aap_password, verify_ssl=aap_validate_certs)
+          }}
+
+    - name: Get authenticator names by IDs
+      ansible.builtin.set_fact:
+        authenticators_by_id: "{{ (authenticators_by_id | default({})) | combine({item.id: item.name}) }}"
+      loop: "{{ authenticators }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Get auth by username
+      ansible.builtin.set_fact:
+        auth_by_username: >-
+          {{
+            (auth_by_username | default({})) | combine({
+              item.username: {
+                'associated_authenticators': item.associated_authenticators | default({})
+              }
+            })
+          }}
+      loop: "{{ users }}"
+      loop_control:
+        label: "{{ item.username }}"
+
+    - name: Group users by email address
+      ansible.builtin.set_fact:
+        users_by_email: >-
+          {{
+            (users_by_email | default({})) | combine({
+              item.email: (users_by_email[item.email] | default([])) + [item]
+            })
+          }}
+      loop: "{{ users }}"
+      loop_control:
+        label: "{{ item.username }}"
+      when: item.email is defined
+
+    - name: Collate emails with multiple users (duplicates)
+      ansible.builtin.set_fact:
+        dupe_emails: "{{ (dupe_emails | default({})) | combine({item.key: item.value | map(attribute='username') | list}) }}"
+      loop: "{{ users_by_email | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value | length > 1
+
+    - name: Build intermediate list of users with duplicate emails
+      ansible.builtin.set_fact:
+        dupe_user_list: >-
+          {{
+            dupe_user_list | default([]) + [{
+              'email': email_item.0.key,
+              'username': email_item.1.username,
+              'associated_authenticators': auth_by_username[email_item.1.username].associated_authenticators | default({})
+            }]
+          }}
+      loop: >-
+        {{
+          users_by_email | dict2items | subelements('value')
+        }}
+      loop_control:
+        loop_var: email_item
+        label: "{{ email_item.0.key }} - {{ email_item.1.username }}"
+      when: (users_by_email[email_item.0.key] | length) > 1
+
+    - name: Flatten user-authenticator combinations
+      ansible.builtin.set_fact:
+        user_auth_combinations: >-
+          {{
+            user_auth_combinations | default([]) +
+            (user_item.associated_authenticators | dict2items | map('combine', {'email': user_item.email, 'username': user_item.username}) | list)
+          }}
+      loop: "{{ dupe_user_list | default([]) }}"
+      loop_control:
+        loop_var: user_item
+        label: "{{ user_item.username }}"
+      when:
+        - user_item.associated_authenticators | length > 0
+
+    - name: Expand each user's authenticators into the data
+      ansible.builtin.set_fact:
+        duplicate_users: >-
+          {{
+            duplicate_users | default([]) + [{
+              'email': item.email,
+              'username': item.username,
+              'authenticator': authenticators_by_id[item.key | int] | default('Unknown (ID: ' + item.key + ')'),
+              'authenticator_uid': item.value.uid
+            }]
+          }}
+      loop: "{{ user_auth_combinations | default([]) }}"
+      loop_control:
+        label: "{{ item.username }} - {{ item.key }}"
+
+    - name: Add users without authenticators to the data
+      ansible.builtin.set_fact:
+        duplicate_users: >-
+          {{
+            duplicate_users | default([]) + [{
+              'email': item.email,
+              'username': item.username,
+              'authenticator': 'No authenticator',
+              'authenticator_uid': ''
+            }]
+          }}
+      loop: "{{ dupe_user_list | default([]) }}"
+      loop_control:
+        label: "{{ item.username }}"
+      when:
+        - dupe_user_list is defined
+        - item.associated_authenticators | length == 0
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: "Found {{ dupe_emails | default({}) | length }} emails with duplicate users"
+
+    - name: No duplicates found
+      ansible.builtin.debug:
+        msg: "No duplicate email addresses found!"
+      when: duplicate_users is not defined or duplicate_users | length == 0
+
+    - name: Found the following duplicate users
+      ansible.builtin.debug:
+        var: duplicate_users
+      when: duplicate_users is defined and duplicate_users | length > 0

@@ -1,0 +1,609 @@
+---
+#
+# Integration test playbook for find_duplicate_users.yml
+#
+# Usage: ansible-playbook -eaap_password=<admin password> tools/ansible/test_find_duplicate_users.yml
+#
+# Additional Arguments:
+#   -eaap_hostname=<url to gateway> (default https://localhost:8000)
+#   -eaap_username=<superuser user name> (default admin)
+#   -eaap_validate_certs=<true/false> (default False)
+#   -etest_id=<unique test identifier> (defaults to random 8-char string)
+#   -v <add playbook output to output>
+#
+# Tag Usage:
+#   --tags create-data : Only create test users and authenticators
+#   --tags test        : Only run validation tests
+#   --tags cleanup-data: Only cleanup test data
+#
+- name: Test find_duplicate_users.yml playbook
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_hostname: 'https://localhost:8000'
+    aap_username: 'admin'
+    aap_password: ''
+    aap_validate_certs: false
+    test_id: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=8') }}"
+
+  tasks:
+    - name: Set test prefix with test_id
+      ansible.builtin.set_fact:
+        test_prefix: "test_dupe_finder_{{ test_id }}_"
+      tags: always
+
+    - name: Create test authenticators
+      ansible.platform.authenticator:
+        name: "{{ item }}"
+        enabled: true
+        type: "ansible_base.authentication.authenticator_plugins.local"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      loop:
+        - "{{ test_prefix }}auth1"
+        - "{{ test_prefix }}auth2"
+        - "{{ test_prefix }}auth3"
+      register: test_authenticators_result
+      tags: create-data
+
+    - name: Get authenticator IDs
+      ansible.builtin.set_fact:
+        auth1_id: "{{ test_authenticators_result.results[0].id }}"
+        auth2_id: "{{ test_authenticators_result.results[1].id }}"
+        auth3_id: "{{ test_authenticators_result.results[2].id }}"
+      tags: create-data
+
+    - name: Debug authenticator IDs
+      ansible.builtin.debug:
+        msg: "Auth1: {{ auth1_id }}, Auth2: {{ auth2_id }}, Auth3: {{ auth3_id }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 1 (single user, no dupe, no authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}single_no_auth"
+        email: "{{ test_prefix }}single1@example.com"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 2
+      ansible.builtin.set_fact:
+        scenario2_auths: "{{ {auth1_id | string: {'uid': 'single_one_auth_uid', 'email': test_prefix + 'single2@example.com'}} }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 2 (single user, no dupe, single authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}single_one_auth"
+        email: "{{ test_prefix }}single2@example.com"
+        associated_authenticators: "{{ scenario2_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 3
+      ansible.builtin.set_fact:
+        scenario3_auths: >-
+          {{
+            {
+              auth1_id | string: {
+                'uid': 'single_multi_local_uid',
+                'email': test_prefix + 'single3@example.com'
+              },
+              auth2_id | string: {
+                'uid': 'single_multi_ldap_uid',
+                'email': test_prefix + 'single3@example.com'
+              }
+            }
+          }}
+      tags: create-data
+
+    - name: Create test users - Scenario 3 (single user, no dupe, multiple authenticators)
+      ansible.platform.user:
+        username: "{{ test_prefix }}single_multi_auth"
+        email: "{{ test_prefix }}single3@example.com"
+        associated_authenticators: "{{ scenario3_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 4 (duplicate users without authenticators)
+      ansible.platform.user:
+        username: "{{ item }}"
+        email: "{{ test_prefix }}dupe_no_auth@example.com"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      loop:
+        - "{{ test_prefix }}dupe_no_auth_1"
+        - "{{ test_prefix }}dupe_no_auth_2"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 5a
+      ansible.builtin.set_fact:
+        scenario5a_auths: "{{ {auth1_id | string: {'uid': 'dupe_one_auth_1_uid', 'email': test_prefix + 'dupe_one_auth@example.com'}} }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 5a (duplicate user 1 with single authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}dupe_one_auth_1"
+        email: "{{ test_prefix }}dupe_one_auth@example.com"
+        associated_authenticators: "{{ scenario5a_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 5b
+      ansible.builtin.set_fact:
+        scenario5b_auths: "{{ {auth1_id | string: {'uid': 'dupe_one_auth_2_uid', 'email': test_prefix + 'dupe_one_auth@example.com'}} }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 5b (duplicate user 2 with single authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}dupe_one_auth_2"
+        email: "{{ test_prefix }}dupe_one_auth@example.com"
+        associated_authenticators: "{{ scenario5b_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 6a
+      ansible.builtin.set_fact:
+        scenario6a_auths: >-
+          {{
+            {
+              auth1_id | string: {
+                'uid': 'dupe_multi_1_local_uid',
+                'email': test_prefix + 'dupe_multi_auth@example.com'
+              },
+              auth2_id | string: {
+                'uid': 'dupe_multi_1_ldap_uid',
+                'email': test_prefix + 'dupe_multi_auth@example.com'
+              }
+            }
+          }}
+      tags: create-data
+
+    - name: Create test users - Scenario 6a (duplicate user 1 with multiple authenticators)
+      ansible.platform.user:
+        username: "{{ test_prefix }}dupe_multi_auth_1"
+        email: "{{ test_prefix }}dupe_multi_auth@example.com"
+        associated_authenticators: "{{ scenario6a_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 6b
+      ansible.builtin.set_fact:
+        scenario6b_auths: >-
+          {{
+            {
+              auth3_id | string: {
+                'uid': 'dupe_multi_2_saml_uid',
+                'email': test_prefix + 'dupe_multi_auth@example.com'
+              },
+              auth2_id | string: {
+                'uid': 'dupe_multi_2_ldap_uid',
+                'email': test_prefix + 'dupe_multi_auth@example.com'
+              }
+            }
+          }}
+      tags: create-data
+
+    - name: Create test users - Scenario 6b (duplicate user 2 with multiple authenticators)
+      ansible.platform.user:
+        username: "{{ test_prefix }}dupe_multi_auth_2"
+        email: "{{ test_prefix }}dupe_multi_auth@example.com"
+        associated_authenticators: "{{ scenario6b_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 7a
+      ansible.builtin.set_fact:
+        scenario7a_auths: "{{ {auth1_id | string: {'uid': 'triple_1_uid', 'email': test_prefix + 'triple@example.com'}} }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 7a (triple user 1 with authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}triple_dupe_1"
+        email: "{{ test_prefix }}triple@example.com"
+        associated_authenticators: "{{ scenario7a_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 7b (triple user 2 without authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}triple_dupe_2"
+        email: "{{ test_prefix }}triple@example.com"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 7c
+      ansible.builtin.set_fact:
+        scenario7c_auths: "{{ {auth2_id | string: {'uid': 'triple_3_uid', 'email': test_prefix + 'triple@example.com'}} }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 7c (triple user 3 with authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}triple_dupe_3"
+        email: "{{ test_prefix }}triple@example.com"
+        associated_authenticators: "{{ scenario7c_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Create test users - Scenario 8 (empty email duplicates)
+      ansible.platform.user:
+        username: "{{ item }}"
+        email: ''
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      loop:
+        - "{{ test_prefix }}empty_email_1"
+        - "{{ test_prefix }}empty_email_2"
+      tags: create-data
+
+    - name: Create test users - Scenario 9a (mixed user 1 without authenticator)
+      ansible.platform.user:
+        username: "{{ test_prefix }}mixed_1"
+        email: "{{ test_prefix }}mixed@example.com"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Build authenticators dict for Scenario 9b
+      ansible.builtin.set_fact:
+        scenario9b_auths: >-
+          {{
+            {
+              auth1_id | string: {
+                'uid': 'mixed_2_uid',
+                'email': test_prefix + 'mixed@example.com'
+              },
+              auth3_id | string: {
+                'uid': 'mixed_2_saml_uid',
+                'email': test_prefix + 'mixed@example.com'
+              }
+            }
+          }}
+      tags: create-data
+
+    - name: Create test users - Scenario 9b (mixed user 2 with authenticators)
+      ansible.platform.user:
+        username: "{{ test_prefix }}mixed_2"
+        email: "{{ test_prefix }}mixed@example.com"
+        associated_authenticators: "{{ scenario9b_auths }}"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: "{{ aap_validate_certs }}"
+      tags: create-data
+
+    - name: Test and validate find_duplicate_users playbook
+      block:
+        - name: Run find_duplicate_users playbook
+          ansible.builtin.command:
+            cmd: >
+              ansible-playbook
+              {{ playbook_dir }}/find_duplicate_users.yml
+              -e aap_hostname={{ aap_hostname }}
+              -e aap_username={{ aap_username }}
+              -e aap_password={{ aap_password }}
+              -e aap_validate_certs={{ aap_validate_certs }}
+          register: playbook_result
+          changed_when: false
+          environment:
+            OBJC_DISABLE_INITIALIZE_FORK_SAFETY: 'YES'
+          tags: test
+
+        - name: Parse playbook output for duplicate email data
+          ansible.builtin.set_fact:
+            # Extract dupe_emails from the playbook output
+            dupe_emails_output: "{{ playbook_result.stdout }}"
+          tags: test
+
+        - name: Debug playbook output
+          ansible.builtin.debug:
+            var: playbook_result.stdout
+            verbosity: 1
+          tags: test
+
+        - name: Extract number of duplicate emails found
+          ansible.builtin.set_fact:
+            found_match: "{{ playbook_result.stdout | regex_search('Found (\\d+) emails', '\\1') }}"
+          tags: test
+
+        - name: Parse duplicate count
+          ansible.builtin.set_fact:
+            total_duplicate_count: "{{ found_match[0] if found_match else 'unknown' }}"
+          tags: test
+
+        - name: Define expected duplicate emails (created by this test)
+          ansible.builtin.set_fact:
+            expected_test_duplicate_emails:
+              - "{{ test_prefix }}dupe_no_auth@example.com"
+              - "{{ test_prefix }}dupe_one_auth@example.com"
+              - "{{ test_prefix }}dupe_multi_auth@example.com"
+              - "{{ test_prefix }}triple@example.com"
+              - "{{ test_prefix }}mixed@example.com"
+              # Note: This test also creates empty email ("") duplicates (validated separately below)
+              # The total count may include existing duplicates in the environment
+          tags: test
+
+        - name: Calculate environment duplicates
+          ansible.builtin.set_fact:
+            test_created_count: 6
+            environment_extra_count: "{{ total_duplicate_count | int - 6 }}"
+          tags: test
+
+        - name: Debug duplicate email summary
+          ansible.builtin.debug:
+            msg:
+              - "=========================================="
+              - "DUPLICATE EMAIL DETECTION SUMMARY"
+              - "=========================================="
+              - "Total duplicate email addresses found: {{ total_duplicate_count }}"
+              - "  ├─ Created by this test: {{ test_created_count }} (5 @example.com + 1 empty email '')"
+              - "  └─ Existing in environment: {{ environment_extra_count }}"
+              - ""
+              - "{% if environment_extra_count | int > 0 %}NOTE: Found {{ environment_extra_count }} extra duplicate(s) from your environment (e.g., timmy/jimmy sharing timmy@example.com){% endif %}"
+              - ""
+              - "Test validates that all 6 duplicate scenarios created by this test are correctly detected."
+              - "=========================================="
+            verbosity: 0
+          tags: test
+
+        - name: Validate results - Check all test duplicate emails appear in output
+          ansible.builtin.assert:
+            that:
+              - "item in playbook_result.stdout"
+            fail_msg: "Expected test duplicate email '{{ item }}' not found in output"
+            success_msg: "All {{ expected_test_duplicate_emails | length }} expected test duplicate @example.com emails detected"
+          loop: "{{ expected_test_duplicate_emails }}"
+          loop_control:
+            label: "{{ item }}"
+          register: validate_duplicate_emails
+          ignore_errors: true
+          tags: test
+
+        - name: Validate results - Check specific duplicate emails appear in output
+          ansible.builtin.assert:
+            that:
+              - "(test_prefix + 'dupe_no_auth@example.com') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_one_auth@example.com') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_multi_auth@example.com') in playbook_result.stdout"
+              - "(test_prefix + 'triple@example.com') in playbook_result.stdout"
+              - "(test_prefix + 'mixed@example.com') in playbook_result.stdout"
+            fail_msg: "Not all expected duplicate emails were found in output"
+            success_msg: "All expected duplicate emails were found in output"
+          register: validate_emails_in_output
+          ignore_errors: true
+          tags: test
+
+        - name: Validate results - Check specific usernames appear in output
+          ansible.builtin.assert:
+            that:
+              - "(test_prefix + 'dupe_no_auth_1') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_no_auth_2') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_one_auth_1') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_one_auth_2') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_multi_auth_1') in playbook_result.stdout"
+              - "(test_prefix + 'dupe_multi_auth_2') in playbook_result.stdout"
+              - "(test_prefix + 'triple_dupe_1') in playbook_result.stdout"
+              - "(test_prefix + 'triple_dupe_2') in playbook_result.stdout"
+              - "(test_prefix + 'triple_dupe_3') in playbook_result.stdout"
+              - "(test_prefix + 'mixed_1') in playbook_result.stdout"
+              - "(test_prefix + 'mixed_2') in playbook_result.stdout"
+              - "(test_prefix + 'empty_email_1') in playbook_result.stdout"
+              - "(test_prefix + 'empty_email_2') in playbook_result.stdout"
+            fail_msg: "Not all expected duplicate usernames found in output"
+            success_msg: "All expected duplicate usernames found in output"
+          register: validate_usernames_in_output
+          ignore_errors: true
+          tags: test
+
+        - name: Validate results - Check duplicate_users section exists
+          ansible.builtin.assert:
+            that:
+              - "'duplicate_users' in playbook_result.stdout"
+              - "'email' in playbook_result.stdout"
+              - "'username' in playbook_result.stdout"
+              - "'authenticator' in playbook_result.stdout"
+              - "'authenticator_uid' in playbook_result.stdout"
+            fail_msg: "duplicate_users output is missing or incomplete"
+            success_msg: "duplicate_users contains all expected fields"
+          register: validate_duplicate_users_section
+          ignore_errors: true
+          tags: test
+
+        - name: Validate results - Check empty email duplicates appear in output
+          ansible.builtin.assert:
+            that:
+              - "(test_prefix + 'empty_email_1') in playbook_result.stdout"
+              - "(test_prefix + 'empty_email_2') in playbook_result.stdout"
+            fail_msg: "Empty email duplicate users (empty_email_1 and empty_email_2) not found in output"
+            success_msg: "Empty email duplicate users correctly detected (empty_email_1 and empty_email_2 both found)"
+          register: validate_empty_email_duplicates
+          ignore_errors: true
+          tags: test
+
+        - name: Validate results - Ensure non-duplicate users are NOT in duplicate_users
+          ansible.builtin.assert:
+            that:
+              - "(test_prefix + 'single_no_auth') not in (playbook_result.stdout | regex_search('duplicate_users.*', multiline=True) | default(''))"
+              - "(test_prefix + 'single1@example.com') not in (playbook_result.stdout | regex_search('duplicate_users.*', multiline=True) | default(''))"
+              - "(test_prefix + 'single2@example.com') not in (playbook_result.stdout | regex_search('duplicate_users.*', multiline=True) | default(''))"
+              - "(test_prefix + 'single3@example.com') not in (playbook_result.stdout | regex_search('duplicate_users.*', multiline=True) | default(''))"
+            fail_msg: "Non-duplicate users found in duplicate_users output"
+            success_msg: "Non-duplicate users correctly excluded from results"
+          register: validate_non_duplicates_excluded
+          ignore_errors: true
+          tags: test
+
+        - name: Collect validation results
+          ansible.builtin.set_fact:
+            validation_results:
+              - name: "Test duplicate emails validation"
+                passed: "{{ validate_duplicate_emails is success }}"
+                message: "{{ validate_duplicate_emails.msg }}"
+              - name: "Duplicate emails in output"
+                passed: "{{ validate_emails_in_output is success }}"
+                message: "{{ validate_emails_in_output.msg }}"
+              - name: "Duplicate usernames in output"
+                passed: "{{ validate_usernames_in_output is success }}"
+                message: "{{ validate_usernames_in_output.msg }}"
+              - name: "Duplicate users structure"
+                passed: "{{ validate_duplicate_users_section is success }}"
+                message: "{{ validate_duplicate_users_section.msg }}"
+              - name: "Empty email duplicates"
+                passed: "{{ validate_empty_email_duplicates is success }}"
+                message: "{{ validate_empty_email_duplicates.msg }}"
+              - name: "Non-duplicates excluded"
+                passed: "{{ validate_non_duplicates_excluded is success }}"
+                message: "{{ validate_non_duplicates_excluded.msg }}"
+          tags: test
+
+        - name: Build test results summary
+          ansible.builtin.set_fact:
+            summary_lines:
+              - ""
+              - "========================================"
+              - "TEST RESULTS SUMMARY"
+              - "========================================"
+              - "Total duplicates found: {{ total_duplicate_count }}"
+              - ""
+          tags: test
+
+        - name: Add validation results to summary
+          ansible.builtin.set_fact:
+            summary_lines: >-
+              {{
+                summary_lines +
+                [('✅' if item.passed else '❌') + ' ' + item.name] +
+                ([] if item.passed else ['  ' + item.message])
+              }}
+          loop: "{{ validation_results }}"
+          loop_control:
+            label: "{{ item.name }}"
+          tags: test
+
+        - name: Add overall result to summary
+          ansible.builtin.set_fact:
+            summary_lines: >-
+              {{
+                summary_lines +
+                [''] +
+                ['Overall: ' + (
+                  (validation_results | selectattr('passed', 'equalto', false) | list | length == 0) |
+                  ternary('ALL TESTS PASSED ✅', 'SOME TESTS FAILED ❌')
+                )] +
+                ['========================================']
+              }}
+          tags: test
+
+        - name: Display test results summary
+          ansible.builtin.debug:
+            msg: "{{ summary_lines }}"
+          tags: test
+
+        - name: Fail if any validation failed
+          ansible.builtin.fail:
+            msg: "One or more validation checks failed. See summary above."
+          when: validation_results | selectattr('passed', 'equalto', false) | list | length > 0
+          tags: test
+
+      always:
+        - name: Cleanup - Remove test users
+          ansible.platform.user:
+            username: "{{ item }}"
+            state: absent
+            aap_hostname: "{{ aap_hostname }}"
+            aap_username: "{{ aap_username }}"
+            aap_password: "{{ aap_password }}"
+            aap_validate_certs: "{{ aap_validate_certs }}"
+          loop:
+            - "{{ test_prefix }}single_no_auth"
+            - "{{ test_prefix }}single_one_auth"
+            - "{{ test_prefix }}single_multi_auth"
+            - "{{ test_prefix }}dupe_no_auth_1"
+            - "{{ test_prefix }}dupe_no_auth_2"
+            - "{{ test_prefix }}dupe_one_auth_1"
+            - "{{ test_prefix }}dupe_one_auth_2"
+            - "{{ test_prefix }}dupe_multi_auth_1"
+            - "{{ test_prefix }}dupe_multi_auth_2"
+            - "{{ test_prefix }}triple_dupe_1"
+            - "{{ test_prefix }}triple_dupe_2"
+            - "{{ test_prefix }}triple_dupe_3"
+            - "{{ test_prefix }}empty_email_1"
+            - "{{ test_prefix }}empty_email_2"
+            - "{{ test_prefix }}mixed_1"
+            - "{{ test_prefix }}mixed_2"
+          register: cleanup_users_result
+          failed_when: false
+          tags: cleanup-data
+
+        - name: Cleanup - Remove test authenticators
+          ansible.platform.authenticator:
+            name: "{{ item }}"
+            state: absent
+            aap_hostname: "{{ aap_hostname }}"
+            aap_username: "{{ aap_username }}"
+            aap_password: "{{ aap_password }}"
+            aap_validate_certs: "{{ aap_validate_certs }}"
+          loop:
+            - "{{ test_prefix }}auth1"
+            - "{{ test_prefix }}auth2"
+            - "{{ test_prefix }}auth3"
+          register: cleanup_auth_result
+          failed_when: false
+          tags: cleanup-data
+
+        - name: Cleanup complete
+          ansible.builtin.debug:
+            msg: "Cleanup tasks completed"
+          tags: cleanup-data
