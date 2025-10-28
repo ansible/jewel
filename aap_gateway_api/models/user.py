@@ -51,6 +51,14 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         'organizations_administered',  # We are going to merge [teams|orgs] the user is an admin in with [teams|orgs] the user is a member of
         'teams_administered',
         'authenticator_users',  # private model .This is not a model we want on the user endpoint. We actually pull this information up into the user payload
+        'original_accounts',  # MigratedUserMetadata - accessed through other means
+        'role_assignments',  # RBAC role assignments - accessed through RBAC endpoints
+        'has_roles',  # RBAC roles - accessed through RBAC endpoints
+        'access_tokens',  # OAuth2 access tokens - accessed through OAuth2 endpoints
+        'applications',  # OAuth2 applications - accessed through OAuth2 endpoints
+        'dab_oauth2_provider_oauth2idtoken',  # OAuth2 ID tokens - accessed through OAuth2 endpoints
+        'dab_oauth2_provider_oauth2refreshtoken',  # OAuth2 refresh tokens - accessed through OAuth2 endpoints
+        'oauth2_provider_grant',  # OAuth2 grants - accessed through OAuth2 endpoints
     ]
     activity_stream_excluded_field_names = ['last_login', 'last_login_from']
 
