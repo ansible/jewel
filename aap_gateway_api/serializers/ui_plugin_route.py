@@ -2,7 +2,7 @@ from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from rest_framework import serializers
 
 from aap_gateway_api.models import DefaultServiceType, ServiceCluster, UIPluginRoute
-from aap_gateway_api.serializers.service import _validate_tags_field
+from aap_gateway_api.utils.formatting import normalize_comma_separated_list
 
 
 class UIPluginRouteSerializer(NamedCommonModelSerializer):
@@ -25,7 +25,7 @@ class UIPluginRouteSerializer(NamedCommonModelSerializer):
     service_cluster = serializers.PrimaryKeyRelatedField(queryset=ServiceCluster.objects.exclude(service_type__name=DefaultServiceType.GATEWAY))
 
     def validate_node_tags(self, value):
-        return _validate_tags_field(value)
+        return normalize_comma_separated_list(value)
 
     def validate_ui_plugin_path(self, value):
         return value.strip('/')
