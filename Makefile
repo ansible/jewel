@@ -248,11 +248,11 @@ requirements/requirements.txt: requirements/requirements.in
 	@-cd .. || true
 
 ## Register services and ports
-register-services: tools/generated/proxy.yml collection-install
+register-services: tools/generated/proxy.yml collection
 	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml
 
 ## Remove the services and ports generated from the register-services target
-cleanup-services: tools/generated/proxy.yml collection-install
+cleanup-services: tools/generated/proxy.yml collection
 	ansible-playbook tools/ansible/register-services.yml -e @container-startup.yml -e @tools/generated/proxy.yml -e gateway_state=absent
 
 ## Plumb the sidecar containers
