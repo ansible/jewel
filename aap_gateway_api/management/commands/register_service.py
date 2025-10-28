@@ -34,6 +34,7 @@ class Command(BaseCommand):
             cfg = services[name]
             service_type_name = cfg["type"]
             enable_gateway_auth = cfg.get("enable_gateway_auth", True)
+            enable_mtls = cfg.get("enable_mtls", False)
             service_type = ServiceType.objects.filter(name=service_type_name).first()
 
             if service_type is None:
@@ -52,6 +53,7 @@ class Command(BaseCommand):
                     "api_slug": name,
                     "order": cfg.get("order", 50),
                     "enable_gateway_auth": enable_gateway_auth,
+                    "enable_mtls": enable_mtls,
                 },
             )
 
@@ -71,8 +73,10 @@ class Command(BaseCommand):
                 # the route can have it's own api port that is different from the service's
                 # but we will default to the service api port if not given
                 additional_route_api_port = additional_route.get('api_port', cfg["api_port"])
-                # the route can specifiy gateway auth, but will default to the setting for the service
+                # the route can specify gateway auth, but will default to the setting for the service
                 additional_route_enable_gateway_auth = additional_route.get("enable_gateway_auth", enable_gateway_auth)
+                # the route can specify mtls, but will default to the setting for the service
+                additional_route_enable_mtls = additional_route.get("enable_mtls", enable_mtls)
 
                 self.stdout.write(f'Creating {gateway_path} route for {service_type}')
 
@@ -87,5 +91,6 @@ class Command(BaseCommand):
                         "description": additional_route.get("description", ""),
                         "service_cluster": service,
                         "enable_gateway_auth": additional_route_enable_gateway_auth,
+                        "enable_mtls": additional_route_enable_mtls,
                     },
                 )

@@ -383,3 +383,5 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # This is the number of hops that are trusted by envoy (proxy that we configure that sits in front of the gateway)
 # This is needed for envoy to not strip the X_FORWARDED_PROTO header, which we need to determine if requests were made with https
 XDS_XFF_NUM_TRUSTED_HOPS = 0
+SDS_CLUSTER_NAMES = ["gateway-control-plane-rest"]
+SDS_REFRESH_DELAY_PROTOBUF_DURATION = "5s"

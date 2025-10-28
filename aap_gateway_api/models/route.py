@@ -58,6 +58,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     # Some routes, such as EDA webhooks, have their own authentication and my not need
     # gateway authentication tokens.
     enable_gateway_auth = models.BooleanField(default=True, help_text=_("If false, the AAP gateway will not insert a gateway token into the proxied request."))
+    enable_mtls = models.BooleanField(
+        default=False, help_text=_("If true, the route requires mutual TLS. Connecting clients have to provide one or more certificates.")
+    )
     # Some Routes should only be accessible to other gateway services, this flag indicates this
     is_internal_route = models.BooleanField(
         default=False, help_text=_("If true, the AAP gateway will only allow other AAP services to access this route. Requires gateway auth to be enabled.")
@@ -215,6 +218,10 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         if StreamingServiceType.is_streaming_service(self.service_cluster.service_type.name):
             cfg["route"]["idle_timeout"] = f"{get_preference_value('proxy', 'stream_idle_timeout')}s"
             cfg["route"]["timeout"] = f"{get_preference_value('proxy', 'max_stream_duration')}s"
+
+        if self.enable_mtls:
+            cfg["match"]["tls_context"] = {"presented": True, "validated": True}
+            cfg["request_headers_to_add"] = [{"header": {"key": "Subject", "value": "%DOWNSTREAM_PEER_SUBJECT%"}}]
 
         if self.service_cluster.upstream_hostname:
             cfg["route"]["host_rewrite_literal"] = self.service_cluster.upstream_hostname

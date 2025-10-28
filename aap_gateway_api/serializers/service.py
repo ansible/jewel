@@ -78,6 +78,11 @@ def _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_ro
         errors.setdefault('is_internal_route', []).append(ErrorDetail(_("Internal routes require gateway auth to be enabled"), code='required'))
 
 
+def _validate_gateway_auth_if_mtls_enabled(enable_gateway_auth, enable_mtls, errors):
+    if enable_mtls and enable_gateway_auth:
+        errors.setdefault('enable_mtls', []).append(ErrorDetail(_("Mutual TLS can only be enabled when gateway auth is disabled"), code='invalid'))
+
+
 class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
     class Meta:
         model = ServiceAPIRoute
@@ -94,6 +99,7 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
             'enable_gateway_auth',
             'order',
             'node_tags',
+            'enable_mtls',
         ]
 
         read_only_fields = ('gateway_path',)
@@ -107,10 +113,12 @@ class ServiceAPIRouteSerializer(NamedCommonModelSerializer):
         """
         enable_gateway_auth = data.get('enable_gateway_auth')
         is_internal_route = data.get('is_internal_route')
+        enable_mtls = data.get('enable_mtls', False)
 
         errors = {}
 
         _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_route, errors)
+        _validate_gateway_auth_if_mtls_enabled(enable_gateway_auth, enable_mtls, errors)
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -154,6 +162,7 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
             'description',
             'enable_gateway_auth',
             'node_tags',
+            'enable_mtls',
         ]
 
     def validate_node_tags(self, value):
@@ -162,10 +171,12 @@ class AdditionalRouteSerializer(NamedCommonModelSerializer):
     def validate(self, attrs):
         enable_gateway_auth = attrs.get('enable_gateway_auth')
         is_internal_route = attrs.get('is_internal_route')
+        enable_mtls = attrs.get('enable_mtls', False)
 
         errors = {}
 
         _validate_gateway_auth_if_internal_route(enable_gateway_auth, is_internal_route, errors)
+        _validate_gateway_auth_if_mtls_enabled(enable_gateway_auth, enable_mtls, errors)
 
         if (
             attrs.get("http_port")

@@ -269,3 +269,20 @@ class TestRoute:
                 assert routes[0]["route"]["idle_timeout"] == expected_idle_timeout
             else:
                 assert "idle_timeout" not in routes[0]["route"]
+
+    @pytest.mark.django_db
+    def test_xds_route_config_enable_mtls(self, service_cluster_eda):
+        service_cluster_eda.upstream_hostname = "eda.com"
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=True)
+        routes = route.get_xds_route_config()
+        assert routes[0]['match']['tls_context']['presented']
+        assert routes[0]['match']['tls_context']['validated']
+        assert routes[0]['request_headers_to_add'][0]['header']['key'] == 'Subject'
+        assert routes[0]['request_headers_to_add'][0]['header']['value'] == '%DOWNSTREAM_PEER_SUBJECT%'
+
+    @pytest.mark.django_db
+    def test_xds_route_config_disable_mtls(self, service_cluster_eda):
+        service_cluster_eda.upstream_hostname = "eda.com"
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=False)
+        routes = route.get_xds_route_config()
+        assert 'tls_context' not in routes[0]['match'].keys()

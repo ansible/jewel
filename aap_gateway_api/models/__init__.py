@@ -18,6 +18,7 @@ from aap_gateway_api.models.ui_plugin_route import UIPluginRoute  # noqa: 401
 from aap_gateway_api.models.additional_route import AdditionalRoute  # noqa: 401  # isort: skip
 from aap_gateway_api.models.http_port import HTTPPort  # noqa: 401  # isort: skip
 from aap_gateway_api.models.service_cluster import ServiceCluster  # noqa: 401  # isort: skip
+from aap_gateway_api.models.ca_certificate import CACertificate  # noqa: 401  # isort: skip
 
 permission_registry.register(Team, parent_field_name='organization')
 permission_registry.register(Organization, parent_field_name=None)

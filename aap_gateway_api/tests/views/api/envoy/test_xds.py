@@ -321,3 +321,20 @@ def test_xds_cluster_names(admin_api_client, service_cluster_eda, http_api_port_
     assert routes["/api/eda/"] == routes["/eda-webhooks/"]
     assert set(clusters[cluster_base_name + "a,b"]) == set([node_a.address, node_b.address])
     assert len(clusters) == 1
+
+
+def test_xds_secret_discover_service_trusted_cas(unauthenticated_api_client, ca_certificate):
+    url = reverse("sds")
+    response = unauthenticated_api_client.post(url, data={})
+    assert response.status_code == 200
+    assert response.data['resources'][0]['validationContext']['trustedCa']['inlineString'] == ca_certificate.pem_data
+
+
+def test_xds_secret_discover_service_multiple_trusted_cas(unauthenticated_api_client, multiple_ca_certificates):
+    url = reverse("sds")
+    response = unauthenticated_api_client.post(url, data={})
+    assert response.status_code == 200
+
+    expected_certs = {cert.pem_data for cert in multiple_ca_certificates}
+    response_certs = set(response.data['resources'][0]['validationContext']['trustedCa']['inlineString'].split())
+    assert response_certs == expected_certs

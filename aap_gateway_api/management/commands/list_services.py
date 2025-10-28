@@ -14,6 +14,7 @@ class Command(BaseCommand):
         'service_path',
         'serviceapiroute',
         'api_slug',
+        'enable_mtls',
     ]
 
     def handle(self, *args, **options):

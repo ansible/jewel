@@ -11,7 +11,7 @@ from django.urls import include, path, re_path, register_converter
 
 from aap_gateway_api import views
 from aap_gateway_api.router import router
-from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView
+from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView, SecretDiscoverServiceView
 
 logger = logging.getLogger('aap.gateway.urls')
 
@@ -69,6 +69,7 @@ urlpatterns = [
     # xDS
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
+    path('v3/discovery:secrets', SecretDiscoverServiceView.as_view(), name='sds'),
     # Social auth
     path('api/gateway/v1/', include(router.urls)),
     path('api/gateway/v1/', include(resource_api_urls)),
