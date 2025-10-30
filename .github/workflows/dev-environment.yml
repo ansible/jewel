@@ -110,6 +110,7 @@ jobs:
         env:
           PR_BODY: ${{ env.PR_BODY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANSIBLE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tools/scripts/get_dab_for_pr.py
 
       - name: Clone the ansible.platform collection

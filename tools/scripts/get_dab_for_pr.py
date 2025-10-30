@@ -24,73 +24,168 @@ import os
 import re
 import sys
 
-import requests
+import requests  # type: ignore
 
 # --- Configuration ---
 DAB_REPO = "ansible/django-ansible-base"
+DAB_ENTERPRISE_REPO = "ansible/django-ansible-base"
 GITHUB_API_URL = "https://api.github.com"
 # ---
 
-# --- Get CI Environment Variables ---
-pr_body = os.environ.get('PR_BODY', '')
-# For pull requests, GITHUB_BASE_REF is the base branch (only set on PRs).
-# For push events, GITHUB_REF_NAME is the branch name.
-current_branch = os.environ.get('GITHUB_BASE_REF') or os.environ.get('GITHUB_REF_NAME')
 
-# --- GitHub Authentication ---
-headers = {}
-gh_token = os.environ.get('GH_TOKEN')
-if gh_token:
-    headers['Authorization'] = f"Bearer {gh_token}"
+def make_github_api_request(url: str, gh_token: str | None, aap_token: str | None) -> requests.Response:
+    """
+    Make a GitHub API request with appropriate authentication.
 
-# --- Primary Check: Scan PR Body for 'requires' link ---
-print("🚀 Starting build process...")
-print("Performing primary check: Scanning PR body for a 'requires' link...")
-print(f"Scanning body: \"{pr_body[:100]}...\"")
+    Args:
+        url: The GitHub API URL to request
+        gh_token: GitHub token for authentication
+        aap_token: AAP token for enterprise repo authentication
 
-requires_re = re.compile(f'requires.*{DAB_REPO}(?:#|/pull/)([0-9]+)', re.IGNORECASE)
-matches = requires_re.search(pr_body)
+    Returns:
+        Response object (on auth failures, exits with error)
+    """
+    # Determine if this is an enterprise repo URL
+    is_enterprise = DAB_ENTERPRISE_REPO in url
 
-if matches:
-    required_pr = matches.group(1)
-    print(f"✅ Found requirement for DAB PR #{required_pr}.")
+    # Build headers with appropriate token
+    if is_enterprise and aap_token:
+        headers = {'Authorization': f"Bearer {aap_token}"}
+    elif gh_token:
+        headers = {'Authorization': f"Bearer {gh_token}"}
+    else:
+        headers = {}
 
-    pr_url = f'{GITHUB_API_URL}/repos/{DAB_REPO}/pulls/{required_pr}'
-    response = requests.get(pr_url, headers=headers)
+    # Make the request
+    response = requests.get(url, headers=headers)
 
-    if response.status_code == 200:
+    # Handle authentication failures
+    if response.status_code in [401, 403]:
+        print(f"##[error]❌ FATAL: Authentication failed for {url}")
+        print(f"##[error]Status code: {response.status_code}")
+        sys.exit(1)
+
+    return response
+
+
+def main():
+    # --- Get CI Environment Variables ---
+    pr_body = os.environ.get('PR_BODY', '')
+    # For pull requests, GITHUB_BASE_REF is the base branch (only set on PRs).
+    # For push events, GITHUB_REF_NAME is the branch name.
+    current_branch = os.environ.get('GITHUB_BASE_REF') or os.environ.get('GITHUB_REF_NAME')
+
+    # --- GitHub Authentication ---
+    gh_token = os.environ.get('GH_TOKEN', None)
+    aap_token = os.environ.get('ANSIBLE_TOKEN', None)
+
+    # Variables to hold what we're cloning
+    repo_to_clone = None
+    branch_to_clone = None
+
+    # =============================================================================
+    # PHASE 1: Determine what to clone (repo + branch)
+    # =============================================================================
+
+    # --- Primary Check: Scan PR Body for 'requires' link ---
+    print("🚀 Starting build process...")
+    print("Performing primary check: Scanning PR body for a 'requires' link...")
+    print(f"Scanning body: \"{pr_body[:100]}...\"")
+
+    # Match both public and enterprise DAB repos
+    requires_re = re.compile(f'requires.*?({DAB_REPO}|{DAB_ENTERPRISE_REPO})(?:#|/pull/)([0-9]+)', re.IGNORECASE)
+    matches = requires_re.search(pr_body)
+
+    if matches:
+        referenced_repo = matches.group(1).lower()  # Normalize to lowercase for comparison
+        required_pr = matches.group(2)
+        print(f"✅ Found requirement for DAB PR #{required_pr} in '{referenced_repo}'.")
+
+        # Make API call to get PR details
+        pr_url = f'{GITHUB_API_URL}/repos/{referenced_repo}/pulls/{required_pr}'
+        response = make_github_api_request(pr_url, gh_token, aap_token)
+
+        if response.status_code != 200:
+            print(f"##[error]❌ Error: Could not fetch data for PR #{required_pr}. Status: {response.status_code}")
+            print(f"##[error]Explicitly required PR {referenced_repo}#{required_pr} is not accessible")
+            sys.exit(1)  # Hard failure - they specified a specific PR that doesn't work
+
         pr_data = response.json()
-        branch = pr_data['head']['ref']
-        repo_url = pr_data['head']['repo']['html_url']
 
         if not pr_data.get('merged'):
-            print(f"Checking out branch '{branch}' from '{repo_url}'...")
-            os.system(f'git clone {repo_url} -b {branch} --depth=1')
-            sys.exit(0)  # Exit successfully
+            # PR is still open - clone the PR branch
+            branch_to_clone = pr_data['head']['ref']
+            repo_to_clone = pr_data['head']['repo']['full_name']
+            print(f"✅ Will clone branch '{branch_to_clone}' from '{repo_to_clone}'")
         else:
-            print(f"✅ The referenced PR #{required_pr} has already been merged. No checkout needed.")
+            # PR is merged - clone the base branch that contains the merged changes
+            branch_to_clone = pr_data['base']['ref']
+            repo_to_clone = pr_data['base']['repo']['full_name']
+            print(f"✅ The referenced PR #{required_pr} has already been merged into '{branch_to_clone}'.")
+            print(f"Will clone the base branch '{branch_to_clone}' from '{repo_to_clone}'.")
+
+    # If we haven't found something to clone yet, check for matching branch
+    if not repo_to_clone and current_branch:
+        # --- Secondary Check (Fallback): Look for a matching branch ---
+        # If we're here, matches must be False (otherwise repo_to_clone would be set)
+        print("ℹ️ No 'requires' link found in PR body.")
+        print("\nPerforming secondary check: Looking for a matching branch...")
+        print(f"Current branch detected as '{current_branch}'.")
+
+        # Always check in this order: public repo first, then enterprise
+        for repo in [DAB_REPO, DAB_ENTERPRISE_REPO]:
+            print(f"Checking for branch '{current_branch}' in '{repo}'...")
+
+            branch_url = f'{GITHUB_API_URL}/repos/{repo}/branches/{current_branch}'
+            response = make_github_api_request(branch_url, gh_token, aap_token)
+
+            if response.status_code == 200:
+                print(f"✅ Success! Found matching branch '{current_branch}' in '{repo}'.")
+                repo_to_clone = repo
+                branch_to_clone = current_branch
+                break
+            elif response.status_code == 404:
+                print(f"ℹ️ Branch '{current_branch}' not found in '{repo}', trying next repository...")
+            else:
+                # Any other error (403, 500, etc.) is a hard failure
+                print(f"##[error]❌ FATAL: Unexpected error checking {repo}")
+                print(f"##[error]Status code: {response.status_code}")
+                sys.exit(1)
+
+    # If we still don't have something to clone, we've exhausted all options
+    if not repo_to_clone:
+        print("##[error]❌ FATAL: Could not find DAB branch to clone")
+        sys.exit(1)
+
+    # =============================================================================
+    # PHASE 2: Perform the clone with authentication
+    # =============================================================================
+
+    # At this point, repo_to_clone and branch_to_clone are guaranteed to be set
+    print(f"\n🔧 Preparing to clone '{branch_to_clone}' from '{repo_to_clone}'...")
+
+    # Determine the authenticated clone URL (use same token precedence as API calls)
+    if DAB_ENTERPRISE_REPO in repo_to_clone and aap_token:
+        clone_url = f"https://{aap_token}@github.com/{repo_to_clone}.git"
+        print("Using ANSIBLE_TOKEN for enterprise repo clone...")
+    elif gh_token:
+        clone_url = f"https://{gh_token}@github.com/{repo_to_clone}.git"
     else:
-        print(f"❌ Error: Could not fetch data for PR #{required_pr}. Status: {response.status_code}")
-        # Continue to secondary check as a fallback
-else:
-    print("ℹ️ No 'requires' link found in PR body.")
+        clone_url = f"https://github.com/{repo_to_clone}.git"
 
-# --- Secondary Check (Fallback): Look for a matching branch ---
-print("\nPerforming secondary check: Looking for a matching branch...")
+    # Perform the clone
+    clone_cmd = f'git clone {clone_url} -b {branch_to_clone} --depth=1 django-ansible-base'
+    masked_cmd = re.sub(r'//[^@]+@', '//***@', clone_cmd)
+    print(f"Executing: {masked_cmd}")
+    exit_code = os.system(clone_cmd)
 
-if current_branch:
-    print(f"Current branch detected as '{current_branch}'.")
-    print(f"Checking for a matching branch in '{DAB_REPO}'...")
-
-    branch_url = f'{GITHUB_API_URL}/repos/{DAB_REPO}/branches/{current_branch}'
-    response = requests.get(branch_url, headers=headers)
-
-    if response.status_code == 200:
-        print(f"✅ Success! Found matching branch '{current_branch}' in '{DAB_REPO}'.")
-        repo_url = f"https://github.com/{DAB_REPO}.git"
-        print(f"Checking out '{current_branch}' from '{repo_url}'...")
-        os.system(f'git clone {repo_url} -b {current_branch} --depth=1')
+    if exit_code == 0:
+        print("✅ Successfully cloned django-ansible-base")
+        sys.exit(0)
     else:
-        print(f"ℹ️ No matching branch found in '{DAB_REPO}'.")
-else:
-    print("Could not determine the current branch from CI environment variables.")
+        print(f"##[error]❌ FATAL: git clone failed with exit code {exit_code}")
+        sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
