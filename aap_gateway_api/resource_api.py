@@ -34,14 +34,21 @@ class GetOrCreateProcessor(ResourceTypeProcessor):
             # this is to support cases where multiple services might make simultaneous requests to create a shared resource.
             # If a resource is being created locally in a service and the resource already exists on Gateway, the local resource
             # should be linked to the resource in Gateway
-            self.instance, _ = self.instance.__class__.objects.update_or_create(**lookup_kwargs, defaults=validated_data)
-            return self.instance
+            self.instance, changed = self.instance.__class__.objects.update_or_create(**lookup_kwargs, defaults=validated_data)
+            # At this point, changed = True if a new object was created, False if the object existed.
+            # Now check if any of the object fields were updated.
+            changed = changed or any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
+            return (changed, self.instance)
 
+        changed_fields = []
         for k, val in validated_data.items():
-            setattr(self.instance, k, val)
+            if not hasattr(self.instance, k) or getattr(self.instance, k) != val:
+                setattr(self.instance, k, val)
+                changed_fields.append(k)
 
-        self.instance.save()
-        return self.instance
+        if changed_fields:
+            self.instance.save(update_fields=changed_fields)
+        return (bool(changed_fields), self.instance)
 
 
 class GatewayRoleDefinitionProcessor(GetOrCreateProcessor):
@@ -88,13 +95,14 @@ class GatewayRoleDefinitionProcessor(GetOrCreateProcessor):
         if new_perms and self.instance.pk:
             existing_perms = list(self.instance.permissions.all())
 
-        super().save(super_validated_data, is_new=is_new)
+        (changed, _) = super().save(super_validated_data, is_new=is_new)
 
         # partial updates might not change permissions
         if new_perms:
             self.update_instance_permissions(new_perms=new_perms, existing_perms=existing_perms)
+            changed = True
 
-        return self.instance
+        return (changed, self.instance)
 
 
 class StrictPermissionSlugListField(serializers.ListField):
