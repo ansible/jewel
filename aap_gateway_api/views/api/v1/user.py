@@ -5,6 +5,7 @@ from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.policies import can_view_all_users, visible_users
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -13,6 +14,7 @@ from aap_gateway_api.serializers import UserSerializer
 from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPIUpdateMixin
 
 
+@extend_schema(responses=UserSerializer)
 class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayModelViewSet):
     """
     API endpoint that allows users to be viewed or edited.
@@ -22,8 +24,6 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
-    deprecated = True
-    deprecated_message = "authenticator_uid and authenticators fields are deprecated and will be removed in a future release."
 
     def filter_queryset(self, qs):
         qs = visible_users(self.request.user, queryset=qs)
@@ -54,13 +54,15 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
         return Response(data)
 
 
+@extend_schema(
+    deprecated=True,
+)
 class DeprecatedRelatedUserViewSet(DABOAuth2UserViewsetMixin, GatewayModelViewSet):
     """
     Shows all users for sublists like /api/v1/organizations/5/users/
     the related view still checks organization view permission
     """
 
-    deprecated = True
     model = User
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer

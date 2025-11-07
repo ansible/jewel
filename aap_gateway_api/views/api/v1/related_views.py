@@ -4,17 +4,20 @@ from ansible_base.rbac.models import ObjectRole
 from ansible_base.rbac.policies import visible_users
 from django.db.models.functions import Cast
 from django.http import Http404
+from drf_spectacular.utils import extend_schema
 
 from aap_gateway_api.models import Organization, Team, User
 from aap_gateway_api.serializers import OrganizationSerializer, TeamSerializer
 from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPIUpdateMixin
 
 
+@extend_schema(
+    deprecated=True,
+)
 class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Team
     serializer_class = TeamSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
-    deprecated = True
 
     def get_queryset(self):
         try:
@@ -24,11 +27,13 @@ class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
             raise Http404("No User matches the given query")
 
 
+@extend_schema(
+    deprecated=True,
+)
 class UserOrganizationViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Organization
     serializer_class = OrganizationSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
-    deprecated = True
 
     def get_queryset(self):
         try:

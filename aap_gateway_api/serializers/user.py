@@ -15,6 +15,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.fields import empty
@@ -29,6 +30,9 @@ logger = logging.getLogger('aap.gateway.serializer.user')
 PASSWORD_DISABLED = 'Password Disabled'  # signal unusable passwords
 
 
+@extend_schema_serializer(
+    deprecate_fields=["authenticators", "authenticator_uid"],
+)
 class UserSerializer(CommonUserSerializer):
     password = serializers.CharField(required=False, max_length=128, allow_blank=True)
     authenticators = serializers.MultipleChoiceField(
