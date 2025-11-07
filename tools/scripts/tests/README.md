@@ -1,6 +1,6 @@
-# Testing `get_dab_for_pr.py`
+# Testing `get_pr_checkout.py`
 
-This directory contains comprehensive integration tests for the `get_dab_for_pr.py` script.
+This directory contains comprehensive integration tests for the `get_pr_checkout.py` unified PR checkout script.
 
 ## Running Tests
 
@@ -8,15 +8,15 @@ This directory contains comprehensive integration tests for the `get_dab_for_pr.
 
 ```bash
 # From the repository root
-pytest tools/scripts/tests/test_get_dab_for_pr.py -v
+pytest tools/scripts/tests/test_get_pr_checkout.py -v
 ```
 
 ### With Coverage Report
 
 ```bash
 # Get coverage report with missing lines
-pytest tools/scripts/tests/test_get_dab_for_pr.py -v \
-    --cov=tools/scripts/get_dab_for_pr \
+pytest tools/scripts/tests/test_get_pr_checkout.py -v \
+    --cov=tools/scripts/get_pr_checkout \
     --cov-report=term-missing \
     --cov-report=html
 
@@ -27,14 +27,17 @@ open htmlcov/index.html
 ### Run Specific Test Classes
 
 ```bash
-# Test only the API request function
-pytest tools/scripts/tests/test_get_dab_for_pr.py::TestMakeGithubApiRequest -v
+# Test API request function
+pytest tools/scripts/tests/test_get_pr_checkout.py::TestMakeApiRequest -v
 
-# Test end-to-end scenarios
-pytest tools/scripts/tests/test_get_dab_for_pr.py::TestEndToEndScenarios -v
+# Test helper functions
+pytest tools/scripts/tests/test_get_pr_checkout.py::TestHelperFunctions -v
 
-# Test security features
-pytest tools/scripts/tests/test_get_dab_for_pr.py::TestSecurityAndEdgeCases -v
+# Test main scenarios
+pytest tools/scripts/tests/test_get_pr_checkout.py::TestMainScenarios -v
+
+# Test git clone execution
+pytest tools/scripts/tests/test_get_pr_checkout.py::TestExecuteGitClone -v
 ```
 
 ### Manual Integration Tests (with real GitHub API)
@@ -44,10 +47,10 @@ These tests require actual GitHub tokens and are marked with `@pytest.mark.manua
 ```bash
 # Set up tokens
 export GH_TOKEN="your_github_personal_access_token"
-export ANSIBLE_TOKEN="your_token"  # Optional, will fallback to GH_TOKEN
+export ANSIBLE_TOKEN="your_token"  # Optional, for enterprise repo access
 
 # Run manual tests only
-pytest tools/scripts/tests/test_get_dab_for_pr.py -v -k manual
+pytest tools/scripts/tests/test_get_pr_checkout.py -v -k manual
 ```
 
 **Note:** Manual tests will skip automatically if `GH_TOKEN` is not set.
@@ -56,32 +59,50 @@ pytest tools/scripts/tests/test_get_dab_for_pr.py -v -k manual
 
 The test suite covers:
 
-- ✅ **API Request Function** (`make_github_api_request`)
-  - Public repo with GH_TOKEN
-  - Enterprise repo with ANSIBLE_TOKEN
-  - Enterprise repo with only GH_TOKEN (fallback)
-  - No authentication (public repos)
-  - Authentication failures (401/403)
+- ✅ **GitHub PR Reference Parsing** (`parse_all_github_pr_references`)
+  - Single shorthand format (org/repo#123)
+  - Single URL format (https://github.com/org/repo/pull/456)
+  - Multiple formats on same line with various separators
+  - Multiple requires lines
+  - Case-insensitive matching
+  - Enterprise repo references
+  - Duplicate repo handling
 
-- ✅ **End-to-End Scenarios**
-  - `requires` link to unmerged PR (public repo)
-  - `requires` link to unmerged PR (enterprise repo)
-  - `requires` link to merged PR (clones base branch)
-  - No `requires`, finds matching branch in public repo
-  - No `requires`, 404 in public, found in enterprise
-  - No `requires`, branch not found anywhere (error)
-  - `requires` PR that doesn't exist (error)
-  - Git clone failure (bubbles up exit code)
-  - 500 error when checking branch (error)
+- ✅ **API Request Function** (`make_api_request`)
+  - Requests with token authentication
+  - Requests without token (public repos)
 
-- ✅ **Security & Edge Cases**
-  - Token masking in output
-  - Case-insensitive `requires` matching
-  - Proper exit codes
+- ✅ **Helper Functions**
+  - `get_current_branch` (from GITHUB_BASE_REF and GITHUB_REF_NAME)
+  - `get_token` (GH_TOKEN with ANSIBLE_TOKEN fallback)
+  - `extract_branch_from_pr` (open and merged PRs)
+  - `build_clone_url` (with and without tokens)
+  - `mask_token_in_url` (token masking in output)
+  - `get_repo_variants` (public and enterprise variants)
+  - `branch_exists` (branch existence checking)
+
+- ✅ **Main Execution Scenarios**
+  - Explicit `requires` link to open PR
+  - Explicit `requires` link to merged PR (clones base branch)
+  - Branch matching on devel
+  
+  - Devel fallback to default branch (when no match)
+  - Stable branch MUST fail without matching branch (product consistency)
+  - Enterprise repo fallback (when public doesn't have branch)
+  - Multiple explicit requirements
+  - Mixed explicit requirements and branch matching
+  - Validation (no repos specified, invalid repo format)
+  - Explicit `requires` with API failure (hard exit)
+
+- ✅ **Git Clone Execution**
+  - Clone with specific branch
+  - Clone without branch (default)
+  - Clone failure handling
+  - Git not found handling
 
 ## Expected Coverage
 
-The test suite achieves **100% code coverage** of `get_dab_for_pr.py`.
+The test suite achieves **~100% code coverage** of `get_pr_checkout.py`.
 
 ## Test Structure
 
@@ -89,7 +110,9 @@ The test suite achieves **100% code coverage** of `get_dab_for_pr.py`.
 tools/scripts/tests/
 ├── __init__.py
 ├── README.md                   # This file
-└── test_get_dab_for_pr.py     # Test suite
+├── conftest.py                 # Pytest configuration
+├── pytest.ini                  # Pytest settings
+└── test_get_pr_checkout.py     # Test suite
 ```
 
 ## Troubleshooting
@@ -100,7 +123,7 @@ If you get import errors, ensure you're running pytest from the repository root:
 
 ```bash
 cd /path/to/aap-gateway
-pytest tools/scripts/tests/test_get_dab_for_pr.py
+pytest tools/scripts/tests/test_get_pr_checkout.py
 ```
 
 ### Coverage Not 100%
@@ -108,7 +131,7 @@ pytest tools/scripts/tests/test_get_dab_for_pr.py
 If coverage is not 100%, check:
 1. All code paths are tested (if/else branches)
 2. Error cases are tested (sys.exit scenarios)
-3. The script's top-level execution code is tested (via `exec()`)
+3. All CLI argument combinations are tested
 
 ### Manual Tests Skipped
 
@@ -116,7 +139,7 @@ Manual tests require `GH_TOKEN` environment variable. Set it:
 
 ```bash
 export GH_TOKEN="ghp_your_token_here"
-pytest tools/scripts/tests/test_get_dab_for_pr.py -v -k manual
+pytest tools/scripts/tests/test_get_pr_checkout.py -v -k manual
 ```
 
 ## CI/CD Integration
@@ -124,19 +147,19 @@ pytest tools/scripts/tests/test_get_dab_for_pr.py -v -k manual
 To integrate into CI/CD pipelines:
 
 ```yaml
-- name: Test get_dab_for_pr.py
+- name: Test get_pr_checkout.py
   run: |
-    pytest tools/scripts/tests/test_get_dab_for_pr.py -v \
-      --cov=tools/scripts/get_dab_for_pr \
+    pytest tools/scripts/tests/test_get_pr_checkout.py -v \
+      --cov=tools/scripts/get_pr_checkout \
       --cov-report=xml \
       --cov-report=term
 ```
 
 ## Contributing
 
-When modifying `get_dab_for_pr.py`:
+When modifying `get_pr_checkout.py`:
 1. Run the test suite
-2. Ensure 100% coverage is maintained
+2. Ensure ~100% coverage is maintained
 3. Add tests for new functionality
 4. Update this README if test commands change
 

@@ -94,30 +94,24 @@ jobs:
             echo ""
             echo "Replacing scripts that access secrets with trusted versions from $PR_BASE:"
             git fetch origin "$PR_BASE"
-            git checkout "origin/$PR_BASE" -- tools/scripts/get_dab_for_pr.py
-            git checkout "origin/$PR_BASE" -- tools/scripts/get_collection_for_pr.py
-            echo "  ✅ get_dab_for_pr.py (accesses GH_TOKEN)"
-            echo "  ✅ get_collection_for_pr.py (accesses GITHUB_TOKEN)"
+            git checkout "origin/$PR_BASE" -- tools/scripts/get_pr_checkout.py
+            echo "  ✅ get_pr_checkout.py (accesses GH_TOKEN and GITHUB_TOKEN)"
             echo ""
-            echo "Note: Changes to these scripts in this PR will NOT be tested."
-            echo "If this PR modifies these scripts, they must be reviewed and tested manually."
+            echo "Note: Changes to this script in this PR will NOT be tested."
+            echo "If this PR modifies this script, it must be reviewed and tested manually."
           else
             echo "✅ PR is from MAIN REPO - trusted contributor, using PR's versions of all scripts"
             echo "   All files from PR (including any script changes) will be tested"
           fi
 
-      - name: Checkout DAB branch if needed
+      - name: Checkout dependencies
         env:
           PR_BODY: ${{ env.PR_BODY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANSIBLE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: tools/scripts/get_dab_for_pr.py
-
-      - name: Clone the ansible.platform collection
-        env:
-          PR_BODY: ${{ env.PR_BODY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: tools/scripts/get_collection_for_pr.py 2>&1
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base' \
+            --always-clone-repos ansible/ansible.platform
 
       - name: Install make
         run: sudo apt install make

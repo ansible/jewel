@@ -62,12 +62,13 @@ jobs:
       - name: Install tox
         run: pip${{ matrix.batch.python-version }} install tox tox-docker requests
 
-      - name: Checkout DAB branch if needed
+      - name: Checkout dependencies
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANSIBLE_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # For ansible/django-ansible-base
-        run: tools/scripts/get_dab_for_pr.py
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base'
 
       - name: Run tests
         env:
