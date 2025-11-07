@@ -33,6 +33,12 @@ jobs:
           - name: Collection completeness test
             type: completeness
     steps:
+      # Checkout the PR code to test
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Download PR metadata artifact
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
@@ -41,12 +47,6 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           name: pr-metadata
           path: pr-metadata
-
-      # Checkout the PR code to test
-      - name: Checkout PR code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set PR metadata and protect against fork attacks
         env:
@@ -88,7 +88,7 @@ jobs:
           echo "=================="
           echo "Base repo: $REPO_NAME"
           echo "PR head repo: $PR_HEAD_REPO"
-          
+
           if [ "$PR_HEAD_REPO" != "$REPO_NAME" ]; then
             echo "⚠️  PR is from a FORK - using trusted base branch scripts for security"
             echo ""
