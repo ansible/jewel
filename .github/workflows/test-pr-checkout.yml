@@ -52,7 +52,7 @@ jobs:
         env:
           PR_BODY: ${{ env.PR_BODY }}
           GITHUB_BASE_REF: ${{ env.TARGET_BRANCH }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           echo "### 🚀 Running get_pr_checkout.py" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

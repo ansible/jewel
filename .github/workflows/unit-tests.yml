@@ -65,7 +65,7 @@ jobs:
       - name: Checkout dependencies
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           python tools/scripts/get_pr_checkout.py \
             --always-clone-repos 'ansible/django-ansible-base'
