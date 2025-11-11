@@ -122,7 +122,7 @@ jobs:
           python-version: 3.11
 
       - name: Install requirements for completeness test
-        run: pip3.11 install --upgrade -r ansible-platform/requirements/requirements_dev.txt ansible-core
+        run: pip3.11 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
 
       - name: Start the dev environment
         run: COMPOSE_UP_OPTS='-d' make docker-compose
@@ -135,14 +135,17 @@ jobs:
             -e gateway_vars=$(readlink -f container-startup.yml) \
             --skip-tags start_dev_environment,dump_container_logs
 
-      - name: Copy container-startup.yml to ansible-platform
+      - name: Copy container-startup.yml to ansible.platform
         if: matrix.test.type == 'completeness'
-        run: cp container-startup.yml ansible-platform
+        run: cp container-startup.yml ansible.platform
 
       - name: Perform completeness tests
         if: matrix.test.type == 'completeness'
-        run: make collection-test-completeness
-        working-directory: ansible-platform
+        run: |
+          GATEWAY_PASSWORD=$(grep 'gateway_admin_password:' container-startup.yml | awk '{print $2}' | tr -d "'\"")
+          export GATEWAY_PASSWORD
+          make collection-test-completeness
+        working-directory: ansible.platform
 
       - name: Dump the container logs on failure
         run: docker compose -f tools/generated/docker-compose.yml logs
