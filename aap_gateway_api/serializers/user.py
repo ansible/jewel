@@ -21,6 +21,9 @@ from rest_framework.exceptions import ErrorDetail
 from rest_framework.fields import empty
 from rest_framework.serializers import ValidationError
 
+from aap_gateway_api.fields.serializers.multiple_choice_field import (
+    MultipleChoiceFieldWithoutEmptyEnum,
+)
 from aap_gateway_api.models import User
 from aap_gateway_api.models.user import password_is_usable
 from aap_gateway_api.utils import get_preference_value
@@ -35,7 +38,7 @@ PASSWORD_DISABLED = 'Password Disabled'  # signal unusable passwords
 )
 class UserSerializer(CommonUserSerializer):
     password = serializers.CharField(required=False, max_length=128, allow_blank=True)
-    authenticators = serializers.MultipleChoiceField(
+    authenticators = MultipleChoiceFieldWithoutEmptyEnum(
         # If we load the authenticators here we end up with a static list of authenticators.
         # Instead, we will populate the authenticator choices in the __init__ method.
         choices=[],

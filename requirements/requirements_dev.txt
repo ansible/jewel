@@ -14,6 +14,7 @@ colorama                # Allows addition of color to logs
 logutils
 psycopg[binary]
 requests
+openapi-spec-validator   # Used for OpenAPI schema validation in CI/CD
 setuptools>=78.1.1      # Needed for the plumbing of the side cars
 setuptools_scm          # Needed for proper version string on /api/gateway/v1/ping
 docker                  # Needed for the plumbing of the side cars via Ansible
