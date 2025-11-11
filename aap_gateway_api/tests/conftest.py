@@ -170,11 +170,16 @@ def ensure_jwt_keys():
     """
     Function-scoped fixture to ensure JWT keys are set up for service tests.
     This prevents authentication issues in service tests and works with pytest-xdist.
+
+    IMPORTANT: This fixture explicitly commits JWT keys to the database to ensure
+    they are visible to subprocess-based service tests. Without explicit commit,
+    keys may not be visible to subprocesses due to transaction isolation.
     """
     # Add debug logging for CI
     import os
+    import time
 
-    from django.db import transaction
+    from django.db import connection, transaction
 
     from aap_gateway_api.utils.jwt_token import generate_jwt_keypair
     from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
@@ -184,20 +189,31 @@ def ensure_jwt_keys():
         print(f"ensure_jwt_keys fixture called (worker: {worker})")
 
     try:
-        with transaction.atomic():
-            public_key = get_preference_value("proxy", "jwt_public_key", encrypted=False)
-            if not public_key or public_key == '':
-                # Generate keys once for the entire test session
-                key_pair = generate_jwt_keypair()
-                update_preference_value("proxy", "jwt_private_key", key_pair.private)
-                update_preference_value("proxy", "jwt_public_key", key_pair.public)
-                if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
-                    print(f"Generated new JWT keys (worker: {worker})")
-                return key_pair.public
-            else:
-                if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
-                    print(f"Using existing JWT keys (worker: {worker})")
-            return public_key
+        public_key = get_preference_value("proxy", "jwt_public_key", encrypted=False)
+        if not public_key or public_key == '':
+            # Generate keys once for the entire test session
+            key_pair = generate_jwt_keypair()
+            update_preference_value("proxy", "jwt_private_key", key_pair.private)
+            update_preference_value("proxy", "jwt_public_key", key_pair.public)
+
+            # Force commit the transaction to ensure keys are visible to subprocesses
+            # Without this, subprocess-based service tests may not see the keys due to
+            # transaction isolation, leading to JWT authentication failures
+            transaction.commit()
+            connection.close()  # Force connection refresh to ensure write is committed
+
+            # Small delay to ensure database has fully committed the write
+            # This addresses race conditions in subprocess startup
+            time.sleep(0.1)
+
+            if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+                print(f"Generated new JWT keys and committed (worker: {worker})")
+            public_key = key_pair.public
+        else:
+            if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+                print(f"Using existing JWT keys (worker: {worker})")
+
+        return public_key
     except Exception as e:
         # If setup fails, return None - will be handled by individual tests
         if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
