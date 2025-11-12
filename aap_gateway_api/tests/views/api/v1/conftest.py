@@ -80,7 +80,6 @@ def organizations():
 
 
 @pytest.fixture
-@pytest.mark.django_db
 def teams(organizations):
     """Each organization has 2 teams (12 total)"""
     teams = {}
@@ -94,7 +93,6 @@ def teams(organizations):
 
 
 @pytest.fixture
-@pytest.mark.django_db
 def users(organizations, teams):
     """
     - Each Team has 3 users (Team Member, Team Admin, Team Member+Admin)
