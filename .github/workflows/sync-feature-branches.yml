@@ -69,6 +69,7 @@ env:
 
 jobs:
   sync-branches:
+    if: github.repository == 'ansible-automation-platform/aap-gateway'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -164,105 +165,104 @@ jobs:
 
             if (remoteBranches.length === 0) {
               console.log('No feature branches found to sync');
-              return;
-            }
-
-            // Update default branch
-            console.log(`\nUpdating ${DEFAULT_BRANCH} branch...`);
-            runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
-            runGitCommand(`git pull origin ${DEFAULT_BRANCH}`);
-
-            // Process each feature branch
-            for (const branch of remoteBranches) {
-              console.log(`\nProcessing branch: ${branch}`);
-
-              if (DRY_RUN) {
-                console.log(`  [DRY RUN] Would sync ${branch}`);
-                console.log(`  [DRY RUN] Would checkout ${branch}`);
-                console.log(`  [DRY RUN] Would check if ${branch} is in sync with ${DEFAULT_BRANCH}`);
-                console.log(`  [DRY RUN] Would rebase ${branch} from ${DEFAULT_BRANCH} (if needed)`);
-                console.log(`  [DRY RUN] Would push ${branch} to remote (if changed)`);
-                continue;
-              }
-
-              try {
-                // Ensure we're on the default branch before starting
-                runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
-
-                // Checkout the feature branch
-                console.log(`  Checking out ${branch}...`);
-                runGitCommand(`git checkout -B ${branch} origin/${branch}`);
-
-                // Check if branch is already in sync with default branch
-                try {
-                  const mergeBase = runGitCommand(`git merge-base ${branch} ${DEFAULT_BRANCH}`);
-                  const defaultHead = runGitCommand(`git rev-parse ${DEFAULT_BRANCH}`);
-
-                  if (mergeBase === defaultHead) {
-                    console.log(`  ✓ Branch ${branch} is already in sync - skipping`);
-                    successfulBranches.push({ branch, status: 'already_in_sync' });
-                    continue;
-                  }
-                } catch (error) {
-                  console.log(`  Could not check sync status for ${branch}, proceeding with rebase`);
-                }
-
-                // Rebase onto default branch
-                console.log(`  Rebasing ${branch} from ${DEFAULT_BRANCH}...`);
-                runGitCommand(`git rebase ${DEFAULT_BRANCH}`);
-
-                // Push the rebased branch
-                console.log(`  Pushing ${branch} to remote...`);
-                runGitCommand(`git push origin ${branch} --force-with-lease`);
-                console.log(`  ✓ Successfully synced ${branch}`);
-                successfulBranches.push({ branch, status: 'synced' });
-
-              } catch (error) {
-                console.error(`  ✗ Failed to sync ${branch}: ${error.message}`);
-
-                // Determine the type of error for better reporting
-                let errorType = 'unknown';
-                let conflictedFiles = [];
-
-                if (error.message.includes('could not apply') || error.message.includes('CONFLICT')) {
-                  errorType = 'merge_conflict';
-                  // Try to get conflicted files
-                  try {
-                    const statusOutput = execSync('git status --porcelain=v1', { encoding: 'utf8' });
-                    conflictedFiles = statusOutput
-                      .split('\n')
-                      .filter(line => line.startsWith('UU ') || line.includes('needs merge'))
-                      .map(line => line.substring(3).trim())
-                      .filter(file => file);
-                  } catch (statusError) {
-                    console.log(`    Could not determine conflicted files: ${statusError.message}`);
-                  }
-                } else if (error.message.includes('resolve your current index first')) {
-                  errorType = 'git_state_error';
-                } else if (error.message.includes('force-push') || error.message.includes('non-fast-forward')) {
-                  errorType = 'push_conflict';
-                }
-
-                // Record the failure with detailed information
-                failedBranches.push({
-                  branch,
-                  errorType,
-                  errorMessage: error.message,
-                  conflictedFiles,
-                  timestamp: new Date().toISOString()
-                });
-
-                // Cleanup git state for next iteration
-                console.log(`  Cleaning up git state after failure...`);
-                cleanupGitState();
-              }
-            }
-
-            // Return to default branch
-            try {
+            } else {
+              // Update default branch
+              console.log(`\nUpdating ${DEFAULT_BRANCH} branch...`);
               runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
-            } catch (error) {
-              console.error(`Warning: Could not return to ${DEFAULT_BRANCH}: ${error.message}`);
+              runGitCommand(`git pull origin ${DEFAULT_BRANCH}`);
+
+              // Process each feature branch
+              for (const branch of remoteBranches) {
+                console.log(`\nProcessing branch: ${branch}`);
+
+                if (DRY_RUN) {
+                  console.log(`  [DRY RUN] Would sync ${branch}`);
+                  console.log(`  [DRY RUN] Would checkout ${branch}`);
+                  console.log(`  [DRY RUN] Would check if ${branch} is in sync with ${DEFAULT_BRANCH}`);
+                  console.log(`  [DRY RUN] Would rebase ${branch} from ${DEFAULT_BRANCH} (if needed)`);
+                  console.log(`  [DRY RUN] Would push ${branch} to remote (if changed)`);
+                  continue;
+                }
+
+                try {
+                  // Ensure we're on the default branch before starting
+                  runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
+
+                  // Checkout the feature branch
+                  console.log(`  Checking out ${branch}...`);
+                  runGitCommand(`git checkout -B ${branch} origin/${branch}`);
+
+                  // Check if branch is already in sync with default branch
+                  try {
+                    const mergeBase = runGitCommand(`git merge-base ${branch} ${DEFAULT_BRANCH}`);
+                    const defaultHead = runGitCommand(`git rev-parse ${DEFAULT_BRANCH}`);
+
+                    if (mergeBase === defaultHead) {
+                      console.log(`  ✓ Branch ${branch} is already in sync - skipping`);
+                      successfulBranches.push({ branch, status: 'already_in_sync' });
+                      continue;
+                    }
+                  } catch (error) {
+                    console.log(`  Could not check sync status for ${branch}, proceeding with rebase`);
+                  }
+
+                  // Rebase onto default branch
+                  console.log(`  Rebasing ${branch} from ${DEFAULT_BRANCH}...`);
+                  runGitCommand(`git rebase ${DEFAULT_BRANCH}`);
+
+                  // Push the rebased branch
+                  console.log(`  Pushing ${branch} to remote...`);
+                  runGitCommand(`git push origin ${branch} --force-with-lease`);
+                  console.log(`  ✓ Successfully synced ${branch}`);
+                  successfulBranches.push({ branch, status: 'synced' });
+
+                } catch (error) {
+                  console.error(`  ✗ Failed to sync ${branch}: ${error.message}`);
+
+                  // Determine the type of error for better reporting
+                  let errorType = 'unknown';
+                  let conflictedFiles = [];
+
+                  if (error.message.includes('could not apply') || error.message.includes('CONFLICT')) {
+                    errorType = 'merge_conflict';
+                    // Try to get conflicted files
+                    try {
+                      const statusOutput = execSync('git status --porcelain=v1', { encoding: 'utf8' });
+                      conflictedFiles = statusOutput
+                        .split('\n')
+                        .filter(line => line.startsWith('UU ') || line.includes('needs merge'))
+                        .map(line => line.substring(3).trim())
+                        .filter(file => file);
+                    } catch (statusError) {
+                      console.log(`    Could not determine conflicted files: ${statusError.message}`);
+                    }
+                  } else if (error.message.includes('resolve your current index first')) {
+                    errorType = 'git_state_error';
+                  } else if (error.message.includes('force-push') || error.message.includes('non-fast-forward')) {
+                    errorType = 'push_conflict';
+                  }
+
+                  // Record the failure with detailed information
+                  failedBranches.push({
+                    branch,
+                    errorType,
+                    errorMessage: error.message,
+                    conflictedFiles,
+                    timestamp: new Date().toISOString()
+                  });
+
+                  // Cleanup git state for next iteration
+                  console.log(`  Cleaning up git state after failure...`);
+                  cleanupGitState();
+                }
+              }
+
+              // Return to default branch
+              try {
+                runGitCommand(`git checkout ${DEFAULT_BRANCH}`);
+              } catch (error) {
+                console.error(`Warning: Could not return to ${DEFAULT_BRANCH}: ${error.message}`);
+              }
             }
 
             // Save results to files for the next step

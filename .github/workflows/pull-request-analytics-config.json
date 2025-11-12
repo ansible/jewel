@@ -1,0 +1,8 @@
+[
+  { "repo": "ansible-automation-platform/aap-gateway", "days": 7 },
+  { "repo": "ansible-automation-platform/aap-gateway", "days": 14 },
+  { "repo": "ansible-automation-platform/aap-gateway", "days": 30 },
+  { "repo": "ansible-automation-platform/aap-gateway", "days": 90 },
+  { "repo": "ansible-automation-platform/aap-gateway", "days": 180 }
+]
+

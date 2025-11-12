@@ -1,0 +1,458 @@
+name: "PR Analytics"
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight UTC
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      repo:
+        description: 'Repository to analyze (leave blank to run all from config)'
+        required: false
+        type: string
+      days:
+        description: 'Number of days to analyze (leave blank to run all from config)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  setup:
+    name: "Load Configuration"
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Generate matrix"
+        id: set-matrix
+        env:
+          TRIGGER: ${{ github.event_name }}
+          INPUT_REPO: ${{ inputs.repo }}
+          INPUT_DAYS: ${{ inputs.days }}
+        run: |
+          if [ "$TRIGGER" == "workflow_dispatch" ]; then
+            # Manual trigger: check inputs
+            echo "Manual trigger detected"
+
+            # Check if both inputs are empty
+            if [ -z "$INPUT_REPO" ] && [ -z "$INPUT_DAYS" ]; then
+              echo "Both inputs empty - running all configurations from config file"
+              MATRIX=$(jq -c '{include: .}' .github/workflows/pull-request-analytics-config.json)
+            # Check if only one input is empty
+            elif [ -z "$INPUT_REPO" ] || [ -z "$INPUT_DAYS" ]; then
+              echo "##[error]Invalid input: Both repo and days must be provided, or both must be empty"
+              echo "##[error]  repo: '$INPUT_REPO'"
+              echo "##[error]  days: '$INPUT_DAYS'"
+              exit 1
+            else
+              # Both inputs provided - create single-item matrix
+              echo "Both inputs provided - running single configuration"
+              echo "  Repo: $INPUT_REPO"
+              echo "  Days: $INPUT_DAYS"
+              MATRIX=$(jq -nc \
+                --arg repo "$INPUT_REPO" \
+                --arg days "$INPUT_DAYS" \
+                '{include: [{repo: $repo, days: ($days | tonumber)}]}')
+            fi
+          else
+            # Scheduled trigger: load from config file
+            echo "Scheduled trigger detected - loading config file"
+            MATRIX=$(jq -c '{include: .}' .github/workflows/pull-request-analytics-config.json)
+          fi
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo ""
+          echo "Generated matrix (compact):"
+          echo "$MATRIX"
+
+  create-report:
+    name: "PR Analytics - ${{ matrix.repo }} - ${{ matrix.days }}d"
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+      fail-fast: false  # Continue other reports even if one fails
+
+    steps:
+      - name: "Validate token configuration"
+        env:
+          SECRET_NAME_VAR: ${{ vars.PR_ANALYSIS_SECRET_NAME }}
+          SECRET_VALUE: ${{ secrets[format('{0}', vars.PR_ANALYSIS_SECRET_NAME)] }}
+        run: |
+          echo "Validating PR Analytics token configuration..."
+
+          # Check if PR_ANALYSIS_SECRET_NAME variable is set
+          if [ -z "$SECRET_NAME_VAR" ]; then
+            echo "##[error]❌ Repository variable 'PR_ANALYSIS_SECRET_NAME' is not set"
+            echo "##[error]"
+            echo "##[error]Please set this variable in repository settings:"
+            echo "##[error]  Settings → Secrets and variables → Actions → Variables"
+            echo "##[error]"
+            echo "##[error]Set PR_ANALYSIS_SECRET_NAME to the name of the secret containing your GitHub token."
+            echo "##[error]For example: 'GITHUB_TOKEN' or 'AAP_ORG_FG_ANSIBLE_CICD_BOT_ACTIONS_REPO_READ'"
+            exit 1
+          fi
+
+          echo "✓ Variable PR_ANALYSIS_SECRET_NAME is set to: $SECRET_NAME_VAR"
+
+          # Check if the secret referenced by the variable exists and has a value
+          if [ -z "$SECRET_VALUE" ]; then
+            echo "##[error]❌ Secret '$SECRET_NAME_VAR' is not set or is empty"
+            echo "##[error]"
+            echo "##[error]The variable PR_ANALYSIS_SECRET_NAME references a secret named '$SECRET_NAME_VAR'"
+            echo "##[error]but that secret does not exist or has no value."
+            echo "##[error]"
+            echo "##[error]Please ensure the secret '$SECRET_NAME_VAR' exists in:"
+            echo "##[error]  Settings → Secrets and variables → Actions → Secrets"
+            exit 1
+          fi
+
+          echo "✓ Secret '$SECRET_NAME_VAR' exists and has a value"
+          echo "Configuration validated successfully!"
+
+      - name: "Test token permissions (teams access)"
+        env:
+          GH_TOKEN: ${{ secrets[format('{0}', vars.PR_ANALYSIS_SECRET_NAME)] }}
+          REPO: ${{ matrix.repo }}
+        run: |
+          echo "Testing if token can access organization teams..."
+
+          # Extract org name from repo (everything before the /)
+          ORG=$(echo "$REPO" | awk -F'/' '{print $1}')
+          echo "Organization: $ORG"
+
+          # Try to fetch teams from the organization
+          if gh api "orgs/$ORG/teams" --jq '.[0].name // empty' > /dev/null 2>&1; then
+            echo "✓ Token has access to organization teams"
+            echo "  The PR analytics report will include team-based metrics"
+          else
+            echo "##[error]❌ Token does NOT have access to organization teams"
+            echo "##[error]"
+            echo "##[error]The default GITHUB_TOKEN (workflow token) cannot access organization-level"
+            echo "##[error]resources like teams. The analytics action requires team access to generate"
+            echo "##[error]complete reports."
+            echo "##[error]"
+            echo "##[error]To fix this issue:"
+            echo "##[error]  1. Ensure you have a token with 'read:org' scope (e.g., AAP_ORG_FG_ANSIBLE_CICD_BOT_ACTIONS_REPO_READ)"
+            echo "##[error]  2. Verify the secret exists in: Settings → Secrets and variables → Actions → Secrets"
+            echo "##[error]  3. Update the repository variable PR_ANALYSIS_SECRET_NAME to reference that secret"
+            echo "##[error]"
+            echo "##[error]For this repository, set:"
+            echo "##[error]  PR_ANALYSIS_SECRET_NAME = AAP_ORG_FG_ANSIBLE_CICD_BOT_ACTIONS_REPO_READ"
+            echo "##[error]"
+            echo "##[error]Current configuration:"
+            echo "##[error]  PR_ANALYSIS_SECRET_NAME = ${{ vars.PR_ANALYSIS_SECRET_NAME }}"
+            exit 1
+          fi
+
+      - name: "Extract repo name and generate metadata"
+        id: metadata
+        env:
+          REPO_FULL: ${{ matrix.repo }}
+          DAYS: ${{ matrix.days }}
+        run: |
+          # Extract repo name (last part after /)
+          REPO_NAME=$(echo "$REPO_FULL" | awk -F'/' '{print $NF}')
+          echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
+
+          # Map days to human-readable period
+          case $DAYS in
+            7)
+              PERIOD_LABEL="Last Week"
+              ;;
+            14)
+              PERIOD_LABEL="Last 2 Weeks"
+              ;;
+            30)
+              PERIOD_LABEL="Last Month"
+              ;;
+            90)
+              PERIOD_LABEL="Last 3 Months"
+              ;;
+            180)
+              PERIOD_LABEL="Last 6 Months"
+              ;;
+            *)
+              PERIOD_LABEL="Last $DAYS Days"
+              ;;
+          esac
+          echo "period_label=$PERIOD_LABEL" >> $GITHUB_OUTPUT
+
+          # Generate issue title
+          ISSUE_TITLE="PR Analytics [$REPO_NAME] - $PERIOD_LABEL"
+          echo "issue_title=$ISSUE_TITLE" >> $GITHUB_OUTPUT
+          echo "Generated issue title: $ISSUE_TITLE"
+
+      - name: "Search for existing issue"
+        id: find-issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ steps.metadata.outputs.issue_title }}
+          ISSUE_REPO: ${{ github.repository }}
+        run: |
+          # Search for issue by exact title in current repo
+          ISSUE_NUMBER=$(gh issue list \
+            --repo "$ISSUE_REPO" \
+            --search "\"$ISSUE_TITLE\" in:title" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$ISSUE_NUMBER" ]; then
+            echo "Found existing issue #$ISSUE_NUMBER"
+            echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+            echo "issue_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "No existing issue found"
+            echo "issue_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "Create placeholder issue if needed"
+        if: steps.find-issue.outputs.issue_exists == 'false'
+        id: create-issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ steps.metadata.outputs.issue_title }}
+          ISSUE_REPO: ${{ github.repository }}
+          ISSUE_BODY: |
+            **Repository:** `${{ matrix.repo }}`
+            **Time Period:** ${{ steps.metadata.outputs.period_label }}
+
+            *This issue will be automatically updated with PR analytics data.*
+        run: |
+          ISSUE_NUMBER=$(gh issue create \
+            --repo "$ISSUE_REPO" \
+            --title "$ISSUE_TITLE" \
+            --body "$ISSUE_BODY" \
+            | grep -oP '(?<=/issues/)[0-9]+')
+
+          echo "Created new issue #$ISSUE_NUMBER"
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: "Set final issue number"
+        id: issue
+        run: |
+          if [ "${{ steps.find-issue.outputs.issue_exists }}" == "true" ]; then
+            ISSUE_NUM="${{ steps.find-issue.outputs.issue_number }}"
+          else
+            ISSUE_NUM="${{ steps.create-issue.outputs.issue_number }}"
+          fi
+          echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
+          echo "Using issue #$ISSUE_NUM for analytics report"
+
+      - name: "Calculate date range"
+        id: dates
+        env:
+          DAYS: ${{ matrix.days }}
+        run: |
+          # Action expects d/MM/yyyy format (e.g., 5/11/2024)
+          END_DATE=$(date -u +%d/%m/%Y)
+          START_DATE=$(date -u -d "$(date -u +%Y-%m-%d) - $DAYS days" +%d/%m/%Y)
+          echo "start_date=$START_DATE" >> $GITHUB_OUTPUT
+          echo "end_date=$END_DATE" >> $GITHUB_OUTPUT
+          echo "Analyzing PRs from $START_DATE to $END_DATE for ${{ matrix.repo }}"
+
+      - name: "Get organization teams to exclude"
+        id: teams
+        env:
+          GH_TOKEN: ${{ secrets[format('{0}', vars.PR_ANALYSIS_SECRET_NAME)] }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          echo "Fetching teams from organization: $ORG"
+
+          # Get all team slugs from the organization
+          TEAMS=$(gh api "orgs/$ORG/teams" --paginate --jq '.[].slug' | tr '\n' ',' | sed 's/,$//')
+
+          if [ -z "$TEAMS" ]; then
+            echo "No teams found in organization"
+            echo "teams_list=" >> $GITHUB_OUTPUT
+          else
+            echo "Found teams: $TEAMS"
+            echo "teams_list=$TEAMS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "Set common analytics parameters"
+        id: common-params
+        run: |
+          # Centralized parameters for PR analytics action
+          # These are used by both the issue update and markdown generation
+          echo "show_stats_types=timeline,workload,pr-quality,code-review-engagement,response-time" >> $GITHUB_OUTPUT
+          echo "aggregate_methods=average,percentile" >> $GITHUB_OUTPUT
+          echo "allow_analytics=false" >> $GITHUB_OUTPUT
+          echo "include_users=${{ vars.PR_ANALYSIS_INCLUDE_USERS }}" >> $GITHUB_OUTPUT
+          echo "exclude_labels=wip,hold,poc" >> $GITHUB_OUTPUT
+          echo "amount=100" >> $GITHUB_OUTPUT
+          echo "percentile=75" >> $GITHUB_OUTPUT
+          echo "top_list_amount=10" >> $GITHUB_OUTPUT
+          echo "required_approvals=1" >> $GITHUB_OUTPUT
+          echo "weekends=0,6" >> $GITHUB_OUTPUT
+
+      - name: "Generate PR analytics report (Issue)"
+        id: analytics-issue
+        uses: AlexSim93/pull-request-analytics-action@01d9a216d16b2eee2ce048c748f3acaac8882990  # v4.8.0
+        with:
+          GITHUB_TOKEN: ${{ secrets[format('{0}', vars.PR_ANALYSIS_SECRET_NAME)] }}
+          GITHUB_REPO_FOR_ISSUE: ${{ github.event.repository.name }}
+          GITHUB_OWNER_FOR_ISSUE: ${{ github.repository_owner }}
+          GITHUB_OWNERS_REPOS: ${{ matrix.repo }}
+          REPORT_DATE_START: ${{ steps.dates.outputs.start_date }}
+          REPORT_DATE_END: ${{ steps.dates.outputs.end_date }}
+          EXECUTION_OUTCOME: 'existing-issue'
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.metadata.outputs.issue_title }}
+          SHOW_STATS_TYPES: ${{ steps.common-params.outputs.show_stats_types }}
+          AGGREGATE_VALUE_METHODS: ${{ steps.common-params.outputs.aggregate_methods }}
+          HIDE_USERS: ${{ steps.teams.outputs.teams_list }}
+          ALLOW_ANALYTICS: ${{ steps.common-params.outputs.allow_analytics }}
+          INCLUDE_USERS: ${{ steps.common-params.outputs.include_users }}
+          EXCLUDE_LABELS: ${{ steps.common-params.outputs.exclude_labels }}
+          AMOUNT: ${{ steps.common-params.outputs.amount }}
+          PERCENTILE: ${{ steps.common-params.outputs.percentile }}
+          TOP_LIST_AMOUNT: ${{ steps.common-params.outputs.top_list_amount }}
+          REQUIRED_APPROVALS: ${{ steps.common-params.outputs.required_approvals }}
+          WEEKENDS: ${{ steps.common-params.outputs.weekends }}
+
+      - name: "Generate PR analytics report (Markdown)"
+        id: analytics-markdown
+        uses: AlexSim93/pull-request-analytics-action@01d9a216d16b2eee2ce048c748f3acaac8882990  # v4.8.0
+        with:
+          GITHUB_TOKEN: ${{ secrets[format('{0}', vars.PR_ANALYSIS_SECRET_NAME)] }}
+          GITHUB_OWNERS_REPOS: ${{ matrix.repo }}
+          REPORT_DATE_START: ${{ steps.dates.outputs.start_date }}
+          REPORT_DATE_END: ${{ steps.dates.outputs.end_date }}
+          EXECUTION_OUTCOME: 'markdown'
+          SHOW_STATS_TYPES: ${{ steps.common-params.outputs.show_stats_types }}
+          AGGREGATE_VALUE_METHODS: ${{ steps.common-params.outputs.aggregate_methods }}
+          HIDE_USERS: ${{ steps.teams.outputs.teams_list }}
+          ALLOW_ANALYTICS: ${{ steps.common-params.outputs.allow_analytics }}
+          INCLUDE_USERS: ${{ steps.common-params.outputs.include_users }}
+          EXCLUDE_LABELS: ${{ steps.common-params.outputs.exclude_labels }}
+          AMOUNT: ${{ steps.common-params.outputs.amount }}
+          PERCENTILE: ${{ steps.common-params.outputs.percentile }}
+          TOP_LIST_AMOUNT: ${{ steps.common-params.outputs.top_list_amount }}
+          REQUIRED_APPROVALS: ${{ steps.common-params.outputs.required_approvals }}
+          WEEKENDS: ${{ steps.common-params.outputs.weekends }}
+
+      - name: "Save markdown report as artifact"
+        id: save-markdown
+        run: |
+          # Create artifacts directory
+          mkdir -p artifacts
+
+          # Generate filename with metadata
+          FILENAME="pr-analytics-${{ steps.metadata.outputs.repo_name }}-${{ matrix.days }}days-$(date -u +%Y%m%d-%H%M%S).md"
+          echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+
+          # Save markdown output to file
+          cat > "artifacts/$FILENAME" << 'EOF'
+          ${{ steps.analytics-markdown.outputs.MARKDOWN }}
+          EOF
+
+          echo "Saved markdown report to artifacts/$FILENAME"
+          ls -lh artifacts/
+
+      - name: "Upload markdown artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-analytics-${{ steps.metadata.outputs.repo_name }}-${{ matrix.days }}d
+          path: artifacts/*.md
+          retention-days: 90
+
+      - name: "Add artifact link comment to issue"
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
+          ISSUE_REPO: ${{ github.repository }}
+          REPO_NAME: ${{ steps.metadata.outputs.repo_name }}
+          PERIOD_LABEL: ${{ steps.metadata.outputs.period_label }}
+          RUN_ID: ${{ github.run_id }}
+          DAYS: ${{ matrix.days }}
+        run: |
+          ARTIFACT_URL="https://github.com/$ISSUE_REPO/actions/runs/$RUN_ID"
+
+          COMMENT_BODY="📊 **PR Analytics Report Available**
+
+          A downloadable markdown version of this report is available as an artifact:
+          - **Repository:** \`$REPO_NAME\`
+          - **Period:** $PERIOD_LABEL ($DAYS days)
+          - **Download:** [View artifacts]($ARTIFACT_URL)
+
+          The artifact will be available for 90 days."
+
+          gh issue comment "$ISSUE_NUMBER" \
+            --repo "$ISSUE_REPO" \
+            --body "$COMMENT_BODY"
+
+          echo "Added artifact link comment to issue #$ISSUE_NUMBER"
+
+      - name: "Clean up old comments"
+        if: success() && vars.PR_ANALYSIS_BOT_USER != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
+          ISSUE_REPO: ${{ github.repository }}
+          BOT_USER: ${{ vars.PR_ANALYSIS_BOT_USER }}
+        run: |
+          echo "Cleaning up old analytics comments from issue #$ISSUE_NUMBER"
+          echo "Bot user: $BOT_USER"
+
+          # Get the timestamp from 5 minutes ago (comments from this run should be newer)
+          CUTOFF_TIME=$(date -u -d '5 minutes ago' --iso-8601=seconds)
+          echo "Removing bot comments older than: $CUTOFF_TIME"
+
+          # Get comments from bot user that are older than cutoff time
+          COMMENTS=$(gh api "repos/$ISSUE_REPO/issues/$ISSUE_NUMBER/comments" \
+            --jq ".[] | select(.user.login == \"$BOT_USER\" and .created_at < \"$CUTOFF_TIME\") | .id")
+
+          if [ -z "$COMMENTS" ]; then
+            echo "No old bot comments to remove"
+          else
+            echo "Found bot comments to remove:"
+            for COMMENT_ID in $COMMENTS; do
+              echo "  Deleting comment ID: $COMMENT_ID"
+              gh api -X DELETE "repos/$ISSUE_REPO/issues/comments/$COMMENT_ID" || true
+            done
+            echo "Cleanup complete"
+          fi
+
+      - name: "Update issue title with status"
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
+          ISSUE_REPO: ${{ github.repository }}
+          ORIGINAL_TITLE: ${{ steps.metadata.outputs.issue_title }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          echo "Updating issue title with job status..."
+          echo "Job status: $JOB_STATUS"
+
+          # Remove any existing status icons from the title
+          CLEAN_TITLE=$(echo "$ORIGINAL_TITLE" | sed 's/^[✅❌] //')
+
+          # Determine the status icon
+          if [ "$JOB_STATUS" == "success" ]; then
+            STATUS_ICON="✅"
+            echo "Job succeeded - adding success icon"
+          else
+            STATUS_ICON="❌"
+            echo "Job failed - adding failure icon"
+          fi
+
+          # Create the new title with status icon
+          NEW_TITLE="$STATUS_ICON $CLEAN_TITLE"
+          echo "New title: $NEW_TITLE"
+
+          # Update the issue title
+          gh issue edit "$ISSUE_NUMBER" \
+            --repo "$ISSUE_REPO" \
+            --title "$NEW_TITLE"
+
+          echo "Issue title updated successfully!"

@@ -49,7 +49,7 @@ jobs:
               --ignore=aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "remaining"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install build requirements
         run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
@@ -62,11 +62,13 @@ jobs:
       - name: Install tox
         run: pip${{ matrix.batch.python-version }} install tox tox-docker requests
 
-      - name: Checkout DAB branch if needed
+      - name: Checkout dependencies
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: tools/scripts/get_dab_for_pr.py
+          GH_TOKEN: ${{ secrets.AAP_PS_DAB_COLLECTION_REPO_READ != '' && secrets.AAP_PS_DAB_COLLECTION_REPO_READ || secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos '[ansible-automation-platform|ansible]/django-ansible-base'
 
       - name: Run tests
         env:
@@ -97,7 +99,7 @@ jobs:
       needs.unit-test.result == 'success' &&
       (github.repository == 'ansible-automation-platform/aap-gateway' || github.repository == 'ansible-automation-platform/aap-gateway-debug')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install python
         uses: actions/setup-python@v5

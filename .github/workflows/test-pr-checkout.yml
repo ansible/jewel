@@ -1,0 +1,118 @@
+name: Test PR Checkout Script
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches:
+      - devel
+
+jobs:
+  test-checkout:
+    name: Test get_pr_checkout.py
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout this branch
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests (only dependency)
+        run: pip install requests
+
+      - name: Display PR details
+        id: pr_info
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Export for next steps
+          echo "PR_BODY<<EOF" >> $GITHUB_ENV
+          echo "$PR_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "TARGET_BRANCH=$TARGET_BRANCH" >> $GITHUB_ENV
+
+          # Display for debugging
+          echo "### 📋 Testing PR #$PR_NUMBER" >> $GITHUB_STEP_SUMMARY
+          echo "**Title:** $PR_TITLE" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Branch:** $TARGET_BRANCH" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PR Body:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$PR_BODY" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Test get_pr_checkout.py
+        env:
+          PR_BODY: ${{ env.PR_BODY }}
+          GITHUB_BASE_REF: ${{ env.TARGET_BRANCH }}
+          GH_TOKEN: ${{ secrets.AAP_PS_DAB_COLLECTION_REPO_READ != '' && secrets.AAP_PS_DAB_COLLECTION_REPO_READ || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "### 🚀 Running get_pr_checkout.py" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Target Branch: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
+          echo "- Token Available: $([ -n "$GH_TOKEN" ] && echo 'yes' || echo 'no')" >> $GITHUB_STEP_SUMMARY
+          echo "- Always Clone Repos: [ansible-automation-platform|ansible]/django-ansible-base" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Run with standard test configuration
+          CMD="python tools/scripts/get_pr_checkout.py --always-clone-repos [ansible-automation-platform|ansible]/django-ansible-base"
+
+          echo "**Command:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "$CMD" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Run the command and capture output
+          echo "**Output:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          if $CMD 2>&1 | tee /tmp/checkout_output.txt; then
+            cat /tmp/checkout_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Script completed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            EXIT_CODE=$?
+            cat /tmp/checkout_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Script failed with exit code $EXIT_CODE" >> $GITHUB_STEP_SUMMARY
+            exit $EXIT_CODE
+          fi
+
+      - name: List cloned repositories
+        if: success()
+        run: |
+          echo "### 📦 Cloned Repositories" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for dir in */; do
+            if [ -d "$dir/.git" ]; then
+              echo "**${dir%/}:**" >> $GITHUB_STEP_SUMMARY
+              cd "$dir"
+              CURRENT_BRANCH=$(git branch --show-current)
+              REMOTE_URL=$(git config --get remote.origin.url | sed 's/https:\/\/.*@/https:\/\//')
+              COMMIT=$(git rev-parse --short HEAD)
+              echo "- Branch: \`$CURRENT_BRANCH\`" >> $GITHUB_STEP_SUMMARY
+              echo "- Remote: $REMOTE_URL" >> $GITHUB_STEP_SUMMARY
+              echo "- Commit: \`$COMMIT\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              cd ..
+            fi
+          done
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "### ❌ Test Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The checkout script encountered an error. Review the output above for details." >> $GITHUB_STEP_SUMMARY

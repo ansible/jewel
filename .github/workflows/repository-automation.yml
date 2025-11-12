@@ -1,0 +1,50 @@
+---
+name: Complete Repository Automation
+# Fork-compatible automation for repository triage, labeling, and management
+
+on:
+  # Fork compatibility via workflow_run (triggered by repository-automation-trigger.yml)
+  workflow_run:
+    workflows: ["Repository Automation: Trigger"]
+    types: [completed]
+
+  # Scheduled events for stale detection
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: 'PR number to process (optional)'
+        required: false
+        type: string
+      dry-run:
+        description: 'Dry run mode (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  issues: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  automation:
+    runs-on: ubuntu-latest
+    # IMPORTANT: This repository reference gets updated by the test setup
+    if: github.repository == 'ansible-automation-platform/aap-gateway'
+
+    steps:
+      - name: Repository Automation
+        uses: thenets/repo-automation@9e9603cd66620a201d222e7f63a649110bc9ecfe # v1.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          custom-github-token: ${{ secrets.GHA_LABELS_AUTOMATION }}
+          dry-run: ${{ github.event.inputs.dry-run || 'false' }}
+
+          # Enable all features for comprehensive testing
+          accepted-releases: '["2.5", "2.6", "2.7", "devel"]'
+          accepted-backports: '["2.5", "2.6", "devel"]'
+          enable-feature-branch: true
+          stale-days: 5
