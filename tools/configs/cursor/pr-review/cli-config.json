@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(gh)",
+      "Read",
+      "mcp__github__*"
+    ],
+    "deny": []
+  }
+}
