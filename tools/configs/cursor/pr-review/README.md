@@ -4,6 +4,13 @@
 
 This directory contains Cursor CLI configuration for automated pull request reviews in GitHub Actions workflows.
 
+**Prerequisites:**
+- A `.github_mcp_env` file in the repository root containing:
+  ```
+  GITHUB_PERSONAL_ACCESS_TOKEN=your_github_personal_access_token
+  ```
+  This file provides authentication for the GitHub MCP server. Ensure it's in `.gitignore` to avoid committing credentials.
+
 The review process:
 1. **Pre-flight check**: Verify GitHub MCP is available and configured
 2. **Create pending review**: Agent creates a pending review on GitHub
@@ -13,17 +20,19 @@ The review process:
 
 ## Files
 
-### `cli-config.json`
+### `mcp.json`
 
-Configures permissions and settings for the Cursor CLI agent when performing PR reviews.
+Configures the GitHub MCP server for automated pull request reviews.
 
 **Key Configuration:**
-- **Permissions**:
-  - **Allow**: `["Shell(gh)", "Read", "mcp__github__*"]` - Grants the Cursor agent permission to:
-    - Execute GitHub CLI (`gh`) commands for viewing PRs and diffs
-    - Use GitHub MCP tools to post review comments directly to PRs
-    - Read any file in the repository to understand context
-  - **Deny**: `[]` - No explicitly denied permissions
+- **MCP Server**: Runs GitHub integration in a Docker container
+- **Authentication**: Requires a `.github_mcp_env` file with `GITHUB_PERSONAL_ACCESS_TOKEN` set
+- **Permissions**: Granted via the `--approve-mcps` flag in the workflow
+
+The Cursor agent has access to:
+- GitHub CLI (`gh`) commands for viewing PRs and diffs
+- GitHub MCP tools to post review comments directly to PRs
+- Read access to repository files for context and analysis
 
 This configuration enables the Cursor agent to:
 - View PR metadata using `gh pr view` or GitHub MCP tools
@@ -44,7 +53,7 @@ This configuration is automatically applied in the PR review workflows:
 2. **`.github/workflows/cursor-pull-request-manual.yml`** - Manual trigger workflow
 3. **`.github/workflows/repository-automation-dispatcher.yml`** - Automatic trigger on PR events
 
-The configuration ensures the Cursor agent has the necessary permissions to interact with GitHub while maintaining security through explicit permission grants.
+Permissions are managed via the `--approve-mcps` flag which grants the Cursor agent access to GitHub MCP tools and other required permissions.
 
 **MCP Verification**: The workflow includes a pre-flight check to verify GitHub MCP is available before attempting the review. If the MCP is not configured or unavailable, the workflow will fail early with a clear error message.
 
@@ -60,12 +69,14 @@ For more information about Cursor CLI configuration and permissions:
 
 ## Security Considerations
 
-- The configuration explicitly allows only:
+- **Authentication**: The `.github_mcp_env` file contains the `GITHUB_PERSONAL_ACCESS_TOKEN` used by the GitHub MCP server
+  - This file must be in `.gitignore` to prevent credential leakage
+  - The token should have appropriate scopes (see Prerequisites in `.cursor/README.md`)
+- Permissions are managed via the `--approve-mcps` flag which grants access to:
   - `gh` shell access for viewing PR metadata and diffs
   - GitHub MCP tools (`mcp__github__*`) for posting review comments
   - Reading any file in the repository for context and analysis
-- All other shell commands and file writes are implicitly denied unless explicitly allowed
-- The `GH_TOKEN` environment variable provides authenticated access to GitHub, scoped to the workflow's permissions
+- The `GH_TOKEN` environment variable (in CI/CD workflows) provides authenticated access to GitHub, scoped to the workflow's permissions
 - Review permissions are limited to `contents: read` and `pull-requests: write` in the workflow
 - The Cursor agent:
   - Creates a pending review using GitHub MCP

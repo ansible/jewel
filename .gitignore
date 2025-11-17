@@ -71,3 +71,6 @@ aap_gateway_api/management/commands/migrate_service_data_25.py
 
 # Ignore AGENTS_USER.md this is user based preferences for CLAUDE
 AGENTS_USER.md
+
+# Ignore files created during workflows
+.github_mcp_env

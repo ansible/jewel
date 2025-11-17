@@ -6,13 +6,17 @@
         "run",
         "-i",
         "--rm",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "--env-file",
+        ".github_mcp_env",
         "ghcr.io/github/github-mcp-server:v0.18.0"
       ],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-      }
+      "allowed_tools": [
+        "github-pull_request_read",
+        "github-create_pending_pull_request_review",
+        "github-add_comment_to_pending_review",
+        "github-submit_pending_pull_request_review",
+        "github-create_and_submit_pull_request_review"
+      ]
     }
   }
 }
