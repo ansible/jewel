@@ -194,7 +194,7 @@ def compare_types(api_type, doc_type):
         case "field":
             # DRF many-related fields present as array type
             return doc_type in ["string", "object", "integer", "boolean", "array"]
-        case "datetime" | "slug" | "url" | "email":
+        case "datetime" | "slug" | "url" | "email" | "choice":
             return doc_type in ["string"]
         case "list" | "multiple choice":
             return doc_type in ["array"]
