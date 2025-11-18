@@ -1,5 +1,5 @@
 cryptography >= 41.0.6 # Required by django 
-Django>=4.2.21,<4.3.0 #   pinned to use version productization has available already, CVE-2024-56374
+Django>=4.2.26,<4.3.0 #   pinned to use version productization has available already, CVE-2024-56374
 djangorestframework
 django-crum
 django-dynamic-preferences
