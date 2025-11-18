@@ -124,7 +124,7 @@ ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
 # Note: Requires aap_gateway_api.feature_flags.conditions to be imported.
 # Format: flag_name: [list of conditions]
 FLAGS = {
-    'FEATURE_GATEWAY_IPV6_USAGE_ENABLED': [{'condition': 'boolean', 'value': False}],
+    'FEATURE_GATEWAY_IPV6_USAGE_ENABLED': [{'condition': 'boolean', 'value': True}],
     # Private feature flag for cloud.redhat.com; DO NOT ENABLE FOR CUSTOMERS until after testing is completed for EPIC AAP-34094
     'FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE': [{'condition': 'boolean', 'value': False}],
     # Makes attribute (name/value) and group (name) comparisons case insensitive
