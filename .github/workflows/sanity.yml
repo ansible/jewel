@@ -1,22 +1,18 @@
 ---
-# Sanity checks for aap-gateway
+# Sanity checks and dev environment tests for aap-gateway
 #
-# This workflow runs sanity checks for aap-gateway.
-# These tests do not need the collection or dev environment to be running.
+# This workflow runs sanity checks first, then calls dev-environment.yml if sanity passes.
+# Sanity checks do not need the collection or dev environment to be running.
+# Dev environment tests require the full dev environment with secrets.
 #
-# FLOW: PR is created → sanity checks run -> Downstream workflows run (i.e. dev-environment tests)
+# FLOW: PR is created → sanity checks run → dev-environment.yml workflow called (if sanity passes)
 #
 # This ensures the PR is valid before running expensive dev environment tests which require secrets.
 #
-# Steps:
-# 1. Checkout the repository
-# 2. Install build requirements
-# 3. Install python
-# 4. Install tox
-# 5. Checkout DAB branch if needed
-# 6. Run tox
-# 7. Create PR metadata artifact
-# 8. Upload PR metadata artifact
+# Jobs:
+# 1. tox - Runs sanity checks (linting, migrations, etc.) - matrix job with 4 test environments
+# 2. create-pr-metadata - Creates PR metadata artifact
+# 3. call-dev-environment - Calls dev-environment.yml reusable workflow with PR number and SHA
 name: Sanity
 env:
   LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
@@ -93,3 +89,19 @@ jobs:
           name: pr-metadata
           path: pr-metadata/
           retention-days: 1
+
+  call-dev-environment:
+    name: Call dev environment tests
+    needs: [tox, create-pr-metadata]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dev-environment.yml
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_head_sha: ${{ github.event.pull_request.head.sha }}
+      pr_base: ${{ github.event.pull_request.base.ref }}
+      pr_head_repo: ${{ github.event.pull_request.head.repo.full_name }}
+      pr_body: ${{ github.event.pull_request.body }}
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

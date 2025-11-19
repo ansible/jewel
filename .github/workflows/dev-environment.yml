@@ -2,104 +2,72 @@
 # Dev Environment Tests Workflow for aap-gateway
 # Any tests that require the dev environment to be running should be in here.
 #
-# This workflow runs dev environment tests triggered by Sanity workflow completion.
+# This is a reusable workflow that can be called from other workflows.
+# It's called from sanity.yml after sanity checks complete.
 #
-# FLOW: Sanity completes on PR → workflow_run triggers this workflow → tests run
+# FLOW: Sanity checks pass → sanity.yml calls this workflow → dev environment tests run
 #
 # This ensures sanity checks pass before running expensive dev environment tests which require secrets.
 name: Dev environment tests
 env:
   LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
 on:
-  workflow_run:   # This is triggered by Sanity being completed.
-    workflows:
-      - Sanity
-    types:
-      - completed
-permissions: read-all
+  workflow_call:
+    inputs:
+      pr_number:
+        description: 'PR number'
+        required: true
+        type: string
+      pr_head_sha:
+        description: 'PR head SHA to checkout'
+        required: true
+        type: string
+      pr_base:
+        description: 'PR base branch'
+        required: true
+        type: string
+      pr_head_repo:
+        description: 'PR head repository (full name)'
+        required: true
+        type: string
+      pr_body:
+        description: 'PR body'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      GITHUB_TOKEN:
+        required: false
+permissions:
+  contents: read
 jobs:
   dev-env-tests:
-    name: ${{ matrix.test.name }}
+    name: Dev environment tests
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
     env:
       HEADLESS: "yes"
-    strategy:
-      fail-fast: false
-      matrix:
-        test:
-          - name: Smoke-test dev env
-            type: smoke
-            command: |
-              ansible-playbook -v tools/ansible/smoke-test.yml \
-                -e repo_root=$(pwd) \
-                -e gateway_vars=$(readlink -f container-startup.yml) \
-                --skip-tags start_dev_environment,dump_container_logs
-          - name: Collection completeness test
-            type: completeness
-            command: |
-              cp container-startup.yml ansible.platform && \
-              cd ansible.platform && \
-              GATEWAY_PASSWORD=$(grep 'gateway_admin_password:' container-startup.yml | awk '{print $2}' | tr -d "'\"") && \
-              export GATEWAY_PASSWORD && \
-              make collection-test-completeness
-          - name: OpenAPI schema validation
-            type: openapi
-            command: |
-              python3 -c "
-              import ssl
-              from openapi_spec_validator import validate_url
-              from openapi_spec_validator.validation.validators import OpenAPIV30SpecValidator
-              
-              ssl._create_default_https_context = ssl._create_unverified_context
-              validate_url('https://localhost:8000/api/gateway/v1/docs/schema/', cls=OpenAPIV30SpecValidator)
-              "
     steps:
-      # Checkout the PR code to test
       - name: Checkout PR code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Download PR metadata artifact
-        uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: Sanity
-          run_id: ${{ github.event.workflow_run.id }}
-          name: pr-metadata
-          path: pr-metadata
+          ref: ${{ inputs.pr_head_sha }}
 
       - name: Set PR metadata and protect against fork attacks
         env:
-          REPO_NAME: ${{ github.event.repository.full_name }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_NAME: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_BASE: ${{ inputs.pr_base }}
+          PR_HEAD_REPO: ${{ inputs.pr_head_repo }}
+          PR_BODY: ${{ inputs.pr_body }}
         run: |
-          if [ ! -f pr-metadata/pr-number.txt ]; then
-            echo "##[error]❌ FATAL: pr-number.txt not found in pr-metadata artifact"
-            echo "##[error]The Sanity workflow should have created this file."
-            exit 1
-          fi
-
-          if [ ! -f pr-metadata/pr-body.txt ]; then
-            echo "##[error]❌ FATAL: pr-body.txt not found in pr-metadata artifact"
-            echo "##[error]The Sanity workflow should have created this file."
-            exit 1
-          fi
-
-          PR_NUMBER=$(cat pr-metadata/pr-number.txt)
-          echo "Found PR number from artifact: $PR_NUMBER"
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-
-          echo "PR_BODY<<EOF" >> $GITHUB_ENV
-          cat pr-metadata/pr-body.txt >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-          # Get PR metadata from GitHub API
-          PR_DATA=$(gh api "repos/$REPO_NAME/pulls/$PR_NUMBER")
-          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
-          PR_HEAD_REPO=$(echo "$PR_DATA" | jq -r '.head.repo.full_name')
           echo "PR_BASE=$PR_BASE" >> $GITHUB_ENV
+          
+          # Store PR_BODY in environment variable (multiline support)
+          echo "PR_BODY<<EOF" >> $GITHUB_ENV
+          printf '%s' "$PR_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
           echo "Successfully loaded PR metadata (target branch: $PR_BASE)"
 
           # Security check: Is this PR from a fork or from the main repo?
@@ -129,7 +97,7 @@ jobs:
       - name: Checkout dependencies
         env:
           PR_BODY: ${{ env.PR_BODY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || github.token }}
         run: |
           python tools/scripts/get_pr_checkout.py \
             --always-clone-repos 'ansible/django-ansible-base' \
@@ -143,19 +111,76 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Install requirements for completeness test
-        run: pip3.11 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
-
-      - name: Install requirements for OpenAPI validation
-        if: matrix.test.type == 'openapi'
-        run: pip3.11 install openapi-spec-validator
+      - name: Install test dependencies
+        run: |
+          pip3.11 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
+          pip3.11 install openapi-spec-validator
 
       - name: Start the dev environment
         run: COMPOSE_UP_OPTS='-d' make docker-compose
 
-      - name: Run ${{ matrix.test.type }} test
-        run: ${{ matrix.test.command }}
+      - name: Run smoke test
+        id: smoke_test
+        continue-on-error: true
+        run: |
+          ansible-playbook -v tools/ansible/smoke-test.yml \
+            -e repo_root=$(pwd) \
+            -e gateway_vars=$(readlink -f container-startup.yml) \
+            --skip-tags start_dev_environment,dump_container_logs
+          echo "✅ Smoke test passed"
+
+      - name: Run collection completeness test
+        id: collection_test
+        continue-on-error: true
+        run: |
+          cp container-startup.yml ansible.platform && \
+          cd ansible.platform && \
+          GATEWAY_PASSWORD=$(grep 'gateway_admin_password:' container-startup.yml | awk '{print $2}' | tr -d "'\"") && \
+          export GATEWAY_PASSWORD && \
+          make collection-test-completeness
+          echo "✅ Collection completeness test passed"
+
+      - name: Run OpenAPI schema validation
+        id: openapi_test
+        continue-on-error: true
+        run: |
+          python3 -c "
+          import ssl
+          from openapi_spec_validator import validate_url
+          from openapi_spec_validator.validation.validators import OpenAPIV30SpecValidator
+          
+          ssl._create_default_https_context = ssl._create_unverified_context
+          validate_url('https://localhost:8000/api/gateway/v1/docs/schema/', cls=OpenAPIV30SpecValidator)
+          "
+          echo "✅ OpenAPI schema validation passed"
+
+      - name: Check test results
+        if: always()
+        run: |
+          FAILED_TESTS=()
+          
+          if [ "${{ steps.smoke_test.outcome }}" != "success" ]; then
+            FAILED_TESTS+=("Smoke test")
+          fi
+          
+          if [ "${{ steps.collection_test.outcome }}" != "success" ]; then
+            FAILED_TESTS+=("Collection completeness test")
+          fi
+          
+          if [ "${{ steps.openapi_test.outcome }}" != "success" ]; then
+            FAILED_TESTS+=("OpenAPI schema validation")
+          fi
+          
+          if [ ${#FAILED_TESTS[@]} -gt 0 ]; then
+            echo "##[error]❌ The following tests failed:"
+            for test in "${FAILED_TESTS[@]}"; do
+              echo "##[error]  - $test"
+            done
+            exit 1
+          else
+            echo "✅ All tests passed"
+          fi
 
       - name: Dump the container logs on failure
-        run: docker compose -f tools/generated/docker-compose.yml logs
         if: failure()
+        run: docker compose -f tools/generated/docker-compose.yml logs
