@@ -7,3 +7,9 @@ pytest-django
 pytest-subtests
 colorama
 logutils
+
+# Linting tools
+flake8==7.1.1
+Flake8-pyproject==1.2.3
+black==25.1.0
+isort==6.0.0

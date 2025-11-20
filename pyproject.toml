@@ -86,6 +86,11 @@ legacy_tox_ini = """
         check-oauth2-permissions
         check-help-text
         py311
+        black
+        flake8
+        isort
+        check-lint
+
     labels =
         test = py311
         check = check, check-migrations, check-oauth2-permissions, check-help-text
@@ -97,111 +102,98 @@ legacy_tox_ini = """
         DB_PORT=5432/tcp
 
     [testenv]
-    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    deps =
+        -r{toxinidir}/requirements/requirements_test.txt
+
+    [testenv:py311]
+    allowlist_externals = 
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
+        pytest
     docker = db
+    passenv = ANSIBLE_GW_TEST_DB_HOST
     setenv =
         PYTHONPATH = {toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
-    passenv = ANSIBLE_GW_TEST_DB_HOST
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-        django-debug-toolbar==5.2  # Required to install for unit tests
-        psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
-    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    allowlist_externals = 
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-        psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check
 
     [testenv:check-migrations]
-    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    allowlist_externals = 
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-         psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api makemigrations --check
 
     [testenv:check-oauth2-permissions]
-    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    allowlist_externals = 
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-        psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check --deploy --tag oauth2_permissions
 
     [testenv:check-help-text]
-    allowlist_externals = ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+    allowlist_externals = 
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-        psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore
 
     [testenv:flake8]
-    deps =
-        flake8==7.1.1
-        Flake8-pyproject==1.2.3
-    docker =
+    allowlist_externals = flake8
+    install_command = pip install {opts} {packages}
     commands = flake8 {posargs:.}
 
     [testenv:black]
-    deps =
-        black==25.1.0
-    docker =
+    allowlist_externals = black
+    install_command = pip install {opts} {packages}
     commands = black {posargs:.}
 
     [testenv:isort]
-    deps =
-        isort==6.0.0
-    docker =
+    allowlist_externals = isort
+    install_command = pip install {opts} {packages}
     commands = isort {posargs:.}
 
     [testenv:check-lint]
-    # allowlist_externals = bash
-    deps =
-        flake8==7.1.1
-        Flake8-pyproject==1.2.3
-        black==25.1.0
-        isort==6.0.0
-    docker =
+    allowlist_externals = 
+        black
+        flake8
+        isort
+    install_command = pip install {opts} {packages}
     commands =
-        # bash -c "black --check . || flake8 . || isort --check ."
         black --check .
         flake8 .
         isort --check .
