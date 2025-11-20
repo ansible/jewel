@@ -72,5 +72,9 @@ aap_gateway_api/management/commands/migrate_service_data_25.py
 # Ignore AGENTS_USER.md this is user based preferences for CLAUDE
 AGENTS_USER.md
 
+# Ignore local Claude/Cursor settings (user-specific configurations)
+.claude/settings.local.json
+.cursor/settings.local.json
+
 # Ignore files created during workflows
 .github_mcp_env
