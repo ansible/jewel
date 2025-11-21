@@ -84,7 +84,7 @@ jobs:
         run: |
           mkdir -p pr-metadata
           printf '%s\n' "$PR_NUMBER" > pr-metadata/pr-number.txt
-          printf '%s' "$PR_BODY" > pr-metadata/pr-body.txt
+          printf '%s\n' "$PR_BODY" > pr-metadata/pr-body.txt
           echo "Created PR metadata for PR #$PR_NUMBER"
 
       - name: Upload PR metadata artifact
