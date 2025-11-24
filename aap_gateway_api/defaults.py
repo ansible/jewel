@@ -119,18 +119,6 @@ ENVOY_VERIFY_HTTPS_CERTIFICATES = True
 # how much higher depends on network throughput, 3 MiB higher is the absolute minimum I could set without error 413s.
 ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
 
-# Feature flags configuration.
-# The feature condition allows defining dependencies between features.
-# Note: Requires aap_gateway_api.feature_flags.conditions to be imported.
-# Format: flag_name: [list of conditions]
-FLAGS = {
-    'FEATURE_GATEWAY_IPV6_USAGE_ENABLED': [{'condition': 'boolean', 'value': True}],
-    # Private feature flag for cloud.redhat.com; DO NOT ENABLE FOR CUSTOMERS until after testing is completed for EPIC AAP-34094
-    'FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE': [{'condition': 'boolean', 'value': False}],
-    # Makes attribute (name/value) and group (name) comparisons case insensitive
-    'FEATURE_CASE_INSENSITIVE_AUTH_MAPS': [{'condition': 'boolean', 'value': True}],
-}
-
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
 GATEWAY_CERT_FILE = '/etc/ansible-automation-platform/gateway/gateway.crt'
@@ -156,7 +144,6 @@ INSTALLED_APPS = [
     'django_extensions',
     'flags',
     'rest_framework',
-    'aap_gateway_api',
     'ansible_base.activitystream',
     'ansible_base.authentication',
     'ansible_base.rest_filters',
@@ -166,6 +153,7 @@ INSTALLED_APPS = [
     'ansible_base.rbac',
     'ansible_base.oauth2_provider',
     "ansible_base.feature_flags",
+    'aap_gateway_api',
 ]
 
 # Internationalization
@@ -386,3 +374,7 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 XDS_XFF_NUM_TRUSTED_HOPS = 0
 SDS_CLUSTER_NAMES = ["gateway-control-plane-rest"]
 SDS_REFRESH_DELAY_PROTOBUF_DURATION = "5s"
+
+# Runtime feature flag settings
+RUNTIME_FEATURE_FLAGS = False
+RUNTIME_FEATURE_FLAGS_UI = False

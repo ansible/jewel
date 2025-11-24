@@ -32,6 +32,22 @@ from aap_gateway_api.tests.service_test_app.launch import launch_service
 from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
 
 
+@pytest.fixture(autouse=True)
+def ensure_settings_bound_preferences():
+    """Ensure all settings-bound preferences have their Django settings set."""
+    from django.conf import settings
+
+    # Set default values for all settings-bound preferences to avoid None value errors
+    if not hasattr(settings, 'AAP_DEPLOYMENT_TYPE'):
+        setattr(settings, 'AAP_DEPLOYMENT_TYPE', 'self-managed')
+    if not hasattr(settings, 'NOTIFICATION_RSS_FEED_URL'):
+        setattr(settings, 'NOTIFICATION_RSS_FEED_URL', 'https://announcements.ansiblecloud.redhat.com/feed.atom')
+    if not hasattr(settings, 'RUNTIME_FEATURE_FLAGS'):
+        setattr(settings, 'RUNTIME_FEATURE_FLAGS', False)
+    if not hasattr(settings, 'RUNTIME_FEATURE_FLAGS_UI'):
+        setattr(settings, 'RUNTIME_FEATURE_FLAGS_UI', False)
+
+
 def pytest_configure():
     """
     macOS uses 'spawn' by default (unlike Linux, which uses 'fork'). This causes issues with Django's app registry in subprocesses,

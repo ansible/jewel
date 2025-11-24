@@ -1,6 +1,8 @@
 from unittest import mock
 
 import pytest
+from ansible_base.feature_flags.models import AAPFlag
+from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
 from aap_gateway_api.models import Organization, ServiceType
 from aap_gateway_api.signals.preloaded_data import add_console_service_type, create_default_organization, create_preload_data
@@ -65,10 +67,10 @@ class TestCreatePreloadedData:
     def test_console_st(self, flag_value, settings_override_mutable, settings):
         with pytest.raises(ServiceType.DoesNotExist):
             ServiceType.objects.get(name="console")
-
-        with settings_override_mutable('FLAGS'):
-            settings.FLAGS['FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE'][0]['value'] = flag_value
-            add_console_service_type()
+        AAPFlag.objects.all().delete()
+        setattr(settings, "FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED", flag_value)
+        seed_feature_flags()
+        add_console_service_type()
 
         if flag_value == 'False':
             with pytest.raises(ServiceType.DoesNotExist):

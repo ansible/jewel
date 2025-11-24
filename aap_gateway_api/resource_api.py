@@ -1,9 +1,10 @@
 import copy
 from typing import Optional
 
+from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.rbac.models import DABPermission, RoleDefinition
 from ansible_base.resource_registry.registry import ParentResource, ResourceConfig, ServiceAPIConfig, SharedResource
-from ansible_base.resource_registry.shared_types import OrganizationType, RoleDefinitionType, TeamType, UserType
+from ansible_base.resource_registry.shared_types import FeatureFlagType, OrganizationType, RoleDefinitionType, TeamType, UserType
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor
 from django.db.models import Model
 from rest_framework import serializers
@@ -136,6 +137,7 @@ class APIConfig(ServiceAPIConfig):
         "shared.team": GetOrCreateProcessor,
         "shared.user": GetOrCreateProcessor,
         "shared.roledefinition": GatewayRoleDefinitionProcessor,
+        "shared.aapflag": GetOrCreateProcessor,
     }
 
 
@@ -144,7 +146,11 @@ RESOURCE_LIST = (
         models.Organization,
         shared_resource=SharedResource(serializer=OrganizationType, is_provider=True),
     ),
-    ResourceConfig(models.User, shared_resource=SharedResource(serializer=UserType, is_provider=True), name_field="username"),
+    ResourceConfig(
+        models.User,
+        shared_resource=SharedResource(serializer=UserType, is_provider=True),
+        name_field="username",
+    ),
     ResourceConfig(
         models.Team,
         shared_resource=SharedResource(serializer=TeamType, is_provider=True),
@@ -153,5 +159,9 @@ RESOURCE_LIST = (
     ResourceConfig(
         RoleDefinition,
         shared_resource=SharedResource(serializer=GatewayRoleDefinitionType, is_provider=True),
+    ),
+    ResourceConfig(
+        AAPFlag,
+        shared_resource=SharedResource(serializer=FeatureFlagType, is_provider=True),
     ),
 )

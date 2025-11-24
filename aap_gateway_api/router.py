@@ -113,3 +113,5 @@ router.register(
     views.CACertificateViewSet,
     basename='ca_certificate',
 )
+
+router.register(r'feature_flags', views.AAPFlagViewSet, basename='aap_flag')

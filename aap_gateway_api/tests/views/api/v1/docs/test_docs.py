@@ -72,9 +72,16 @@ class ApiSpecs:
                 self.openapi_schemas[api_url][action.upper()] = {}
                 if "requestBody" in doc_schema:
                     # Get schema object ref (KeyError anyone?)
-                    doc_schema_ref = schema["paths"][endpoint][action]["requestBody"]["content"]["application/json"]["schema"]["$ref"].split('/')[-1]
-                    # Get schema object and store (uppercase action)
-                    self.openapi_schemas[api_url][action.upper()] = schema["components"]["schemas"][doc_schema_ref]
+                    request_body = doc_schema["requestBody"]
+                    if (
+                        "content" in request_body
+                        and "application/json" in request_body["content"]
+                        and "schema" in request_body["content"]["application/json"]
+                        and "$ref" in request_body["content"]["application/json"]["schema"]
+                    ):
+                        doc_schema_ref = request_body["content"]["application/json"]["schema"]["$ref"].split('/')[-1]
+                        # Get schema object and store (uppercase action)
+                        self.openapi_schemas[api_url][action.upper()] = schema["components"]["schemas"][doc_schema_ref]
 
                 # TODO parse and store response objects and parameters
 
@@ -182,6 +189,11 @@ def validate_param(pname, description, api_url, param_schema):
         if pname == "content_type" and 'role_definitions' in api_url:
             # This does not match, but it's OK because the
             # serializer depends on action.  See DAB rbac/api/views.py.
+            return
+        if pname == "type" and 'authenticators' in api_url:
+            # This does not match, but it's OK because the
+            # authenticator type field has different read-only behavior between
+            # OpenAPI schema and OPTIONS endpoint.
             return
         assert description["readOnly"] == param_schema["read_only"], f"Read only mismatch between openapi and options for {api_url} - {pname}"
     if "nullable" in description:

@@ -4,9 +4,11 @@ from ansible_base.lib.utils.models import get_system_user
 from ansible_base.rbac.management import create_dab_permissions
 from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
-from flags.state import flag_enabled
+from django.conf import settings
+from flags.state import flag_enabled, get_flags
 
 from aap_gateway_api.models import ServiceType
+from aap_gateway_api.utils import get_preference_value
 
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
@@ -25,6 +27,7 @@ def create_preload_data(**kwargs) -> None:
         create_managed_roles,
         set_system_user_password,
         set_system_user_managed_flag,
+        toggle_install_time_flags,
         add_console_service_type,
     ]
 
@@ -116,9 +119,32 @@ def set_system_user_managed_flag() -> None:
 
 
 def add_console_service_type() -> None:
-    if flag_enabled("FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE"):
+    if flag_enabled("FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED"):
         # Add console.redhat.com service type
         console_type = {
             "name": "console",
         }
         ServiceType.objects.get_or_create(**console_type)
+
+
+def toggle_install_time_flags() -> None:
+    # If runtime feature flags are enabled, check if install-time flags need to be modified
+    # If runtime feature flags are disabled, check and apply settings overrides
+
+    runtime_feature_flags_enabled = get_preference_value('feature_flags', 'RUNTIME_FEATURE_FLAGS', encrypted=False)
+    aap_flags_model = global_apps.get_model('dab_feature_flags', 'AAPFlag')
+    for flag in get_flags():
+        if hasattr(settings, flag) and isinstance(getattr(settings, flag), bool):
+            state = str(getattr(settings, flag))
+            try:
+                existing_flag = aap_flags_model.objects.get(name=flag, condition="boolean")
+            except aap_flags_model.DoesNotExist:
+                logger.warning(f"Feature flag {flag} not found in database. Skipping toggle. This may indicate that DAB's load_feature_flags has not run yet.")
+                continue
+            if existing_flag.toggle_type == "run-time" and runtime_feature_flags_enabled:
+                logger.info(f"Skipping toggle of run-time feature flag: {flag}")
+                continue
+            logger.info(f"Toggling feature flag: {flag} to {state}")
+            existing_flag.value = state
+            existing_flag.full_clean()
+            existing_flag.save()
