@@ -86,6 +86,7 @@ legacy_tox_ini = """
         check-oauth2-permissions
         check-help-text
         py311
+        311
         black
         flake8
         isort
@@ -93,6 +94,7 @@ legacy_tox_ini = """
 
     labels =
         test = py311
+        311 = py311
         check = check, check-migrations, check-oauth2-permissions, check-help-text
         lint = flake8, black, isort
 
@@ -119,6 +121,10 @@ legacy_tox_ini = """
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
+
+    [testenv:311]
+    allowlist_externals = tox
+    commands = tox -e py311 -- {posargs}
 
     [testenv:check]
     allowlist_externals =
