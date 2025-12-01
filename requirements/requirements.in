@@ -7,7 +7,7 @@ django-extensions
 django-flags
 grpcio
 grpcio-tools
-protobuf>=4.21
+protobuf>=5.29.5  # CVE-2025-4565
 psycopg
 pyjwt
 requests
