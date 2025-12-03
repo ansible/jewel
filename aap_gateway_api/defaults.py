@@ -213,6 +213,10 @@ LOGGING = {
             'handlers': ['console', 'file'],
             'level': 'WARNING',
         },
+        'aap.auth_audit': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+        },
     },
 }
 
@@ -352,6 +356,7 @@ ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'org_admin': {},
     'org_member': {},
 }
+ANSIBLE_BASE_AUTH_AUDIT_LOGGER_NAME = 'aap.auth_audit'
 
 # Gateway overwrites the DAB RBAC views heavily so this is done by a custom URL include
 ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST = ['ansible_base.rbac']

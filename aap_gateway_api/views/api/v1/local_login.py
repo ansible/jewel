@@ -2,6 +2,7 @@ import json
 import logging
 import re
 
+from ansible_base.lib.logging import log_auth_event
 from ansible_base.lib.utils.requests import get_remote_host
 from django.conf import settings
 from django.contrib.auth import views
@@ -72,5 +73,5 @@ class LoggedLogoutView(views.LogoutView):
         ret = super().dispatch(request, *args, **kwargs)
         current_user = getattr(request, 'user', None)
         if (not current_user or not getattr(current_user, 'pk', True)) and current_user != original_user:
-            logger.info("User {} logged out.".format(original_user.username))
+            log_auth_event("User {} logged out.".format(original_user.username), logger)
         return ret
