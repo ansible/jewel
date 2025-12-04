@@ -144,6 +144,13 @@ tox -e 311
 
 ## JIRA Ticket Creation
 
+### Default Project Settings
+
+#### Project Key
+- **Default**: `AAP` (Ansible Automation Platform)
+- Always assume `AAP` project unless explicitly specified otherwise
+- All commit messages and PR titles should include `[AAP-XXXXX]` prefix
+
 When using MCP JIRA tools to create and update tickets programmatically:
 
 ### Workstream Custom Field
@@ -182,12 +189,100 @@ mcp_atlasian_jira_update_issue(
 
 **Tip:** Always use `mcp_atlasian_jira_search_fields` to discover custom field IDs when needed.
 
+### Bug-Specific Rules
+
+When creating or working with bugs:
+
+1. **Bug Creation Workaround**: Due to MCP limitations, create bugs as Stories first, then convert
+   - Create as `issue_type="Story"`
+   - Immediately convert to Bug using `update_issue` with `{"issuetype": {"name": "Bug"}}`
+   - This is required for reliable bug creation
+
+2. **Story Points**: Always set to `0`
+   - Bugs are reactive work and don't get estimated
+   - This is a hard requirement, not a suggestion
+   - Use: `{"customfield_12310243": 0}`
+
+3. **Acceptance Criteria**: Required for transitioning to In Progress
+   - Must include clear, measurable acceptance criteria in the description
+   - Without acceptance criteria, the transition will fail
+   - Use: `{"customfield_12315940": "criteria text"}`
+
+4. **Example Bug Creation**:
+```python
+# Step 1: Create as Story (workaround for MCP bug creation issues)
+issue = mcp_atlasian_jira_create_issue(
+    project_key="AAP",
+    summary="[Bug] Description of issue",
+    issue_type="Story",  # Create as Story first!
+    description="""
+## Problem
+Describe the bug...
+
+## Expected Behavior
+What should happen...
+
+## Actual Behavior
+What actually happens...
+
+## Steps to Reproduce
+1. Step one
+2. Step two
+3. Bug occurs
+
+## Acceptance Criteria
+* Bug is fixed and verified
+* Tests pass consistently
+* No regression in related functionality
+    """
+)
+issue_key = issue["issue"]["key"]
+
+# Step 2: Convert to Bug
+mcp_atlasian_jira_update_issue(
+    issue_key=issue_key,
+    fields={"issuetype": {"name": "Bug"}}
+)
+
+# Step 3: Always set story points to 0 for bugs
+mcp_atlasian_jira_update_issue(
+    issue_key=issue_key,
+    additional_fields={"customfield_12310243": 0}
+)
+
+# Step 4: If fixing it, move to In Progress (acceptance criteria must be present!)
+mcp_atlasian_jira_transition_issue(
+    issue_key=issue_key,
+    transition_id=41  # "In Progress"
+)
+```
+
+### Status Management Rules
+
+**Critical Rule**: If you are taking action on a ticket (coding, creating PRs, making changes), it **MUST** be transitioned to "In Progress".
+
+This ensures:
+- The board accurately reflects active work
+- Team visibility into what's being worked on
+- Proper workflow tracking
+
+**Prerequisites for Transitioning to In Progress:**
+- Acceptance Criteria MUST be present in the description (use `customfield_12315940`)
+- Sprint SHOULD be set (use `customfield_12310940`)
+- Without acceptance criteria, the transition will fail
+
+**Workflow States:**
+- **New/To Do**: Not started
+- **In Progress**: Actively being worked on (required when taking action)
+- **Review**: PR created, awaiting review
+- **Done**: Merged and complete
+
 ### Known MCP JIRA Tool Limitations
 
 **Issue Type Selection:**
-- When creating issues, `issue_type="Bug"` may fail in some cases
-- If bug creation fails, try `issue_type="Story"` instead
-- The story can be manually changed to bug type in the JIRA UI after creation
+- Direct `issue_type="Bug"` creation may fail in some cases
+- Use the Story → Bug conversion workflow documented above
+- This workaround is reliable and allows full bug field configuration
 
 **Fields That Work via API (with correct formats):**
 - ✅ **Components**: Use `{"components": [{"name": "aap-gateway"}]}`
