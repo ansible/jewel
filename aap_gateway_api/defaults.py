@@ -166,11 +166,15 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'filters': {
+        'request_audit_info_filter': {
+            '()': 'ansible_base.lib.logging.filters.RequestAuditInfoFilter',
+        },
         'request_id_filter': {
             '()': 'ansible_base.lib.logging.filters.RequestIdFilter',
         },
     },
     'formatters': {
+        'audit_logging': {'format': '%(asctime)s %(levelname)-8s %(request_id)s %(name)s [%(source_ip)s] "%(user_agent)s" %(message)s'},
         'simple': {'format': '%(asctime)s %(levelname)-8s %(request_id)s %(name)s %(message)s'},
     },
     'handlers': {
@@ -180,7 +184,14 @@ LOGGING = {
             'formatter': 'simple',
             'filters': ['request_id_filter'],
         },
+        'console_audit': {
+            '()': 'logging.StreamHandler',
+            'level': 'DEBUG',
+            'formatter': 'audit_logging',
+            'filters': ['request_id_filter', 'request_audit_info_filter'],
+        },
         'file': {'class': 'logging.NullHandler', 'formatter': 'simple', 'filters': ['request_id_filter']},
+        'file_audit': {'class': 'logging.NullHandler', 'formatter': 'audit_logging', 'filters': ['request_id_filter', 'request_audit_info_filter']},
     },
     'loggers': {
         'django': {
@@ -214,8 +225,9 @@ LOGGING = {
             'level': 'WARNING',
         },
         'aap.auth_audit': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console_audit', 'file_audit'],
             'level': 'INFO',
+            'propagate': False,  # Prevent propagation to the root aap logger
         },
     },
 }
