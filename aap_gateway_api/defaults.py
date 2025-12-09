@@ -14,6 +14,10 @@ import socket
 from os import path
 from pathlib import Path
 
+# AAP_DEPLOYMENT_TYPE indicates the type of deployment
+# "self-managed" (default), "managed-azure", or "saas-aws"
+AAP_DEPLOYMENT_TYPE = "self-managed"
+
 ALLOWED_HOSTS = ["*"]
 
 # This setting should not be overrideable
@@ -114,10 +118,14 @@ DYNAMIC_PREFERENCES = {
 # This is used to make API HTTP requests from the gateway to the services that
 # are configured to run behind it for operations like syncing and migration.
 ENVOY_HOSTNAME = "localhost"
-ENVOY_VERIFY_HTTPS_CERTIFICATES = True
 # Since envoy buffer limits are "soft limits", this needs to be comfortably higher than GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH;
 # how much higher depends on network throughput, 3 MiB higher is the absolute minimum I could set without error 413s.
 ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
+ENVOY_VERIFY_HTTPS_CERTIFICATES = True
+
+# Set to desired external URL (load balancer, proxy, etc.)
+# Used to construct fully qualified URLs to gateway
+FRONT_END_URL = ''
 
 # Time in seconds that the gateway access tokens are valid for, can be overridden
 GATEWAY_ACCESS_TOKEN_EXIPIRATION = 600
@@ -194,6 +202,19 @@ LOGGING = {
         'file_audit': {'class': 'logging.NullHandler', 'formatter': 'audit_logging', 'filters': ['request_id_filter', 'request_audit_info_filter']},
     },
     'loggers': {
+        'aap': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
+        'aap.auth_audit': {
+            'handlers': ['console_audit', 'file_audit'],
+            'level': 'INFO',
+            'propagate': False,  # Prevent propagation to the root aap logger
+        },
+        'ansible_base': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
         'django': {
             'handlers': ['console', 'file'],
             'level': 'WARNING',
@@ -207,37 +228,20 @@ LOGGING = {
             'level': 'WARNING',
             'propagate': True,
         },
+        'py.warnings': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
         'rest_framework.request': {
             'handlers': ['console', 'file'],
             'level': 'WARNING',
             'propagate': False,
         },
-        'py.warnings': {
-            'handlers': ['console', 'file'],
-            'level': 'WARNING',
-        },
-        'aap': {
-            'handlers': ['console', 'file'],
-            'level': 'WARNING',
-        },
-        'ansible_base': {
-            'handlers': ['console', 'file'],
-            'level': 'WARNING',
-        },
-        'aap.auth_audit': {
-            'handlers': ['console_audit', 'file_audit'],
-            'level': 'INFO',
-            'propagate': False,  # Prevent propagation to the root aap logger
-        },
     },
 }
 
-LOGIN_URL = '/'
 LOGIN_REDIRECT_URL = '/api/gateway/v1/'
-
-# Set to desired external URL (load balancer, proxy, etc.)
-# Used to construct fully qualified URLs to gateway
-FRONT_END_URL = ''
+LOGIN_URL = '/'
 
 LOGOUT_ALLOWED_HOSTS = []
 
@@ -254,10 +258,6 @@ MIDDLEWARE = [
     'ansible_base.lib.middleware.logging.LogRequestMiddleware',
 ]
 
-# AAP_DEPLOYMENT_TYPE indicates the type of deployment
-# "self-managed" (default), "managed-azure", or "saas-aws"
-AAP_DEPLOYMENT_TYPE = "self-managed"
-
 # URL for customer notifications feed
 NOTIFICATION_RSS_FEED_URL = "https://announcements.ansiblecloud.redhat.com/feed.atom"
 
@@ -270,9 +270,9 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.ScryptPasswordHasher",
 ]
 
+PING_PAGE_CHECK_IGNORE_CERT = False
 # Timeout in seconds for ping of DB, proxy and service ping URLs.
 PING_PAGE_CHECK_TIMEOUT = 3
-PING_PAGE_CHECK_IGNORE_CERT = False
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -288,14 +288,14 @@ REST_FRAMEWORK = {
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
 
-# Disallow sending session cookies over insecure connections
-SESSION_COOKIE_SECURE = True
 # Seconds before sessions expire.
 # Note: This setting may be overridden by database settings.
 SESSION_COOKIE_AGE = 1800
-SESSION_COOKIE_NAME = 'gateway_sessionid'
-SESSION_ENGINE = "ansible_base.lib.sessions.stores.cached_dynamic_timeout"
 SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_NAME = 'gateway_sessionid'
+# Disallow sending session cookies over insecure connections
+SESSION_COOKIE_SECURE = True
+SESSION_ENGINE = "ansible_base.lib.sessions.stores.cached_dynamic_timeout"
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Gateway API',
@@ -304,9 +304,9 @@ SPECTACULAR_SETTINGS = {
     'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
 }
 
+STATIC_ROOT = '/opt/aap_gateway/static/'
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-STATIC_ROOT = '/opt/aap_gateway/static/'
 
 # This is a gateway system account that gets created. If you change this after
 # the account is created, you will need to manually update the username of the
@@ -350,17 +350,13 @@ ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = True
 ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = True
 ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
 ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
+ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST = ['ansible_base.rbac']
+ANSIBLE_BASE_AUTH_AUDIT_LOGGER_NAME = 'aap.auth_audit'
+ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
+    "ansible_base.authentication.authenticator_plugins",
+]
 ANSIBLE_BASE_AUTHENTICATION_LOCAL_FALLBACK_AUTHENTICATORS = ["aap_gateway_api.authentication.fallbacks.controller"]
 ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_platform_auditor'}
-ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
-ANSIBLE_BASE_PRODUCT_NAME = 'Jewel'
-ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
-ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
-ANSIBLE_BASE_ROLE_PRECREATE = {}  # managed roles are created in data migrations
-ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
-ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
-ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
-ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'},
     'team_member': {},
@@ -368,30 +364,32 @@ ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'org_admin': {},
     'org_member': {},
 }
-ANSIBLE_BASE_AUTH_AUDIT_LOGGER_NAME = 'aap.auth_audit'
+ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
+ANSIBLE_BASE_PRODUCT_NAME = 'Jewel'
+ANSIBLE_BASE_PRODUCT_VERSION_FUNCTION = 'aap_gateway_api.version.get_api_version'
+ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "aap_gateway_api.resource_api"
+ANSIBLE_BASE_ROLE_PRECREATE = {}  # managed roles are created in data migrations
+ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
+ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
+ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
+ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
 
-# Gateway overwrites the DAB RBAC views heavily so this is done by a custom URL include
-ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST = ['ansible_base.rbac']
+# Set the maximum number of secrets that can be active for a service cluster at any given time.
+MAX_ACTIVE_KEYS_PER_SERVICE = 2
 
 # This should not make a behavioral difference, but telling DAB that we do not
 # want to sync resources back to another server will silence some error logs we do not want
 RESOURCE_SERVER_SYNC_ENABLED = False
 
-# Set the maximum number of secrets that can be active for a service cluster at any given time.
-MAX_ACTIVE_KEYS_PER_SERVICE = 2
+# Runtime feature flag settings
+RUNTIME_FEATURE_FLAGS = False
+RUNTIME_FEATURE_FLAGS_UI = False
 
-ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
-    "ansible_base.authentication.authenticator_plugins",
-]
+SDS_CLUSTER_NAMES = ["gateway-control-plane-rest"]
+SDS_REFRESH_DELAY_PROTOBUF_DURATION = "5s"
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # This is the number of hops that are trusted by envoy (proxy that we configure that sits in front of the gateway)
 # This is needed for envoy to not strip the X_FORWARDED_PROTO header, which we need to determine if requests were made with https
 XDS_XFF_NUM_TRUSTED_HOPS = 0
-SDS_CLUSTER_NAMES = ["gateway-control-plane-rest"]
-SDS_REFRESH_DELAY_PROTOBUF_DURATION = "5s"
-
-# Runtime feature flag settings
-RUNTIME_FEATURE_FLAGS = False
-RUNTIME_FEATURE_FLAGS_UI = False
