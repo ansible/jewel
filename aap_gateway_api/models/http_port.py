@@ -1,3 +1,6 @@
+import logging
+import socket
+
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from django.conf import settings
@@ -8,6 +11,8 @@ from flags.state import flag_enabled
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
+
+logger = logging.getLogger("aap_gateway_api.models.http_port")
 
 
 class HTTPPort(UniqueNamedCommonModel, AuditableModel):
@@ -85,7 +90,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             "per_connection_buffer_limit_bytes": settings.ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES,
         }
 
-        if flag_enabled("FEATURE_GATEWAY_IPV6_USAGE_ENABLED"):
+        if flag_enabled("FEATURE_GATEWAY_IPV6_USAGE_ENABLED") and is_ipv6_enabled():
             cfg['address']['socket_address'] = {"address": "::", "port_value": self.number, "ipv4_compat": True}
 
         if self.use_https:
@@ -95,3 +100,15 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
     def get_listener_name(self):
         return f"port-{self.number}"
+
+
+def is_ipv6_enabled():
+    """Check if IPv6 is available."""
+    try:
+        v6sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        v6sock.close()
+        logger.debug("IPv6 is available, binding to ::")
+        return True
+    except (OSError, socket.error, AttributeError):
+        logger.debug("IPv6 is not available, binding to 0.0.0.0")
+        return False
