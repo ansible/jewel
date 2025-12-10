@@ -32,8 +32,10 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           # Export for next steps
+          # Using printf '%s\n' to preserve exact content without interpreting
+          # escape sequences, while ensuring the trailing newline for heredoc EOF.
           echo "PR_BODY<<EOF" >> $GITHUB_ENV
-          echo "$PR_BODY" >> $GITHUB_ENV
+          printf '%s\n' "$PR_BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
           echo "TARGET_BRANCH=$TARGET_BRANCH" >> $GITHUB_ENV

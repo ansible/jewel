@@ -62,12 +62,15 @@ jobs:
         run: |
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
           echo "PR_BASE=$PR_BASE" >> $GITHUB_ENV
-          
+
           # Store PR_BODY in environment variable (multiline support)
+          # Using printf '%s\n' to preserve exact content without interpreting
+          # escape sequences, while ensuring the trailing newline required for
+          # GITHUB_ENV heredoc EOF delimiter.
           echo "PR_BODY<<EOF" >> $GITHUB_ENV
-          printf '%s' "$PR_BODY" >> $GITHUB_ENV
+          printf '%s\n' "$PR_BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-          
+
           echo "Successfully loaded PR metadata (target branch: $PR_BASE)"
 
           # Security check: Is this PR from a fork or from the main repo?
@@ -116,6 +119,14 @@ jobs:
           pip3.11 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
           pip3.11 install openapi-spec-validator
 
+      - name: Configure faster xDS refresh for CI
+        # Default xDS refresh is 60 seconds, which is too slow for CI.
+        # If Envoy polls mid-configuration and rejects a listener, it won't
+        # retry for 60 seconds, causing flaky smoke tests.
+        run: |
+          sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
+          echo "Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
+
       - name: Start the dev environment
         run: COMPOSE_UP_OPTS='-d' make docker-compose
 
@@ -148,7 +159,7 @@ jobs:
           import ssl
           from openapi_spec_validator import validate_url
           from openapi_spec_validator.validation.validators import OpenAPIV30SpecValidator
-          
+
           ssl._create_default_https_context = ssl._create_unverified_context
           validate_url('https://localhost:8000/api/gateway/v1/docs/schema/', cls=OpenAPIV30SpecValidator)
           "
@@ -158,19 +169,19 @@ jobs:
         if: always()
         run: |
           FAILED_TESTS=()
-          
+
           if [ "${{ steps.smoke_test.outcome }}" != "success" ]; then
             FAILED_TESTS+=("Smoke test")
           fi
-          
+
           if [ "${{ steps.collection_test.outcome }}" != "success" ]; then
             FAILED_TESTS+=("Collection completeness test")
           fi
-          
+
           if [ "${{ steps.openapi_test.outcome }}" != "success" ]; then
             FAILED_TESTS+=("OpenAPI schema validation")
           fi
-          
+
           if [ ${#FAILED_TESTS[@]} -gt 0 ]; then
             echo "##[error]❌ The following tests failed:"
             for test in "${FAILED_TESTS[@]}"; do
