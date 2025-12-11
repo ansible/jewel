@@ -6,13 +6,20 @@ on:
     branches:
       - devel
       
+
 env:
   # Only upload JUnit xml files if we are this repo:
   TARGET_REPOSITORY: 'ansible/jewel'
 jobs:
   unit-test:
     name: ${{ matrix.batch.name }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # Using ubuntu-24.04 because it has docker engine 28.0.4(first link) that uses docker API version 1.51.
+    # The tox docker plugin needs docker API 1.51 or older, otherwise it will fail because API 1.52 removed the
+    # gateway (networking gateway) IP address from network settings of the container(its in different location).
+    # There is a PR to fix the issue(second link) but until its merged, we need to stick with specific docker version.
+    # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md#tools
+    # https://github.com/tox-dev/tox-docker/pull/196
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
     services:
       redis:
@@ -28,19 +35,19 @@ jobs:
       matrix:
         batch:
           - name: "Service-dependent tests"
-            python-version: "3.11"
+            python-version: "3.12"
             processes: 1  # this is required to be single threaded because the mock service can't do parallelization at this time
             test-filter:
               aap_gateway_api/tests/management/test_migrate_resources.py
               aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "service"
           - name: "Views tests"
-            python-version: "3.11"
+            python-version: "3.12"
             processes: auto
             test-filter: aap_gateway_api/tests/views/
             artifact-suffix: "views"
           - name: "Remaining tests"
-            python-version: "3.11"
+            python-version: "3.12"
             processes: auto
             test-filter: >-
               aap_gateway_api/tests/
@@ -70,10 +77,39 @@ jobs:
           python tools/scripts/get_pr_checkout.py \
             --always-clone-repos 'ansible/django-ansible-base'
 
+      - name: Create tox environment and run setup
+        # We use --collect-only instead of --notest because:
+        # 1. The tox-reinstall-django-ansible-base.sh script runs as part of tox commands
+        # 2. This script may reinstall DAB with different lxml/xmlsec versions
+        # 3. We need those final versions before rebuilding from source
+        #
+        # Optimizations to make this fast:
+        # -x testenv:py312.docker=  : Override docker config to empty, skipping DB container startup
+        # --collect-only            : pytest only discovers tests, doesn't run them
+        # aap_gateway_api/tests/__init__.py : Collect just this one (empty) file for speed
+        run: |
+          tox -e py312 \
+            -x testenv:py312.docker= \
+            -- --collect-only aap_gateway_api/tests/__init__.py
+
+      - name: Rebuild lxml and xmlsec from source
+        # Workaround for https://github.com/xmlsec/python-xmlsec/issues/320
+        # The pip wheels are compiled against a different libxml2 than the system has,
+        # causing "lxml & xmlsec libxml2 library version mismatch" errors.
+        # Using --no-binary forces pip to build from source against system libxml2.
+        run: |
+          XMLSEC_VERSION=$(.tox/py312/bin/pip freeze | grep xmlsec | sed 's:^.*=::')
+          LXML_VERSION=$(.tox/py312/bin/pip freeze | grep lxml | sed 's:^.*=::')
+
+          echo "Rebuilding xmlsec==${XMLSEC_VERSION} and lxml==${LXML_VERSION} from source"
+
+          .tox/py312/bin/pip install --no-cache-dir --no-binary lxml,xmlsec --force-reinstall \
+              lxml==${LXML_VERSION} xmlsec==${XMLSEC_VERSION}
+
       - name: Run tests
         env:
           PYTEST_NUM_PROCESSES: ${{ matrix.batch.processes }}
-        run: tox -e py311 -- ${{ matrix.batch.test-filter }} -v --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
+        run: tox -e py312 -- ${{ matrix.batch.test-filter }} -v --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
 
       - name: Inject PR number into coverage file
         if: github.event_name == 'pull_request'
@@ -104,7 +140,7 @@ jobs:
       - name: Install python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install merge tools
         run: pip install junitparser

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ue
 
-PYTHON=python3.11
+PYTHON=python3.12
 
 for FILE in requirements.in requirements.txt ; do
 	if [ ! -f ${FILE} ] ; then

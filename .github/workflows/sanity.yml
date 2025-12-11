@@ -36,13 +36,13 @@ jobs:
       matrix:
         tests:
           - env: check
-            python-version: "3.11"
+            python-version: "3.12"
           - env: check-migrations
-            python-version: "3.11"
+            python-version: "3.12"
           - env: check-oauth2-permissions
-            python-version: "3.11"
+            python-version: "3.12"
           - env: check-help-text
-            python-version: "3.11"
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
 

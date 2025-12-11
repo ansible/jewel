@@ -109,15 +109,15 @@ jobs:
       - name: Install make
         run: sudo apt install make
 
-      - name: Install python 3.11
-        uses: actions/setup-python@v4
+      - name: Install python 3.12
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: 3.12
 
       - name: Install test dependencies
         run: |
-          pip3.11 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
-          pip3.11 install openapi-spec-validator
+          pip3.12 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
+          pip3.12 install openapi-spec-validator
 
       - name: Configure faster xDS refresh for CI
         # Default xDS refresh is 60 seconds, which is too slow for CI.

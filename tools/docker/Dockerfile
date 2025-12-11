@@ -1,4 +1,4 @@
-ARG PYTHON=python3.11
+ARG PYTHON=python3.12
 
 FROM quay.io/centos/centos:stream9 AS builder
 ARG PYTHON

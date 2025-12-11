@@ -9,9 +9,10 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "HOST": os.getenv("ANSIBLE_GW_TEST_DB_HOST", "localhost"),
-        # These are defined in tools/dev_postgres/Dockerfile and in pyproject.toml (tox config)
+        # These are defined in pyproject.toml (tox config)
         "NAME": "gw_db",
-        "USER": "gw",
+        # Using 'postgres' user because that one has permissions to create DBs
+        "USER": "postgres",
         "PASSWORD": "password",
         "PORT": os.getenv("DB_PORT", 5432),
         "OPTIONS": {

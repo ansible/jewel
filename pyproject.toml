@@ -3,7 +3,7 @@ name = "jewel"
 authors = [{ name = "Ansible community", email = "info@ansible.com" }]
 description = "gateway"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 keywords = ["ansible", "django", "gateway"]
 license = { text = "Apache-2.0" }
 classifiers = [
@@ -15,11 +15,9 @@ classifiers = [
   "Intended Audience :: System Administrators",
   "Operating System :: OS Independent",
   "License :: OSI Approved :: Apache Software License",
-  "Programming Language :: Python",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
 ]
 dynamic = ["version", "dependencies"]
 
@@ -85,6 +83,8 @@ legacy_tox_ini = """
         check-migrations
         check-oauth2-permissions
         check-help-text
+        py312
+        312
         py311
         311
         black
@@ -93,27 +93,54 @@ legacy_tox_ini = """
         check-lint
 
     labels =
-        test = py311
+        test = py312
+        312 = py312
         311 = py311
         check = check, check-migrations, check-oauth2-permissions, check-help-text
         lint = flake8, black, isort
 
     [docker:db]
-    dockerfile = {toxinidir}/tools/dev_postgres/Dockerfile
+    ## NOTE: If you see this failing with output as shown below, 
+    ## apply a patch from the PR link to the last file listed.
+    ## ---------------------------------------------------
+    ## File ".../site-packages/tox_docker/plugin.py", line 53, in get_gateway_ip
+    ##     ip = container.attrs["NetworkSettings"]["Gateway"] or "0.0.0.0"
+    ##          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+    ## KeyError: 'Gateway'
+    ## ---------------------------------------------------
+    ## Patch from PR: https://patch-diff.githubusercontent.com/raw/tox-dev/tox-docker/pull/196.patch
+
+    image = quay.io/sclorg/postgresql-15-c9s
+    environment =
+        POSTGRESQL_PASSWORD=password
+        POSTGRESQL_ADMIN_PASSWORD=password
+        POSTGRESQL_USER=gw
+        POSTGRESQL_DATABASE=gw_db
+    healthcheck_cmd = PGPASSWORD=$POSTGRESQL_PASSWORD psql \
+        --user=$POSTGRESQL_USER --dbname=$POSTGRESQL_DATABASE \
+        --host=127.0.0.1 --quiet --no-align --tuples-only \
+        -1 --command="SELECT 1"
+    healthcheck_timeout = 5
+    healthcheck_retries = 5
+    healthcheck_interval = 10
+    healthcheck_start_period = 3
     expose =
         DB_PORT=5432/tcp
+    host_var = ANSIBLE_GW_TEST_DB_HOST
 
     [testenv]
     deps =
         -r{toxinidir}/requirements/requirements_test.txt
 
-    [testenv:py311]
+    [testenv:py311,py312]
     allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
         pytest
     docker = db
-    passenv = ANSIBLE_GW_TEST_DB_HOST
+    passenv = 
+        ANSIBLE_GW_TEST_DB_HOST
+        DB_PORT
     setenv =
         PYTHONPATH = {toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
@@ -121,10 +148,6 @@ legacy_tox_ini = """
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
-
-    [testenv:311]
-    allowlist_externals = tox
-    commands = tox -e py311 -- {posargs}
 
     [testenv:check]
     allowlist_externals =

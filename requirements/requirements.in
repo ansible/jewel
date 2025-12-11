@@ -3,7 +3,7 @@ Django>=4.2.26,<4.3.0 #   pinned to use version productization has available alr
 djangorestframework
 django-crum
 django-dynamic-preferences
-django-extensions
+django-extensions>=4.0 # python 3.12 support added in version 4: https://github.com/django-extensions/django-extensions/releases/tag/4.0
 django-flags
 grpcio
 grpcio-tools

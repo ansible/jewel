@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to run tox -e 311 twenty times and summarize failures
+# Script to run tox -e py312 twenty times and summarize failures
 # Usage: ./run_tox_batch.sh
 
 set -e
@@ -12,7 +12,7 @@ SUCCESS_COUNT=0
 TOTAL_RUNS=0
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
-echo "Running tox -e 311 ${RUNS} times..."
+echo "Running tox -e py312 ${RUNS} times..."
 echo "Started at: $(date)"
 echo ""
 
@@ -23,7 +23,7 @@ for i in $(seq 1 $RUNS); do
     TEMP_FILE=$(mktemp)
 
     # Run tox and capture both stdout and stderr to temp file
-    if tox -e py311 >"$TEMP_FILE" 2>&1; then
+    if tox -e py312 >"$TEMP_FILE" 2>&1; then
         echo "✓ PASSED"
         # Clean up temp file on success
         rm "$TEMP_FILE"
@@ -63,7 +63,7 @@ else
 
     echo ""
     echo "To investigate failures, examine the output files above or run:"
-    echo "  tox -e py311"
+    echo "  tox -e py312"
     echo ""
     echo "Example: cat ${FAILED_FILES[0]:-run_tox_batch_output_<timestamp>_run_<N>.txt}"
 fi
