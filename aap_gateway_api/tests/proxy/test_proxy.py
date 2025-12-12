@@ -391,9 +391,7 @@ class TestOAuth2ScopeValidation:
 
         # Verify error message contains key information
         error_body = response.denied_response.body
-        assert "read" in error_body, "Error should mention the token scope"
-        assert "POST" in error_body, "Error should mention the HTTP method"
-        assert "safe methods" in error_body.lower() or "GET" in error_body, "Error should mention safe methods"
+        assert "insufficient scope" in error_body.lower(), "Error should mention insufficient scope"
 
     def test_oauth2_scope_denial_with_application(self, ext_auth, admin_user):
         """Test scope denial logging includes application info when present."""

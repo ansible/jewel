@@ -214,12 +214,8 @@ class _ExternalAuth:
         except ImportError:
             logger.warning(log_message)
 
-        # Return a detailed error message to the client
-        safe_methods_str = ', '.join(SAFE_METHODS)
-        return self._return_no_auth_with_reason(
-            f"Your token has scope '{token_scope}' which does not permit the '{self.drf_request.method}' method. "
-            f"Tokens with 'read' scope can only be used for safe methods ({safe_methods_str})."
-        )
+        # Return an error message to the client
+        return self._return_no_auth_with_reason("Your token has insufficient scope to perform this action")
 
     def try_authenticate_request(self):
         try:
