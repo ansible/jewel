@@ -187,11 +187,17 @@ class _ExternalAuth:
 
         # Build detailed log message for auditing
         token = self.drf_request.auth
+        if token is None:
+            # OAuth2ScopePermission should only return False for OAuth2 tokens,
+            # but add defensive check to prevent AttributeError
+            return None
+
         username = user.username if user else '<none>'
         token_scope = getattr(token, 'scope', 'unknown')
         token_pk = getattr(token, 'pk', 'N/A')
-        oauth2_application_pk = token.application.pk if getattr(token, 'application', None) else "N/A"
-        oauth2_application_name = token.application.name if getattr(token, 'application', None) else "Personal Access Token"
+        application = getattr(token, 'application', None)
+        oauth2_application_pk = application.pk if application else "N/A"
+        oauth2_application_name = application.name if application else "Personal Access Token"
 
         log_message = (
             f"User {username} attempted a {self.drf_request.method} to {self.request_path} through the API "
@@ -199,14 +205,14 @@ class _ExternalAuth:
             f"but token scope '{token_scope}' does not permit this method."
         )
         try:
-            from ansible_base.lib.logging import log_auth_error
+            from ansible_base.lib.logging import log_auth_warning
 
-            log_auth_error(
+            log_auth_warning(
                 log_message,
                 logger,
             )
         except ImportError:
-            logger.error(log_message)
+            logger.warning(log_message)
 
         # Return a detailed error message to the client
         safe_methods_str = ', '.join(SAFE_METHODS)

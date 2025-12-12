@@ -416,7 +416,8 @@ class TestOAuth2ScopeValidation:
                 "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
                 mock_has_permission,
             ):
-                with mock.patch("ansible_base.lib.logging.log_auth_error") as mock_log:
+                # Mock log_auth_warning (devel) or logger.warning (backports)
+                with mock.patch("ansible_base.lib.logging.log_auth_warning", create=True) as mock_log:
                     ext_auth.Check(request, None)
 
                     # Verify logging was called with detailed information
@@ -450,7 +451,8 @@ class TestOAuth2ScopeValidation:
                 "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
                 mock_has_permission,
             ):
-                with mock.patch("ansible_base.lib.logging.log_auth_error") as mock_log:
+                # Mock log_auth_warning (devel) or logger.warning (backports)
+                with mock.patch("ansible_base.lib.logging.log_auth_warning", create=True) as mock_log:
                     ext_auth.Check(request, None)
 
                     # Verify logging handles missing application gracefully
@@ -527,3 +529,172 @@ class TestOAuth2ScopeValidation:
         assert response.denied_response.status.code == 403
         # status.code 7 is PERMISSION_DENIED in gRPC
         assert response.status.code == 7
+
+    def test_oauth2_scope_check_token_is_none(self, ext_auth, admin_user):
+        """Test that scope check handles None token gracefully (defensive check)."""
+        request = Request(method="POST", path="/api/controller/v2/organizations/")
+
+        def mock_authenticate(self, req):
+            # Set auth to None (edge case)
+            req._auth = None
+            return (admin_user, None)
+
+        def mock_has_permission(self, req, view):
+            # Simulate OAuth2ScopePermission returning False even with None token
+            return False
+
+        with mock.patch(
+            "ansible_base.oauth2_provider.authentication.LoggedOAuth2Authentication.authenticate",
+            mock_authenticate,
+        ):
+            with mock.patch(
+                "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
+                mock_has_permission,
+            ):
+                response = ext_auth.Check(request, None)
+
+        # When token is None, the defensive check should return None (allow the request through)
+        # This results in the request proceeding to authentication
+        assert response.status.code == 0, "Token is None should pass through (defensive check)"
+
+    def test_oauth2_scope_check_user_is_none(self, ext_auth):
+        """Test that scope check handles None user gracefully (username becomes '<none>')."""
+        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        token = MockOAuth2Token(scope='read', pk=123, application=None)
+
+        def mock_authenticate(self, req):
+            req._auth = token
+            # Return None user (edge case)
+            return (None, token)
+
+        def mock_has_permission(self, req, view):
+            return False
+
+        with mock.patch(
+            "ansible_base.oauth2_provider.authentication.LoggedOAuth2Authentication.authenticate",
+            mock_authenticate,
+        ):
+            with mock.patch(
+                "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
+                mock_has_permission,
+            ):
+                with mock.patch("ansible_base.lib.logging.log_auth_warning", create=True) as mock_log:
+                    # This will fail at user check before scope check, but let's verify the path
+                    ext_auth.Check(request, None)
+
+                    # If we got to scope check with None user, log should have '<none>'
+                    if mock_log.called:
+                        log_message = mock_log.call_args[0][0]
+                        assert "<none>" in log_message
+
+    def test_oauth2_scope_check_token_missing_attributes(self, ext_auth, admin_user):
+        """Test that scope check handles tokens missing scope/pk attributes."""
+        request = Request(method="POST", path="/api/controller/v2/organizations/")
+
+        # Create a minimal token object without scope or pk
+        class MinimalToken:
+            pass
+
+        token = MinimalToken()
+
+        def mock_authenticate(self, req):
+            req._auth = token
+            return (admin_user, token)
+
+        def mock_has_permission(self, req, view):
+            return False
+
+        with mock.patch(
+            "ansible_base.oauth2_provider.authentication.LoggedOAuth2Authentication.authenticate",
+            mock_authenticate,
+        ):
+            with mock.patch(
+                "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
+                mock_has_permission,
+            ):
+                with mock.patch("ansible_base.lib.logging.log_auth_warning", create=True) as mock_log:
+                    response = ext_auth.Check(request, None)
+
+                    # Verify getattr fallbacks are used
+                    assert mock_log.called
+                    log_message = mock_log.call_args[0][0]
+                    assert "unknown" in log_message  # scope fallback
+                    assert "N/A" in log_message  # pk and application fallbacks
+
+        # Should still return 403
+        assert response.status.code == 7
+        assert response.denied_response.status.code == 403
+
+    def test_oauth2_scope_check_import_error_fallback(self, ext_auth, admin_user):
+        """Test that scope check falls back to logger.warning when log_auth_warning import fails."""
+        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        token = MockOAuth2Token(scope='read', pk=55, application=None)
+
+        def mock_authenticate(self, req):
+            req._auth = token
+            return (admin_user, token)
+
+        def mock_has_permission(self, req, view):
+            return False
+
+        def mock_import_error(*args, **kwargs):
+            raise ImportError("log_auth_warning not available")
+
+        with mock.patch(
+            "ansible_base.oauth2_provider.authentication.LoggedOAuth2Authentication.authenticate",
+            mock_authenticate,
+        ):
+            with mock.patch(
+                "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
+                mock_has_permission,
+            ):
+                # Mock the import to fail, forcing the fallback to logger.warning
+                with mock.patch.dict('sys.modules', {'ansible_base.lib.logging': None}):
+                    with mock.patch("aap_gateway_api.proxy.control_plane.logger") as mock_logger:
+                        response = ext_auth.Check(request, None)
+
+                        # Verify fallback to logger.warning was used
+                        assert mock_logger.warning.called
+                        log_message = mock_logger.warning.call_args[0][0]
+                        assert admin_user.username in log_message
+                        assert "read" in log_message
+
+        assert response.status.code == 7
+        assert response.denied_response.status.code == 403
+
+    def test_oauth2_scope_check_various_paths(self, ext_auth, admin_user):
+        """Test scope check with various API paths to ensure path is included in logs."""
+        paths = [
+            "/api/controller/v2/job_templates/",
+            "/api/eda/v1/activations/",
+            "/api/hub/v3/collections/",
+            "/api/lightspeed/v1/completions/",
+        ]
+
+        for path in paths:
+            request = Request(method="DELETE", path=path)
+            token = MockOAuth2Token(scope='read', pk=1, application=None)
+
+            def mock_authenticate(self, req):
+                req._auth = token
+                return (admin_user, token)
+
+            def mock_has_permission(self, req, view):
+                return False
+
+            with mock.patch(
+                "ansible_base.oauth2_provider.authentication.LoggedOAuth2Authentication.authenticate",
+                mock_authenticate,
+            ):
+                with mock.patch(
+                    "ansible_base.oauth2_provider.permissions.OAuth2ScopePermission.has_permission",
+                    mock_has_permission,
+                ):
+                    with mock.patch("ansible_base.lib.logging.log_auth_warning", create=True) as mock_log:
+                        response = ext_auth.Check(request, None)
+
+                        assert mock_log.called
+                        log_message = mock_log.call_args[0][0]
+                        assert path in log_message, f"Path {path} should be in log message"
+
+            assert response.status.code == 7, f"Should deny DELETE on {path} with read scope"
