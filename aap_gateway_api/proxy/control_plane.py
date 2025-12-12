@@ -8,6 +8,7 @@ from ansible_base.authentication.middleware import AuthenticatorBackendMiddlewar
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
 from ansible_base.lib.logging import thread_local as logging_thread_local
 from ansible_base.lib.middleware.logging import LogRequestMiddleware
+from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.conf import settings
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -176,6 +177,50 @@ class _ExternalAuth:
 
         return jwt
 
+    def _check_oauth2_scope_permission(self, user):
+        """
+        Check if the OAuth2 token scope permits the requested method.
+        Returns a denied response if scope is insufficient, None otherwise.
+        """
+        if OAuth2ScopePermission().has_permission(self.drf_request, None):
+            return None
+
+        # Build detailed log message for auditing
+        token = self.drf_request.auth
+        if token is None:
+            # OAuth2ScopePermission should only return False for OAuth2 tokens,
+            # but add defensive check to prevent AttributeError
+            return None
+
+        username = user.username if user else '<none>'
+        token_scope = getattr(token, 'scope', 'unknown')
+        token_pk = getattr(token, 'pk', 'N/A')
+        application = getattr(token, 'application', None)
+        oauth2_application_pk = application.pk if application else "N/A"
+        oauth2_application_name = application.name if application else "Personal Access Token"
+
+        log_message = (
+            f"User {username} attempted a {self.drf_request.method} to {self.request_path} through the API "
+            f"using OAuth 2 token {token_pk} for OAuth2 application {oauth2_application_pk} ({oauth2_application_name}) "
+            f"but token scope '{token_scope}' does not permit this method."
+        )
+        try:
+            from ansible_base.lib.logging import log_auth_warning
+
+            log_auth_warning(
+                log_message,
+                logger,
+            )
+        except ImportError:
+            logger.warning(log_message)
+
+        # Return a detailed error message to the client
+        safe_methods_str = ', '.join(SAFE_METHODS)
+        return self._return_no_auth_with_reason(
+            f"Your token has scope '{token_scope}' which does not permit the '{self.drf_request.method}' method. "
+            f"Tokens with 'read' scope can only be used for safe methods ({safe_methods_str})."
+        )
+
     def try_authenticate_request(self):
         try:
             user = self.drf_request.user
@@ -192,6 +237,9 @@ class _ExternalAuth:
 
         if not user or not user.pk:
             return self._return_not_authenticated()
+
+        if scope_denied_response := self._check_oauth2_scope_permission(user):
+            return scope_denied_response
 
         match self.auth_type:
             case ServiceCluster.ServiceAuthType.JWT_AUTH:
