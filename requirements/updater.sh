@@ -4,7 +4,7 @@ set -ue
 PYTHON=python3.12
 
 for FILE in requirements.in requirements.txt ; do
-	if [ ! -f ${FILE} ] ; then
+	if [[ ! -f ${FILE} ]] ; then
 		touch ${FILE}
 	fi
 done
@@ -14,7 +14,7 @@ pip_compile="pip-compile --no-header --quiet -r --allow-unsafe"
 
 _cleanup() {
   cd /
-  test "${KEEP_TMP:-0}" = 1 || rm -rf "${_tmp}"
+  [[ "${KEEP_TMP:-0}" = 1 ]] || rm -rf "${_tmp}"
 }
 
 generate_requirements() {
@@ -80,5 +80,5 @@ main() {
 }
 
 # set EVAL=1 in case you want to source this script
-test "${EVAL:-0}" -eq "1" || main "${1:-}"
+[[ "${EVAL:-0}" -eq "1" ]] || main "${1:-}"
 
