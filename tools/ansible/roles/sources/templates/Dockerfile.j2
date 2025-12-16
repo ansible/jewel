@@ -1,7 +1,6 @@
 ARG PYTHON=python3.12
 
-# For python 3.11 the centos in both of the stages below has to be: stream9
-FROM quay.io/centos/centos:stream10 as builder
+FROM quay.io/centos/centos:stream9 as builder
 ARG PYTHON
 
 ENV LANG en_US.UTF-8
@@ -24,8 +23,7 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     openldap-devel \
     postgresql \
     less \
-    xmlsec1-devel \
-    libxml2-devel
+    xmlsec1-devel
 
 RUN for dir in \
       /opt/aap_gateway; \
@@ -52,21 +50,12 @@ RUN if [[ -f /opt/aap_gateway/django-ansible-base/pyproject.toml ]]; then \
     fi && \
     rm -rf /opt/aap_gateway/django-ansible-base
 
-# Rebuild xmlsec and lxml from source to link against system libxml2
-# Workaround for https://github.com/xmlsec/python-xmlsec/issues/320
-# The pip wheels are compiled against a different libxml2 version than the system has.
-RUN XMLSEC_VERSION=$(/opt/aap_gateway/venv/bin/pip freeze | grep xmlsec | sed 's:^.*=::') && \
-    LXML_VERSION=$(/opt/aap_gateway/venv/bin/pip freeze | grep lxml | sed 's:^.*=::') && \
-    /opt/aap_gateway/venv/bin/pip install --no-cache-dir --no-binary lxml,xmlsec --force-reinstall \
-        lxml==${LXML_VERSION} xmlsec==${XMLSEC_VERSION}
-
-# For python 3.11 the centos below has to be: stream9
-FROM quay.io/centos/centos:stream10
+FROM quay.io/centos/centos:stream9
 ARG PYTHON
 
-RUN dnf install epel-release -y  && \
+RUN dnf module install -y nginx:1.22/common && \
+    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm  && \
     dnf install -y \
-    nginx \
     git-core \
     inotify-tools \
     less \
