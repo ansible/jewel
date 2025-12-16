@@ -48,8 +48,8 @@ jobs:
           mkdir -p ./pr-metadata
           if [ "$EVENT_NAME" == "pull_request" ]; then
             # Create base64 encoded metadata to prevent JSON parsing issues with special characters
-            TITLE_B64=$(echo -n '$PR_TITLE' | base64 -w 0)
-            BODY_B64=$(echo -n '$PR_BODY' | base64 -w 0)
+            TITLE_B64=$(echo -n "$PR_TITLE" | base64 -w 0)
+            BODY_B64=$(echo -n "$PR_BODY" | base64 -w 0)
 
             cat > ./pr-metadata/metadata.json << EOF
           {
@@ -79,8 +79,8 @@ jobs:
           EOF
           elif [ "$EVENT_NAME" == "issues" ]; then
             # Create base64 encoded metadata to prevent JSON parsing issues with special characters
-            TITLE_B64=$(echo -n '$ISSUE_TITLE' | base64 -w 0)
-            BODY_B64=$(echo -n '$ISSUE_BODY' | base64 -w 0)
+            TITLE_B64=$(echo -n "$ISSUE_TITLE" | base64 -w 0)
+            BODY_B64=$(echo -n "$ISSUE_BODY" | base64 -w 0)
 
             cat > ./pr-metadata/metadata.json << EOF
           {
