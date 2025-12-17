@@ -21,6 +21,7 @@ from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
 from aap_gateway_api.views.api.v1.app_url import AppUrlViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.authenticator_user import AuthenticatorUserViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.ca_certificate import CACertificateViewSet  # noqa: F401
+from aap_gateway_api.views.api.v1.feature_flags import AAPFlagViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_claims import JWTClaimsView  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_key import JWTKeyView  # noqa: F401
 from aap_gateway_api.views.api.v1.local_login import LoggedLoginView, LoggedLogoutView  # noqa: F401

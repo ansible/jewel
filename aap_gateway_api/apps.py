@@ -38,5 +38,4 @@ class MyAppConfig(AppConfig):
         preference_updated.connect(_notify_on_preference_update)
 
         # Load the signals and feature flag conditions
-        import aap_gateway_api.feature_flags.conditions  # noqa: F401
         import aap_gateway_api.signals  # noqa 401

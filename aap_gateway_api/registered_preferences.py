@@ -499,3 +499,35 @@ register(
     read_only=False,
     label=_('Notification RSS Feed Enabled'),
 )
+
+register(
+    section="feature_flags",
+    preference_name="RUNTIME_FEATURE_FLAGS",
+    required=False,
+    default=getattr(settings, "RUNTIME_FEATURE_FLAGS", False),
+    preference_type="bool",
+    help_text=_(
+        "Controls whether toggling of runtime flags is allowed. This is currently set through settings. "
+        "If you'd like to change this please update the RUNTIME_FEATURE_FLAGS setting in your configuration."
+    ),
+    label=_('Runtime Feature Flag Toggling'),
+    read_only=True,
+    encrypted=False,
+    settings_bound=True,
+)
+
+register(
+    section="feature_flags",
+    preference_name="RUNTIME_FEATURE_FLAGS_UI",
+    required=False,
+    default=getattr(settings, "RUNTIME_FEATURE_FLAGS_UI", False),
+    preference_type="bool",
+    help_text=_(
+        "Controls whether the feature flags UI page is displayed. This is currently set through settings. "
+        "If you'd like to change this please update the RUNTIME_FEATURE_FLAGS_UI setting in your configuration."
+    ),
+    label=_('Feature Flags UI Page'),
+    read_only=True,
+    encrypted=False,
+    settings_bound=True,
+)

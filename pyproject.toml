@@ -112,7 +112,7 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_test.txt
 
     [testenv:py311]
-    allowlist_externals = 
+    allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
         pytest
@@ -127,46 +127,58 @@ legacy_tox_ini = """
         pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
 
     [testenv:check]
-    allowlist_externals = 
+    allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    deps =
+        -r{toxinidir}/requirements/requirements.txt
+        -r{toxinidir}/requirements/requirements_git.txt
+        -r{toxinidir}/requirements/requirements_test.txt
+        psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check
 
     [testenv:check-migrations]
-    allowlist_externals = 
+    allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    deps =
+        -r{toxinidir}/requirements/requirements.txt
+        -r{toxinidir}/requirements/requirements_git.txt
+        -r{toxinidir}/requirements/requirements_test.txt
+         psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api makemigrations --check
 
     [testenv:check-oauth2-permissions]
-    allowlist_externals = 
+    allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
     setenv =
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    deps =
+        -r{toxinidir}/requirements/requirements.txt
+        -r{toxinidir}/requirements/requirements_git.txt
+        -r{toxinidir}/requirements/requirements_test.txt
+        psycopg[binary]
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check --deploy --tag oauth2_permissions
 
     [testenv:check-help-text]
-    allowlist_externals = 
+    allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
     setenv =
@@ -194,7 +206,7 @@ legacy_tox_ini = """
     commands = isort {posargs:.}
 
     [testenv:check-lint]
-    allowlist_externals = 
+    allowlist_externals =
         black
         flake8
         isort

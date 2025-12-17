@@ -191,6 +191,11 @@ def validate_param(pname, description, api_url, param_schema):
             # This does not match, but it's OK because the
             # serializer depends on action.  See DAB rbac/api/views.py.
             return
+        if pname == "type" and 'authenticators' in api_url:
+            # This does not match, but it's OK because the
+            # authenticator type field has different read-only behavior between
+            # OpenAPI schema and OPTIONS endpoint.
+            return
         assert description["readOnly"] == param_schema["read_only"], f"Read only mismatch between openapi and options for {api_url} - {pname}"
     if "nullable" in description:
         assert description["nullable"] != param_schema["required"], f"Nullability mismatch between openapi and options for {api_url} - {pname}"

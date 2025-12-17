@@ -1,4 +1,7 @@
 import pytest
+from ansible_base.feature_flags.models import AAPFlag
+from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
+from django.conf import settings
 
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 from aap_gateway_api.models.service_node import ServiceNode
@@ -197,7 +200,7 @@ class TestRoute:
             ("False", "0.0.0.0", "0.0.0.0"),
         ],
     )
-    def test_xds_cluster_config_health_checks_enabled(self, is_ipv6_enabled, address, hostname, service_cluster_eda, settings_override_mutable, settings):
+    def test_xds_cluster_config_health_checks_enabled(self, is_ipv6_enabled, address, hostname, service_cluster_eda):
         service_cluster_eda.upstream_hostname = "eda.com"
         service_cluster_eda.health_checks_enabled = True
         service_cluster_eda.nodes.set(
@@ -213,12 +216,15 @@ class TestRoute:
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
         route.node_tags = "eda"
 
-        with settings_override_mutable('FLAGS'):
-            settings.FLAGS['FEATURE_GATEWAY_IPV6_USAGE_ENABLED'][0]['value'] = is_ipv6_enabled
-            cluster = route.get_xds_cluster_config()
-            endpoint = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"][0]["endpoint"]
-            assert endpoint["address"]["socket_address"]["address"] == address
-            assert endpoint["health_check_config"]["hostname"] == hostname
+        # Use DAB feature flags API as documented
+        AAPFlag.objects.all().delete()
+        setattr(settings, "FEATURE_GATEWAY_IPV6_USAGE_ENABLED", is_ipv6_enabled)
+        seed_feature_flags()
+
+        cluster = route.get_xds_cluster_config()
+        endpoint = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"][0]["endpoint"]
+        assert endpoint["address"]["socket_address"]["address"] == address
+        assert endpoint["health_check_config"]["hostname"] == hostname
 
     @pytest.mark.django_db
     def test_xds_cluster_config_dns_params(self, service_cluster_eda):

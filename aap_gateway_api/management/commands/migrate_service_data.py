@@ -163,6 +163,14 @@ class Command(BaseCommand):
                 "name",
             ],
         }
+        self.resource_types_to_migrate["shared.aapflag"] = {
+            "merge": True,
+            "type": ResourceType.objects.get(name="shared.aapflag"),
+            "unique_fields": [
+                "name",
+                "condition",
+            ],
+        }
 
         try:
             user = User.objects.get(username=username)
