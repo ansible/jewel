@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Repository Automation
-        uses: thenets/repo-automation@9e9603cd66620a201d222e7f63a649110bc9ecfe # v1.0.1
+        uses: thenets/repo-automation@d9299e3b11fa2231d26a219d1986678d85a6d671
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           custom-github-token: ${{ secrets.GHA_LABELS_AUTOMATION }}
