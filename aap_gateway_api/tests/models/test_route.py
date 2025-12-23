@@ -1,7 +1,6 @@
 import pytest
 from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
-from django.conf import settings
 
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 from aap_gateway_api.models.service_node import ServiceNode
@@ -194,13 +193,13 @@ class TestRoute:
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
-        "is_ipv6_enabled,address,hostname",
+        "address,hostname",
         [
-            ("True", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"),
-            ("False", "0.0.0.0", "0.0.0.0"),
+            ("2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"),
+            ("0.0.0.0", "0.0.0.0"),
         ],
     )
-    def test_xds_cluster_config_health_checks_enabled(self, is_ipv6_enabled, address, hostname, service_cluster_eda):
+    def test_xds_cluster_config_health_checks_enabled(self, address, hostname, service_cluster_eda):
         service_cluster_eda.upstream_hostname = "eda.com"
         service_cluster_eda.health_checks_enabled = True
         service_cluster_eda.nodes.set(
@@ -218,7 +217,6 @@ class TestRoute:
 
         # Use DAB feature flags API as documented
         AAPFlag.objects.all().delete()
-        setattr(settings, "FEATURE_GATEWAY_IPV6_USAGE_ENABLED", is_ipv6_enabled)
         seed_feature_flags()
 
         cluster = route.get_xds_cluster_config()

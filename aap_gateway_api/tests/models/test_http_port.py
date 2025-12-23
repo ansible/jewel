@@ -5,7 +5,7 @@ from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 from django.conf import settings
 
-from aap_gateway_api.models.http_port import is_ipv6_enabled
+from aap_gateway_api.models.http_port import HTTPPort, is_ipv6_enabled
 
 
 @pytest.fixture
@@ -38,20 +38,6 @@ def feature_flag_setup():
             seed_feature_flags()
 
     return _setup_flag
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize(
-    "flag_value,expected_result",
-    [
-        ('True', '::'),
-        ('False', '0.0.0.0'),
-    ],
-)
-def test_ipv6_flag_on_xds_listener_config(flag_value, expected_result, http_port, feature_flag_setup):
-    with feature_flag_setup("FEATURE_GATEWAY_IPV6_USAGE_ENABLED", flag_value):
-        config = http_port.get_xds_listener_config()
-        assert config['address']['socket_address']['address'] == expected_result
 
 
 class TestIsIPv6Enabled:
@@ -132,3 +118,23 @@ class TestIsIPv6Enabled:
         assert isinstance(result, bool)
         # The function should not raise any exceptions
         assert result in (True, False)
+
+
+class TestHTTPPortGetXdsListenerConfig:
+    """Unit tests for HTTPPort.get_xds_listener_config() method."""
+
+    @pytest.mark.django_db
+    def test_get_xds_listener_config_ipv6_fallback(self):
+        """Test that get_xds_listener_config falls back to IPv4 when IPv6 is not available."""
+        # Create an HTTPPort instance
+        http_port = HTTPPort.objects.create(name="test-port", number=8080, use_https=False)
+
+        # Mock is_ipv6_enabled to return False to trigger the IPv6 fallback (line 94)
+        with patch('aap_gateway_api.models.http_port.is_ipv6_enabled', return_value=False):
+            cfg = http_port.get_xds_listener_config()
+
+        # Verify that line 94 was executed: address should be IPv4 instead of IPv6
+        assert cfg['address']['socket_address']['address'] == "0.0.0.0"
+        assert cfg['address']['socket_address']['port_value'] == 8080
+        # Verify that ipv4_compat is not present when using IPv4 fallback
+        assert 'ipv4_compat' not in cfg['address']['socket_address']
