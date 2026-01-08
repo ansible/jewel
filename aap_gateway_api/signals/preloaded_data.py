@@ -8,7 +8,6 @@ from django.conf import settings
 from flags.state import flag_enabled, get_flags
 
 from aap_gateway_api.models import ServiceType
-from aap_gateway_api.utils import get_preference_value
 
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
@@ -128,10 +127,20 @@ def add_console_service_type() -> None:
 
 
 def toggle_install_time_flags() -> None:
-    # If runtime feature flags are enabled, check if install-time flags need to be modified
-    # If runtime feature flags are disabled, check and apply settings overrides
+    """
+    Apply install-time feature flag values from settings.
 
-    runtime_feature_flags_enabled = get_preference_value('feature_flags', 'RUNTIME_FEATURE_FLAGS', encrypted=False)
+    Feature Flag Order Precedence:
+    1. Install-time specified values take precedence over all other sources
+       - Flag overrides can be defined at install time to define their initial state
+       - Value is saved to the database
+       - If a feature flag is set at install time, it becomes READ-ONLY and cannot be changed at runtime
+    2. Runtime feature flags can only be toggled if they were NOT explicitly set at install time
+       AND RUNTIME_FEATURE_FLAGS=True
+    3. When the installer is rerun, install-time specified feature flag values are always applied
+       - If a flag was previously toggled at runtime but is now specified at install-time,
+         the install-time value takes precedence
+    """
     aap_flags_model = global_apps.get_model('dab_feature_flags', 'AAPFlag')
     for flag in get_flags():
         if hasattr(settings, flag) and isinstance(getattr(settings, flag), bool):
@@ -141,10 +150,8 @@ def toggle_install_time_flags() -> None:
             except aap_flags_model.DoesNotExist:
                 logger.warning(f"Feature flag {flag} not found in database. Skipping toggle. This may indicate that DAB's load_feature_flags has not run yet.")
                 continue
-            if existing_flag.toggle_type == "run-time" and runtime_feature_flags_enabled:
-                logger.info(f"Skipping toggle of run-time feature flag: {flag}")
-                continue
-            logger.info(f"Toggling feature flag: {flag} to {state}")
+            # Install-time specified values always take precedence over runtime changes
+            logger.info(f"Applying install-time feature flag: {flag} to {state}")
             existing_flag.value = state
             existing_flag.full_clean()
             existing_flag.save()

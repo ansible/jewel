@@ -6,6 +6,7 @@ from ansible_base.feature_flags.views import AAPFlag
 from ansible_base.lib.utils.validation import to_python_boolean
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
@@ -43,6 +44,18 @@ class AAPFlagViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
             )
 
         feature_flag = get_object_or_404(AAPFlag, pk=_feature_flag.id)
+
+        # Check if the flag is locked by install-time configuration
+        # Install-time specified values take precedence and make the flag read-only
+        if hasattr(settings, feature_flag.name) and isinstance(getattr(settings, feature_flag.name), bool):
+            return Response(
+                status=status.HTTP_405_METHOD_NOT_ALLOWED,
+                data={
+                    "details": "This feature flag was set at install-time and cannot be modified at runtime. "
+                    "To change this flag, update the install-time configuration and rerun the installer."
+                },
+            )
+
         if feature_flag.toggle_type == 'install-time':
             return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED, data={"details": "Install-time feature flags cannot be toggled at run-time."})
         if feature_flag.condition == "boolean":
