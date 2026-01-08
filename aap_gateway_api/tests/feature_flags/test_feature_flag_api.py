@@ -314,6 +314,61 @@ def test_feature_flags_detail_patch_install_time_flag(admin_api_client, runtime_
     assert response.data["details"] == "Install-time feature flags cannot be toggled at run-time."
 
 
+def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime_feature_flags_enabled):
+    """
+    Test that a 405 is returned if attempting to patch a flag that was set at install-time via settings.
+
+    Feature Flag Precedence Rule:
+    - If a feature flag is set at install time, it becomes READ-ONLY and cannot be changed at runtime
+    - Runtime feature flags can only be toggled if they were NOT explicitly set at install time
+    """
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    try:
+        created_flag = AAPFlag.objects.get(name=feature_flag)
+    except AAPFlag.DoesNotExist:
+        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+
+    # Simulate the flag being set at install-time by adding it to settings
+    with override_settings(**{feature_flag: True}):
+        response = admin_api_client.patch(url, data={"value": False})
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert "install-time" in response.data["details"].lower()
+        assert "cannot be modified at runtime" in response.data["details"].lower()
+
+
+def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_api_client, runtime_feature_flags_enabled):
+    """
+    Test that a flag can be modified via API when it's NOT specified in settings.
+
+    Feature Flag Precedence Rule:
+    - If a flag was set at install-time and is removed from install configuration,
+      it reverts to allowing runtime toggles
+    """
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    try:
+        created_flag = AAPFlag.objects.get(name=feature_flag)
+    except AAPFlag.DoesNotExist:
+        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+
+    # Get initial state
+    initial_response = admin_api_client.get(url)
+    assert initial_response.status_code == status.HTTP_200_OK
+    initial_state = initial_response.data['state']
+
+    # Without the flag in settings, we should be able to modify it
+    new_state = not initial_state
+    response = admin_api_client.patch(url, data={"value": new_state})
+    assert response.status_code == status.HTTP_200_OK
+
+    # Verify the change was applied
+    verification_response = admin_api_client.get(url)
+    assert verification_response.data['state'] == new_state
+
+
 @pytest.mark.parametrize(
     'feature_flag',
     [
@@ -422,9 +477,15 @@ def test_feature_flags_preferences(admin_api_client, preference):
 
 
 @pytest.mark.django_db
-def test_feature_flag_install_time_update_blocked():
+def test_feature_flag_install_time_value_applied_on_rerun():
     """
-    Tests that install time updates are not allowed if RUNTIME_FEATURE_FLAGS is enabled
+    Tests that install-time specified values are always applied when the installer is rerun,
+    overriding any previous runtime changes.
+
+    Feature Flag Precedence Rule:
+    When the installer is rerun, install-time specified values are always applied.
+    If a flag was previously toggled at runtime but is now specified at install-time,
+    the install-time value takes precedence.
     """
     flag_name = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
 
@@ -432,15 +493,16 @@ def test_feature_flag_install_time_update_blocked():
         # Assert flag is true by default for FEATURE_GATEWAY_IPV6_USAGE_ENABLED
         assert flag_enabled(flag_name) is True
 
-        # Set flag setting to false to test that runtime changes don't apply
+        # Set flag setting to False to simulate install-time configuration
         with override_settings(**{flag_name: False}):
             seed_feature_flags()
+            # seed_feature_flags only updates value for NEW flags, existing flags keep their value
             assert flag_enabled(flag_name) is True
 
-            # Re-toggle install time update
-            # Ensure flag is not updated since 'RUNTIME_FEATURE_FLAGS' is enabled
+            # toggle_install_time_flags applies install-time values to existing flags
             toggle_install_time_flags()
-            assert flag_enabled(flag_name) is True
+            # Install-time value should be applied, overriding the current value
+            assert flag_enabled(flag_name) is False
 
 
 @pytest.mark.django_db
@@ -500,9 +562,14 @@ def test_install_time_flag_modification_when_runtime_flags_enabled(admin_api_cli
 
 
 @pytest.mark.django_db
-def test_runtime_time_flag_modification_when_runtime_flags_enabled(admin_api_client):
+def test_install_time_value_takes_precedence_for_runtime_flag(admin_api_client):
     """
-    Test that that run-time feature flags can't be modified if RUNTIME_FEATURE_FLAGS is enabled
+    Test that install-time specified values always take precedence,
+    even for flags with toggle_type='run-time'.
+
+    Feature Flag Precedence Rule:
+    Install-time specified values take precedence over all other sources.
+    This applies regardless of the flag's toggle_type.
     """
     feature_flag_name = "FEATURE_FOO_ENABLED"
 
@@ -530,7 +597,8 @@ def test_runtime_time_flag_modification_when_runtime_flags_enabled(admin_api_cli
 
         with override_settings(**{feature_flag_name: True}):
             toggle_install_time_flags()
-            assert flag_enabled(feature_flag_name) is False
+            # Install-time specified value should always take precedence
+            assert flag_enabled(feature_flag_name) is True
 
 
 # FF012: Activity Stream Tests for Feature Flag Operations
