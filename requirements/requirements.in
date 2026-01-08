@@ -16,6 +16,6 @@ uwsgi
 xds-protos>=1.58
 PyYAML
 # Not directly imported but pinned per dependabot alerts
-urllib3>=1.26.19,<1.27
+urllib3>=2.6.3   # CVE-2025-66471 / AAP-62077
 argon2-cffi
 dynaconf>=3.2.10,<4.0.0
