@@ -90,7 +90,7 @@ def test_feature_flags_patch_unpriv_denied(user_api_client, runtime_feature_flag
     This test covers the reviewer feedback requesting verification that PATCH operations
     are denied (403) for unprivileged users, as specified in the test plan.
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED"
     try:
         created_flag = AAPFlag.objects.get(name=feature_flag)
     except AAPFlag.DoesNotExist:
@@ -232,7 +232,7 @@ def test_feature_flags_detail_patch_forbidden(admin_api_client, runtime_feature_
     """
     Test that that a 403 is returned if RUNTIME_FEATURE_FLAGS is unset or False
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED"
     try:
         created_flag = AAPFlag.objects.get(name=feature_flag)
     except AAPFlag.DoesNotExist:
@@ -241,8 +241,8 @@ def test_feature_flags_detail_patch_forbidden(admin_api_client, runtime_feature_
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert response.data['name'] == feature_flag
-    assert response.data['state']  # FEATURE_GATEWAY_IPV6_USAGE_ENABLED defaults to True
-    response = admin_api_client.patch(url, data={"value": True})
+    assert not response.data['state']  # FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED defaults to False
+    response = admin_api_client.patch(url, data={"value": False})
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
@@ -372,7 +372,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
 @pytest.mark.parametrize(
     'feature_flag',
     [
-        ('FEATURE_GATEWAY_IPV6_USAGE_ENABLED'),
+        ('FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED'),
     ],
 )
 def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enabled, feature_flag):
@@ -426,7 +426,6 @@ def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enab
 @pytest.mark.parametrize(
     'feature_flag, value',
     [
-        ('FEATURE_GATEWAY_IPV6_USAGE_ENABLED', False),
         ('FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED', True),
     ],
 )
@@ -487,10 +486,10 @@ def test_feature_flag_install_time_value_applied_on_rerun():
     If a flag was previously toggled at runtime but is now specified at install-time,
     the install-time value takes precedence.
     """
-    flag_name = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    flag_name = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     with override_settings(RUNTIME_FEATURE_FLAGS=True):
-        # Assert flag is true by default for FEATURE_GATEWAY_IPV6_USAGE_ENABLED
+        # Assert flag is true by default for FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED
         assert flag_enabled(flag_name) is True
 
         # Set flag setting to False to simulate install-time configuration
@@ -510,10 +509,10 @@ def test_feature_flag_install_time_update_allowed():
     """
     Tests that install time updates are allowed if RUNTIME_FEATURE_FLAGS is disabled
     """
-    flag_name = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    flag_name = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     with override_settings(RUNTIME_FEATURE_FLAGS=False):
-        # Assert flag is true by default for FEATURE_GATEWAY_IPV6_USAGE_ENABLED
+        # Assert flag is true by default for FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED
         assert flag_enabled(flag_name) is True
 
         # Set flag setting to false to test that install-time updates work
@@ -619,7 +618,7 @@ def test_feature_flag_activity_stream_integration_superuser_operations(admin_api
     - Objects affected are tracked
     - Operations can be retrieved for auditing
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     # Get the flag for operations
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -679,7 +678,7 @@ def test_feature_flag_activity_stream_integration_auditor_operations(platform_au
     This test verifies that auditor operations (which should mostly be read-only) can be
     properly logged, and that failed write operations by auditors can also be tracked.
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     # Get the flag for testing
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -717,7 +716,7 @@ def test_feature_flag_activity_stream_integration_normal_user_operations(user_ap
     This test verifies that normal user operations (which should be denied) can be properly logged,
     especially focusing on failed access attempts for security auditing.
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     # Get the flag for testing
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -754,7 +753,7 @@ def test_feature_flag_activity_stream_api_access(admin_api_client, runtime_featu
     This test ensures that feature flag activity stream entries are accessible
     through the activity stream API endpoint for audit purposes.
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     # Get the flag for operations
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -810,7 +809,7 @@ def test_feature_flag_activity_stream_comprehensive_metadata_tracking(admin_api_
     This test performs a complete feature flag operation cycle and demonstrates how all
     required metadata can be captured in activity stream entries for comprehensive auditing.
     """
-    feature_flag = "FEATURE_GATEWAY_IPV6_USAGE_ENABLED"
+    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
 
     # Get the flag for activity stream queries
     flag_obj = AAPFlag.objects.get(name=feature_flag)

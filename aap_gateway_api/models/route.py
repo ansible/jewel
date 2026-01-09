@@ -5,7 +5,6 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
-from flags.state import flag_enabled
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.models.http_port import HTTPPort
@@ -129,11 +128,8 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 },
             }
             if self.service_cluster.health_checks_enabled:
-                hostname = node.address
-                address_type = dab_address_util.classify_address(hostname)
-                if flag_enabled("FEATURE_GATEWAY_IPV6_USAGE_ENABLED") and address_type.type == dab_address_util.AddressType.IPv6:
-                    hostname = address_type.ipv6_bracketed
-
+                address_type = dab_address_util.classify_address(node.address)
+                hostname = address_type.ipv6_bracketed if address_type.type == dab_address_util.AddressType.IPv6 else node.address
                 endpoint["endpoint"]["health_check_config"] = {
                     "hostname": hostname,
                     "port_value": self.service_port,

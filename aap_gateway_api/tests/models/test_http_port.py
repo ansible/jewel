@@ -5,7 +5,7 @@ from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 from django.conf import settings
 
-from aap_gateway_api.models.http_port import is_ipv6_enabled
+from aap_gateway_api.models.http_port import HTTPPort, is_ipv6_enabled
 
 
 @pytest.fixture
@@ -38,20 +38,6 @@ def feature_flag_setup():
             seed_feature_flags()
 
     return _setup_flag
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize(
-    "flag_value,expected_result",
-    [
-        ('True', '::'),
-        ('False', '0.0.0.0'),
-    ],
-)
-def test_ipv6_flag_on_xds_listener_config(flag_value, expected_result, http_port, feature_flag_setup):
-    with feature_flag_setup("FEATURE_GATEWAY_IPV6_USAGE_ENABLED", flag_value):
-        config = http_port.get_xds_listener_config()
-        assert config['address']['socket_address']['address'] == expected_result
 
 
 class TestIsIPv6Enabled:
@@ -132,3 +118,52 @@ class TestIsIPv6Enabled:
         assert isinstance(result, bool)
         # The function should not raise any exceptions
         assert result in (True, False)
+
+
+class TestHTTPPortGetXdsListenerConfig:
+    """Unit tests for HTTPPort.get_xds_listener_config() method."""
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "ipv6_enabled,expected_address,expected_ipv4_compat_present",
+        [
+            (True, "::", True),
+            (False, "0.0.0.0", False),
+        ],
+    )
+    def test_get_xds_listener_config_ipv6_default_and_fallback(self, ipv6_enabled, expected_address, expected_ipv4_compat_present):
+        """Test that get_xds_listener_config defaults to IPv6 (::) when available, or falls back to IPv4 (0.0.0.0) when not."""
+        # Create an HTTPPort instance
+        http_port = HTTPPort.objects.create(name="test-port", number=8080, use_https=False)
+
+        # Mock is_ipv6_enabled to return the test value
+        with patch('aap_gateway_api.models.http_port.is_ipv6_enabled', return_value=ipv6_enabled):
+            cfg = http_port.get_xds_listener_config()
+
+        # Verify the address matches expected value
+        assert cfg['address']['socket_address']['address'] == expected_address
+        assert cfg['address']['socket_address']['port_value'] == 8080
+
+        # Verify ipv4_compat presence matches expected value
+        if expected_ipv4_compat_present:
+            assert cfg['address']['socket_address']['ipv4_compat'] is True
+        else:
+            assert 'ipv4_compat' not in cfg['address']['socket_address']
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("use_https,expected_transport_socket_present", [(True, True), (False, False)])
+    def test_get_xds_listener_config_ipv6_with_https(self, use_https, expected_transport_socket_present):
+        """Test that IPv6 default behavior works with both HTTP and HTTPS."""
+        # Create an HTTPPort instance
+        http_port = HTTPPort.objects.create(name="test-port", number=8443, use_https=use_https)
+
+        # Mock is_ipv6_enabled to return True to verify IPv6 default behavior
+        with patch('aap_gateway_api.models.http_port.is_ipv6_enabled', return_value=True):
+            cfg = http_port.get_xds_listener_config()
+
+        # Verify IPv6 is the default regardless of HTTPS setting
+        assert cfg['address']['socket_address']['address'] == "::"
+        assert cfg['address']['socket_address']['ipv4_compat'] is True
+
+        # Verify HTTPS configuration is applied based on use_https setting
+        assert ("transport_socket" in cfg["filter_chains"][0]) == expected_transport_socket_present

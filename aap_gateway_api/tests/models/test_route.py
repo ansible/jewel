@@ -1,7 +1,5 @@
 import pytest
-from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
-from django.conf import settings
 
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 from aap_gateway_api.models.service_node import ServiceNode
@@ -194,13 +192,13 @@ class TestRoute:
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
-        "is_ipv6_enabled,address,hostname",
+        "address,hostname",
         [
-            ("True", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"),
-            ("False", "0.0.0.0", "0.0.0.0"),
+            ("2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"),
+            ("0.0.0.0", "0.0.0.0"),
         ],
     )
-    def test_xds_cluster_config_health_checks_enabled(self, is_ipv6_enabled, address, hostname, service_cluster_eda):
+    def test_xds_cluster_config_health_checks_enabled(self, address, hostname, service_cluster_eda):
         service_cluster_eda.upstream_hostname = "eda.com"
         service_cluster_eda.health_checks_enabled = True
         service_cluster_eda.nodes.set(
@@ -217,14 +215,162 @@ class TestRoute:
         route.node_tags = "eda"
 
         # Use DAB feature flags API as documented
-        AAPFlag.objects.all().delete()
-        setattr(settings, "FEATURE_GATEWAY_IPV6_USAGE_ENABLED", is_ipv6_enabled)
         seed_feature_flags()
 
         cluster = route.get_xds_cluster_config()
         endpoint = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"][0]["endpoint"]
         assert endpoint["address"]["socket_address"]["address"] == address
         assert endpoint["health_check_config"]["hostname"] == hostname
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "node_address,expected_health_check_hostname,upstream_hostname",
+        [
+            # Expanded IPv6 address
+            ("2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", "eda.com"),
+            # Compressed IPv6 address
+            ("2001:db8:85a3::8a2e:370:7334", "[2001:db8:85a3::8a2e:370:7334]", "hub.com"),
+            # IPv6 with leading zeros compressed
+            ("2001:db8::1", "[2001:db8::1]", "controller.com"),
+            # IPv6 loopback
+            ("::1", "[::1]", "gateway.com"),
+            # IPv6 already bracketed (should still work correctly)
+            ("[2001:db8::1]", "[2001:db8::1]", "eda.com"),
+            # IPv4 address (should not be bracketed)
+            ("192.168.1.1", "192.168.1.1", "hub.com"),
+            ("10.0.0.1", "10.0.0.1", "controller.com"),
+            ("0.0.0.0", "0.0.0.0", "gateway.com"),
+            # Test hostname handling - health check uses node address, not upstream_hostname
+            ("192.168.1.1", "192.168.1.1", "example.com"),
+            ("192.168.1.1", "192.168.1.1", "service.example.com"),
+            ("192.168.1.1", "192.168.1.1", "subdomain.example.com"),
+            ("192.168.1.1", "192.168.1.1", "localhost"),
+        ],
+    )
+    def test_xds_cluster_config_address_and_hostname_handling(self, node_address, expected_health_check_hostname, upstream_hostname, service_cluster_eda):
+        """Test that addresses in health checks are properly formatted and hostnames are handled correctly."""
+        service_cluster_eda.upstream_hostname = upstream_hostname
+        service_cluster_eda.health_checks_enabled = True
+
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="my-eda-service-node",
+                    service_cluster=service_cluster_eda,
+                    address=node_address,
+                    tags="eda",
+                )
+            ]
+        )
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        route.node_tags = "eda"
+
+        seed_feature_flags()
+
+        cluster = route.get_xds_cluster_config()
+        endpoint = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"][0]["endpoint"]
+        # Address should be stored without brackets
+        assert endpoint["address"]["socket_address"]["address"] == node_address
+        # Health check hostname should use node address (properly formatted), not upstream_hostname
+        assert endpoint["health_check_config"]["hostname"] == expected_health_check_hostname
+
+        # Verify upstream_hostname is used for host_rewrite_literal in route config
+        routes = route.get_xds_route_config()
+        assert routes[0]["route"]["host_rewrite_literal"] == upstream_hostname
+
+    @pytest.mark.django_db
+    def test_xds_cluster_config_health_checks_disabled(self, service_cluster_eda):
+        """Test proper behavior when health checks are disabled."""
+        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.health_checks_enabled = False
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="my-eda-service-node-ipv6",
+                    service_cluster=service_cluster_eda,
+                    address="2001:db8::1",
+                    tags="eda",
+                ),
+                ServiceNode.objects.create(
+                    name="my-eda-service-node-ipv4",
+                    service_cluster=service_cluster_eda,
+                    address="192.168.1.1",
+                    tags="eda",
+                ),
+            ]
+        )
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        route.node_tags = "eda"
+
+        seed_feature_flags()
+
+        cluster = route.get_xds_cluster_config()
+        endpoints = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"]
+
+        # Verify all endpoints are present
+        assert len(endpoints) == 2
+
+        # Verify health_check_config is not present when health checks are disabled
+        for endpoint in endpoints:
+            assert "health_check_config" not in endpoint["endpoint"]
+            # Address should still be present
+            assert "address" in endpoint["endpoint"]
+
+        # Verify health_checks section is not in cluster config
+        assert "health_checks" not in cluster
+
+    @pytest.mark.django_db
+    def test_xds_cluster_config_mixed_ipv4_ipv6(self, service_cluster_eda):
+        """Test mixed IPv4/IPv6 mode (v4 address for some service nodes, v6 for others)."""
+        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.health_checks_enabled = True
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="my-eda-service-node-ipv6-1",
+                    service_cluster=service_cluster_eda,
+                    address="2001:db8::1",
+                    tags="eda",
+                ),
+                ServiceNode.objects.create(
+                    name="my-eda-service-node-ipv6-2",
+                    service_cluster=service_cluster_eda,
+                    address="2001:db8::2",
+                    tags="eda",
+                ),
+                ServiceNode.objects.create(
+                    name="my-eda-service-node-ipv4-1",
+                    service_cluster=service_cluster_eda,
+                    address="192.168.1.1",
+                    tags="eda",
+                ),
+                ServiceNode.objects.create(
+                    name="my-eda-service-node-ipv4-2",
+                    service_cluster=service_cluster_eda,
+                    address="10.0.0.1",
+                    tags="eda",
+                ),
+            ]
+        )
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        route.node_tags = "eda"
+
+        seed_feature_flags()
+
+        cluster = route.get_xds_cluster_config()
+        endpoints = cluster["load_assignment"]["endpoints"][0]["lb_endpoints"]
+
+        # Verify all endpoints are present
+        assert len(endpoints) == 4
+
+        # Verify each endpoint has correct address and health check hostname
+        for endpoint in endpoints:
+            address = endpoint["endpoint"]["address"]["socket_address"]["address"]
+            hostname = endpoint["endpoint"]["health_check_config"]["hostname"]
+            if ":" in address:  # IPv6
+                assert hostname == f"[{address}]"
+            else:  # IPv4
+                assert hostname == address
 
     @pytest.mark.django_db
     def test_xds_cluster_config_dns_params(self, service_cluster_eda):
