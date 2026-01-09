@@ -24,6 +24,9 @@ redis_tls_enabled: True
 ### Sidecars (uncomment to enable):
 # haproxy_enabled: True
 # keycloak_enabled: True
+# Uncomment this if enabling keycloak on macOS M1 or later
+# keycloak_image: quay.io/rh_ee_dtoirov/m1/keycloak
+# keycloak_image: quay.io/rh_ee_dtoirov/m1/keycloak
 # ldap_enabled: True
 # tacacs_enabled: True
 # radius_enabled: True
