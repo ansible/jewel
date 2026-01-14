@@ -172,9 +172,8 @@ class Command(BaseCommand):
             ],
         }
 
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
+        user = self._get_gateway_user(username)
+        if user is None:
             raise CommandError(f"Username {username} does not exist")
 
         # Get all services with DefaultServiceType in exact order: controller, hub, eda
@@ -871,37 +870,82 @@ class Command(BaseCommand):
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
 
     def _set_gateway_user_use_controller_password_flag(self, username: str) -> None:
-        try:
-            gateway_user = User.objects.get(username=username)
-            # As this code is only invoked when dealing with a shared.user involving controller
-            # if the user meets the following, inclusive, conditions:
-            #   - isn't already marked as using the controller password
-            #   - the user has never logged in
-            #   - the user's password is not usable
-            # we mark it to use the controller password.
-            #
-            # Note that if, prior to upgrade to 2.6, the controller user
-            # account was disabled marking the user to use the controller
-            # password simply results in an attempt to use the disabled
-            # password from controller.  I.e., the disabling of the user
-            # account remains in force.
-            self.stdout.write(f"Gateway user {gateway_user}")
-            self.stdout.write(f"\t use controller password {gateway_user.use_controller_password}")
-            self.stdout.write(f"\t last login {gateway_user.last_login}")
-            self.stdout.write(f"\t password {password_is_usable(gateway_user.password)}")
-            if not gateway_user.use_controller_password and not gateway_user.last_login and not password_is_usable(gateway_user.password):
-                gateway_user.use_controller_password = True
-                gateway_user.save(update_fields=["use_controller_password"])
-                self.stdout.write(f"Set use_controller_password flag for Gateway user '{username}'")
-        except User.DoesNotExist:
+        gateway_user = self._get_gateway_user(username)
+        if gateway_user is None:
             # User was not updated as expected
             self.stdout.write(f"Gateway user '{username}' was not updated with 'use_controller_password' flag")
+            return
+
+        # As this code is only invoked when dealing with a shared.user involving controller
+        # if the user meets the following, inclusive, conditions:
+        #   - isn't already marked as using the controller password
+        #   - the user has never logged in
+        #   - the user's password is not usable
+        # we mark it to use the controller password.
+        #
+        # Note that if, prior to upgrade to 2.6, the controller user
+        # account was disabled marking the user to use the controller
+        # password simply results in an attempt to use the disabled
+        # password from controller.  I.e., the disabling of the user
+        # account remains in force.
+        self.stdout.write(f"Gateway user {gateway_user}")
+        self.stdout.write(f"\t use controller password {gateway_user.use_controller_password}")
+        self.stdout.write(f"\t last login {gateway_user.last_login}")
+        self.stdout.write(f"\t password {password_is_usable(gateway_user.password)}")
+        if not gateway_user.use_controller_password and not gateway_user.last_login and not password_is_usable(gateway_user.password):
+            gateway_user.use_controller_password = True
+            gateway_user.save(update_fields=["use_controller_password"])
+            self.stdout.write(f"Set use_controller_password flag for Gateway user '{username}'")
 
     def _set_use_controller_password_flag(self, upstream_resource: Dict[str, Any]) -> Dict[str, Any]:
         self._set_gateway_user_use_controller_password_flag(
             upstream_resource["resource_data"]["username"],
         )
         return upstream_resource
+
+    def _get_gateway_user(self, username: str) -> Optional[AbstractUser]:
+        """Get Gateway user by username, returning None if not found."""
+        try:
+            return User.objects.get(username=username)
+        except User.DoesNotExist:
+            return None
+
+    def _sync_controller_superuser(self, upstream_resource: Dict[str, Any], username: str, upstream_is_superuser: bool) -> None:
+        """Promote Gateway user to superuser if Controller user is superuser."""
+        if not upstream_is_superuser:
+            return
+
+        gateway_user = self._get_gateway_user(username)
+        if gateway_user is None:
+            self.stdout.write(f"New user '{username}' will be created with superuser status from Controller")
+        elif not gateway_user.is_superuser:
+            gateway_user.is_superuser = True
+            gateway_user.save(update_fields=['is_superuser'])
+            self.stdout.write(f"Promoted Gateway user '{username}' to superuser based on Controller")
+
+        upstream_resource["resource_data"]["is_superuser"] = True
+
+    def _sync_hub_eda_superuser(self, upstream_resource: Dict[str, Any], username: str, upstream_is_superuser: bool, service_type: str) -> None:
+        """Sync superuser status from Gateway to Hub/EDA (Gateway is source of truth)."""
+        self.stdout.write(f"Checking superuser status for user '{username}'")
+        self.stdout.write(f"Is admin user in {service_type}: {upstream_is_superuser}")
+
+        gateway_user = self._get_gateway_user(username)
+
+        if gateway_user:
+            should_be_superuser = gateway_user.is_superuser
+            self.stdout.write(f"Gateway user exists: {gateway_user}")
+            self.stdout.write(f"Gateway user is superuser: {should_be_superuser}")
+        else:
+            should_be_superuser = False
+            self.stdout.write("Gateway user does not exist, will not be superuser")
+
+        upstream_resource["resource_data"]["is_superuser"] = should_be_superuser
+
+        if upstream_is_superuser != should_be_superuser:
+            action = "promoted to" if should_be_superuser else "demoted from"
+            reason = "exists in Gateway as superuser" if should_be_superuser else "does not exist in Gateway as superuser"
+            self.stdout.write(f"User '{username}' {action} superuser in {service_type} ({reason})")
 
     def _sync_user_superuser_flag(self, upstream_resource: Dict[str, Any], validated_resource_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -922,47 +966,9 @@ class Command(BaseCommand):
         upstream_is_superuser = validated_resource_data.get("is_superuser", False)
 
         if service_type == DefaultServiceType.CONTROLLER.value:
-            # Controller → Gateway: Promote Gateway user if Controller user is superuser
-            if upstream_is_superuser:
-                try:
-                    gateway_user = User.objects.get(username=username)
-                    if not gateway_user.is_superuser:
-                        gateway_user.is_superuser = True
-                        gateway_user.save()
-                        self.stdout.write(f"Promoted Gateway user '{username}' to superuser based on Controller")
-                except User.DoesNotExist:
-                    # New user will be created with Controller's superuser status
-                    self.stdout.write(f"New user '{username}' will be created with superuser status from Controller")
-
-                # Ensure the resource data reflects superuser status
-                upstream_resource["resource_data"]["is_superuser"] = True
-
+            self._sync_controller_superuser(upstream_resource, username, upstream_is_superuser)
         elif service_type in [DefaultServiceType.HUB.value, DefaultServiceType.EDA.value]:
-            # Hub/EDA users should only be superusers if they already exist in Gateway as superusers
-            # This prevents auto-synced superuser users from maintaining superuser status during migration
-            self.stdout.write(f"Checking superuser status for user '{username}'")
-
-            self.stdout.write(f"Is admin user in {service_type}: {upstream_is_superuser}")
-
-            should_be_superuser = False
-
-            # Only set superuser if user already exists in Gateway as a superuser
-            try:
-                gateway_user = User.objects.get(username=username)
-                self.stdout.write(f"Gateway user exists: {gateway_user}")
-                should_be_superuser = gateway_user.is_superuser
-                self.stdout.write(f"Gateway user is superuser: {should_be_superuser}")
-            except User.DoesNotExist:
-                # New users from Hub/EDA should not be superusers
-                should_be_superuser = False
-                self.stdout.write("Gateway user does not exist, will not be superuser")
-
-            upstream_resource["resource_data"]["is_superuser"] = should_be_superuser
-
-            if upstream_is_superuser != should_be_superuser:
-                action = "promoted to" if should_be_superuser else "demoted from"
-                reason = "exists in Gateway as superuser" if should_be_superuser else "does not exist in Gateway as superuser"
-                self.stdout.write(f"User '{username}' {action} superuser in {service_type} ({reason})")
+            self._sync_hub_eda_superuser(upstream_resource, username, upstream_is_superuser, service_type)
 
         return upstream_resource
 
@@ -1056,13 +1062,13 @@ class Command(BaseCommand):
             # Promote these users to superuser in Gateway
             missing_users = []
             for username in controller_only:
-                try:
-                    gateway_user = User.objects.get(username=username)
-                    gateway_user.is_superuser = True
-                    gateway_user.save()
-                    self.stdout.write(f"Promoted Gateway user '{username}' to superuser to match Controller status")
-                except User.DoesNotExist:
+                gateway_user = self._get_gateway_user(username)
+                if gateway_user is None:
                     missing_users.append(username)
+                    continue
+                gateway_user.is_superuser = True
+                gateway_user.save()
+                self.stdout.write(f"Promoted Gateway user '{username}' to superuser to match Controller status")
 
             if missing_users:
                 self.stderr.write(f"Error: Users {sorted(missing_users)} are superusers in Controller but don't exist in Gateway")

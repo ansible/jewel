@@ -2115,3 +2115,206 @@ def test_ensure_controller_gateway_superusers_scenarios(
         output = captured.out + captured.err
         for expected_msg in expected_output:
             assert expected_msg in output, f"Expected message '{expected_msg}' not found in output"
+
+
+# =============================================================================
+# Tests for _get_gateway_user helper function
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_get_gateway_user_existing_user():
+    """Test _get_gateway_user returns the user when it exists."""
+    # Create a test user
+    test_user = User.objects.create(username="existing_user")
+
+    cmd = MigrateCommand()
+    result = cmd._get_gateway_user("existing_user")
+
+    # Verify the correct user is returned
+    assert result == test_user
+    assert result.username == "existing_user"
+
+
+@pytest.mark.django_db
+def test_get_gateway_user_nonexistent_user():
+    """Test _get_gateway_user returns None when user doesn't exist."""
+    cmd = MigrateCommand()
+    result = cmd._get_gateway_user("nonexistent_user")
+
+    # Verify None is returned for non-existent user
+    assert result is None
+
+
+# =============================================================================
+# Tests for _sync_controller_superuser helper function
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_sync_controller_superuser_promotes_existing_user(capsys):
+    """Test _sync_controller_superuser promotes existing non-superuser to superuser."""
+    # Create an existing Gateway user who is not a superuser
+    gateway_user = User.objects.create(username="controller_admin", is_superuser=False)
+
+    upstream_resource = {"resource_data": {"is_superuser": False}}
+
+    cmd = MigrateCommand()
+    cmd._sync_controller_superuser(upstream_resource, "controller_admin", upstream_is_superuser=True)
+
+    # Verify the gateway user was promoted
+    gateway_user.refresh_from_db()
+    assert gateway_user.is_superuser is True
+
+    # Verify upstream_resource was updated
+    assert upstream_resource["resource_data"]["is_superuser"] is True
+
+    # Verify log output
+    captured = capsys.readouterr()
+    assert "Promoted Gateway user 'controller_admin' to superuser based on Controller" in captured.out
+
+
+@pytest.mark.django_db
+def test_sync_controller_superuser_new_user_logs_creation(capsys):
+    """Test _sync_controller_superuser logs message for new user that will be created."""
+    # No Gateway user exists yet
+    upstream_resource = {"resource_data": {"is_superuser": False}}
+
+    cmd = MigrateCommand()
+    cmd._sync_controller_superuser(upstream_resource, "new_controller_admin", upstream_is_superuser=True)
+
+    # Verify upstream_resource was updated (user will be created later with superuser status)
+    assert upstream_resource["resource_data"]["is_superuser"] is True
+
+    # Verify log output
+    captured = capsys.readouterr()
+    assert "New user 'new_controller_admin' will be created with superuser status from Controller" in captured.out
+
+
+@pytest.mark.django_db
+def test_sync_controller_superuser_skips_non_superuser(capsys):
+    """Test _sync_controller_superuser does nothing when upstream user is not superuser."""
+    # Create an existing Gateway user
+    gateway_user = User.objects.create(username="regular_user", is_superuser=False)
+
+    upstream_resource = {"resource_data": {"is_superuser": False}}
+
+    cmd = MigrateCommand()
+    cmd._sync_controller_superuser(upstream_resource, "regular_user", upstream_is_superuser=False)
+
+    # Verify the gateway user was NOT promoted
+    gateway_user.refresh_from_db()
+    assert gateway_user.is_superuser is False
+
+    # Verify upstream_resource was NOT changed
+    assert upstream_resource["resource_data"]["is_superuser"] is False
+
+    # Verify no promotion log
+    captured = capsys.readouterr()
+    assert "Promoted" not in captured.out
+
+
+@pytest.mark.django_db
+def test_sync_controller_superuser_already_superuser(capsys):
+    """Test _sync_controller_superuser doesn't re-promote already superuser."""
+    # Create an existing Gateway user who is already a superuser
+    gateway_user = User.objects.create(username="existing_admin", is_superuser=True)
+
+    upstream_resource = {"resource_data": {"is_superuser": True}}
+
+    cmd = MigrateCommand()
+    cmd._sync_controller_superuser(upstream_resource, "existing_admin", upstream_is_superuser=True)
+
+    # Verify the gateway user is still a superuser
+    gateway_user.refresh_from_db()
+    assert gateway_user.is_superuser is True
+
+    # Verify upstream_resource still has is_superuser=True
+    assert upstream_resource["resource_data"]["is_superuser"] is True
+
+    # Verify no "Promoted" log (already superuser)
+    captured = capsys.readouterr()
+    assert "Promoted" not in captured.out
+
+
+# =============================================================================
+# Tests for _sync_hub_eda_superuser helper function
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_sync_hub_eda_superuser_gateway_superuser(capsys):
+    """Test _sync_hub_eda_superuser sets is_superuser=True when Gateway user is superuser."""
+    # Create a Gateway superuser
+    User.objects.create(username="hub_admin", is_superuser=True)
+
+    upstream_resource = {"resource_data": {"is_superuser": False}}
+
+    cmd = MigrateCommand()
+    cmd._sync_hub_eda_superuser(upstream_resource, "hub_admin", upstream_is_superuser=False, service_type="hub")
+
+    # Verify upstream_resource was updated to match Gateway
+    assert upstream_resource["resource_data"]["is_superuser"] is True
+
+    # Verify log output shows promotion
+    captured = capsys.readouterr()
+    assert "Gateway user is superuser: True" in captured.out
+    assert "promoted to superuser in hub" in captured.out
+
+
+@pytest.mark.django_db
+def test_sync_hub_eda_superuser_demotes_non_gateway_superuser(capsys):
+    """Test _sync_hub_eda_superuser demotes Hub/EDA superuser when Gateway user is not superuser."""
+    # Create a non-superuser Gateway user
+    User.objects.create(username="hub_regular", is_superuser=False)
+
+    upstream_resource = {"resource_data": {"is_superuser": True}}
+
+    cmd = MigrateCommand()
+    cmd._sync_hub_eda_superuser(upstream_resource, "hub_regular", upstream_is_superuser=True, service_type="hub")
+
+    # Verify upstream_resource was updated to match Gateway (demoted)
+    assert upstream_resource["resource_data"]["is_superuser"] is False
+
+    # Verify log output shows demotion
+    captured = capsys.readouterr()
+    assert "Gateway user is superuser: False" in captured.out
+    assert "demoted from superuser in hub" in captured.out
+
+
+@pytest.mark.django_db
+def test_sync_hub_eda_superuser_no_gateway_user(capsys):
+    """Test _sync_hub_eda_superuser sets is_superuser=False when Gateway user doesn't exist."""
+    # No Gateway user exists
+    upstream_resource = {"resource_data": {"is_superuser": True}}
+
+    cmd = MigrateCommand()
+    cmd._sync_hub_eda_superuser(upstream_resource, "missing_user", upstream_is_superuser=True, service_type="eda")
+
+    # Verify upstream_resource was set to False (no Gateway user = not superuser)
+    assert upstream_resource["resource_data"]["is_superuser"] is False
+
+    # Verify log output
+    captured = capsys.readouterr()
+    assert "Gateway user does not exist, will not be superuser" in captured.out
+    assert "demoted from superuser in eda" in captured.out
+
+
+@pytest.mark.django_db
+def test_sync_hub_eda_superuser_no_change_needed(capsys):
+    """Test _sync_hub_eda_superuser logs no change when status already matches."""
+    # Create a Gateway superuser
+    User.objects.create(username="synced_admin", is_superuser=True)
+
+    upstream_resource = {"resource_data": {"is_superuser": True}}
+
+    cmd = MigrateCommand()
+    cmd._sync_hub_eda_superuser(upstream_resource, "synced_admin", upstream_is_superuser=True, service_type="hub")
+
+    # Verify upstream_resource stays True
+    assert upstream_resource["resource_data"]["is_superuser"] is True
+
+    # Verify no promotion/demotion log (status already matches)
+    captured = capsys.readouterr()
+    assert "promoted to" not in captured.out
+    assert "demoted from" not in captured.out
