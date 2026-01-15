@@ -40,17 +40,21 @@ services:
       - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
       - DJANGO_DEBUG_TOOL_BAR={{ ddt_enabled }}
       - CONTAINER_NUMBER={{ container_id }}
+{% if container_engine == 'docker' %}
     links:
       - db
 {% for i in range(redis_node_count|int) %}
 {% set container_id = loop.index %}
       - redis{{ container_id }}
 {% endfor %}
+{% endif %}
     networks:
       - dbnet
       - service-mesh
+{% if container_engine == 'docker' %}
     extra_hosts:
       host-gateway: host-gateway
+{% endif %}
     ports:
       - "{{ exposed_port }}:8000"
       - "{{ container_id }}4444:4444"
@@ -215,8 +219,10 @@ services:
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
       - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+{% if container_engine == 'docker' %}
     extra_hosts:
       host-gateway: host-gateway
+{% endif %}
     networks:
       - dbnet
       - service-mesh
@@ -247,8 +253,10 @@ services:
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
       - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
+{% if container_engine == 'docker' %}
     extra_hosts:
-      host-gateway: "host-gateway"
+      host-gateway: host-gateway
+{% endif %}
     networks:
       - dbnet
       - service-mesh

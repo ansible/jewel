@@ -253,7 +253,7 @@ services:
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
 {% if container_engine == 'docker' %}
     extra_hosts:
-      host-gateway: "host-gateway"
+      host-gateway: host-gateway
 {% endif %}
     networks:
       - dbnet

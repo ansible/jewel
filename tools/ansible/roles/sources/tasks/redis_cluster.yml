@@ -33,7 +33,7 @@
 
     - name: Get IPs from Redis cluster
       shell:
-        cmd: "docker inspect -f '{{ filter }}' {{ redis_node_prefix }}{{ item }}"
+        cmd: "{{ container_engine }} inspect -f '{{ filter }}' {{ redis_node_prefix }}{{ item }}"
       vars:
         filter: !unsafe '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
       loop: "{{ query('sequence', 'start=1 end='+(redis_node_count)|string) }}"
