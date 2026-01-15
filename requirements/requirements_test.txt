@@ -7,6 +7,7 @@ pytest-django
 pytest-subtests
 colorama
 logutils
+django-debug-toolbar==5.2  # Required by test_urls.py; pinned because 6.x has models requiring INSTALLED_APPS
 
 # Linting tools
 flake8==7.1.1

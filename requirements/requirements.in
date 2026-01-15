@@ -1,4 +1,5 @@
 cryptography >= 41.0.6 # Required by django 
+# NOTE: When updating Django version, also update requirements/constraints_django52.txt
 Django>=5.2.8,<5.3 # Upgrade to Django 5.2 LTS - see AAP-55610 and CVE-2025-64459
 djangorestframework
 django-crum
