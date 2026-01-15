@@ -29,53 +29,53 @@ The AAP Gateway test suite **supports parallel test execution** using `pytest-xd
 
 ```bash
 # Run with specific number of workers
-PYTEST_NUM_PROCESSES=4 tox -e 311
+PYTEST_NUM_PROCESSES=4 tox -e py312
 
 # Run single-threaded (for debugging)
-PYTEST_NUM_PROCESSES=1 tox -e 311
+PYTEST_NUM_PROCESSES=1 tox -e py312
 
 # Use auto-detection (default)
-PYTEST_NUM_PROCESSES=auto tox -e 311
+PYTEST_NUM_PROCESSES=auto tox -e py312
 ```
 
 ### Running Tests
 
 #### Run all tests:
 ```bash
-tox -e 311
+tox -e py312
 ```
 
 #### Run specific test patterns:
 ```bash
-tox -e 311 -- -k "test_pattern_name" -v
+tox -e py312 -- -k "test_pattern_name" -v
 ```
 
 #### Run tests in a specific file:
 ```bash
-tox -e 311 -- aap_gateway_api/tests/path/to/test_file.py -v
+tox -e py312 -- aap_gateway_api/tests/path/to/test_file.py -v
 ```
 
 #### Run a specific test function:
 ```bash
-tox -e 311 -- -k "test_function_name" -v
+tox -e py312 -- -k "test_function_name" -v
 ```
 
 ### Examples
 
 ```bash
 # Run CSRF validation tests
-tox -e 311 -- -k "test_csrf" -v
+tox -e py312 -- -k "test_csrf" -v
 
 # Run all preference tests
-tox -e 311 -- aap_gateway_api/tests/preferences/ -v
+tox -e py312 -- aap_gateway_api/tests/preferences/ -v
 
 # Run a specific test
-tox -e 311 -- -k "test_csrf_trusted_origins_type" -v
+tox -e py312 -- -k "test_csrf_trusted_origins_type" -v
 ```
 
 ## Test Environment
 
-- **Python Version**: 3.11
+- **Python Version**: 3.12
 - **Test Framework**: pytest (via tox)
 - **Database**: PostgreSQL (managed by Docker via tox)
 - **Django Settings**: Configured automatically by tox environment
@@ -91,7 +91,7 @@ When the `django-ansible-base/` folder contains actual code (not empty), run tes
 
 ```bash
 cd django-ansible-base
-tox -e 311
+tox -e py312
 ```
 
 Or potentially:
@@ -139,31 +139,35 @@ When writing new tests:
 ## Debugging Tests
 
 ### General Debugging
+
 If you need to debug failing tests:
-1. Use `tox -e 311 -- -v -s` for verbose output without capture
+
+1. Use `tox -e py312 -- -v -s` for verbose output without capture
 2. Add `breakpoint()` for debugging breakpoints
 3. Check the test database state if needed
 4. Review Django settings in `aap_gateway_api.tests.settings_overrides`
 
 ### Debugging Parallel Test Issues
+
 For debugging parallel execution problems:
 
 ```bash
 # Run single-threaded to isolate issues
-PYTEST_NUM_PROCESSES=1 tox -e 311 -- -v -s
+PYTEST_NUM_PROCESSES=1 tox -e py312 -- -v -s
 
 # Run specific failing tests in isolation
-tox -e 311 -- -k "test_specific_failing_test" -v -s
+tox -e py312 -- -k "test_specific_failing_test" -v -s
 
 # Check for race conditions by running multiple times
-for i in {1..5}; do tox -e 311 -- -k "test_name" -v; done
+for i in {1..5}; do tox -e py312 -- -k "test_name" -v; done
 ```
 
 ## Common Issues
 
 ### Django Configuration Errors
+
 - **Problem**: `ImproperlyConfigured` errors about settings
-- **Solution**: Always use `tox -e 311` instead of `pytest` directly
+- **Solution**: Always use `tox -e py312` instead of `pytest` directly
 
 ### Database Issues
 - **Problem**: Database connection or migration errors

@@ -45,13 +45,13 @@ NOTE: nginx still runs in both cases and envoy can route traffic to either the n
 We use `pytest` to run our tests. To run all tests, use the following command:
 
 ```bash
-tox -e 311
+tox -e py312
 ```
 
 To run a specific test, use:
 
 ```bash
-tox -e 311 -- -k <testname>
+tox -e py312 -- -k <testname>
 ```
 
 ### Important Notes:
@@ -76,7 +76,7 @@ If you encounter these issues, you can remove the `-n auto option` from your `py
 
 - Use `breakpoint()` to set breakpoints in your code.
 - `remote-pdb` will listen on port 4444 for remote debugging.
-- Run `tox -e 311` to execute all tests.
-- Run `tox -e 311 -- -k <testname>` to execute a specific test.
+- Run `tox -e py312` to execute all tests.
+- Run `tox -e py312 -- -k <testname>` to execute a specific test.
 - Remove the `-n auto` option in `pyproject.toml` to avoid issues with parallel execution.
 - If breakpoints are not being hit, disable coverage options during debugging.

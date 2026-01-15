@@ -27,6 +27,9 @@ AAP Services Gateway provides a single entry point that sits in front of all ser
 ## Build and Test Commands
 
 ### Initial Setup
+
+Make sure to use Python 3.12. Higher versions might work but are not being tested.
+
 ```bash
 # Create and activate virtual environment
 python3 -m venv venv
@@ -48,14 +51,14 @@ make docker-compose
 
 ```bash
 # Run all tests (parallel by default)
-tox -e 311
+tox -e py312
 
 # Run single-threaded (for debugging)
-PYTEST_NUM_PROCESSES=1 tox -e 311
+PYTEST_NUM_PROCESSES=1 tox -e py312
 
 # Run specific tests
-tox -e 311 -- -k "test_pattern_name" -v
-tox -e 311 -- aap_gateway_api/tests/path/to/test_file.py -v
+tox -e py312 -- -k "test_pattern_name" -v
+tox -e py312 -- aap_gateway_api/tests/path/to/test_file.py -v
 
 # Stress test for threading issues
 ./run_tox_batch.sh

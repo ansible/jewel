@@ -9,7 +9,7 @@ Connection with on-premise AAP:
 - GitHub org: RedHatInsights (Frontend)
 - GitLab org: automation-analytics
 - Main GIT branch: `main`
-- Docker Python version: `3.9`
+- Docker Python version: `3.12`
 - Python dependencies specified by Pipenv (Pipfile)
 - Project is using Makefile
 

@@ -2,9 +2,9 @@
 
 - GitHub org: `ansible`
 - Main GIT branch: `main`
-- Docker Python version: `3.9`
+- Docker Python version: `3.12`
 - Python dependencies managed by Poetry
-- Project is using Taskfile(task/go-task) instead of Makefile(make) 
+- Project is using Taskfile(task/go-task) instead of Makefile(make)
 
 ## Assumptions
 

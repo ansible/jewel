@@ -2,7 +2,7 @@
 
 - GitHub org: `ansible`
 - Main GIT branch: `devel`
-- Docker Python version: 3.11
+- Docker Python version: `3.12`
 - Python dependencies specified by requirements.txt (updater.sh)
 - Project is using Makefile
 

@@ -26,7 +26,7 @@ django-crum==0.7.9
     # via -r requirements/requirements.in
 django-dynamic-preferences==1.16.0
     # via -r requirements/requirements.in
-django-extensions==3.2.3
+django-extensions==4.1
     # via -r requirements/requirements.in
 django-flags==5.0.13
     # via -r requirements/requirements.in

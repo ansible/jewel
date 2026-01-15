@@ -43,10 +43,11 @@ sudo dnf install libxml2-devel xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-
 
 ### Install python dependencies
 
-  * Create a python virtual environment: `python3 -m venv <location>`
-  * Activate the virtual environment: `source <location>/bin/activate`
-  * Install the tools for development: `pip install -r requirements/requirements_dev.txt`
-  * Optionally clone `django-ansible-base` if you are going to be making changes to it. If you clone it, it must live directly inside your `aap-gateway` directory, and be called `django-ansible-base`. If you skip this step, the latest git version of `django-ansible-base` will be built into your development image.
+* Make sure to use Python 3.12
+* Create a python virtual environment: `python3 -m venv <location>`
+* Activate the virtual environment: `source <location>/bin/activate`
+* Install the tools for development: `pip install -r requirements/requirements_dev.txt`
+* Optionally clone `django-ansible-base` if you are going to be making changes to it. If you clone it, it must live directly inside your `aap-gateway` directory, and be called `django-ansible-base`. If you skip this step, the latest git version of `django-ansible-base` will be built into your development image.
 
 ### Proxy Configuration
 
