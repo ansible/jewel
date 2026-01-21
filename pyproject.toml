@@ -143,9 +143,12 @@ legacy_tox_ini = """
     passenv = 
         ANSIBLE_GW_TEST_DB_HOST
         DB_PORT
+    ## The CFLAGS env variable below is a workaround for issue:
+    ## https://github.com/xmlsec/python-xmlsec/issues/323
     setenv =
         PYTHONPATH = {toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
+        CFLAGS="-Wno-error=incompatible-pointer-types"
     install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
