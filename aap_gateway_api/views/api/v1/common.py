@@ -77,7 +77,7 @@ class ResourceAllClientMixin:
         # CLI users can _still_ specify basic auth credentials explicitly via
         # a header or in the URL e.g.,
         # `curl https://user:pass@gateway.example.org/api/gateway/v1/something/`
-        authorize_url = get_relative_url('authorize')
+        authorize_url = get_relative_url('oauth2_provider:authorize')
         return f'Bearer realm=api authorization_url={authorize_url}'
 
 

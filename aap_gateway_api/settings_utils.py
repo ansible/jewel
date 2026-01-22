@@ -8,6 +8,7 @@ from dynaconf import Dynaconf
 
 logger = logging.getLogger('aap.gateway.settings.utils')
 _GATEWAY_ETC_DIRECTORY = '/etc/ansible-automation-platform/gateway/'
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def load_custom_envvars(settings):
@@ -114,3 +115,19 @@ def load_grpc_settings(settings: Dynaconf) -> None:
     # Load settings for the GRPC server
     settings_file_path = os.environ.get('GATEWAY_GRPC_SETTINGS_FILE', f'{_GATEWAY_ETC_DIRECTORY}/grpc_settings.py')
     load_python_file_with_injected_context(settings_file_path, settings=settings)
+
+
+def load_oidc_provider_settings(settings: Dynaconf) -> None:
+    """Load OIDC provider settings when the feature flag is enabled.
+
+    Conditionally loads OAuth2/OIDC provider configuration from oidc_provider.py
+    based on the FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED install-time feature flag.
+    When enabled, Gateway can act as an OIDC Provider for authentication.
+    """
+    if not settings.get('FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', False):
+        logger.debug('OIDC provider feature flag is disabled, skipping OIDC provider settings')
+        return
+
+    logger.debug('Loading OIDC provider settings')
+
+    settings.load_file(os.path.join(_MODULE_DIR, "oidc_provider.py"))
