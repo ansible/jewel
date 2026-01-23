@@ -60,20 +60,24 @@ class SettingSectionView(AnsibleBaseView):
         self.serializer = SettingSectionSerializer(category_slug)
         return super().options(request, category_slug, format)
 
-    @extend_schema(operation_id="settings_getter")
+    @extend_schema(operation_id="settings_getter", extensions={'x-ai-description': "Get Gateway preferences for a category, or 'all' for all categories"})
     def get(self, request, category_slug, format=None):
         # TODO: Check permissions (should be on the category)
         # self.check_object_permissions(self.request, obj)
         self.serializer = SettingSectionSerializer(category_slug)
         return Response(self.serializer.to_representation())
 
+    @extend_schema(extensions={'x-ai-description': 'Update Gateway preferences within a category'})
     def put(self, request, category_slug, format=None):
         # TODO: Check permissions on the category
         self.serializer = SettingSectionSerializer(category_slug)
         updated_data = self.serializer.validate_and_save(request.data)
         return Response(updated_data)
 
-    @extend_schema(operation_id="settings_destroyer")
+    @extend_schema(
+        operation_id="settings_destroyer",
+        extensions={'x-ai-description': 'Revert Gateway category preferences to defaults, excluding read-only and encrypted settings'},
+    )
     def delete(self, request, category_slug=None, *args, **kwargs):
         """
         Revert all preferences in the current category to their default values
@@ -114,7 +118,10 @@ PreferenceSection = collections.namedtuple('PreferenceSection', ('url', 'name'))
 
 
 # Hides default /{id}/ endpoint from api docs.
-@extend_schema_view(retrieve=extend_schema(exclude=True))
+@extend_schema_view(
+    retrieve=extend_schema(exclude=True),
+    list=extend_schema(extensions={'x-ai-description': 'List setting categories grouping related Gateway configuration preferences'}),
+)
 class SettingSectionViewSet(GatewayModelViewSet):
     """
     A view class for managing and displaying all section of settings, with their urls and names
@@ -155,6 +162,7 @@ class SettingPreferenceView(AnsibleBaseView):
             return SettingPreferenceSerializer()
         return self.serializer
 
+    @extend_schema(extensions={'x-ai-description': 'Get a single Gateway preference by category and name'})
     def get(self, request, category_slug, preference_name, *args, **kwargs):
         if category_slug == 'all':
             message = _(
@@ -172,6 +180,7 @@ class SettingPreferenceView(AnsibleBaseView):
         serializer = SettingPreferenceSerializer(preference)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(extensions={'x-ai-description': 'Revert a single Gateway preference to default, excluding read-only and encrypted settings'})
     def delete(self, request, category_slug, preference_name, *args, **kwargs):
         """
         revert the setting `preference_name` in section `category_slug` to its default value.

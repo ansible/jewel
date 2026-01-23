@@ -18,6 +18,7 @@ class OrganizationViewSet(ResourceAPIUpdateMixin, RoleModelViewSet):
 
     queryset = Organization.objects.select_related("resource").all()
     serializer_class = OrganizationSerializer
+    resource_purpose = "logical collection of users, teams, and resources for organizing access control"
 
     # Don't allow the deletion of any managed organizations
     def destroy(self, request, *args, **kwargs):
