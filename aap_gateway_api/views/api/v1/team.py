@@ -13,6 +13,8 @@ class TeamViewSet(ResourceAPIUpdateMixin, RoleModelViewSet):
     API endpoint that allows groups to be viewed or edited.
     """
 
+    resource_purpose = "organization subdivisions that group users for bulk permission assignment and role-based access control"
+
     queryset = Team.objects.select_related("resource").all()
     serializer_class = TeamSerializer
 

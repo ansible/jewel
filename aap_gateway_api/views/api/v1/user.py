@@ -20,6 +20,8 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     API endpoint that allows users to be viewed or edited.
     """
 
+    resource_purpose = "authenticated platform users with permissions assigned directly or via team membership"
+
     model = User
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer

@@ -1,5 +1,6 @@
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
@@ -9,6 +10,7 @@ from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 User = get_user_model()
 
 
+@extend_schema(extensions={"x-ai-description": "Retrieve details about the current authenticated user"})
 class MeViewSet(viewsets.ReadOnlyModelViewSet, AnsibleBaseView):
     model = User
     serializer_class = UserSerializer
