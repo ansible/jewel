@@ -35,13 +35,17 @@ jobs:
     # IMPORTANT: This repository reference gets updated by the test setup
     if: github.repository == 'ansible-automation-platform/aap-gateway'
 
+    # Pass user-controlled inputs through environment variables to prevent injection
+    env:
+      DRY_RUN: ${{ github.event.inputs.dry-run || 'false' }}
+
     steps:
       - name: Repository Automation
         uses: thenets/repo-automation@d9299e3b11fa2231d26a219d1986678d85a6d671
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           custom-github-token: ${{ secrets.GHA_LABELS_AUTOMATION }}
-          dry-run: ${{ github.event.inputs.dry-run || 'false' }}
+          dry-run: ${{ env.DRY_RUN }}
 
           # Enable all features for comprehensive testing
           accepted-releases: '["2.5", "2.6", "2.7", "devel"]'

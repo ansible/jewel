@@ -34,11 +34,14 @@ on:
       - Unit Tests
     types:
       - completed
-permissions: read-all
 jobs:
   sonar-pr-analysis:
     name: SonarCloud PR Analysis
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     if: |
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request' &&
@@ -185,6 +188,9 @@ jobs:
   sonar-branch-analysis:
     name: SonarCloud Branch Analysis
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     if: |
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -225,8 +231,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
+          # Pass user-controlled workflow_run data through environment variables
+          SCM_REVISION: ${{ github.event.workflow_run.head_sha }}
+          BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         with:
           args: >
-            -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }}
-            -Dsonar.branch.name=${{ github.event.workflow_run.head_branch }}
+            -Dsonar.scm.revision=${{ env.SCM_REVISION }}
+            -Dsonar.branch.name=${{ env.BRANCH_NAME }}
             ${{ env.COVERAGE_PATHS && format('-Dsonar.python.coverage.reportPaths={0}', env.COVERAGE_PATHS) || '' }}

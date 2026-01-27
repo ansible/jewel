@@ -14,15 +14,12 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: read
-  issues: write
-  pull-requests: read
-
 jobs:
   setup:
     name: "Load Configuration"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -75,6 +72,10 @@ jobs:
     name: "PR Analytics - ${{ matrix.repo }} - ${{ matrix.days }}d"
     needs: setup
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
     strategy:
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
       fail-fast: false  # Continue other reports even if one fails
