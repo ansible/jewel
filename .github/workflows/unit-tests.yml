@@ -12,7 +12,7 @@ env:
   TARGET_REPOSITORY: 'ansible/jewel'
 jobs:
   unit-test:
-    name: ${{ matrix.batch.name }} (Django ${{ matrix.django-version }})
+    name: ${{ matrix.batch.name }}
     runs-on: ubuntu-24.04
     # Using ubuntu-24.04 because it has docker engine 28.0.4(first link) that uses docker API version 1.51.
     # The tox docker plugin needs docker API 1.51 or older, otherwise it will fail because API 1.52 removed the
@@ -21,10 +21,6 @@ jobs:
     # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md#tools
     # https://github.com/tox-dev/tox-docker/pull/196
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
-    # Django 4.2 tests are informational only on devel (for backport compatibility checking)
-    # Django 5.2 tests must always pass - this is the production version for devel
-    # On stable-* branches, BOTH Django versions must pass (production uses 4.2 there)
-    continue-on-error: ${{ matrix.django-version == '4.2' && (github.base_ref == 'devel' || (github.event_name == 'push' && github.ref_name == 'devel')) }}
     services:
       redis:
         image: redis
@@ -37,7 +33,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        django-version: ["4.2", "5.2"]
         batch:
           - name: "Service-dependent tests"
             python-version: "3.12"
@@ -82,16 +77,6 @@ jobs:
           python tools/scripts/get_pr_checkout.py \
             --always-clone-repos 'ansible/django-ansible-base'
 
-      # Construct tox environment name based on Django version
-      # e.g., py312-django42 or py312-django52
-      - name: Set tox environment name
-        id: tox-env
-        run: |
-          DJANGO_VERSION="${{ matrix.django-version }}"
-          TOX_ENV="py312-django${DJANGO_VERSION/./}"
-          echo "name=${TOX_ENV}" >> $GITHUB_OUTPUT
-          echo "Using tox environment: ${TOX_ENV}"
-
       - name: Create tox environment and run setup
         # We use --collect-only instead of --notest because:
         # 1. The tox-reinstall-django-ansible-base.sh script runs as part of tox commands
@@ -99,12 +84,12 @@ jobs:
         # 3. We need those final versions before rebuilding from source
         #
         # Optimizations to make this fast:
-        # -x testenv:$TOX_ENV.docker=  : Override docker config to empty, skipping DB container startup
+        # -x testenv:py312.docker=  : Override docker config to empty, skipping DB container startup
         # --collect-only            : pytest only discovers tests, doesn't run them
         # aap_gateway_api/tests/__init__.py : Collect just this one (empty) file for speed
         run: |
-          tox -e ${{ steps.tox-env.outputs.name }} \
-            -x testenv:${{ steps.tox-env.outputs.name }}.docker= \
+          tox -e py312 \
+            -x testenv:py312.docker= \
             -- --collect-only aap_gateway_api/tests/__init__.py
 
       - name: Rebuild lxml and xmlsec from source
@@ -113,56 +98,41 @@ jobs:
         # causing "lxml & xmlsec libxml2 library version mismatch" errors.
         # Using --no-binary forces pip to build from source against system libxml2.
         run: |
-          TOX_ENV="${{ steps.tox-env.outputs.name }}"
-          XMLSEC_VERSION=$(.tox/${TOX_ENV}/bin/pip freeze | grep xmlsec | sed 's:^.*=::')
-          LXML_VERSION=$(.tox/${TOX_ENV}/bin/pip freeze | grep lxml | sed 's:^.*=::')
+          XMLSEC_VERSION=$(.tox/py312/bin/pip freeze | grep xmlsec | sed 's:^.*=::')
+          LXML_VERSION=$(.tox/py312/bin/pip freeze | grep lxml | sed 's:^.*=::')
 
           echo "Rebuilding xmlsec==${XMLSEC_VERSION} and lxml==${LXML_VERSION} from source"
 
-          .tox/${TOX_ENV}/bin/pip install --no-cache-dir --no-binary lxml,xmlsec --force-reinstall \
+          .tox/py312/bin/pip install --no-cache-dir --no-binary lxml,xmlsec --force-reinstall \
               lxml==${LXML_VERSION} xmlsec==${XMLSEC_VERSION}
 
       - name: Run tests
         env:
           PYTEST_NUM_PROCESSES: ${{ matrix.batch.processes }}
-        run: |
-          DJANGO_VERSION="${{ matrix.django-version }}"
-          ARTIFACT_SUFFIX="${{ matrix.batch.artifact-suffix }}-django${DJANGO_VERSION/./}"
-          tox -e ${{ steps.tox-env.outputs.name }} -- ${{ matrix.batch.test-filter }} -v \
-            --cov=. --cov-report=xml:coverage-${ARTIFACT_SUFFIX}.xml \
-            --junit-xml=junit-${ARTIFACT_SUFFIX}.xml
-
-      - name: Set artifact suffix
-        id: artifact
-        run: |
-          DJANGO_VERSION="${{ matrix.django-version }}"
-          echo "suffix=${{ matrix.batch.artifact-suffix }}-django${DJANGO_VERSION/./}" >> $GITHUB_OUTPUT
+        run: tox -e py312 -- ${{ matrix.batch.test-filter }} -v --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
 
       - name: Inject PR number into coverage file
         if: github.event_name == 'pull_request'
-        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage-${{ steps.artifact.outputs.suffix }}.xml
+        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage-${{ matrix.batch.artifact-suffix }}.xml
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ steps.artifact.outputs.suffix }}
-          path: coverage-${{ steps.artifact.outputs.suffix }}.xml
+          name: coverage-${{ matrix.batch.artifact-suffix }}
+          path: coverage-${{ matrix.batch.artifact-suffix }}.xml
 
       - name: Upload junit artifact
         uses: actions/upload-artifact@v4
         with:
-          name: junit-${{ steps.artifact.outputs.suffix }}
-          path: junit-${{ steps.artifact.outputs.suffix }}.xml
+          name: junit-${{ matrix.batch.artifact-suffix }}
+          path: junit-${{ matrix.batch.artifact-suffix }}.xml
 
   merge-and-upload:
     name: Merge junit and upload results
     runs-on: ubuntu-latest
     needs: unit-test
-    # Run even if some jobs failed (Django 4.2 might fail with continue-on-error)
-    # but only if at least one job completed
     if: |
-      always() &&
-      (needs.unit-test.result == 'success' || needs.unit-test.result == 'failure') &&
+      needs.unit-test.result == 'success' &&
       (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
     steps:
       - uses: actions/checkout@v5
