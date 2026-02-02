@@ -1,0 +1,6 @@
+# Django 5.2 LTS constraint file
+# This is the current production version for devel branch.
+#
+# IMPORTANT: Keep this pin in sync with requirements.txt
+#
+Django==5.2.9

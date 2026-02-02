@@ -1,0 +1,7 @@
+# Django 4.2 LTS constraint file for transition testing
+# This file is used during the Django 4.2 -> 5.2 transition period
+# to test backward compatibility with stable branches.
+#
+# IMPORTANT: Keep this pin in sync with stable branch requirements.txt
+#
+Django==4.2.26
