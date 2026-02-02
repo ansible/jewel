@@ -2,7 +2,7 @@ ansible                 # Needed by the dev environment to run playbooks
 black==25.1.0           # Linting tool, if changed update pyproject.toml as well
 build
 debugpy                 # Used for VSCode debugging
-django-debug-toolbar
+django-debug-toolbar==5.2  # Pinned: 6.x has cache panel bug causing RecursionError (AAP-64316)
 flake8==7.1.1           # Linting tool, if changed update pyproject.toml as well
 Flake8-pyproject==1.2.3 # Linting tool, if changed update pyproject.toml as well
 ipython                 # Used in shell_plus
