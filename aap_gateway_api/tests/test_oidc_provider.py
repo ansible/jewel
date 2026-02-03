@@ -5,7 +5,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from rest_framework import status
 
 from aap_gateway_api.oidc_provider import OIDC_JWT_TTL_CLOCK_SKEW_SECONDS, LazyPrivateKey
-from aap_gateway_api.registered_preferences import get_jwt_ttl_with_skew
+from aap_gateway_api.utils.jwt_token import get_jwt_ttl_with_skew
 
 
 class TestClockSkewConstant:

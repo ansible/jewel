@@ -1,26 +1,8 @@
 from django.conf import settings
 from django.utils.translation import gettext as _
 
-from aap_gateway_api.oidc_provider import OIDC_JWT_TTL_CLOCK_SKEW_SECONDS
 from aap_gateway_api.utils import register
 from aap_gateway_api.utils.jwt_token import update_jwt_public_key
-
-
-def get_jwt_ttl_with_skew(base_ttl_seconds: int) -> int:
-    """
-    Apply clock skew offset to JWT TTL value.
-
-    Automatically adds OIDC_JWT_TTL_CLOCK_SKEW_SECONDS to the base TTL to ensure
-    JWT validity across time synchronization drift between systems.
-
-    Args:
-        base_ttl_seconds: Base TTL value from preference (e.g., 300)
-
-    Returns:
-        TTL with clock skew added (e.g., 360 = 300 + 60)
-    """
-    return base_ttl_seconds + OIDC_JWT_TTL_CLOCK_SKEW_SECONDS
-
 
 register(
     section="proxy",
@@ -561,7 +543,7 @@ if getattr(settings, 'FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', False):
         help_text=_(
             "Fallback TTL (in seconds) for JWTs issued to jobs without configured timeout. "
             "Default 300s (5 minutes) is appropriate for most workloads. "
-            "Use get_jwt_ttl_with_skew() to automatically apply 60s clock skew offset. "
+            "A 60s clock skew offset is automatically added to ensure token validity. "
             "Adjust based on organizational workload patterns; no hard maximum."
         ),
         encrypted=False,

@@ -10,9 +10,26 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.conf import settings
 from django.db.models import F, Model, OuterRef
 
+from aap_gateway_api.oidc_provider import OIDC_JWT_TTL_CLOCK_SKEW_SECONDS
 from aap_gateway_api.utils.preferences import get_preference_value, update_preference_value
 
 logger = logging.getLogger('aap.gateway.utils.jwt_token')
+
+
+def get_jwt_ttl_with_skew(base_ttl_seconds: int) -> int:
+    """
+    Apply clock skew offset to JWT TTL value.
+
+    Automatically adds OIDC_JWT_TTL_CLOCK_SKEW_SECONDS to the base TTL to ensure
+    JWT validity across time synchronization drift between systems.
+
+    Args:
+        base_ttl_seconds: Base TTL value from preference (e.g., 300)
+
+    Returns:
+        TTL with clock skew added (e.g., 360 = 300 + 60)
+    """
+    return base_ttl_seconds + OIDC_JWT_TTL_CLOCK_SKEW_SECONDS
 
 
 def create_signed_jwt(user, resource_api_actions=None):
