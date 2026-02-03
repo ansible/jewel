@@ -4,6 +4,9 @@ from fakeredis import FakeConnection
 
 from aap_gateway_api.settings import *  # noqa: F403
 
+# Enable OIDC workload identity feature for tests
+FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED = True
+
 # noqa: F405
 DATABASES = {
     "default": {

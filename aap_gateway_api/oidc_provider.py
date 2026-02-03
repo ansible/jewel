@@ -6,6 +6,11 @@ install-time feature flag. When enabled, Gateway can issue OIDC tokens for authe
 
 """
 
+# Clock skew offset added to all JWT TTLs to account for time synchronization drift
+# between Gateway, external systems, and workload execution environments.
+# Value based on RFC 7519 Section 4.1.4 recommendations.
+OIDC_JWT_TTL_CLOCK_SKEW_SECONDS = 60
+
 
 class LazyPrivateKey:
     """Lazily loads the JWT RSA private key for OIDC token signing.
