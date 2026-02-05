@@ -45,7 +45,7 @@ idna==3.10
     # via requests
 persisting-theory==1.0
     # via django-dynamic-preferences
-protobuf==5.29.1
+protobuf==5.29.5
     # via
     #   -r requirements/requirements.in
     #   grpcio-tools

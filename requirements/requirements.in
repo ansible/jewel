@@ -7,7 +7,7 @@ django-extensions>=4.0 # python 3.12 support added in version 4: https://github.
 django-flags
 grpcio
 grpcio-tools
-protobuf>=4.21
+protobuf>=4.25.8  # CVE-2025-4565
 psycopg
 pyjwt
 requests
