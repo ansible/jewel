@@ -1,12 +1,58 @@
-from unittest.mock import Mock, patch
+import json
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 import requests
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.policies import visible_users
 from ansible_base.rbac.remote import RemoteObject
+from django.core.exceptions import FieldDoesNotExist
 
 from aap_gateway_api.models import HTTPPort, Organization, ServiceAPIRoute, ServiceCluster, ServiceType, Team, User
+
+
+@pytest.fixture
+def controller_api_route(service_cluster_controller, http_api_port_factory):
+    http_api_port_factory()
+    return ServiceAPIRoute.objects.create(
+        name="Controller API Route",
+        service_cluster=service_cluster_controller,
+        service_port=12345,
+        service_path="/api/controller/",
+        is_service_https=False,
+        api_slug="controller",
+        http_port=HTTPPort.objects.get(is_api_port=True),
+    )
+
+
+@pytest.fixture
+def controller_project_role_definition():
+    defaults = {
+        "id": max(DABContentType.objects.values_list("id", flat=True), default=0) + 1,
+        "app_label": "awx",
+        "api_slug": "awx.project",
+        "pk_field_type": "integer",
+    }
+
+    try:
+        DABContentType._meta.get_field("parent_content_type")
+    except FieldDoesNotExist:
+        pass
+    else:
+        defaults["parent_content_type"] = DABContentType.objects.get_for_model(Organization)
+
+    ct, created = DABContentType.objects.get_or_create(service="awx", model="project", defaults=defaults)
+    if not created:
+        ct.service = "awx"
+        ct.save()
+
+    role_def, _ = RoleDefinition.objects.get_or_create(
+        name="AWX Project Role",
+        content_type=ct,
+        defaults={"description": "An AWX project-specific role"},
+    )
+    return role_def
 
 
 @pytest.mark.django_db
@@ -137,7 +183,7 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
         assert assignment is not None
 
         # Verify direct client was used for service-specific role
-        mock_direct_client_class.assert_called_once_with(service_api_route, raise_if_bad_request=True)
+        mock_direct_client_class.assert_called_once_with(service_api_route, user=ANY, raise_if_bad_request=True)
         mock_direct_client.sync_assignment.assert_called_once_with(assignment)
 
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
@@ -236,8 +282,72 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
         assert not RoleUserAssignment.objects.filter(id=assignment.id).exists()
 
         # Verify direct client was used for unassignment
-        mock_direct_client_class.assert_called_with(service_api_route, raise_if_bad_request=True)
+        mock_direct_client_class.assert_called_with(service_api_route, user=ANY, raise_if_bad_request=True)
         mock_direct_client.sync_unassignment.assert_called_with(service_role_definition, regular_user, mock_inventory)
+
+    @pytest.mark.parametrize(
+        "is_org_admin, controller_status, expect_created",
+        [
+            (True, 201, True),
+            (False, 403, False),
+        ],
+        ids=["org-admin-success", "unprivileged-forbidden"],
+    )
+    def test_assignment_to_controller_project_syncs_and_respects_permissions(
+        self,
+        is_org_admin,
+        controller_status,
+        expect_created,
+        user_api_client,
+        user,
+        organization,
+        org_admin_rd,
+        org_member_rd,
+        controller_project_role_definition,
+        controller_api_route,
+    ):
+        """Controller project role assignment syncs to controller and respects permissions."""
+        # NOTE: not bothering doing this in org_admin case
+        # org_admin_rd.give_permission(user, organization)
+        # because this is enforced on the controller side, in the request mock
+        org_member_rd.give_permission(user, organization)
+        target_user = User.objects.create(username="project-user")
+        org_member_rd.give_permission(target_user, organization)
+
+        # sanity: user needs to be able to see target user for test to be meaningful
+        assert target_user in visible_users(user)
+
+        project_id = 2020
+        data = {"user": target_user.id, "object_id": project_id, "role_definition": controller_project_role_definition.id}
+        called_urls = []
+
+        def _request(url, method, **other_stuff):
+            called_urls.append(url)
+            assert method == "post"
+            payload = {"id": project_id} if controller_status == 201 else {"detail": "You do not have permission (for test)"}
+            response = requests.Response()
+            response.status_code = controller_status
+            response.headers["Content-Type"] = "application/json"
+            response._content = json.dumps(payload).encode("utf-8")
+            response.json = lambda: payload
+            response.url = url
+            return response
+
+        public_assignment_url = self.get_assignment_url()
+        with patch("requests.request", side_effect=_request):
+            response = user_api_client.post(public_assignment_url, data)
+
+        assert response.status_code == controller_status, response.data
+        if controller_status == 403:
+            # Error message should be a carbon-copy of what the service gave
+            assert 'You do not have permission (for test)' in str(response.data)
+        assignment_exists = RoleUserAssignment.objects.filter(
+            user=target_user,
+            object_id=project_id,
+            role_definition=controller_project_role_definition,
+        ).exists()
+        assert assignment_exists is expect_created
+        assert any("role-user-assignments" in url for url in called_urls), [x for x in called_urls]
 
 
 @pytest.mark.django_db
@@ -291,7 +401,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
         assert assignment is not None
 
         # Verify direct client was used for service-specific role
-        mock_direct_client_class.assert_called_once_with(service_api_route, raise_if_bad_request=True)
+        mock_direct_client_class.assert_called_once_with(service_api_route, user=ANY, raise_if_bad_request=True)
         mock_direct_client.sync_assignment.assert_called_once_with(assignment)
 
     @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
@@ -335,7 +445,7 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
         assert not RoleTeamAssignment.objects.filter(id=assignment.id).exists()
 
         # Verify direct client was used for unassignment
-        mock_direct_client_class.assert_called_with(service_api_route, raise_if_bad_request=True)
+        mock_direct_client_class.assert_called_with(service_api_route, user=ANY, raise_if_bad_request=True)
         mock_direct_client.sync_unassignment.assert_called_with(service_role_definition, team, mock_inventory)
 
 
@@ -411,7 +521,7 @@ class TestAssignmentSyncMixinMethods:
 
         mock_slug_func.assert_called_once_with('awx')
         mock_service_get.assert_called_once_with(api_slug='awx')
-        mock_client_class.assert_called_once_with(mock_service, raise_if_bad_request=True)
+        mock_client_class.assert_called_once_with(mock_service, user=viewset_instance.request.user, raise_if_bad_request=True)
 
         assert result == mock_client_class.return_value
 
@@ -429,7 +539,7 @@ class TestAssignmentSyncMixinMethods:
 
         # After fix, galaxy service should map to galaxy api_slug, not hub
         mock_service_get.assert_called_once_with(api_slug='galaxy')
-        mock_client_class.assert_called_once_with(mock_service, raise_if_bad_request=True)
+        mock_client_class.assert_called_once_with(mock_service, user=viewset_instance.request.user, raise_if_bad_request=True)
 
         assert result == mock_client_class.return_value
 
@@ -447,7 +557,7 @@ class TestAssignmentSyncMixinMethods:
 
         # AWX service should still map to controller api_slug
         mock_service_get.assert_called_once_with(api_slug='controller')
-        mock_client_class.assert_called_once_with(mock_service, raise_if_bad_request=True)
+        mock_client_class.assert_called_once_with(mock_service, user=viewset_instance.request.user, raise_if_bad_request=True)
 
         assert result == mock_client_class.return_value
 
@@ -535,5 +645,5 @@ class TestAssignmentSyncMixinMethods:
         mock_service_get.assert_called_once_with(api_slug='galaxy')
 
         # Verify direct client was used for service-specific role
-        mock_direct_client_class.assert_called_once_with(galaxy_service_api_route, raise_if_bad_request=True)
+        mock_direct_client_class.assert_called_once_with(galaxy_service_api_route, user=ANY, raise_if_bad_request=True)
         mock_direct_client.sync_assignment.assert_called_once_with(assignment)

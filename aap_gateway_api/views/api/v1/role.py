@@ -117,7 +117,7 @@ class AssignmentSyncMixin(ResourceAllClientMixin):
         service_type = role_definition.content_type.service
         service_name = service_type_to_api_slug(service_type)
         service = ServiceAPIRoute.objects.get(api_slug=service_name)
-        return GWResourceAPIClient(service, raise_if_bad_request=True)
+        return GWResourceAPIClient(service, user=self.request.user, raise_if_bad_request=True)
 
     def remote_sync_assignment(self, assignment):
         if self._is_owned_by_gateway(assignment.role_definition):
