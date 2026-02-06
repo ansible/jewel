@@ -1,0 +1,206 @@
+---
+# Sync OpenAPI Spec on Merge (Standalone)
+#
+# This workflow runs when code is merged to protected branches (devel, stable-*).
+# It generates the OpenAPI spec using a minimal environment, then syncs it to
+# the central spec repository.
+#
+# FLOW: PR merged → push to branch → minimal env → spec generated → synced to central repo
+name: Sync OpenAPI Spec on Merge (Standalone)
+env:
+  LC_ALL: "C.UTF-8"
+on:
+  push:
+    branches:
+      - devel
+      - 'stable-*'
+  workflow_dispatch:  # Allow manual triggering for testing
+jobs:
+  generate-and-sync-spec:
+    name: Generate and sync OpenAPI spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      HEADLESS: "yes"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout dependencies
+        env:
+          GH_TOKEN: ${{ secrets.AAP_PS_DAB_COLLECTION_REPO_READ != '' && secrets.AAP_PS_DAB_COLLECTION_REPO_READ || github.token }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos '[ansible-automation-platform|ansible]/django-ansible-base' \
+            --always-clone-repos ansible/ansible.platform
+
+      - name: Install python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Configure faster xDS refresh for CI
+        run: |
+          sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
+          echo "Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
+
+      - name: Start the dev environment
+        run: COMPOSE_UP_OPTS='-d' make docker-compose-basic
+
+      - name: Wait for gateway to be ready
+        run: |
+          echo "Waiting for gateway to be ready..."
+          max_attempts=60
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            if curl -k -s -f https://localhost:8000/api/gateway/v1/ping/ > /dev/null 2>&1; then
+              echo "✅ Gateway is ready"
+              break
+            fi
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt/$max_attempts - waiting..."
+            sleep 5
+          done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "❌ Gateway did not become ready in time"
+            docker compose -f tools/generated/docker-compose.yml logs
+            exit 1
+          fi
+
+      - name: Generate OpenAPI schema
+        run: |
+          # Fetch the schema from the running server
+          curl -k https://localhost:8000/api/gateway/v1/docs/schema/?format=json \
+            -o gateway-schema.json
+
+          # Verify it's valid JSON
+          if ! jq empty gateway-schema.json 2>/dev/null; then
+            echo "❌ Generated schema is not valid JSON"
+            cat gateway-schema.json
+            exit 1
+          fi
+
+          # Verify it's actually an OpenAPI schema
+          if ! jq -e '.openapi' gateway-schema.json > /dev/null 2>&1; then
+            echo "❌ Schema doesn't appear to be a valid OpenAPI spec (missing .openapi field)"
+            cat gateway-schema.json
+            exit 1
+          fi
+
+          echo "✅ Generated OpenAPI schema"
+          echo "Schema size: $(wc -c < gateway-schema.json) bytes"
+
+      - name: Checkout spec repo
+        uses: actions/checkout@v4
+        with:
+          repository: ansible-automation-platform/aap-openapi-specs
+          ref: ${{ github.ref_name }}
+          path: spec-repo
+          token: ${{ secrets.OPENAPI_SPEC_SYNC_TOKEN }}
+          persist-credentials: true
+
+      - name: Compare specs
+        id: compare
+        run: |
+          COMPONENT_SPEC="./gateway-schema.json"
+          SPEC_REPO_FILE="spec-repo/gateway.json"
+
+          # Compare files (or detect if file doesn't exist)
+          if [ ! -f "$SPEC_REPO_FILE" ]; then
+            echo "📝 Spec file doesn't exist in spec repo - will create"
+            echo "has_diff=true" >> $GITHUB_OUTPUT
+          elif diff -q "$COMPONENT_SPEC" "$SPEC_REPO_FILE" > /dev/null; then
+            echo "✅ No differences found - specs are identical"
+            echo "has_diff=false" >> $GITHUB_OUTPUT
+          else
+            echo "📝 Differences found - spec has changed"
+            echo "has_diff=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update spec file
+        if: steps.compare.outputs.has_diff == 'true'
+        run: |
+          cp "./gateway-schema.json" "spec-repo/gateway.json"
+          echo "✅ Updated spec-repo/gateway.json"
+
+      - name: Create PR in spec repo
+        if: steps.compare.outputs.has_diff == 'true'
+        working-directory: spec-repo
+        env:
+          GH_TOKEN: ${{ secrets.OPENAPI_SPEC_SYNC_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          HEAD_COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Configure git to use the token for push
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/ansible-automation-platform/aap-openapi-specs.git"
+
+          # Create branch for PR
+          SHORT_SHA="${SOURCE_SHA:0:7}"
+          BRANCH_NAME="update-gateway-${SOURCE_BRANCH}-${SHORT_SHA}"
+          git checkout -b "$BRANCH_NAME"
+
+          # Add and commit changes
+          git add "gateway.json"
+
+          COMMIT_MSG="Update gateway OpenAPI spec for $SOURCE_BRANCH"
+
+          git commit -m "$COMMIT_MSG
+
+          Synced from ${SOURCE_REPO}@${SOURCE_SHA}
+          Source branch: $SOURCE_BRANCH"
+
+          # Push branch
+          git push origin "$BRANCH_NAME"
+
+          # Create PR
+          PR_TITLE="[${SOURCE_BRANCH}] Update gateway spec from merged commit"
+          PR_BODY="## Summary
+          Automated OpenAPI spec sync from component repository merge.
+
+          **Source:** ${SOURCE_REPO}@${SOURCE_SHA}
+          **Branch:** \`${SOURCE_BRANCH}\`
+          **Component:** \`gateway\`
+          **Spec File:** \`gateway.json\`
+
+          ## Changes
+          - 📝 Spec file updated with latest changes
+
+          ## Source Commit
+          \`\`\`
+          $(printf '%s' "$HEAD_COMMIT_MSG")
+          \`\`\`
+
+          ---
+          🤖 This PR was automatically generated by the OpenAPI spec sync workflow."
+
+          gh pr create \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY" \
+            --base "$SOURCE_BRANCH" \
+            --head "$BRANCH_NAME"
+
+          echo "✅ Created PR in spec repo"
+
+      - name: Report results
+        if: always()
+        env:
+          HAS_DIFF: ${{ steps.compare.outputs.has_diff }}
+        run: |
+          if [ "$HAS_DIFF" == "true" ]; then
+            echo "📝 Spec sync completed - PR created in spec repo"
+          else
+            echo "✅ Spec sync completed - no changes needed"
+          fi
+
+      - name: Dump the container logs on failure
+        if: failure()
+        run: docker compose -f tools/generated/docker-compose.yml logs
