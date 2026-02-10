@@ -207,10 +207,7 @@ class _ExternalAuth:
         try:
             from ansible_base.lib.logging import log_auth_warning
 
-            log_auth_warning(
-                log_message,
-                logger,
-            )
+            log_auth_warning(log_message)
         except ImportError:
             logger.warning(log_message)
 

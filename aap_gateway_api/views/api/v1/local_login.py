@@ -73,5 +73,5 @@ class LoggedLogoutView(views.LogoutView):
         ret = super().dispatch(request, *args, **kwargs)
         current_user = getattr(request, 'user', None)
         if (not current_user or not getattr(current_user, 'pk', True)) and current_user != original_user:
-            log_auth_event("User {} logged out.".format(original_user.username), logger)
+            log_auth_event(f"User {original_user.username} logged out.")
         return ret
