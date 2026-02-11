@@ -1,3 +1,9 @@
+# Re-export from django-ansible-base for backwards compatibility
+from ansible_base.lib.workload_identity.workload_identity_tokens import (  # noqa: F401
+    WorkloadIdentityTokenRequestSerializer,
+    WorkloadIdentityTokenResponseSerializer,
+)
+
 from aap_gateway_api.serializers.additional_route import AdditionalRouteSerializer  # noqa: F401
 from aap_gateway_api.serializers.app_url import AppUrlSerializer  # noqa: F401
 from aap_gateway_api.serializers.authenticator_user import AuthenticatorUserMoveSerializer, AuthenticatorUserSerializer  # noqa: F401

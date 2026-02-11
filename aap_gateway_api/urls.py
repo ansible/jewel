@@ -8,6 +8,7 @@ from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path, register_converter
+from flags.urls import flagged_path
 
 from aap_gateway_api import views
 from aap_gateway_api.router import router
@@ -76,6 +77,14 @@ urlpatterns = [
     path('api/gateway/v1/', include(rbac_service_urls)),
     # JWT claims endpoint
     path('api/gateway/v1/jwt_claims/<str:user_ansible_id>/', views.JWTClaimsView.as_view(), name='jwt-claims-view'),
+    # OIDC Workload Identity endpoints (behind feature flag)
+    flagged_path(
+        'FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED',
+        'api/gateway/v1/workload_identity_tokens/',
+        views.WorkloadIdentityTokensView.as_view(),
+        name='workload-identity-tokens-view',
+        state=True,
+    ),
 ]
 
 if getattr(settings, 'ENABLE_DJANGO_DEBUG_TOOLBAR', False):

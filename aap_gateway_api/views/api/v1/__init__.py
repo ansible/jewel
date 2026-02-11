@@ -16,7 +16,7 @@ from rest_framework.schemas.generators import EndpointEnumerator
 logger = logging.getLogger('aap.gateway.views')
 
 
-ignore_endpoints = ['docs', 'service-index', 'jwt_key', 'role_metadata', 'feature_flags_state']
+ignore_endpoints = ['docs', 'service-index', 'jwt_key', 'role_metadata', 'feature_flags_state', 'workload_identity_tokens']
 
 
 GW_V1_ROOT_URL = "/api/gateway/v1"
