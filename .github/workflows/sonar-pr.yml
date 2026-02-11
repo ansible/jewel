@@ -182,6 +182,8 @@ jobs:
             -Dsonar.pullrequest.key=${{ env.PR_NUMBER }}
             -Dsonar.pullrequest.branch=${{ env.PR_HEAD }}
             -Dsonar.pullrequest.base=${{ env.PR_BASE }}
+            -Dsonar.projectKey=${{ github.repository }}
+            -Dsonar.projectName=${{ github.event.repository.name }}
             -Dsonar.python.coverage.reportPaths=${{ env.COVERAGE_PATHS }}
             ${{ env.SONAR_INCLUSIONS && format('-Dsonar.inclusions={0}', env.SONAR_INCLUSIONS) || '' }}
 
@@ -238,4 +240,6 @@ jobs:
           args: >
             -Dsonar.scm.revision=${{ env.SCM_REVISION }}
             -Dsonar.branch.name=${{ env.BRANCH_NAME }}
+            -Dsonar.projectKey=${{ github.repository }}
+            -Dsonar.projectName=${{ github.event.repository.name }}
             ${{ env.COVERAGE_PATHS && format('-Dsonar.python.coverage.reportPaths={0}', env.COVERAGE_PATHS) || '' }}

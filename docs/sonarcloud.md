@@ -64,8 +64,16 @@ For CI-based analysis, parameters can be set in the `sonar-project.properties` f
 - 📚 [aap-gateway `sonar-project.properties`](https://github.com/ansible/aap-gateway/blob/devel/sonar-project.properties)
 - 📚 [Setting configuration with analysis parameters](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/analysis-parameters/#setting-configuration-in-a-file)
 
-> [!WARNING] 
+> [!WARNING]
 > If changes to `sonar-project.properties` break SonarCloud, the PR may still appear **green** since Sonar doesn't inject itself in such cases.
+
+## Dynamic Project Configuration
+
+The CI workflows dynamically set the project key and name using GitHub context variables, preventing mismatches when workflows are copied between repositories.
+
+- **CI Workflows**: Both `.github/workflows/sonar-pr.yml` jobs override the project key/name at scan time using `-Dsonar.projectKey=${{ github.repository }}` and `-Dsonar.projectName=${{ github.event.repository.name }}`. These command-line args take precedence over `sonar-project.properties`.
+- **Local Script**: `tools/scripts/run-sonar-local.sh` auto-detects the project key from `git remote origin`, with fallback to `sonar-project.properties`.
+- **Security**: Repository restrictions remain in place (only `ansible-automation-platform/aap-gateway` and `ansible-automation-platform/aap-gateway-debug` can execute workflows).
 
 ## 📌 GitHub Actions Integration  
 There are two GitHub Actions workflows that handle the integration of SonarCloud into the AAP-Gateway CI/CD pipeline:  

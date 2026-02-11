@@ -271,6 +271,35 @@ function generate_coverage() {
     fi
 }
 
+function auto_detect_project_key() {
+    # Auto-detect project key from git remote origin
+    # Returns:
+    #   Sets PROJECT_KEY_DETECTED
+    local remote_url=$(git remote get-url origin 2>/dev/null || echo "")
+
+    if [ -z "$remote_url" ]; then
+        log_warning "No git remote origin found"
+        return 1
+    fi
+
+    log_debug "Remote URL: $remote_url"
+
+    # Extract repository path from various Git URL formats
+    # https://github.com/org/repo.git -> org/repo
+    # git@github.com:org/repo.git -> org/repo
+    # https://github.com/org/repo -> org/repo
+    local repo_path=""
+    if [[ $remote_url =~ github\.com[:/]([^/]+/[^/]+)(.git)?$ ]]; then
+        repo_path="${BASH_REMATCH[1]}"
+        repo_path="${repo_path%.git}"  # Remove .git if present
+        PROJECT_KEY_DETECTED="$repo_path"
+        return 0
+    else
+        log_warning "Could not parse repository path from remote URL: $remote_url"
+        return 1
+    fi
+}
+
 function run_sonar_analysis() {
     # Execute sonar-scanner with PR parameters
     # Globals:
@@ -285,18 +314,21 @@ function run_sonar_analysis() {
         exit 1
     }
     
-    # Determine project key - use override if provided, otherwise read from sonar-project.properties
+    # Determine project key - use override if provided, otherwise auto-detect, fallback to properties file
     local project_key=""
     if [ -n "$PROJECT_KEY_ARG" ]; then
         project_key="$PROJECT_KEY_ARG"
         log_info "Using custom project key: $project_key"
+    elif auto_detect_project_key; then
+        project_key="$PROJECT_KEY_DETECTED"
+        log_info "Using auto-detected project key: $project_key"
     else
-        # Read from sonar-project.properties
+        # Fallback to reading from sonar-project.properties
         if [ -f "sonar-project.properties" ]; then
             project_key=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2)
             log_info "Using project key from sonar-project.properties: $project_key"
         else
-            log_error "No sonar-project.properties found and no project key provided"
+            log_error "No sonar-project.properties found and could not auto-detect project key"
             exit 1
         fi
     fi
@@ -314,8 +346,8 @@ function run_sonar_analysis() {
         "-Dsonar.pullrequest.base=$PR_BASE"
     )
     
-    # Add project key override if provided
-    if [ -n "$PROJECT_KEY_ARG" ]; then
+    # Add project key override if provided or auto-detected
+    if [ -n "$PROJECT_KEY_ARG" ] || [ -n "$PROJECT_KEY_DETECTED" ]; then
         sonar_args+=("-Dsonar.projectKey=$project_key")
     fi
     
