@@ -22,6 +22,10 @@ jobs:
   tox:
     name: aap_gateway_api - ${{ matrix.tests.env }}
     runs-on: ubuntu-latest
+    env:
+      # Avoid KeyError: 'Gateway' with Docker API 1.52+ (tox-docker expects NetworkSettings.Gateway).
+      # See https://github.com/tox-dev/tox-docker/pull/196 and django-ansible-base PR 938.
+      TOX_DOCKER_GATEWAY: "0.0.0.0"
     services:
       redis:
         image: redis

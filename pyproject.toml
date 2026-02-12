@@ -102,15 +102,9 @@ legacy_tox_ini = """
         lint = flake8, black, isort
 
     [docker:db]
-    ## NOTE: If you see this failing with output as shown below, 
-    ## apply a patch from the PR link to the last file listed.
-    ## ---------------------------------------------------
-    ## File ".../site-packages/tox_docker/plugin.py", line 53, in get_gateway_ip
-    ##     ip = container.attrs["NetworkSettings"]["Gateway"] or "0.0.0.0"
-    ##          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
-    ## KeyError: 'Gateway'
-    ## ---------------------------------------------------
-    ## Patch from PR: https://patch-diff.githubusercontent.com/raw/tox-dev/tox-docker/pull/196.patch
+    ## NOTE: If you see this failing with KeyError: 'Gateway' (Docker API 1.52+ removed that field),
+    ## set TOX_DOCKER_GATEWAY=0.0.0.0 in the environment where tox is run (CI sets this automatically).
+    ## Alternative: apply patch from https://github.com/tox-dev/tox-docker/pull/196
 
     image = quay.io/sclorg/postgresql-15-c9s
     environment =
