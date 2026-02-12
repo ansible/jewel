@@ -14,6 +14,10 @@ jobs:
   unit-test:
     name: ${{ matrix.batch.name }}
     runs-on: ubuntu-24.04
+    env:
+      # Avoid KeyError: 'Gateway' with Docker API 1.52+ (tox-docker expects NetworkSettings.Gateway).
+      # See https://github.com/tox-dev/tox-docker/pull/196 and django-ansible-base PR 938.
+      TOX_DOCKER_GATEWAY: "0.0.0.0"
     # Using ubuntu-24.04 because it has docker engine 28.0.4(first link) that uses docker API version 1.51.
     # The tox docker plugin needs docker API 1.51 or older, otherwise it will fail because API 1.52 removed the
     # gateway (networking gateway) IP address from network settings of the container(its in different location).
