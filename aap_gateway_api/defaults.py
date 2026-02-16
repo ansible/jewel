@@ -350,6 +350,9 @@ ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = True
 ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = True
 ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
 ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
+# Rely on the remote service's RBAC enforcement instead of local checks.
+# See aap_gateway_api/views/api/v1/role.py for the remote permission validation path.
+ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS = False
 ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST = ['ansible_base.rbac']
 ANSIBLE_BASE_AUTH_AUDIT_LOGGER_NAME = 'aap.auth_audit'
 ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
