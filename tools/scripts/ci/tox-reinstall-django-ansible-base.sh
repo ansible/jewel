@@ -25,7 +25,7 @@ fi
 
 if [ "$REQS_CHANGED" -ne 0 ]; then
     echo "Changes detected in requirements. Installing django-ansible-base..."
-    OPTIONAL_DEEPS=`grep egg=django-ansible-base requirements/requirements_git.txt | sed 's:.*\[::' | sed 's:]::'`
+    OPTIONAL_DEEPS=`grep '^django-ansible-base\[' requirements/requirements_git.txt | sed 's:^django-ansible-base\[::' | sed 's:\] @.*::'`
     pip install "./${DAB_DIR}/"[$OPTIONAL_DEEPS]
     echo "Caching requirements to avoid needlessly reinstalling..."
     cp "$REQ_FILE" "$TOX_REQ_FILE"

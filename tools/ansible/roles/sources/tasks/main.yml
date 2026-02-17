@@ -16,8 +16,8 @@
 
 - name: Get the optional dependencies for DAB
   set_fact:
-    optional_dab_deeps: "{{ item | regex_replace('^.*egg=django-ansible-base\\[(.*)\\]', '\\1') }}"
-  when: "'egg=django-ansible-base' in item"
+    optional_dab_deeps: "{{ item | regex_replace('^django-ansible-base\\[(.*)\\] @.*', '\\1') }}"
+  when: "'django-ansible-base[' in item"
   loop: "{{ git_requirements['content'] | b64decode | split('\n') }}"
   loop_control:
     label: 'reading line'
