@@ -15,13 +15,13 @@ def wit_url():
 @pytest.fixture
 def valid_payload():
     return {
-        "scope": "dummy_scope",
+        "scope": "aap_controller_automation_job",
         "audience": "https://example.com/api",
         "claims": {
-            "job_name": "test-job",
-            "organization_name": "test-org",
-            "project_name": "test-project",
-            "job_template_name": "test-template",
+            "aap_controller_job_name": "test-job",
+            "aap_controller_organization_name": "test-org",
+            "aap_controller_project_name": "test-project",
+            "aap_controller_job_template_name": "test-template",
         },
     }
 
@@ -56,14 +56,22 @@ class TestWorkloadIdentityTokensValidation:
     @pytest.mark.parametrize(
         "payload, expected_error_field",
         [
-            pytest.param({"audience": "https://example.com", "claims": {"job_name": "test-job"}}, "scope", id="missing_scope"),
-            pytest.param({"scope": None, "audience": "https://example.com", "claims": {"job_name": "test-job"}}, "scope", id="null_scope"),
-            pytest.param({"scope": "", "audience": "https://example.com", "claims": {"job_name": "test-job"}}, "scope", id="empty_scope"),
-            pytest.param({"scope": "dummy_scope", "claims": {"job_name": "test-job"}}, "audience", id="missing_audience"),
-            pytest.param({"scope": "dummy_scope", "audience": None, "claims": {"job_name": "test-job"}}, "audience", id="null_audience"),
-            pytest.param({"scope": "dummy_scope", "audience": "", "claims": {"job_name": "test-job"}}, "audience", id="empty_audience"),
-            pytest.param({"scope": "dummy_scope", "audience": "https://example.com"}, "claims", id="missing_claims"),
-            pytest.param({"scope": "dummy_scope", "audience": "https://example.com", "claims": {}}, "claims", id="empty_claims"),
+            pytest.param({"audience": "https://example.com", "claims": {"aap_controller_job_name": "test-job"}}, "scope", id="missing_scope"),
+            pytest.param({"scope": None, "audience": "https://example.com", "claims": {"aap_controller_job_name": "test-job"}}, "scope", id="null_scope"),
+            pytest.param({"scope": "", "audience": "https://example.com", "claims": {"aap_controller_job_name": "test-job"}}, "scope", id="empty_scope"),
+            pytest.param({"scope": "aap_controller_automation_job", "claims": {"aap_controller_job_name": "test-job"}}, "audience", id="missing_audience"),
+            pytest.param(
+                {"scope": "aap_controller_automation_job", "audience": None, "claims": {"aap_controller_job_name": "test-job"}},
+                "audience",
+                id="null_audience",
+            ),
+            pytest.param(
+                {"scope": "aap_controller_automation_job", "audience": "", "claims": {"aap_controller_job_name": "test-job"}},
+                "audience",
+                id="empty_audience",
+            ),
+            pytest.param({"scope": "aap_controller_automation_job", "audience": "https://example.com"}, "claims", id="missing_claims"),
+            pytest.param({"scope": "aap_controller_automation_job", "audience": "https://example.com", "claims": {}}, "claims", id="empty_claims"),
         ],
     )
     def test_invalid_payloads_return_400(self, admin_api_client, wit_url, payload, expected_error_field):
@@ -92,7 +100,7 @@ class TestWorkloadIdentityTokensValidation:
     )
     def test_claims_not_dict_returns_400(self, admin_api_client, wit_url, invalid_claims):
         """Request with non-dict claims returns 400."""
-        payload = {"scope": "dummy_scope", "audience": "https://example.com", "claims": invalid_claims}
+        payload = {"scope": "aap_controller_automation_job", "audience": "https://example.com", "claims": invalid_claims}
         response = admin_api_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "claims" in response.data
@@ -130,10 +138,10 @@ class TestWorkloadIdentityTokensJWTGeneration:
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
 
         # Verify workload claims are included
-        assert decoded["job_name"] == "test-job"
-        assert decoded["organization_name"] == "test-org"
-        assert decoded["project_name"] == "test-project"
-        assert decoded["job_template_name"] == "test-template"
+        assert decoded["aap_controller_job_name"] == "test-job"
+        assert decoded["aap_controller_organization_name"] == "test-org"
+        assert decoded["aap_controller_project_name"] == "test-project"
+        assert decoded["aap_controller_job_template_name"] == "test-template"
 
     def test_jwt_exp_matches_configured_ttl_preference(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
         """JWT expiration is set to jwt_default_ttl_seconds preference value from iat."""
@@ -158,7 +166,7 @@ class TestWorkloadIdentityTokensJWTGeneration:
             algorithms=["RS256"],
             audience=valid_payload["audience"],
         )
-        assert decoded["job_name"] == "test-job"
+        assert decoded["aap_controller_job_name"] == "test-job"
 
     def test_jwt_aud_claim_matches_audience_parameter(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
         """JWT aud claim matches the audience parameter from the request."""
@@ -187,7 +195,7 @@ class TestWorkloadIdentityTokensJWTGeneration:
         assert decoded["aud"] == audience
 
     def test_jwt_sub_claim_format(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
-        """JWT sub claim follows the expected format from generate_sub_claim_from_workload_details."""
+        """JWT sub claim follows the expected format from scope.generate_sub_claim()."""
         response = admin_api_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
@@ -196,28 +204,71 @@ class TestWorkloadIdentityTokensJWTGeneration:
         expected_sub = "job:test-job:organization:test-org:project:test-project:job_template:test-template"
         assert decoded["sub"] == expected_sub
 
+
+class TestWorkloadIdentityTokensScopeValidation:
+    def test_unknown_scope_returns_400(self, admin_api_client, wit_url):
+        """Request with unknown scope returns 400."""
+        payload = {
+            "scope": "unknown_scope",
+            "audience": "https://example.com",
+            "claims": {"aap_controller_job_name": "test-job"},
+        }
+        response = admin_api_client.post(wit_url, payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error" in response.data
+        assert response.data["error"] == "Unknown scope: unknown_scope"
+
+    def test_invalid_claims_for_scope_returns_400(self, admin_api_client, wit_url):
+        """Request with invalid claims for the scope returns 400."""
+        payload = {
+            "scope": "aap_controller_automation_job",
+            "audience": "https://example.com",
+            "claims": {
+                "aap_controller_job_name": "test-job",
+                "invalid_claim_name": "some-value",
+                "another_invalid_claim": "another-value",
+            },
+        }
+        response = admin_api_client.post(wit_url, payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error" in response.data
+        assert "invalid_claim_name" in response.data["error"]
+        assert "another_invalid_claim" in response.data["error"]
+
+    def test_valid_claims_for_scope_returns_200(self, admin_api_client, wit_url, ensure_jwt_keys):
+        """Request with valid claims for the scope returns 200."""
+        payload = {
+            "scope": "aap_controller_automation_job",
+            "audience": "https://example.com",
+            "claims": {
+                "aap_controller_job_name": "test-job",
+                "aap_controller_organization_name": "test-org",
+                "aap_controller_project_id": "123",
+                "aap_controller_job_id": "456",
+            },
+        }
+        response = admin_api_client.post(wit_url, payload, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert "jwt" in response.data
+
     @pytest.mark.parametrize(
         "reserved_claim, malicious_value",
         [
-            pytest.param("jti", "attacker-controlled-jti", id="jti_overwrite_attempt"),
-            pytest.param("exp", 9999999999, id="exp_overwrite_attempt"),
-            pytest.param("iat", 0, id="iat_overwrite_attempt"),
-            pytest.param("iss", "https://malicious-issuer.com", id="iss_overwrite_attempt"),
-            pytest.param("sub", "attacker-controlled-subject", id="sub_overwrite_attempt"),
-            pytest.param("aud", "https://wrong-audience.com", id="aud_overwrite_attempt"),
+            pytest.param("jti", "attacker-controlled-jti", id="jti"),
+            pytest.param("exp", 9999999999, id="exp"),
+            pytest.param("iat", 0, id="iat"),
+            pytest.param("iss", "https://malicious-issuer.com", id="iss"),
+            pytest.param("sub", "attacker-controlled-subject", id="sub"),
+            pytest.param("aud", "https://wrong-audience.com", id="aud"),
         ],
     )
-    def test_reserved_jwt_claims_in_request_are_overwritten(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys, reserved_claim, malicious_value):
-        """Reserved JWT claims passed in request claims are overwritten by system-generated values."""
-        # Attempt to inject a reserved claim via the claims field
+    def test_reserved_claims_are_rejected(self, admin_api_client, wit_url, valid_payload, reserved_claim, malicious_value):
+        """Reserved JWT claims in request are rejected as invalid for the scope."""
         valid_payload["claims"][reserved_claim] = malicious_value
         response = admin_api_client.post(wit_url, valid_payload, format="json")
-        assert response.status_code == status.HTTP_200_OK
-
-        decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
-
-        # The reserved claim should NOT have the attacker-controlled value
-        assert decoded[reserved_claim] != malicious_value
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error" in response.data
+        assert reserved_claim in response.data["error"]
 
 
 class TestWorkloadIdentityTokensHTTPMethods:

@@ -3,9 +3,11 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import jwt
+from ansible_base.lib.logging import log_auth_event
 from ansible_base.lib.utils.response import get_fully_qualified_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuser
+from ansible_base.lib.workload_identity.controller import AutomationControllerJobScope
 from ansible_base.lib.workload_identity.workload_identity_tokens import WorkloadIdentityTokenRequestSerializer, WorkloadIdentityTokenResponseSerializer
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from drf_spectacular.utils import extend_schema
@@ -19,29 +21,34 @@ from aap_gateway_api.utils.preferences import get_preference_value
 logger = logging.getLogger("aap.gateway.views.workload_identity_tokens")
 
 
-TARGET_CLAIM_NAMES_TO_SUB_STUBS = {
-    "job_name": "job",
-    "organization_name": "organization",
-    "project_name": "project",
-    "job_template_name": "job_template",
+SCOPE_REGISTRY = {
+    AutomationControllerJobScope.name: AutomationControllerJobScope,
 }
 
 
-def generate_sub_claim_from_workload_details(workload_details: dict) -> str:
+def _validate_claims_for_scope(scope_class, claims: dict) -> set[str]:
     """
-    Given a dictionary with the details of a workload, generates a sub claim string with the following format:
-    "job:<job_name>:organization:<organization_name>:project:<project_name>:job_template:<job_template_name>"
+    Validate that all claims in the request are valid for the specified scope.
 
-    Note: The specified claim names are included in the output sub claim value even if they
-    are empty. Claim validation is expected to take care of doing these checks before this
-    function is called.
+    This function checks that the provided claims align with the scope definition.
+    It ensures that only claims defined in the scope's list_claims() method are
+    included in the request.
+
+    Reserved JWT claims (jti, exp, iat, iss, sub, aud) will be rejected because they
+    are not included in any scope's list_claims() definition. The gateway is responsible
+    for setting these values during JWT construction.
 
     Args:
-        workload_details: A dictionary containing the workload details
+        scope_class: The scope class from SCOPE_REGISTRY
+        claims: Dictionary of claim names and values from the request
+
     Returns:
-        A string containing the sub claim string
+        Set of invalid claim names (empty set if all claims are valid)
     """
-    return ":".join([f"{TARGET_CLAIM_NAMES_TO_SUB_STUBS[key]}:{workload_details.get(key, '')}" for key in TARGET_CLAIM_NAMES_TO_SUB_STUBS.keys()])
+    allowed_claims = set(scope_class.list_claims())
+    provided_claims = set(claims.keys())
+
+    return provided_claims - allowed_claims
 
 
 class WorkloadIdentityTokensView(AnsibleBaseView):
@@ -69,13 +76,21 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
         validated_data = request_serializer.validated_data
         workload_claims = validated_data["claims"]
         audience = validated_data["audience"]
+        scope = validated_data["scope"]
 
         # [AAP-62528] Check that the requested scope is valid against the well-known oidc GW endpoints.
-        # For now we just pass along the received value (future issues)
 
-        # JWTs issued by WIT will not validate scopes for claims initially. Stories in other epics will expand this.
-        # [AAP-62657] Filter out claims not included in the requested scopes (once default scope is implemented in DAB)
-        # [AAP-62528] Add validation of the received claims (future issues)
+        # Get scope class and validate that claims align with the specified scope
+        error_msg = None
+        scope_class = SCOPE_REGISTRY.get(scope)
+        if scope_class is None:
+            error_msg = f"Unknown scope: {scope}"
+        elif invalid_claims := _validate_claims_for_scope(scope_class, workload_claims):
+            error_msg = f"Invalid claims for scope '{scope}': {', '.join(sorted(invalid_claims))}"
+
+        if error_msg:
+            logger.warning("Workload identity token request rejected: %s", error_msg)
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
         # Fetch the gateway common private key for signing the JWT
         gw_private_key = get_jwt_rsa_key()
@@ -88,7 +103,7 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
         jwt_default_claims = {
             "jti": str(uuid4()),
             "iss": get_fully_qualified_url("oauth2_provider:oauth_authorization_root_view"),
-            "sub": generate_sub_claim_from_workload_details(workload_claims),
+            "sub": scope_class.generate_sub_claim(workload_claims),
             "aud": audience,
             "exp": jwt_issuance_timestamp + jwt_ttl_seconds,
             "iat": jwt_issuance_timestamp,
@@ -97,12 +112,9 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
         # WIT API issues a JWT with the RS256 algorithm, signed by the aap-gateway private key get_jwt_rsa_key
         signed_jwt = jwt.encode({**workload_claims, **jwt_default_claims}, gw_private_key, algorithm="RS256")
 
-        logger.info(
-            "Workload identity token issued: jti=%s, sub=%s, aud=%s, exp=%s",
-            jwt_default_claims["jti"],
-            jwt_default_claims["sub"],
-            jwt_default_claims["aud"],
-            jwt_default_claims["exp"],
+        log_auth_event(
+            f"Workload identity token issued for scope '{scope}': jti={jwt_default_claims['jti']}, "
+            f"sub={jwt_default_claims['sub']}, aud={jwt_default_claims['aud']}, exp={jwt_default_claims['exp']}"
         )
 
         # Serialize the response using the response serializer
