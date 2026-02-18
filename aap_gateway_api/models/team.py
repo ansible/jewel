@@ -9,6 +9,9 @@ from aap_gateway_api.models.mixins import UsersMembersMixin
 
 
 class Team(UsersMembersMixin, AbstractTeam, AuditableModel):
+    # Enable audit log for this model
+    audit_log_enabled = True
+
     class Meta(AbstractTeam.Meta):
         app_label = 'aap_gateway_api'
         permissions = [('member_team', 'Has all permissions granted to this team')]

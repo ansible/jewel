@@ -10,6 +10,9 @@ from aap_gateway_api.models.mixins import UsersMembersMixin
 
 
 class Organization(UsersMembersMixin, AbstractOrganization, AuditableModel):
+    # Enable audit log for this model
+    audit_log_enabled = True
+
     class Meta:
         app_label = 'aap_gateway_api'
         permissions = [('member_organization', 'User is a member of this organization')]
