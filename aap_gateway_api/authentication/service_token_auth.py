@@ -58,6 +58,9 @@ class ServiceTokenAuthentication(BaseAuthentication):
             service = token_data["service_cluster"]
             payload = token_data["token_data"]["payload"]
 
+            # Attach service_cluster to request so downstream views can check service authorization.
+            request.service_cluster = service
+
             if self.is_user_authorized(request, user, service, payload):
                 logger.warning(f"User is authorized to access {request.path}.")
                 return (user, SERVICE_TOKEN_AUTH_STRING)

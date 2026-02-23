@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import jwt
-from ansible_base.lib.logging import log_auth_event
+from ansible_base.lib.logging import log_auth_event, log_auth_warning
 from ansible_base.lib.utils.response import get_fully_qualified_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuser
@@ -14,6 +14,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 
+from aap_gateway_api.models import DefaultServiceType
 from aap_gateway_api.permissions.service_token_only_permission import ServiceTokenAuthOnly
 from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key, get_jwt_ttl_with_skew
 from aap_gateway_api.utils.preferences import get_preference_value
@@ -24,6 +25,12 @@ logger = logging.getLogger("aap.gateway.views.workload_identity_tokens")
 SCOPE_REGISTRY = {
     AutomationControllerJobScope.name: AutomationControllerJobScope,
 }
+
+SCOPE_SERVICE_AUTHORIZATION = {
+    AutomationControllerJobScope.name: DefaultServiceType.CONTROLLER.value,
+}
+
+WIT_REQUEST_REJECTED_MSG = "Workload identity token request rejected: %s"
 
 
 def _validate_claims_for_scope(scope_class, claims: dict) -> set[str]:
@@ -80,16 +87,31 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
 
         # [AAP-62528] Check that the requested scope is valid against the well-known oidc GW endpoints.
 
-        # Get scope class and validate that claims align with the specified scope
-        error_msg = None
+        # Validate scope exists
         scope_class = SCOPE_REGISTRY.get(scope)
         if scope_class is None:
             error_msg = f"Unknown scope: {scope}"
-        elif invalid_claims := _validate_claims_for_scope(scope_class, workload_claims):
-            error_msg = f"Invalid claims for scope '{scope}': {', '.join(sorted(invalid_claims))}"
+            logger.warning(WIT_REQUEST_REJECTED_MSG, error_msg)
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
-        if error_msg:
-            logger.warning("Workload identity token request rejected: %s", error_msg)
+        # Validate service is authorized for scope (only applies to service token authentication).
+        # Non-service-authenticated requests (e.g., superusers) will not have a service_cluster
+        # attribute and bypass this check; their access is governed by the permission classes.
+        service_cluster = getattr(request, 'service_cluster', None)
+        if service_cluster:
+            service_type_name = service_cluster.service_type.name
+            if SCOPE_SERVICE_AUTHORIZATION.get(scope) != service_type_name:
+                error_msg = f"Service '{service_type_name}' is not authorized for scope '{scope}'"
+                log_auth_warning(
+                    f"Workload identity token request rejected: {error_msg} "
+                    f"(service_id: {service_cluster.service_id}, service_cluster: {service_cluster.name})"
+                )
+                return Response({"error": error_msg}, status=status.HTTP_403_FORBIDDEN)
+
+        # Validate claims align with scope
+        if invalid_claims := _validate_claims_for_scope(scope_class, workload_claims):
+            error_msg = f"Invalid claims for scope '{scope}': {', '.join(sorted(invalid_claims))}"
+            logger.warning(WIT_REQUEST_REJECTED_MSG, error_msg)
             return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
         # Fetch the gateway common private key for signing the JWT

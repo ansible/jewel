@@ -1,10 +1,32 @@
+import logging
+from datetime import UTC, datetime, timedelta
+from unittest import mock
+
 import jwt
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.resource_registry.models import service_id
 from rest_framework import status
+from rest_framework.test import APIClient
 
 from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key, get_jwt_ttl_with_skew
 from aap_gateway_api.utils.preferences import get_preference_value
+
+
+def _create_service_client(user, service_cluster):
+    """Helper to create an authenticated service client."""
+    service_cluster.service_id = service_id()
+    service_cluster.save()
+    key = service_cluster.generate_key()
+
+    payload = {
+        "sub": str(user.resource.ansible_id),
+        "iss": str(service_cluster.service_id),
+        "exp": datetime.now(tz=UTC) + timedelta(seconds=60),
+    }
+
+    token = jwt.encode(payload, key.secret, key.algorithm)
+    return APIClient(headers={"X-ANSIBLE-SERVICE-AUTH": token})
 
 
 @pytest.fixture
@@ -271,6 +293,38 @@ class TestWorkloadIdentityTokensScopeValidation:
         assert reserved_claim in response.data["error"]
 
 
+class TestWorkloadIdentityTokensServiceAuthorization:
+
+    def test_authorized_service_can_request_scope(self, user, service_cluster_controller, wit_url, valid_payload, ensure_jwt_keys):
+        """Controller service can request controller scope."""
+        client = _create_service_client(user, service_cluster_controller)
+        response = client.post(wit_url, valid_payload, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert "jwt" in response.data
+
+    @pytest.mark.parametrize(
+        "service_type",
+        [
+            pytest.param("eda", id="eda_service"),
+            pytest.param("gateway", id="gateway_service"),
+            pytest.param("hub", id="hub_service"),
+        ],
+    )
+    def test_unauthorized_service_cannot_request_scope(self, user, service_type, wit_url, valid_payload, request):
+        """Unauthorized services cannot request controller scope."""
+        service_cluster = request.getfixturevalue(f"service_cluster_{service_type}")
+        client = _create_service_client(user, service_cluster)
+        response = client.post(wit_url, valid_payload, format="json")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.data["error"] == f"Service '{service_type}' is not authorized for scope 'aap_controller_automation_job'"
+
+    def test_superuser_bypasses_service_authorization(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+        """Superuser (non-service auth) can request any scope without service authorization check."""
+        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert "jwt" in response.data
+
+
 class TestWorkloadIdentityTokensHTTPMethods:
     """Tests to verify only POST is allowed."""
 
@@ -293,3 +347,30 @@ class TestWorkloadIdentityTokensHTTPMethods:
         """DELETE method is not allowed."""
         response = admin_api_client.delete(wit_url)
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+class TestWorkloadIdentityTokensLogging:
+    """Tests for logging during validation."""
+
+    def test_unknown_scope_logs_rejection(self, caplog, admin_api_client, wit_url, valid_payload):
+        valid_payload["scope"] = "unknown_scope"
+        with caplog.at_level(logging.WARNING, logger="aap.gateway.views.workload_identity_tokens"):
+            admin_api_client.post(wit_url, valid_payload, format="json")
+            assert "Workload identity token request rejected: Unknown scope: unknown_scope" in caplog.text
+
+    def test_unauthorized_service_logs_audit_details(self, user, service_cluster_eda, wit_url, valid_payload):
+        client = _create_service_client(user, service_cluster_eda)
+        with mock.patch("aap_gateway_api.views.api.v1.workload_identity_tokens.log_auth_warning") as log_auth_warning:
+            client.post(wit_url, valid_payload, format="json")
+            log_auth_warning.assert_called_once()
+            log_message = log_auth_warning.call_args[0][0]
+            assert "Service 'eda' is not authorized" in log_message
+            assert f"service_id: {service_cluster_eda.service_id}" in log_message
+            assert f"service_cluster: {service_cluster_eda.name}" in log_message
+
+    def test_invalid_claims_logs_rejection(self, caplog, admin_api_client, wit_url, valid_payload):
+        valid_payload["claims"]["invalid_claim"] = "value"
+        with caplog.at_level(logging.WARNING, logger="aap.gateway.views.workload_identity_tokens"):
+            admin_api_client.post(wit_url, valid_payload, format="json")
+            assert "Workload identity token request rejected:" in caplog.text
+            assert "invalid_claim" in caplog.text
