@@ -358,7 +358,6 @@ ANSIBLE_BASE_AUTH_AUDIT_LOGGER_NAME = 'aap.auth_audit'
 ANSIBLE_BASE_AUTHENTICATOR_CLASS_PREFIXES = [
     "ansible_base.authentication.authenticator_plugins",
 ]
-ANSIBLE_BASE_AUTHENTICATION_LOCAL_FALLBACK_AUTHENTICATORS = ["aap_gateway_api.authentication.fallbacks.controller"]
 ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {'view': 'is_platform_auditor'}
 ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'platform_auditor': {'name': 'Platform Auditor', 'shortname': 'sys_auditor'},
