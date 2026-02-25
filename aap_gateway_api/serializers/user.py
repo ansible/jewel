@@ -66,7 +66,6 @@ class UserSerializer(CommonUserSerializer):
     )
 
     is_platform_auditor = serializers.BooleanField(read_only=True)
-    use_controller_password = serializers.BooleanField(required=False, read_only=True)
 
     def __init__(self, instance=None, data=empty, **kwargs):
         super().__init__(instance, data, **kwargs)
@@ -91,9 +90,8 @@ class UserSerializer(CommonUserSerializer):
             'authenticator_uid',
             'associated_authenticators',
             'managed',
-            "use_controller_password",
         ]
-        read_only_fields = ["last_login", "is_platform_auditor", "use_controller_password", "last_login_from"]
+        read_only_fields = ["last_login", "is_platform_auditor", "last_login_from"]
 
     def _add_deprecation_warning(self, field_name, message):
         """Add a deprecation warning for a field if not already added."""

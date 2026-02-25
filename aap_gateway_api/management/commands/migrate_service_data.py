@@ -18,7 +18,6 @@ from django.db import models, transaction
 from aap_gateway_api.models import ServiceAPIRoute, ServiceType
 from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 from aap_gateway_api.models.service_type import DefaultServiceType, get_service_type_name
-from aap_gateway_api.models.user import password_is_usable
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
@@ -723,55 +722,8 @@ class Command(BaseCommand):
             # determine the resource to use in Gateway
             if create_gateway_resource:
                 Resource.create_resource(resource_type, upstream_resource["resource_data"], **resource_creation_kwargs)
-                if (
-                    resource_context["type_name"] == "shared.user"
-                    and self.client.service.service_cluster.service_type.name == DefaultServiceType.CONTROLLER.value
-                ):
-                    self._set_use_controller_password_flag(upstream_resource)
 
             self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
-
-    def _correct_users_use_controller_password(self, resource_type_name: str) -> None:
-        """
-        If we're operating against controller and dealing with shared.users correct
-        the state of the gateway users' use_controller_password which may have been
-        left in an incorrect state as a consequence of multiple upgrades and the users
-        not having logged in between one upgrade and the next.
-        """
-        # A migration following the progression of 2.4 to 2.5 to 2.6 can leave
-        # a shared.user in a situation where they cannot log in on 2.6.
-        # This only happens in the situation where a 2.4 deployment was upgraded
-        # to 2.5 and the user never logged in to 2.5.
-        #
-        # Any user on controller which has the service id of gateway may be in the
-        # above state.  We will correct, if necessary, the gateway user's ability
-        # to use its controller's password.
-        #
-        # We can't handle correcting this situation as part of the agnostic
-        # migration processing as that excludes anything that does not match
-        # the upstream service's service id.
-
-        if self.client.service.service_cluster.service_type.name == DefaultServiceType.CONTROLLER.value and resource_type_name == "shared.user":
-            # Filter for resources with gateway's service id.
-            api_call_filters = {
-                "service_id": str(service_id()),
-                "is_partially_migrated": "false",
-                "content_type__resource_type__name": resource_type_name,
-            }
-
-            page = 1
-            while True:
-                data = self.client.list_resources(filters={**api_call_filters, "page": page}).json()
-
-                for user_item in data["results"]:
-                    if user_item["name"] == settings.SYSTEM_USERNAME:
-                        continue
-
-                    self._set_gateway_user_use_controller_password_flag(user_item["name"])
-
-                if not data.get("next"):
-                    break
-                page += 1
 
     """
     Before migration, we need to send requests to upstream services and acquire resources data.
@@ -842,9 +794,6 @@ class Command(BaseCommand):
             "LocalResourceModel": resource_type.content_type.model_class(),
         }
 
-        # Correct users' use_controller_password, if appropriate.
-        self._correct_users_use_controller_password(resource_type_name)
-
         # Each resource that gets updated in the gateway will change the service ID to Gateway's (except for 'shared.user'), and
         # will cause the migrated resources to be filtered out of the server response.
         # 'shared.user' resource type can also be filtered out by setting the 'is_partially_migrated' flag to true
@@ -868,40 +817,6 @@ class Command(BaseCommand):
 
             for upstream_resource_item in results:
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
-
-    def _set_gateway_user_use_controller_password_flag(self, username: str) -> None:
-        gateway_user = self._get_gateway_user(username)
-        if gateway_user is None:
-            # User was not updated as expected
-            self.stdout.write(f"Gateway user '{username}' was not updated with 'use_controller_password' flag")
-            return
-
-        # As this code is only invoked when dealing with a shared.user involving controller
-        # if the user meets the following, inclusive, conditions:
-        #   - isn't already marked as using the controller password
-        #   - the user has never logged in
-        #   - the user's password is not usable
-        # we mark it to use the controller password.
-        #
-        # Note that if, prior to upgrade to 2.6, the controller user
-        # account was disabled marking the user to use the controller
-        # password simply results in an attempt to use the disabled
-        # password from controller.  I.e., the disabling of the user
-        # account remains in force.
-        self.stdout.write(f"Gateway user {gateway_user}")
-        self.stdout.write(f"\t use controller password {gateway_user.use_controller_password}")
-        self.stdout.write(f"\t last login {gateway_user.last_login}")
-        self.stdout.write(f"\t password {password_is_usable(gateway_user.password)}")
-        if not gateway_user.use_controller_password and not gateway_user.last_login and not password_is_usable(gateway_user.password):
-            gateway_user.use_controller_password = True
-            gateway_user.save(update_fields=["use_controller_password"])
-            self.stdout.write(f"Set use_controller_password flag for Gateway user '{username}'")
-
-    def _set_use_controller_password_flag(self, upstream_resource: Dict[str, Any]) -> Dict[str, Any]:
-        self._set_gateway_user_use_controller_password_flag(
-            upstream_resource["resource_data"]["username"],
-        )
-        return upstream_resource
 
     def _get_gateway_user(self, username: str) -> Optional[AbstractUser]:
         """Get Gateway user by username, returning None if not found."""

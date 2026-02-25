@@ -141,18 +141,6 @@ class TestUserModel:
             assert managed_user not in all_users
 
     @pytest.mark.parametrize(
-        "use_controller_password,expected_flag",
-        [
-            (False, False),
-            (True, True),
-        ],
-    )
-    def test_use_controller_password_flag(self, django_user_model, use_controller_password, expected_flag):
-        """Test that use_controller_password flag works correctly"""
-        user = django_user_model.objects.create_user(username=f"controller_user_{use_controller_password}", use_controller_password=use_controller_password)
-        assert user.use_controller_password == expected_flag
-
-    @pytest.mark.parametrize(
         "password_input,should_be_usable,test_username",
         [
             ("validpassword", True, "valid_pass_user"),
