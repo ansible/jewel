@@ -1,8 +1,10 @@
 import copy
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
+import requests
 from ansible_base.lib.utils.validation import to_python_boolean
 from ansible_base.resource_registry.rest_client import ResourceAPIClient as DABResourceAPIClient
 from ansible_base.resource_registry.rest_client import ResourceRequestBody as DABResourceRequestBody
@@ -96,34 +98,95 @@ class AllServicesClient(GWResourceAPIClient):
         cp.callback = callback
         return cp
 
-    # This function should be async, but that currently isn't possible with the requests library. Some options to
-    # consider here for the future are: 1. switch to something like aiohttp, 2. use async.to_thread and run each
-    # request in a thread pool, 3. add a tasking system to gateway.
+    def _make_service_request(self, service, method: str, path: str, data: dict = None, params: dict = None, jwt: str = None):
+        """Execute request for a single service (runs in thread pool)"""
+        # Build URL for this specific service (avoid mutating shared self.base_url)
+        url = f'{self.get_url_for_service(service)}{path.lstrip("/")}'
+        logger.info(f"Making {method} request to {url}.")
+
+        # Build request kwargs
+        # When JWT is passed in (parallel execution), build auth kwargs manually to avoid
+        # calling self.jwt property in multiple threads. Otherwise use parent's logic.
+        if jwt:
+            auth_kwargs = {"headers": {self.header_name: jwt}}
+            if not self.wait_for_response:
+                auth_kwargs["timeout"] = (5, self.read_timeout)
+        else:
+            auth_kwargs = {**self.requests_auth_kwargs}
+
+        kwargs = {
+            **auth_kwargs,
+            "method": method,
+            "url": url,
+            "verify": self.verify_https,
+        }
+
+        if data:
+            kwargs["json"] = data
+        if params:
+            kwargs["params"] = params
+
+        # Execute request with appropriate error handling
+        try:
+            resp = requests.request(**kwargs)
+            logger.debug(f"Response status code from {url}: {resp.status_code}")
+            return service.pk, resp
+        except Timeout as e:
+            logger.error(f"Resource client request timeout for {url} - {type(e).__name__}")
+            if self.wait_for_response:
+                raise
+            return service.pk, None
+
+    # Executes requests in parallel using ThreadPoolExecutor to improve performance when
+    # making requests to multiple services simultaneously.
     def _make_request(
         self,
         method: str,
         path: str,
         data: dict = None,
         params: dict = None,
-    ) -> Response:
+    ) -> dict[int, Response | None]:
         from aap_gateway_api.models import ServiceAPIRoute
 
         responses = {}
         svc_qs = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
         if self.service_filter:
             svc_qs = svc_qs.filter(**self.service_filter)
-        for service in svc_qs:
-            self.base_url = self.get_url_for_service(service)
-            if self.wait_for_response:
-                responses[service.pk] = super()._make_request(method, path, data, params)
-            else:
+
+        # Evaluate queryset once to avoid lazy evaluation issues in threads
+        services = list(svc_qs)
+
+        # Early return if no services to process
+        if not services:
+            return responses
+
+        # Prefetch JWT to avoid race conditions with multiple threads calling refresh_jwt()
+        jwt_token = self.jwt
+
+        # Execute all service requests in parallel
+        # Cap max_workers to avoid excessive thread creation
+        max_workers = min(len(services), 10)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(self._make_service_request, svc, method, path, data, params, jwt_token): svc for svc in services}
+
+            for future in as_completed(futures):
+                service = futures[future]
                 try:
-                    responses[service.pk] = super()._make_request(method, path, data, params)
+                    _, response = future.result()
+                    responses[service.pk] = response
                 except Timeout as e:
-                    logger.error(f"Resource client request timeout for {self.base_url} - {type(e).__name__}")
+                    # Re-raise timeout if we're supposed to wait for responses
+                    if self.wait_for_response:
+                        raise
+                    logger.error(f"Resource client request timeout for service {service.pk}: {type(e).__name__}")
+                    responses[service.pk] = None
+                except Exception as e:
+                    # Log the error but continue processing other services
+                    logger.exception(f"Error processing request for service {service.pk}: {e}")
                     responses[service.pk] = None
 
-            if self.callback:
-                self.callback(service, responses[service.pk])
+                # Call callback after storing response, even if there was an exception
+                if self.callback:
+                    self.callback(service, responses[service.pk])
 
         return responses

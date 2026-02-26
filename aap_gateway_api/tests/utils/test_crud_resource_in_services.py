@@ -1,7 +1,8 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
+from requests.exceptions import Timeout
 
 from aap_gateway_api.models import Organization, ServiceAPIRoute, Team, User
 from aap_gateway_api.utils.resources_client import AllServicesClient
@@ -147,3 +148,126 @@ def test_teams_are_updated(
     assert response.status_code == 204
 
     _assert_resource_deleted(resource, patched_resource_client, admin_user)
+
+
+@pytest.mark.django_db
+def test_all_services_client_with_service_filter(
+    simulated_controller_resource_api,
+    simmulated_hub_resource_api,
+    simulated_eda_resource_api,
+    admin_user,
+):
+    """Test that service_filter parameter correctly filters services"""
+    # Get one specific service to filter on
+    controller_service = ServiceAPIRoute.objects.filter(service_cluster__service_type__name="controller").first()
+    assert controller_service is not None
+
+    client = PatchedAllServicesClient(user=admin_user, service_filter={"service_cluster__service_type__name": "controller"})
+
+    # Make a request with filtering enabled
+    with patch.object(client, '_make_service_request') as mock_request:
+        mock_request.return_value = (controller_service.pk, MagicMock(status_code=200))
+        client._make_request("GET", "/test/")
+
+        # Should only be called once (for controller, not hub or eda)
+        assert mock_request.call_count == 1
+
+
+@pytest.mark.django_db
+def test_all_services_client_timeout_handling(
+    simulated_controller_resource_api,
+    simmulated_hub_resource_api,
+    simulated_eda_resource_api,
+    admin_user,
+):
+    """Test that timeout exceptions are handled when wait_for_response=False"""
+    client = PatchedAllServicesClient(user=admin_user, wait_for_response=False)
+
+    # Mock requests.request to raise a Timeout
+    with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
+        mock_request.side_effect = Timeout("Request timed out")
+
+        responses = client._make_request("GET", "/test/")
+
+        # Should return None for all services that timed out
+        assert all(response is None for response in responses.values())
+        # Should have attempted all services
+        assert len(responses) == ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway").count()
+
+
+@pytest.mark.django_db
+def test_all_services_client_timeout_raises_when_wait_for_response_true(
+    simulated_controller_resource_api,
+    simmulated_hub_resource_api,
+    simulated_eda_resource_api,
+    admin_user,
+):
+    """Test that timeout exceptions are raised when wait_for_response=True"""
+    client = PatchedAllServicesClient(user=admin_user, wait_for_response=True)
+
+    # Mock both JWT property and requests.request to isolate the timeout behavior
+    with patch.object(type(client), 'jwt', new_callable=lambda: MagicMock(return_value="fake-jwt-token")):
+        with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
+            mock_request.side_effect = Timeout("Request timed out")
+
+            # Should raise the Timeout exception
+            with pytest.raises(Timeout):
+                client._make_request("GET", "/test/")
+
+
+@pytest.mark.django_db
+def test_all_services_client_with_callback(
+    simulated_controller_resource_api,
+    simmulated_hub_resource_api,
+    simulated_eda_resource_api,
+    admin_user,
+):
+    """Test that callback is invoked for each service response"""
+    callback_calls = []
+
+    def test_callback(service, response):
+        callback_calls.append((service.pk, response))
+
+    client = PatchedAllServicesClient(user=admin_user).with_callback(test_callback)
+
+    # Mock the actual request execution
+    with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
+        mock_response = MagicMock(status_code=200)
+        mock_request.return_value = mock_response
+
+        responses = client._make_request("GET", "/test/")
+
+        # Callback should have been called for each service
+        expected_count = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway").count()
+        assert len(callback_calls) == expected_count
+        # Each callback should have received the service and response from the responses dict
+        # This matches the serial version behavior: callback(service, responses[service.pk])
+        # Some callbacks may receive None if the service request failed (which is expected behavior)
+        for service_pk, response in callback_calls:
+            # Verify the callback response matches what's in the responses dict
+            assert response == responses[service_pk], f"Callback response doesn't match stored response for service {service_pk}"
+            # Only check status_code if response is not None
+            if response is not None:
+                assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_all_services_client_exception_handling(
+    simulated_controller_resource_api,
+    simmulated_hub_resource_api,
+    simulated_eda_resource_api,
+    admin_user,
+):
+    """Test that exceptions in thread pool are caught and logged"""
+    client = PatchedAllServicesClient(user=admin_user)
+
+    # Mock requests.request to raise a generic exception
+    with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
+        mock_request.side_effect = Exception("Something went wrong")
+
+        responses = client._make_request("GET", "/test/")
+
+        # Should return None for all services that raised exceptions
+        assert all(response is None for response in responses.values())
+        # Should have attempted all services
+        assert len(responses) == ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway").count()
