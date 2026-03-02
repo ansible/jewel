@@ -43,6 +43,9 @@ def password_is_usable(password):
 
 
 class User(AbstractDABUser, CommonModel, AuditableModel):
+    # Enable audit log for this model
+    audit_log_enabled = True
+
     ignore_relations = [
         'groups',  # not using the auth app stuff, see Team model
         'user_permissions',  # not using auth app permissions
