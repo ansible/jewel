@@ -84,6 +84,7 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
         workload_claims = validated_data["claims"]
         audience = validated_data["audience"]
         scope = validated_data["scope"]
+        workload_ttl_seconds = validated_data.get("workload_ttl_seconds")
 
         # [AAP-62528] Check that the requested scope is valid against the well-known oidc GW endpoints.
 
@@ -117,11 +118,21 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
         # Fetch the gateway common private key for signing the JWT
         gw_private_key = get_jwt_rsa_key()
 
+        # Workload TTL takes priority; serializer enforces min_value=1 and max_value=86400 when present.
+        base_ttl = workload_ttl_seconds or get_preference_value("workload_identity", "jwt_default_ttl_seconds", encrypted=False)
+        # Always add clock skew offset to ensure token validity across time drift
+        jwt_ttl_seconds = get_jwt_ttl_with_skew(base_ttl)
+
+        logger.debug(
+            "JWT TTL calculated: workload_ttl=%s, base_ttl=%s, final_ttl_with_skew=%s",
+            workload_ttl_seconds,
+            base_ttl,
+            jwt_ttl_seconds,
+        )
+        jwt_issuance_timestamp = datetime.now(tz=UTC).timestamp()
         # WIT issues a JWT with exp claim set to current time plus the configured TTL preference
         # WIT sets other standard claims https://datatracker.ietf.org/doc/html/rfc7519#section-4.1 to reasonable values
         # WIT issues a JWT with the iss claim matching the OIDC Discovery configuration in AAP-43413
-        jwt_ttl_seconds = get_jwt_ttl_with_skew(get_preference_value("workload_identity", "jwt_default_ttl_seconds", encrypted=False))
-        jwt_issuance_timestamp = datetime.now(tz=UTC).timestamp()
         jwt_default_claims = {
             "jti": str(uuid4()),
             "iss": get_fully_qualified_url("oauth2_provider:oauth_authorization_root_view"),
@@ -135,8 +146,9 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
         signed_jwt = jwt.encode({**workload_claims, **jwt_default_claims}, gw_private_key, algorithm="RS256")
 
         log_auth_event(
-            f"Workload identity token issued for scope '{scope}': jti={jwt_default_claims['jti']}, "
-            f"sub={jwt_default_claims['sub']}, aud={jwt_default_claims['aud']}, exp={jwt_default_claims['exp']}"
+            f"Workload identity token issued to user '{request.user}' for scope '{scope}': "
+            f"jti={jwt_default_claims['jti']}, sub={jwt_default_claims['sub']}, "
+            f"aud={jwt_default_claims['aud']}, exp={jwt_default_claims['exp']}"
         )
 
         # Serialize the response using the response serializer

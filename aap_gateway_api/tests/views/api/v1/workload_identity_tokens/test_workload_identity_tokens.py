@@ -374,3 +374,57 @@ class TestWorkloadIdentityTokensLogging:
             admin_api_client.post(wit_url, valid_payload, format="json")
             assert "Workload identity token request rejected:" in caplog.text
             assert "invalid_claim" in caplog.text
+
+
+class TestWorkloadAwareTTL:
+    """Tests for workload-aware TTL calculation with two-priority fallback."""
+
+    def _verify_jwt_ttl(self, jwt_token, expected_ttl):
+        """Helper to verify JWT TTL matches expected value."""
+        decoded = jwt.decode(jwt_token, options={"verify_signature": False})
+        actual_ttl = int(decoded['exp'] - decoded['iat'])
+        assert actual_ttl == expected_ttl, f"Expected TTL {expected_ttl}s, got {actual_ttl}s"
+        return decoded
+
+    def test_workload_ttl_zero_is_rejected(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+        """Test that workload_ttl_seconds=0 is rejected by the serializer (min_value=1)."""
+        payload = {**valid_payload, "workload_ttl_seconds": 0}
+        response = admin_api_client.post(wit_url, data=payload, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.parametrize(
+        "workload_ttl, platform_default, expected_ttl",
+        [
+            pytest.param(None, 600, 660, id="null_uses_default"),
+            pytest.param("OMIT", 450, 510, id="omitted_uses_default"),
+        ],
+    )
+    def test_workload_ttl_priority_2_uses_platform_fallback(
+        self, admin_api_client, wit_url, valid_payload, preference_manager, ensure_jwt_keys, workload_ttl, platform_default, expected_ttl
+    ):
+        """Test Priority 2: When workload_ttl_seconds is null or omitted, use platform default."""
+        with preference_manager.set("workload_identity", "jwt_default_ttl_seconds", platform_default):
+            payload = {**valid_payload}
+            if workload_ttl != "OMIT":
+                payload["workload_ttl_seconds"] = workload_ttl
+
+            response = admin_api_client.post(wit_url, data=payload, format='json')
+            assert response.status_code == status.HTTP_200_OK
+            # Verify TTL: platform default + clock skew (60)
+            self._verify_jwt_ttl(response.data['jwt'], expected_ttl)
+
+    @pytest.mark.parametrize(
+        "workload_ttl, expected_ttl",
+        [
+            pytest.param(1, 61, id="minimum-workload-ttl"),
+            pytest.param(120, 180, id="short-workload-ttl"),
+            pytest.param(7200, 7260, id="large-workload-ttl"),
+        ],
+    )
+    def test_clock_skew_always_applied(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys, workload_ttl, expected_ttl):
+        """Test that 60s clock skew offset is always added to the workload TTL."""
+        payload = {**valid_payload, "workload_ttl_seconds": workload_ttl}
+        response = admin_api_client.post(wit_url, data=payload, format='json')
+
+        assert response.status_code == status.HTTP_200_OK
+        self._verify_jwt_ttl(response.data['jwt'], expected_ttl)
