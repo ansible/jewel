@@ -2,9 +2,11 @@ import os
 
 from fakeredis import FakeConnection
 
-from aap_gateway_api.settings import *  # noqa: F403
+# Set feature flag BEFORE importing settings so oidc_provider.py gets loaded
+os.environ['GATEWAY_FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED'] = 'true'
 
-# Enable OIDC workload identity feature for tests
+from aap_gateway_api.settings import *  # noqa: F403, E402
+
 FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED = True
 
 # noqa: F405

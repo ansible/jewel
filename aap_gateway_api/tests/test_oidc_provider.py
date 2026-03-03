@@ -4,8 +4,14 @@ import pytest
 from ansible_base.lib.utils.response import get_relative_url
 from rest_framework import status
 
-from aap_gateway_api.oidc_provider import OIDC_JWT_TTL_CLOCK_SKEW_SECONDS, LazyPrivateKey
+from aap_gateway_api.authentication.workload_scopes_backend import WorkloadIdentityScopesBackend
+from aap_gateway_api.oidc_provider import (
+    OIDC_JWT_TTL_CLOCK_SKEW_SECONDS,
+    LazyPrivateKey,
+)
+from aap_gateway_api.preferences.registry import gateway_preference_registry
 from aap_gateway_api.utils.jwt_token import get_jwt_ttl_with_skew
+from aap_gateway_api.views.api.v1.workload_identity_tokens import SCOPE_REGISTRY
 
 
 class TestClockSkewConstant:
@@ -170,8 +176,6 @@ class TestTTLConfigurationIntegration:
 
     def test_constant_and_preference_work_together(self):
         """Verify constant and preference can be imported and used together (manual approach)"""
-        from aap_gateway_api.preferences.registry import gateway_preference_registry
-
         clock_skew = OIDC_JWT_TTL_CLOCK_SKEW_SECONDS
 
         # Get fallback TTL from the preference registry
@@ -187,3 +191,56 @@ class TestTTLConfigurationIntegration:
         calculated_ttl = fallback_ttl + clock_skew
 
         assert calculated_ttl == 360  # 300 + 60
+
+
+class TestWorkloadIdentityScopesBackend:
+    def test_includes_all_registered_scopes(self):
+        backend = WorkloadIdentityScopesBackend()
+        scopes = backend.get_all_scopes()
+
+        assert isinstance(scopes, dict)
+        for scope_name, scope_class in SCOPE_REGISTRY.items():
+            assert scope_name in scopes
+            assert scopes[scope_name] == scope_class.description
+
+    def test_get_available_scopes_returns_scope_names(self):
+        backend = WorkloadIdentityScopesBackend()
+        scopes = backend.get_available_scopes()
+
+        assert isinstance(scopes, list)
+        for scope_name in SCOPE_REGISTRY.keys():
+            assert scope_name in scopes
+
+
+class TestOIDCDiscoveryEndpoint:
+    @pytest.fixture
+    def discovery_url(self):
+        return get_relative_url('oauth2_provider:oidc-connect-discovery-info')
+
+    def test_scopes_supported_includes_workload_identity_scopes(self, admin_api_client, discovery_url, ensure_jwt_keys):
+        response = admin_api_client.get(discovery_url)
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        assert 'aap_controller_automation_job' in data['scopes_supported']
+
+    @pytest.mark.parametrize(
+        "claim",
+        [
+            'sub',
+            'iss',
+            'aud',
+            'exp',
+            'iat',
+            'jti',
+            'aap_controller_job_name',
+            'aap_controller_organization_name',
+            'aap_controller_project_name',
+            'aap_controller_job_template_name',
+        ],
+    )
+    def test_claims_supported_includes_workload_identity_claims(self, admin_api_client, discovery_url, ensure_jwt_keys, claim):
+        response = admin_api_client.get(discovery_url)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert claim in data['claims_supported']
