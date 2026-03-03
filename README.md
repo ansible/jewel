@@ -125,7 +125,7 @@ Keycloak can be used as both a SAML and OIDC provider and can be used to test ga
 
 _Note_: If you are using M1 Mac, refer to building [keycloak image for M1](./docs/keycloak_on_m1.md) documentation.
 
-Once the containers come up a new port (8443 by default) should be exposed and the Keycloak interface should be running on that port. Connect to this through a url like `https://localhost:8443` to confirm that Keycloak has stared. If you wanted to login and look at Keycloak itself you could select the "Administration console" link and log into the UI the username/password set in the container_config.yml file. For more information about Keycloak and links to their documentation see their project at https://github.com/keycloak/keycloak.
+Once the containers come up a new port (8443 by default) should be exposed and the Keycloak interface should be running on that port. Connect to this through a url like `https://localhost:8443` to confirm that Keycloak has started. If you wanted to login and look at Keycloak itself you could select the "Administration console" link and log into the UI the username/password set in the container_config.yml file. For more information about Keycloak and links to their documentation see their project at https://github.com/keycloak/keycloak.
 
 #### Additional Configuration
 ```
