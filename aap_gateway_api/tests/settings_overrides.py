@@ -2,10 +2,16 @@ import os
 
 from fakeredis import FakeConnection
 
-# Set feature flag BEFORE importing settings so oidc_provider.py gets loaded
+# Set feature flag BEFORE importing settings so oidc_provider.py gets loaded.
+# It MUST be removed immediately after the import so it does not leak into
+# subprocesses (e.g. mock services launched by service-dependent tests).
+# The Django setting FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED (below) is what
+# the running test process actually reads at runtime.
 os.environ['GATEWAY_FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED'] = 'true'
 
 from aap_gateway_api.settings import *  # noqa: F403, E402
+
+del os.environ['GATEWAY_FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED']
 
 FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED = True
 
