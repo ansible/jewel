@@ -132,7 +132,7 @@ legacy_tox_ini = """
     allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
-        pytest
+        ./tools/scripts/run_tests.sh
     docker = db
     passenv = 
         ANSIBLE_GW_TEST_DB_HOST
@@ -146,7 +146,7 @@ legacy_tox_ini = """
     install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
-        pytest -n {env:PYTEST_NUM_PROCESSES:auto} --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=aap-gateway-test-results.xml {env:GATEWAY_TEST_DIRS:aap_gateway_api/tests} {posargs}
+        ./tools/scripts/run_tests.sh {posargs}
 
     [testenv:check]
     allowlist_externals =

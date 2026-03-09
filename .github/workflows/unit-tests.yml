@@ -43,27 +43,38 @@ jobs:
       matrix:
         django-version: ["4.2", "5.2"]
         batch:
-          - name: "Service-dependent tests"
-            python-version: "3.12"
-            processes: 1  # this is required to be single threaded because the mock service can't do parallelization at this time
-            test-filter:
-              aap_gateway_api/tests/management/test_migrate_resources.py
-              aap_gateway_api/tests/utils/test_crud_resource_in_services.py
-            artifact-suffix: "service"
-          - name: "Views tests"
+          # Views are split alphabetically by v1/ subdirectory name so both
+          # halves stay roughly balanced as new test dirs are added.  Anything
+          # under views/ that is NOT under views/api/v1/ (envoy, root-level
+          # test files, future api versions) falls into the "Non-views" batch.
+          - name: "Views A-R"
             python-version: "3.12"
             processes: auto
-            test-filter: aap_gateway_api/tests/views/
-            artifact-suffix: "views"
-          - name: "Remaining tests"
+            test-filter: >-
+              aap_gateway_api/tests/views/api/v1/[a-r]*/
+            artifact-suffix: "views-ar"
+          - name: "Views S-Z"
+            python-version: "3.12"
+            processes: auto
+            test-filter: >-
+              aap_gateway_api/tests/views/api/v1/[s-z]*/
+            artifact-suffix: "views-sz"
+          - name: "Non-views"
             python-version: "3.12"
             processes: auto
             test-filter: >-
               aap_gateway_api/tests/
-              --ignore=aap_gateway_api/tests/views/
+              --ignore-glob=aap_gateway_api/tests/views/api/v1/*/
               --ignore=aap_gateway_api/tests/management/test_migrate_resources.py
               --ignore=aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "remaining"
+          - name: "Service tests"
+            python-version: "3.12"
+            processes: auto
+            test-filter: >-
+              aap_gateway_api/tests/management/test_migrate_resources.py
+              aap_gateway_api/tests/utils/test_crud_resource_in_services.py
+            artifact-suffix: "services"
     steps:
       - uses: actions/checkout@v5
 
@@ -105,7 +116,10 @@ jobs:
         # Optimizations to make this fast:
         # -x testenv:$TOX_ENV.docker=  : Override docker config to empty, skipping DB container startup
         # --collect-only            : pytest only discovers tests, doesn't run them
-        # aap_gateway_api/tests/__init__.py : Collect just this one (empty) file for speed
+        # GATEWAY_TEST_DIRS=""      : Override tox default so only __init__.py is collected
+        # aap_gateway_api/tests/__init__.py : Contains a single placeholder test
+        env:
+          GATEWAY_TEST_DIRS: ""
         run: |
           tox -e ${{ steps.tox-env.outputs.name }} \
             -x testenv:${{ steps.tox-env.outputs.name }}.docker= \
@@ -129,6 +143,7 @@ jobs:
       - name: Run tests
         env:
           PYTEST_NUM_PROCESSES: ${{ matrix.batch.processes }}
+          GATEWAY_TEST_DIRS: ""
         run: |
           DJANGO_VERSION="${{ matrix.django-version }}"
           ARTIFACT_SUFFIX="${{ matrix.batch.artifact-suffix }}-django${DJANGO_VERSION/./}"
