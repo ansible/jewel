@@ -1,14 +1,13 @@
-from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from rest_framework import serializers
 
 from aap_gateway_api.models import DefaultServiceType, ServiceCluster, UIPluginRoute
-from aap_gateway_api.utils.formatting import normalize_comma_separated_list
+from aap_gateway_api.serializers.base_route import BaseRouteSerializer
 
 
-class UIPluginRouteSerializer(NamedCommonModelSerializer):
+class UIPluginRouteSerializer(BaseRouteSerializer):
     class Meta:
         model = UIPluginRoute
-        fields = NamedCommonModelSerializer.Meta.fields + [
+        fields = BaseRouteSerializer.Meta.fields + [
             'http_port',
             'service_cluster',
             'service_port',
@@ -23,9 +22,6 @@ class UIPluginRouteSerializer(NamedCommonModelSerializer):
         read_only_fields = ('gateway_path', 'service_path', 'enable_gateway_auth', 'is_internal_route')
 
     service_cluster = serializers.PrimaryKeyRelatedField(queryset=ServiceCluster.objects.exclude(service_type__name=DefaultServiceType.GATEWAY))
-
-    def validate_node_tags(self, value):
-        return normalize_comma_separated_list(value)
 
     def validate_ui_plugin_path(self, value):
         return value.strip('/')

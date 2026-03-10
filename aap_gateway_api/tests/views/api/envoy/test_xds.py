@@ -125,26 +125,27 @@ def test_xds_cluster_discover_service_health_checks_enabled(health_checks_enable
     assert bool("healthChecks" in response.data['resources'][0]) == health_checks_enabled
 
 
-def test_xds_health_check_params(admin_api_client, full_service_hierarchy_controller):
-    url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})
-    response = admin_api_client.patch(
-        url,
-        {
-            "health_check_timeout_seconds": 18,
-            "health_check_unhealthy_threshold": 29,
-            "health_check_healthy_threshold": 98,
-        },
-    )
-    assert response.status_code == 200
+def test_xds_health_check_params(admin_api_client, full_service_hierarchy_controller, preference_manager):
+    with preference_manager.set("proxy", "request_timeout", 10):
+        url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})
+        response = admin_api_client.patch(
+            url,
+            {
+                "health_check_timeout_seconds": 18,
+                "health_check_unhealthy_threshold": 29,
+                "health_check_healthy_threshold": 98,
+            },
+        )
+        assert response.status_code == 200
 
-    url = reverse("cds")
-    response = admin_api_client.post(url, data={})
-    assert response.status_code == 200
+        url = reverse("cds")
+        response = admin_api_client.post(url, data={})
+        assert response.status_code == 200
 
-    health_checks = response.data['resources'][0]['healthChecks'][0]
-    assert health_checks['timeout'] == '18s'
-    assert health_checks['unhealthyThreshold'] == 29
-    assert health_checks['healthyThreshold'] == 98
+        health_checks = response.data['resources'][0]['healthChecks'][0]
+        assert health_checks['timeout'] == '18s'
+        assert health_checks['unhealthyThreshold'] == 29
+        assert health_checks['healthyThreshold'] == 98
 
 
 def test_xds_cluster_discover_service_route_tags(admin_api_client, full_service_hierarchy_controller, http_port_factory, randname):

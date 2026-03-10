@@ -6,9 +6,11 @@ from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from ansible_base.resource_registry.models import service_id
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Max
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType
+from aap_gateway_api.utils.preferences import get_preference_value
 
 
 class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
@@ -187,6 +189,22 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
             return f"{self.service_type.logout_path}"
         else:
             return None
+
+    def get_effective_health_check_timeout_seconds(self):
+        # _max_route_timeout may be pre-populated as a queryset annotation by
+        # ServiceClusterViewSet.get_queryset() to avoid an N+1 query on list
+        # responses. When absent we fall back to a per-object aggregate.
+        if hasattr(self, '_max_route_timeout'):
+            max_route_timeout = self._max_route_timeout or 0
+        else:
+            max_route_timeout = (
+                self.routes.exclude(request_timeout_seconds__isnull=True).aggregate(max_timeout=Max('request_timeout_seconds'))['max_timeout']
+            ) or 0
+        return max(
+            self.health_check_timeout_seconds,
+            max_route_timeout,
+            get_preference_value('proxy', 'request_timeout'),
+        )
 
     @staticmethod
     def get_cluster_by_type(service_type: Union[ServiceType, str]):

@@ -4,13 +4,34 @@ from rest_framework.exceptions import ValidationError
 from aap_gateway_api.serializers.base_route import BaseRouteSerializer
 
 
+class MockServiceType:
+    def __init__(self, name="eda"):
+        self.name = name
+
+
+class MockServiceCluster:
+    def __init__(self, service_type_name="eda"):
+        self.service_type = MockServiceType(service_type_name)
+
+
 class MockInstance:
     """Mock instance for testing PATCH operations."""
 
-    def __init__(self, enable_gateway_auth=True, is_internal_route=False, enable_mtls=False):
+    def __init__(
+        self,
+        enable_gateway_auth=True,
+        is_internal_route=False,
+        enable_mtls=False,
+        service_cluster=None,
+        request_timeout_seconds=None,
+        idle_timeout_seconds=None,
+    ):
         self.enable_gateway_auth = enable_gateway_auth
         self.is_internal_route = is_internal_route
         self.enable_mtls = enable_mtls
+        self.service_cluster = service_cluster or MockServiceCluster()
+        self.request_timeout_seconds = request_timeout_seconds
+        self.idle_timeout_seconds = idle_timeout_seconds
 
 
 class TestBaseRouteSerializer:
@@ -98,7 +119,6 @@ class TestBaseRouteSerializer:
         attrs = {'enable_gateway_auth': True}
 
         result = serializer.validate(attrs)
-        # Should not raise an error about mTLS
         assert result is not None
 
     # PATCH operation tests (instance exists)
@@ -106,7 +126,7 @@ class TestBaseRouteSerializer:
         """Test PATCH trying to enable mTLS on instance that has gateway auth enabled."""
         instance = MockInstance(enable_gateway_auth=True, enable_mtls=False)
         serializer = BaseRouteSerializer(instance=instance)
-        attrs = {'enable_mtls': True}  # Only changing mTLS
+        attrs = {'enable_mtls': True}
 
         with pytest.raises(ValidationError) as exc_info:
             serializer.validate(attrs)
@@ -117,7 +137,7 @@ class TestBaseRouteSerializer:
         """Test PATCH trying to enable gateway auth on instance that has mTLS enabled."""
         instance = MockInstance(enable_gateway_auth=False, enable_mtls=True)
         serializer = BaseRouteSerializer(instance=instance)
-        attrs = {'enable_gateway_auth': True}  # Only changing gateway auth
+        attrs = {'enable_gateway_auth': True}
 
         with pytest.raises(ValidationError) as exc_info:
             serializer.validate(attrs)
@@ -128,7 +148,7 @@ class TestBaseRouteSerializer:
         """Test PATCH trying to enable internal route on instance without gateway auth."""
         instance = MockInstance(enable_gateway_auth=False, is_internal_route=False)
         serializer = BaseRouteSerializer(instance=instance)
-        attrs = {'is_internal_route': True}  # Only changing internal route
+        attrs = {'is_internal_route': True}
 
         with pytest.raises(ValidationError) as exc_info:
             serializer.validate(attrs)
@@ -139,7 +159,7 @@ class TestBaseRouteSerializer:
         """Test PATCH trying to disable gateway auth on an internal route."""
         instance = MockInstance(enable_gateway_auth=True, is_internal_route=True)
         serializer = BaseRouteSerializer(instance=instance)
-        attrs = {'enable_gateway_auth': False}  # Only changing gateway auth
+        attrs = {'enable_gateway_auth': False}
 
         with pytest.raises(ValidationError) as exc_info:
             serializer.validate(attrs)
@@ -198,7 +218,6 @@ class TestBaseRouteSerializer:
         with pytest.raises(ValidationError) as exc_info:
             serializer.validate(attrs)
 
-        # Should only have is_internal_route error since enable_mtls requires enable_gateway_auth=True
         assert 'is_internal_route' in exc_info.value.detail
 
     def test_no_validation_errors_with_all_flags_false(self):
@@ -217,9 +236,7 @@ class TestBaseRouteSerializer:
         serializer = BaseRouteSerializer()
         attrs = {'enable_gateway_auth': None, 'is_internal_route': None}
 
-        # None values should not trigger validation errors
         result = serializer.validate(attrs)
-        # Validation should pass without errors
         assert result is not None
 
     def test_empty_attrs_dict(self):
@@ -229,3 +246,113 @@ class TestBaseRouteSerializer:
 
         result = serializer.validate(attrs)
         assert result == {}
+
+    # request_timeout_seconds validation tests
+    @pytest.mark.parametrize(
+        "route_timeout,preference_value,should_fail",
+        [
+            (60, 30, False),
+            (30, 30, False),
+            (10, 30, True),
+            (None, 30, False),
+        ],
+        ids=[
+            "above_floor_passes",
+            "equal_to_floor_passes",
+            "below_floor_fails",
+            "null_passes",
+        ],
+    )
+    def test_request_timeout_seconds_validation(self, route_timeout, preference_value, should_fail, preference_manager):
+        with preference_manager.set('proxy', 'request_timeout', preference_value):
+            serializer = BaseRouteSerializer()
+            attrs = {
+                'enable_gateway_auth': True,
+                'request_timeout_seconds': route_timeout,
+            }
+
+            if should_fail:
+                with pytest.raises(ValidationError) as exc_info:
+                    serializer.validate(attrs)
+                assert 'request_timeout_seconds' in exc_info.value.detail
+            else:
+                result = serializer.validate(attrs)
+                assert result['request_timeout_seconds'] == route_timeout
+
+    def test_request_timeout_seconds_validation_on_patch(self, preference_manager):
+        with preference_manager.set("proxy", "request_timeout", 30):
+            instance = MockInstance(service_cluster=MockServiceCluster("eda"))
+            serializer = BaseRouteSerializer(instance=instance)
+            attrs = {'request_timeout_seconds': 10}
+
+            with pytest.raises(ValidationError) as exc_info:
+                serializer.validate(attrs)
+            assert 'request_timeout_seconds' in exc_info.value.detail
+
+    def test_request_timeout_seconds_without_value_skips_validation(self):
+        serializer = BaseRouteSerializer()
+        attrs = {'enable_gateway_auth': True}
+        result = serializer.validate(attrs)
+        assert 'request_timeout_seconds' not in result or result.get('request_timeout_seconds') is None
+
+    # idle_timeout_seconds validation tests
+    @pytest.mark.parametrize(
+        "route_idle,preference_value,should_fail",
+        [
+            (60, 15, False),
+            (15, 15, False),
+            (5, 15, True),
+            (None, 15, False),
+        ],
+        ids=[
+            "above_floor_passes",
+            "equal_to_floor_passes",
+            "below_floor_fails",
+            "null_passes",
+        ],
+    )
+    def test_idle_timeout_seconds_validation(self, route_idle, preference_value, should_fail, preference_manager):
+        with preference_manager.set('proxy', 'idle_timeout', preference_value):
+            serializer = BaseRouteSerializer()
+            attrs = {
+                'enable_gateway_auth': True,
+                'idle_timeout_seconds': route_idle,
+            }
+
+            if should_fail:
+                with pytest.raises(ValidationError) as exc_info:
+                    serializer.validate(attrs)
+                assert 'idle_timeout_seconds' in exc_info.value.detail
+            else:
+                result = serializer.validate(attrs)
+                assert result['idle_timeout_seconds'] == route_idle
+
+    def test_idle_timeout_seconds_validation_on_patch(self, preference_manager):
+        with preference_manager.set("proxy", "idle_timeout", 15):
+            instance = MockInstance(service_cluster=MockServiceCluster("eda"))
+            serializer = BaseRouteSerializer(instance=instance)
+            attrs = {'idle_timeout_seconds': 5}
+
+            with pytest.raises(ValidationError) as exc_info:
+                serializer.validate(attrs)
+            assert 'idle_timeout_seconds' in exc_info.value.detail
+
+    def test_both_timeouts_validated_simultaneously(self, preference_manager):
+        """Both request_timeout and idle_timeout errors are reported together."""
+        with preference_manager.set_multiple(
+            {
+                ('proxy', 'request_timeout'): 30,
+                ('proxy', 'idle_timeout'): 15,
+            }
+        ):
+            serializer = BaseRouteSerializer()
+            attrs = {
+                'enable_gateway_auth': True,
+                'request_timeout_seconds': 1,
+                'idle_timeout_seconds': 1,
+            }
+
+            with pytest.raises(ValidationError) as exc_info:
+                serializer.validate(attrs)
+            assert 'request_timeout_seconds' in exc_info.value.detail
+            assert 'idle_timeout_seconds' in exc_info.value.detail

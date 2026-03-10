@@ -1,7 +1,7 @@
 import pytest
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
-from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
+from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 from aap_gateway_api.models.service_node import ServiceNode
 
 
@@ -381,46 +381,26 @@ class TestRoute:
         assert cluster["dns_lookup_family"] == ServiceCluster.DNSLookupFamily.V4_ONLY
         assert cluster["type"] == ServiceCluster.DNSServiceDiscovery.LOGICAL_DNS
 
-    @pytest.mark.parametrize(
-        "service_type_name,expected_timeout,expected_idle_timeout",
-        [
-            ("lightspeed", "7200s", "120s"),  # Streaming service gets both timeouts
-            ("eda", "30s", None),  # Non-streaming service gets only request timeout
-        ],
-    )
     @pytest.mark.django_db
-    def test_xds_route_config_timeout_by_service_type(self, service_type_name, expected_timeout, expected_idle_timeout, preference_manager):
-        """Test that route timeout configuration varies by service type"""
-        # Set up all timeout preferences
+    def test_xds_route_config_always_emits_both_timeouts(self, service_cluster_eda, preference_manager):
+        """All routes emit both timeout and idle_timeout regardless of service type."""
         with preference_manager.set_multiple(
             {
                 ('proxy', 'request_timeout'): 30,
-                ('proxy', 'stream_idle_timeout'): 120,
-                ('proxy', 'max_stream_duration'): 7200,
+                ('proxy', 'idle_timeout'): 15,
             }
         ):
-            # Create service type and cluster
-            service_type, _ = ServiceType.objects.get_or_create(name=service_type_name)
-            service_cluster, _ = ServiceCluster.objects.get_or_create(name=service_type_name, service_type=service_type)
-
-            # Create route
             route = ServiceAPIRoute(
-                gateway_path=f'/api/{service_type_name}/',
+                gateway_path='/api/eda/',
                 service_path='/api/',
-                envoy_cluster_name=f'{service_type_name}-cluster',
-                service_cluster=service_cluster,
+                envoy_cluster_name='eda-cluster',
+                service_cluster=service_cluster_eda,
             )
 
             routes = route.get_xds_route_config()
             assert len(routes) == 1
-
-            # Check timeout configuration
-            assert routes[0]["route"]["timeout"] == expected_timeout
-
-            if expected_idle_timeout:
-                assert routes[0]["route"]["idle_timeout"] == expected_idle_timeout
-            else:
-                assert "idle_timeout" not in routes[0]["route"]
+            assert routes[0]["route"]["timeout"] == "30s"
+            assert routes[0]["route"]["idle_timeout"] == "15s"
 
     @pytest.mark.django_db
     def test_xds_route_config_enable_mtls(self, service_cluster_eda):
@@ -438,3 +418,225 @@ class TestRoute:
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=False)
         routes = route.get_xds_route_config()
         assert 'tls_context' not in routes[0]['match'].keys()
+
+
+class TestRouteRequestTimeout:
+    """Tests for per-route request_timeout_seconds and idle_timeout_seconds."""
+
+    @pytest.fixture
+    def http_port(self):
+        port = HTTPPort.objects.create(name="test-timeout-port", number=9999)
+        yield port
+        port.delete()
+
+    @pytest.mark.parametrize(
+        "route_timeout,preference_timeout,expected_timeout",
+        [
+            (600, 30, "600s"),
+            (None, 30, "30s"),
+            (10, 30, "30s"),
+            (30, 30, "30s"),
+        ],
+        ids=[
+            "route_above_preference_uses_route",
+            "route_null_uses_preference",
+            "route_below_preference_uses_preference",
+            "route_equal_to_preference_uses_preference",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_xds_route_config_request_timeout(self, route_timeout, preference_timeout, expected_timeout, service_cluster_eda, preference_manager):
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            route = ServiceAPIRoute(
+                gateway_path='/',
+                service_path='/path',
+                envoy_cluster_name='testing',
+                service_cluster=service_cluster_eda,
+                request_timeout_seconds=route_timeout,
+            )
+            routes = route.get_xds_route_config()
+            assert routes[0]["route"]["timeout"] == expected_timeout
+
+    @pytest.mark.parametrize(
+        "route_idle,preference_idle,expected_idle",
+        [
+            (60, 15, "60s"),
+            (None, 15, "15s"),
+            (5, 15, "15s"),
+            (15, 15, "15s"),
+        ],
+        ids=[
+            "route_above_preference_uses_route",
+            "route_null_uses_preference",
+            "route_below_preference_uses_preference",
+            "route_equal_to_preference_uses_preference",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_xds_route_config_idle_timeout(self, route_idle, preference_idle, expected_idle, service_cluster_eda, preference_manager):
+        with preference_manager.set("proxy", "idle_timeout", preference_idle):
+            route = ServiceAPIRoute(
+                gateway_path='/',
+                service_path='/path',
+                envoy_cluster_name='testing',
+                service_cluster=service_cluster_eda,
+                idle_timeout_seconds=route_idle,
+            )
+            routes = route.get_xds_route_config()
+            assert routes[0]["route"]["idle_timeout"] == expected_idle
+
+    @pytest.mark.parametrize(
+        "route_timeout,preference_timeout,expected",
+        [
+            (600, 30, 600),
+            (None, 30, 30),
+            (10, 30, 30),
+        ],
+        ids=[
+            "route_above_preference",
+            "route_null",
+            "route_below_preference",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_get_effective_timeout_seconds(self, route_timeout, preference_timeout, expected, service_cluster_eda, preference_manager):
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            route = ServiceAPIRoute(
+                gateway_path='/',
+                service_path='/path',
+                envoy_cluster_name='testing',
+                service_cluster=service_cluster_eda,
+                request_timeout_seconds=route_timeout,
+            )
+            assert route.get_effective_timeout_seconds() == expected
+
+    @pytest.mark.parametrize(
+        "route_idle,preference_idle,expected",
+        [
+            (60, 15, 60),
+            (None, 15, 15),
+            (5, 15, 15),
+        ],
+        ids=[
+            "route_above_preference",
+            "route_null",
+            "route_below_preference",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_get_effective_idle_timeout_seconds(self, route_idle, preference_idle, expected, service_cluster_eda, preference_manager):
+        with preference_manager.set("proxy", "idle_timeout", preference_idle):
+            route = ServiceAPIRoute(
+                gateway_path='/',
+                service_path='/path',
+                envoy_cluster_name='testing',
+                service_cluster=service_cluster_eda,
+                idle_timeout_seconds=route_idle,
+            )
+            assert route.get_effective_idle_timeout_seconds() == expected
+
+    @pytest.mark.parametrize(
+        "health_check_timeout,route_timeout,preference_timeout,expected",
+        [
+            (5, 600, 30, 600),
+            (5, None, 30, 30),
+            (700, 600, 30, 700),
+            (5, None, 60, 60),
+        ],
+        ids=[
+            "route_timeout_is_highest",
+            "no_route_timeout_uses_preference_as_floor",
+            "cluster_timeout_is_highest",
+            "preference_is_highest_when_no_route_timeout",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_effective_health_check_timeout(
+        self, health_check_timeout, route_timeout, preference_timeout, expected, service_cluster_eda, http_port, preference_manager
+    ):
+        service_cluster_eda.health_check_timeout_seconds = health_check_timeout
+        service_cluster_eda.save()
+
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            AdditionalRoute.objects.create(
+                name="test-timeout-route",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path",
+                gateway_path="/test-path/",
+                request_timeout_seconds=route_timeout,
+            )
+            assert service_cluster_eda.get_effective_health_check_timeout_seconds() == expected
+
+    @pytest.mark.django_db
+    def test_effective_health_check_timeout_multiple_routes(self, service_cluster_eda, http_port, preference_manager):
+        service_cluster_eda.health_check_timeout_seconds = 5
+        service_cluster_eda.save()
+
+        with preference_manager.set("proxy", "request_timeout", 30):
+            AdditionalRoute.objects.create(
+                name="route-low-timeout",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path1",
+                gateway_path="/test-path-1/",
+                request_timeout_seconds=60,
+            )
+            AdditionalRoute.objects.create(
+                name="route-high-timeout",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path2",
+                gateway_path="/test-path-2/",
+                request_timeout_seconds=600,
+            )
+            AdditionalRoute.objects.create(
+                name="route-null-timeout",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path3",
+                gateway_path="/test-path-3/",
+                request_timeout_seconds=None,
+            )
+            assert service_cluster_eda.get_effective_health_check_timeout_seconds() == 600
+
+    @pytest.mark.django_db
+    def test_xds_cluster_config_uses_effective_health_check_timeout(self, service_cluster_eda, http_port, preference_manager):
+        service_cluster_eda.health_checks_enabled = True
+        service_cluster_eda.health_check_timeout_seconds = 5
+        service_cluster_eda.save()
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="node-for-timeout-test",
+                    service_cluster=service_cluster_eda,
+                    address="10.0.0.1",
+                    tags="eda",
+                )
+            ]
+        )
+
+        seed_feature_flags()
+
+        with preference_manager.set("proxy", "request_timeout", 30):
+            route = AdditionalRoute.objects.create(
+                name="timeout-xds-test-route",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path",
+                gateway_path="/xds-test/",
+                request_timeout_seconds=600,
+            )
+            route.node_tags = "eda"
+            cluster_cfg = route.get_xds_cluster_config()
+            assert cluster_cfg["health_checks"][0]["timeout"] == "600s"

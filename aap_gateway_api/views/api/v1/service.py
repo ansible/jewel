@@ -1,3 +1,4 @@
+from django.db.models import Max
 from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.response import Response
@@ -86,6 +87,15 @@ class ServiceClusterViewSet(ProxyUnsafeGatewayModelViewSet):
 
     queryset = ServiceCluster.objects.all()
     serializer_class = ServiceClusterSerializer
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                _max_route_timeout=Max('routes__request_timeout_seconds'),
+            )
+        )
 
     # Default service clusters not editable/deletable via proxy, but non-default OK
     def object_write_unsafe(self, request, obj: ServiceCluster) -> bool:

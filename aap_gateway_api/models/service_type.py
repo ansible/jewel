@@ -42,19 +42,6 @@ class DefaultServiceType(str, Enum):
         return any(svc.value == name for svc in DefaultServiceType)
 
 
-class StreamingServiceType(str, Enum):
-    """
-    Service types that support streaming responses and require special timeout handling.
-    """
-
-    LIGHTSPEED = "lightspeed"
-
-    @staticmethod
-    def is_streaming_service(name: str) -> bool:
-        """Check if a service type supports streaming responses."""
-        return any(svc.value == name for svc in StreamingServiceType)
-
-
 def get_service_type_name(service_type: str) -> str:
     """
     Normalize service type names for legacy compatibility.

@@ -9,7 +9,7 @@ from django.utils.translation import gettext as _
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
-from aap_gateway_api.models.service_type import DefaultServiceType, StreamingServiceType
+from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
 
 API_PREFIX = "/api/"
@@ -88,6 +88,31 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         help_text=_("A comma-separated list of nodes in the service cluster to receive traffic from this route.  Leave blank to select all nodes."),
     )
 
+    request_timeout_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(604800)],
+        help_text=_(
+            "The request timeout in seconds for this route. "
+            "Values below the global proxy request_timeout setting are rejected. "
+            "Leave null to use the global proxy timeout setting. "
+            "See effective_timeout_seconds for the computed value applied to the route."
+        ),
+    )
+
+    idle_timeout_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(86400)],
+        help_text=_(
+            "The idle timeout in seconds for this route. "
+            "Connections with no data transmitted within this period are closed. "
+            "Values below the global proxy idle_timeout setting are rejected. "
+            "Leave null to use the global proxy idle timeout setting. "
+            "See effective_idle_timeout_seconds for the computed value applied to the route."
+        ),
+    )
+
     def is_internal_route_string(self):
         return "t" if self.is_internal_route else "f"
 
@@ -161,9 +186,10 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             }
 
         if self.service_cluster.health_checks_enabled:
+            effective_health_check_timeout = self.service_cluster.get_effective_health_check_timeout_seconds()
             cfg["health_checks"] = [
                 {
-                    "timeout": f"{self.service_cluster.health_check_timeout_seconds}s",
+                    "timeout": f"{effective_health_check_timeout}s",
                     "interval": f"{self.service_cluster.health_check_interval_seconds}s",
                     "unhealthy_threshold": self.service_cluster.health_check_unhealthy_threshold,
                     "healthy_threshold": self.service_cluster.health_check_healthy_threshold,
@@ -192,28 +218,38 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         return cfg
 
+    def get_effective_timeout_seconds(self):
+        """Return the effective request timeout: max of per-route value and global preference."""
+        route_timeout = self.request_timeout_seconds or 0
+        return max(route_timeout, get_preference_value('proxy', 'request_timeout'))
+
+    def get_effective_idle_timeout_seconds(self):
+        """Return the effective idle timeout: max of per-route value and global preference."""
+        route_idle = self.idle_timeout_seconds or 0
+        return max(route_idle, get_preference_value('proxy', 'idle_timeout'))
+
     def get_xds_route_config(self):
         if not self.gateway_path or not self.service_path or not self.envoy_cluster_name:
             return []
 
         returned_routes = self.get_xds_login_logout_routes()
 
+        timeout = self.get_effective_timeout_seconds()
+        idle_timeout = self.get_effective_idle_timeout_seconds()
+
         cfg = {
             "match": {"prefix": self.gateway_path},
             "route": {
                 "prefix_rewrite": self.service_path,
                 "cluster": self.envoy_cluster_name,
-                "timeout": f"{get_preference_value('proxy', 'request_timeout')}s",
+                "timeout": f"{timeout}s",
+                "idle_timeout": f"{idle_timeout}s",
             },
             "metadata": {
                 "typed_filter_metadata": {},
             },
             "typed_per_filter_config": {},
         }
-
-        if StreamingServiceType.is_streaming_service(self.service_cluster.service_type.name):
-            cfg["route"]["idle_timeout"] = f"{get_preference_value('proxy', 'stream_idle_timeout')}s"
-            cfg["route"]["timeout"] = f"{get_preference_value('proxy', 'max_stream_duration')}s"
 
         if self.enable_mtls:
             cfg["match"]["tls_context"] = {"presented": True, "validated": True}

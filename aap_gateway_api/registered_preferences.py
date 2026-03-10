@@ -145,28 +145,17 @@ register(
 
 register(
     section="proxy",
-    preference_name="stream_idle_timeout",
-    default=60,
+    preference_name="idle_timeout",
+    default=15,
     required=True,
     preference_type="int",
     help_text=_(
-        "Timeout in seconds for idle streaming connections (e.g., AAP Lightspeed chatbot). Stream is closed if no data is transmitted within this period."
+        "The idle timeout in seconds for proxied connections. "
+        "Connections with no data transmitted within this period are closed. "
+        "Individual routes may extend this value but cannot reduce it."
     ),
     encrypted=False,
-    label=_('Stream Idle Timeout'),
-)
-
-register(
-    section="proxy",
-    preference_name="max_stream_duration",
-    default=3600,
-    required=True,
-    preference_type="int",
-    help_text=_(
-        "Maximum total duration in seconds for streaming connections (e.g., AAP Lightspeed chatbot). Stream is closed after this time regardless of activity."
-    ),
-    encrypted=False,
-    label=_('Maximum Stream Duration'),
+    label=_('Idle Timeout'),
 )
 
 register(

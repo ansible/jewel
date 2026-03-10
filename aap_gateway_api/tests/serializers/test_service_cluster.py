@@ -1,8 +1,11 @@
 from unittest.mock import Mock
 
 import pytest
+from django.db import connection
+from django.db.models import Max
+from django.test.utils import CaptureQueriesContext
 
-from aap_gateway_api.models import ServiceCluster, ServiceType
+from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceCluster, ServiceType
 from aap_gateway_api.serializers.service_cluster import ServiceClusterSerializer
 
 
@@ -35,6 +38,7 @@ class TestServiceClusterSerializer:
             'health_check_unhealthy_threshold',
             'health_check_healthy_threshold',
             'healthy_panic_threshold',
+            'effective_health_check_timeout_seconds',
         ]
         for field in expected_fields:
             assert field in ServiceClusterSerializer.Meta.fields, f"Field {field} missing from Meta.fields"
@@ -158,3 +162,99 @@ class TestServiceClusterSerializer:
         assert serializer.is_valid(), serializer.errors
         cluster = serializer.save()
         assert cluster.healthy_panic_threshold == 25
+
+    def test_effective_health_check_timeout_in_serializer_fields(self):
+        assert 'effective_health_check_timeout_seconds' in ServiceClusterSerializer.Meta.fields
+
+    @pytest.mark.parametrize(
+        "health_check_timeout,route_timeout,preference_timeout,expected",
+        [
+            (5, 600, 30, 600),
+            (5, None, 30, 30),
+            (700, 600, 30, 700),
+            (5, None, 60, 60),
+        ],
+        ids=[
+            "route_timeout_highest",
+            "no_route_uses_preference",
+            "cluster_timeout_highest",
+            "preference_highest",
+        ],
+    )
+    def test_effective_health_check_timeout_seconds(self, service_type, health_check_timeout, route_timeout, preference_timeout, expected, preference_manager):
+        cluster = ServiceCluster.objects.create(
+            name='Effective Timeout Cluster',
+            service_type=service_type,
+            health_check_timeout_seconds=health_check_timeout,
+        )
+        http_port = HTTPPort.objects.create(name="effective-timeout-port", number=9996)
+
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            if route_timeout is not None:
+                AdditionalRoute.objects.create(
+                    name="effective-timeout-route",
+                    http_port=http_port,
+                    is_service_https=False,
+                    service_cluster=cluster,
+                    service_port=8080,
+                    service_path="/path",
+                    gateway_path="/effective-test/",
+                    request_timeout_seconds=route_timeout,
+                )
+
+            serializer = ServiceClusterSerializer(instance=cluster, context={'request': Mock(query_params={})})
+            assert serializer.data['effective_health_check_timeout_seconds'] == expected
+
+    @pytest.mark.parametrize(
+        "health_check_timeout,route_timeout,preference_timeout,expected",
+        [
+            (5, 600, 30, 600),
+            (5, None, 30, 30),
+            (700, 600, 30, 700),
+        ],
+        ids=[
+            "annotated_route_timeout_highest",
+            "annotated_no_route_uses_preference",
+            "annotated_cluster_timeout_highest",
+        ],
+    )
+    def test_effective_health_check_timeout_uses_annotation(
+        self, service_type, health_check_timeout, route_timeout, preference_timeout, expected, preference_manager
+    ):
+        """Verify the serializer uses _max_route_timeout annotation to avoid N+1 queries."""
+        cluster = ServiceCluster.objects.create(
+            name='Annotated Timeout Cluster',
+            service_type=service_type,
+            health_check_timeout_seconds=health_check_timeout,
+        )
+        http_port = HTTPPort.objects.create(name="annotated-timeout-port", number=9997)
+
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            if route_timeout is not None:
+                AdditionalRoute.objects.create(
+                    name="annotated-timeout-route",
+                    http_port=http_port,
+                    is_service_https=False,
+                    service_cluster=cluster,
+                    service_port=8080,
+                    service_path="/path",
+                    gateway_path="/annotated-test/",
+                    request_timeout_seconds=route_timeout,
+                )
+
+            annotated = (
+                ServiceCluster.objects.filter(pk=cluster.pk)
+                .annotate(
+                    _max_route_timeout=Max('routes__request_timeout_seconds'),
+                )
+                .get()
+            )
+            serializer = ServiceClusterSerializer(instance=annotated, context={'request': Mock(query_params={})})
+
+            with CaptureQueriesContext(connection) as ctx:
+                result = serializer.data['effective_health_check_timeout_seconds']
+            assert result == expected
+            # The annotation path must not issue any additional aggregate
+            # queries; if this fires, the code regressed to the fallback.
+            aggregate_queries = [q for q in ctx.captured_queries if 'MAX' in q['sql'].upper()]
+            assert aggregate_queries == [], f"Annotation should prevent aggregate queries, but got: {aggregate_queries}"
