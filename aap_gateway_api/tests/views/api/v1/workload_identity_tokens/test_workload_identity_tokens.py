@@ -223,7 +223,7 @@ class TestWorkloadIdentityTokensJWTGeneration:
 
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
 
-        expected_sub = "job:test-job:organization:test-org:project:test-project:job_template:test-template"
+        expected_sub = "workload_type:aap_controller_automation_job:organization:test-org:job_template:test-template"
         assert decoded["sub"] == expected_sub
 
 

@@ -8,7 +8,6 @@ from ansible_base.lib.utils.response import get_fully_qualified_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuser
 from ansible_base.lib.workload_identity.controller import AutomationControllerJobScope
-from ansible_base.lib.workload_identity.workload_identity_tokens import WorkloadIdentityTokenRequestSerializer, WorkloadIdentityTokenResponseSerializer
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -16,6 +15,7 @@ from rest_framework.response import Response
 
 from aap_gateway_api.models import DefaultServiceType
 from aap_gateway_api.permissions.service_token_only_permission import ServiceTokenAuthOnly
+from aap_gateway_api.serializers.workload_identity_tokens import WorkloadIdentityTokenRequestSerializer, WorkloadIdentityTokenResponseSerializer
 from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key, get_jwt_ttl_with_skew
 from aap_gateway_api.utils.preferences import get_preference_value
 
