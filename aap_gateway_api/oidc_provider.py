@@ -30,4 +30,4 @@ class LazyPrivateKey:
 OAUTH2_PROVIDER__OIDC_ENABLED = True
 OAUTH2_PROVIDER__OIDC_RSA_PRIVATE_KEY = LazyPrivateKey()
 OAUTH2_PROVIDER__SCOPES_BACKEND_CLASS = 'aap_gateway_api.authentication.workload_scopes_backend.WorkloadIdentityScopesBackend'
-OAUTH2_PROVIDER__OAUTH2_VALIDATOR_CLASS = 'aap_gateway_api.oauth2_validator.WorkloadIdentityValidator'
+OAUTH2_PROVIDER__OAUTH2_VALIDATOR_CLASS = 'aap_gateway_api.oauth2_validator.GatewayOIDCValidator'

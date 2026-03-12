@@ -118,16 +118,11 @@ def load_grpc_settings(settings: Dynaconf) -> None:
 
 
 def load_oidc_provider_settings(settings: Dynaconf) -> None:
-    """Load OIDC provider settings when the feature flag is enabled.
+    """Load OIDC provider settings.
 
-    Conditionally loads OAuth2/OIDC provider configuration from oidc_provider.py
-    based on the FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED install-time feature flag.
-    When enabled, Gateway can act as an OIDC Provider for authentication.
+    Loads OAuth2/OIDC provider configuration from oidc_provider.py,
+    enabling Gateway to act as an OIDC Provider for authentication.
     """
-    if not settings.get('FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', False):
-        logger.debug('OIDC provider feature flag is disabled, skipping OIDC provider settings')
-        return
-
     logger.debug('Loading OIDC provider settings')
 
     settings.load_file(os.path.join(_MODULE_DIR, "oidc_provider.py"))

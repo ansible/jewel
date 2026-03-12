@@ -107,6 +107,22 @@ class _ExternalAuth:
         self._log_process_time()
         return external_auth_pb2.CheckResponse(ok_response=response)
 
+    def _is_oidc_public_path(self):
+        """Check if the request path is an OIDC/OAuth2 flow endpoint.
+
+        These endpoints handle their own authentication via DOT and should
+        bypass proxy-level auth. Admin endpoints (/o/applications/, /o/tokens/)
+        are intentionally excluded.
+        """
+        oidc_public_prefixes = (
+            '/o/authorize/',
+            '/o/token/',
+            '/o/revoke_token/',
+            '/o/.well-known/',
+            '/o/userinfo/',
+        )
+        return any(self.request_path.startswith(prefix) for prefix in oidc_public_prefixes)
+
     def _return_no_authentication_required(self):
         # This endpoint did not require authentication so no logs required
         logger.debug(f"No JWT authentication required for {self.request_id} {self.request_path}")
@@ -282,7 +298,13 @@ class _ExternalAuth:
         self.request_path = request.attributes.request.http.path
         self.is_internal_route = self.is_route_internal(request)
 
-        # /static endpoints and any requests to the gateway api do not require any JWT authentication
+        # OIDC/OAuth2 flow endpoints handle their own authentication via DOT.
+        # This check runs before internal/external branching so it works regardless
+        # of the route's is_internal_route setting.
+        if self._is_oidc_public_path():
+            return self._return_no_authentication_required()
+
+        # /static endpoints and gateway API requests do not require proxy-level authentication.
         # This should never trigger if enable_gateway_auth is set to False on the gateway service.
         if not self.is_internal_route and (self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/')):
             return self._return_no_authentication_required()

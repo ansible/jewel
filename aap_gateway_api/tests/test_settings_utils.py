@@ -80,22 +80,3 @@ def test_load_oidc_provider_settings_enabled(expected_log):
         # dynamically, creating a different class object than directly imported one
         private_key = DYNACONF.get('OAUTH2_PROVIDER').get('OIDC_RSA_PRIVATE_KEY')
         assert type(private_key).__name__ == 'LazyPrivateKey'
-
-
-def test_load_oidc_provider_settings_disabled(expected_log):
-    DYNACONF = factory(
-        __name__,
-        "GATEWAY_TEST",
-        settings_files=["defaults.py", "settings_dev.py"],
-    )
-    # Don't set the feature flag, or explicitly set to False
-
-    with expected_log(
-        'aap_gateway_api.settings_utils.logger',
-        'debug',
-        'OIDC provider feature flag is disabled',
-    ):
-        load_oidc_provider_settings(DYNACONF)
-        # Verify OIDC settings were NOT loaded
-        oauth_provider = DYNACONF.get('OAUTH2_PROVIDER', {})
-        assert oauth_provider.get('OIDC_ENABLED') is None
