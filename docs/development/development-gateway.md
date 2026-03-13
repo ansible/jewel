@@ -177,7 +177,7 @@ There are two types of requirements file, an `.in` file and `.txt` which is gene
 
 In order to allow upgrading the newer versions of dependencies for all AAP components, the requirements files will use a version specification that can be satisfied by range of versions. For example:
 ```
-Django>=4.2.16,<4.3.0
+Django>=5.2.8,<5.3
 ```
 Where possible, it is preferable to use more restricted version ranges in Tower repository and more relaxed version ranges in DAB and Gateway. With this approach, the DAB and Gateway can pickup new dependency versions when Tower upgrades theirs. This might not always be possible or desired, especially when depenency versions are upgraded to pickup security fixes.
 

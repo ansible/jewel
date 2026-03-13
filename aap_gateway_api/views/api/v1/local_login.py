@@ -7,8 +7,6 @@ from ansible_base.lib.utils.requests import get_remote_host
 from django.conf import settings
 from django.contrib.auth import views
 from django.core.exceptions import PermissionDenied
-from django.utils.decorators import method_decorator
-from django.views.decorators.http import require_http_methods
 from rest_framework import status
 from rest_framework.exceptions import NotAcceptable
 from rest_framework.negotiation import DefaultContentNegotiation
@@ -64,9 +62,14 @@ class LoggedLoginView(views.LoginView):
             return ret
 
 
-@method_decorator(require_http_methods(["POST", "GET"]), name="dispatch")
 class LoggedLogoutView(views.LogoutView):
     success_url_allowed_hosts = settings.LOGOUT_ALLOWED_HOSTS
+    # Override http_method_names to allow GET requests (Django 5.2+ defaults to POST only)
+    http_method_names = ["get", "post", "options"]
+
+    def get(self, request, *args, **kwargs):
+        """Handle GET requests for logout (for backward compatibility)."""
+        return self.post(request, *args, **kwargs)
 
     def dispatch(self, request, *args, **kwargs):
         original_user = getattr(request, 'user', None)

@@ -1,5 +1,5 @@
 cryptography >= 41.0.6 # Required by django https://github.com/ansible/aap-gateway/security/dependabot/9
-Django>=4.2.26,<4.3.0 # https://github.com/ansible/aap-gateway/security/dependabot/28  pinned to use version productization has available already, CVE-2024-56374
+Django>=5.2.8,<5.3 # Upgrade to Django 5.2 LTS - see AAP-55610 and CVE-2025-64459
 djangorestframework
 django-crum
 django-dynamic-preferences
