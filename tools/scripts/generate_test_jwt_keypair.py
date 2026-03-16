@@ -18,10 +18,12 @@ data = {
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     ).decode(),
-    "public": key.public_key().public_bytes(
+    "public": key.public_key()
+    .public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode(),
+    )
+    .decode(),
 }
 
 f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix="gateway_jwt_", delete=False)

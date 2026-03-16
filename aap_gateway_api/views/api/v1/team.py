@@ -1,10 +1,9 @@
-from django.utils.translation import gettext_lazy as _
-from rest_framework import status
-from rest_framework.response import Response
+from ansible_base.rbac.policies import can_view_all_users
 
 from aap_gateway_api.models import Team
 from aap_gateway_api.serializers import TeamSerializer
-from aap_gateway_api.utils.preferences import get_preference_value
+from aap_gateway_api.utils.rbac import visible_teams
+from aap_gateway_api.utils.views.permissions import IsSuperuserOrManageOrgsEnabled
 from aap_gateway_api.views.api.v1.common import ResourceAPIUpdateMixin, RoleModelViewSet
 
 
@@ -17,9 +16,13 @@ class TeamViewSet(ResourceAPIUpdateMixin, RoleModelViewSet):
 
     queryset = Team.objects.select_related("resource").all()
     serializer_class = TeamSerializer
+    permission_classes = RoleModelViewSet.permission_classes + [IsSuperuserOrManageOrgsEnabled]
 
-    def create(self, request, *args, **kwargs):
-        # Check if organization management is enabled, but allow superusers to bypass this restriction
-        if not get_preference_value('configuration', 'MANAGE_ORGANIZATION_AUTH') and not request.user.is_superuser:
-            return Response({"detail": _("Team creation is disabled when MANAGE_ORGANIZATION_AUTH is false.")}, status=status.HTTP_400_BAD_REQUEST)
-        return super().create(request, *args, **kwargs)
+    # Enables ORG_ADMINS_CAN_SEE_ALL_USERS to see all teams as well
+    def filter_queryset(self, qs):
+        if can_view_all_users(self.request.user):
+            qs = visible_teams(self.request.user, queryset=qs)
+            # Skip RoleModelViewSet's access_qs so visible_teams result is kept;
+            # still run DRF filter chain (ordering, search, pagination, etc.)
+            return super(RoleModelViewSet, self).filter_queryset(qs)
+        return super().filter_queryset(qs)

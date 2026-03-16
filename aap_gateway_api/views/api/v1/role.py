@@ -58,7 +58,14 @@ class GatewayRoleTeamAssignmentSerializer(RoleTeamAssignmentSerializer):
     """Custom serializer with Galaxy-specific validation for team role assignments
 
     Teams can only be assigned roles where all permissions are in the 'galaxy' service.
+    Gateway overrides actor queryset so team visibility is enforced here
+    rather than in DAB, since users/teams are owned by the resource provider.
     """
+
+    def get_actor_queryset(self, requesting_user):
+        from aap_gateway_api.utils.rbac import visible_teams
+
+        return visible_teams(requesting_user)
 
     def validate(self, attrs):
         """Validate that team role assignments only use galaxy-only roles"""
