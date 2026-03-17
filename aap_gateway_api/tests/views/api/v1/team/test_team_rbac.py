@@ -25,12 +25,30 @@ def associate_logged_user(teams, organizations, user):
     organizations[4].add_admin(user)
 
 
-def _visible_teams(teams, organizations):
+def _visible_teams(teams, organizations, org_admins_can_see_all=True):
     """
     Based on associate_logged_user()
-    Org Admins, Team Members and Team Admins can see team
+    When ORG_ADMINS_CAN_SEE_ALL_USERS=True (default): Org Admins can see ALL teams
+    When ORG_ADMINS_CAN_SEE_ALL_USERS=False: Org Admins can only see teams from their own organization
+    Team Members and Team Admins can always see their teams
     """
-    return [teams[organizations[0]][0], teams[organizations[1]][0], teams[organizations[2]][0], teams[organizations[2]][1]] + teams[organizations[4]]
+    if org_admins_can_see_all:
+        # User is org admin, so they can see ALL teams when ORG_ADMINS_CAN_SEE_ALL_USERS=True (default)
+        all_teams = []
+        for org in organizations:
+            all_teams.extend(teams[org])
+        return sorted(all_teams, key=lambda t: t.id)
+    else:
+        # When False: org admin can only see teams from their own org (organizations[4])
+        # Plus teams where they're team member/admin (orgs 0, 1, 2)
+        return [
+            teams[organizations[0]][0],  # Team member
+            teams[organizations[1]][0],  # Team admin
+            teams[organizations[2]][0],  # Team member
+            teams[organizations[2]][1],  # Team admin
+        ] + teams[
+            organizations[4]
+        ]  # All teams from org where user is org admin
 
 
 def _editable_teams(teams, organizations):
@@ -45,6 +63,7 @@ def test_team_list_permissions(user_api_client, user, teams, organizations):  # 
     """
     Teams in list can see:
     - Superuser (other tests)
+    - Org Admin can see ALL teams (when ORG_ADMINS_CAN_SEE_ALL_USERS=True, which is the default)
     - Admin or User of Team
     - Admin or User of Team's Org
     """
@@ -55,7 +74,6 @@ def test_team_list_permissions(user_api_client, user, teams, organizations):  # 
 
     associate_logged_user(teams, organizations, user)
     expected_teams = _visible_teams(teams, organizations)
-
     api_get_and_assert(url, user_api_client, expected_teams, order_by="id")
 
 
@@ -63,6 +81,7 @@ def test_team_detail_permissions(user_api_client, user, teams, organizations):  
     """
     Detail of team can read:
     - Superuser (other tests)
+    - Org Admin can see ALL teams (when ORG_ADMINS_CAN_SEE_ALL_USERS=True, which is the default)
     - Admin or User of Team
     - Admin or User of Team's Org
     """
@@ -253,6 +272,47 @@ def test_team_delete_with_roles_permissions(user_api_client, user, teams, organi
                 assert response.status_code == 403, f"Team {org_team.name} shouldn't be deletable"
             else:
                 assert response.status_code == 404, f"Team {org_team.name} should be inaccessible"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("setting_value", [True, False])
+def test_team_org_admin_permissions_with_setting(user_api_client, user, teams, organizations, preference_manager, setting_value):
+    """Test org admin team visibility with different ORG_ADMINS_CAN_SEE_ALL_USERS values"""
+    associate_logged_user(teams, organizations, user)
+
+    with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', setting_value):
+        # Test team list visibility
+        url = get_relative_url("team-list")
+        response = user_api_client.get(url, {"order_by": "id"})
+        assert response.status_code == 200
+
+        expected_teams = _visible_teams(teams, organizations, org_admins_can_see_all=setting_value)
+        actual_team_ids = {t['id'] for t in response.data['results']}
+        expected_team_ids = {t.id for t in expected_teams}
+        if setting_value:
+            # When True: org admin should see all teams
+            total_teams = sum(len(org_teams) for org_teams in teams.values())
+            assert response.data['count'] == total_teams, f"Org Admin should see all {total_teams} teams when ORG_ADMINS_CAN_SEE_ALL_USERS=True"
+            assert actual_team_ids == expected_team_ids, "Org Admin should see all teams when ORG_ADMINS_CAN_SEE_ALL_USERS=True"
+        else:
+            # When False: org admin should see limited teams (from their own org + teams where they're member/admin)
+            assert response.data['count'] == len(expected_teams), f"Org Admin should see {len(expected_teams)} teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
+            assert actual_team_ids == expected_team_ids, "Org Admin should see limited teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
+            assert response.data['count'] < sum(
+                len(org_teams) for org_teams in teams.values()
+            ), "Org Admin should see fewer teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
+
+        # Test detail view for teams from different organizations
+        # Test a team from an organization where user is NOT org admin and NOT team member/admin
+        different_org = organizations[5]  # User has no membership in org 5
+        different_org_team = teams[different_org][0]
+        url = get_relative_url("team-detail", kwargs={"pk": different_org_team.pk})
+        response = user_api_client.get(url)
+
+        if setting_value:
+            assert response.status_code == 200, f"Org Admin should see {different_org_team.name} when ORG_ADMINS_CAN_SEE_ALL_USERS=True"
+        else:
+            assert response.status_code == 404, f"Org Admin should not see {different_org_team.name} when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
 
 
 @pytest.mark.django_db

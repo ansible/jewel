@@ -371,11 +371,11 @@ register(
     help_text=_(
         'Controls whether any Organization Admin can view all users and teams, '
         'even those not associated with their Organization. '
-        'When enabled, organization admins can view all users, even users not associated with their organizations. '
-        'When disabled, organization admins can only see users from their own organizations, '
+        'When enabled, organization admins can view all users and teams, even users and teams not associated with their organizations. '
+        'When disabled, organization admins can only see users and teams from their own organizations.'
     ),
     encrypted=False,
-    label=_('All Users Visible to Organization Admins'),
+    label=_('All Teams and Users Visible to Organization Admins'),
 )
 
 register(
