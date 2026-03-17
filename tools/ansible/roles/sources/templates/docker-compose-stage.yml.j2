@@ -86,7 +86,7 @@ services:
   redis{{ container_id }}:
     container_name: {{ name }}
     hostname: {{ name }}
-    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    image: {{ redis_container_image }}:{{ redis_container_version }}
     entrypoint: ["redis-server"]
     command:
       - /usr/local/etc/redis/redis.conf
@@ -118,7 +118,7 @@ services:
   redis_replica_{{ container_id }}:
     container_name: {{ name }}
     hostname: {{ name }}
-    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    image: {{ redis_container_image }}:{{ redis_container_version }}
     entrypoint: ["redis-server"]
     command:
       - /usr/local/etc/redis/redis.replica.conf
@@ -146,7 +146,7 @@ services:
   redis_sentinel_{{ container_id }}:
     container_name: {{ name }}
     hostname: {{ name }}
-    image: quay.io/fedora/redis-6:{{ redis_container_version }}
+    image: {{ redis_container_image }}:{{ redis_container_version }}
     entrypoint: ["redis-server"]
     command:
       - /usr/local/etc/sentinel/sentinel.conf

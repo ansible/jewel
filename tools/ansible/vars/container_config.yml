@@ -69,8 +69,10 @@ tacacs_exposed_tacacs_port: 49
 radius_image: "mirror.gcr.io/freeradius/freeradius-server"
 radius_image_version: latest
 
-# Redis
-redis_container_version: latest
+# Redis — Fedora image is amd64-only; use GCR mirror multi-arch image on macOS
+_redis_use_multiarch: "{{ lookup('pipe', 'uname -s') == 'Darwin' }}"
+redis_container_image: "{{ 'mirror.gcr.io/library/redis' if _redis_use_multiarch else 'quay.io/fedora/redis-6' }}"
+redis_container_version: "{{ '6' if _redis_use_multiarch else 'latest' }}"
 redis_exposed_port: 6380
 redis_username: gateway1
 redis_password: redis_password
