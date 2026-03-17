@@ -1,7 +1,6 @@
+from ansible_base.lib.workload_identity import SCOPE_REGISTRY
 from ansible_base.oauth2_provider.models.access_token import SCOPES as DAB_SCOPES
 from oauth2_provider.scopes import SettingsScopes
-
-from aap_gateway_api.views.api.v1.workload_identity_tokens import SCOPE_REGISTRY
 
 # Descriptions for OIDC scopes defined in DAB's SCOPES list.
 # Scope names are validated against DAB at import time to prevent drift.

@@ -1,6 +1,5 @@
+from ansible_base.lib.workload_identity import SCOPE_REGISTRY
 from oauth2_provider.oauth2_validators import OAuth2Validator
-
-from aap_gateway_api.views.api.v1.workload_identity_tokens import SCOPE_REGISTRY
 
 # Standard OIDC user identity claims advertised in discovery
 USER_IDENTITY_CLAIMS = ['sub', 'preferred_username', 'email', 'name', 'given_name', 'family_name']

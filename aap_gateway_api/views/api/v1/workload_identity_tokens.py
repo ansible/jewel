@@ -7,7 +7,7 @@ from ansible_base.lib.logging import log_auth_event, log_auth_warning
 from ansible_base.lib.utils.response import get_fully_qualified_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuser
-from ansible_base.lib.workload_identity.controller import AutomationControllerJobScope
+from ansible_base.lib.workload_identity import SCOPE_REGISTRY, AutomationControllerJobScope
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -20,11 +20,6 @@ from aap_gateway_api.utils.jwt_token import get_jwt_rsa_key, get_jwt_ttl_with_sk
 from aap_gateway_api.utils.preferences import get_preference_value
 
 logger = logging.getLogger("aap.gateway.views.workload_identity_tokens")
-
-
-SCOPE_REGISTRY = {
-    AutomationControllerJobScope.name: AutomationControllerJobScope,
-}
 
 SCOPE_SERVICE_AUTHORIZATION = {
     AutomationControllerJobScope.name: DefaultServiceType.CONTROLLER.value,
