@@ -140,6 +140,9 @@ class ApiSpecs:
             # app_url detail intentionally hidden
             if 'app_url' in endpoint and endpoint.endswith('1/'):
                 continue
+            # workload identity tokens intentionally hidden
+            if 'workload_identity_tokens' in endpoint:
+                continue
             valid_endpoints.append(endpoint)
         return valid_endpoints
 

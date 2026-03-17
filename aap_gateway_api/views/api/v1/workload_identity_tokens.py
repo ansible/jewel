@@ -6,10 +6,7 @@ import jwt
 from ansible_base.lib.logging import log_auth_event, log_auth_warning
 from ansible_base.lib.utils.response import get_fully_qualified_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
-from ansible_base.lib.utils.views.permissions import IsSuperuser
 from ansible_base.lib.workload_identity import SCOPE_REGISTRY, AutomationControllerJobScope
-from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
-from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -54,17 +51,13 @@ def _validate_claims_for_scope(scope_class, claims: dict) -> set[str]:
 
 
 class WorkloadIdentityTokensView(AnsibleBaseView):
-    # WIT API can be accessed by ServiceTokenAuthentication (and superuser)
+    # WIT API can be accessed by ServiceTokenAuthentication only
     # WIT API cannot be accessed by other users or authentication types
     custom_action_label = "create"  # For permission checking
-    permission_classes = [OAuth2ScopePermission, IsSuperuser | ServiceTokenAuthOnly]
+    permission_classes = [ServiceTokenAuthOnly]
+    schema = None  # Exclude from OpenAPI schema - internal service-to-service API
 
     # WIT API accepts only POST requests
-    @extend_schema(
-        request=WorkloadIdentityTokenRequestSerializer,
-        responses=WorkloadIdentityTokenResponseSerializer,
-        extensions={"x-ai-description": "Issue a signed JWT token for workload identity based on provided claims"},
-    )
     def post(self, request):
         """
         This POST endpoint will serve JWT tokens for workload identity based on a set of claims received as parameters in the request.
@@ -90,19 +83,20 @@ class WorkloadIdentityTokensView(AnsibleBaseView):
             logger.warning(WIT_REQUEST_REJECTED_MSG, error_msg)
             return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate service is authorized for scope (only applies to service token authentication).
-        # Non-service-authenticated requests (e.g., superusers) will not have a service_cluster
-        # attribute and bypass this check; their access is governed by the permission classes.
+        # Validate service is authorized for scope.
+        # ServiceTokenAuthOnly ensures only service-token-authenticated requests reach here.
         service_cluster = getattr(request, 'service_cluster', None)
-        if service_cluster:
-            service_type_name = service_cluster.service_type.name
-            if SCOPE_SERVICE_AUTHORIZATION.get(scope) != service_type_name:
-                error_msg = f"Service '{service_type_name}' is not authorized for scope '{scope}'"
-                log_auth_warning(
-                    f"Workload identity token request rejected: {error_msg} "
-                    f"(service_id: {service_cluster.service_id}, service_cluster: {service_cluster.name})"
-                )
-                return Response({"error": error_msg}, status=status.HTTP_403_FORBIDDEN)
+        if not service_cluster:
+            logger.error("Workload identity token request rejected: missing service_cluster")
+            return Response({"error": "Service authentication required"}, status=status.HTTP_403_FORBIDDEN)
+
+        service_type_name = service_cluster.service_type.name
+        if SCOPE_SERVICE_AUTHORIZATION.get(scope) != service_type_name:
+            error_msg = f"Service '{service_type_name}' is not authorized for scope '{scope}'"
+            log_auth_warning(
+                f"Workload identity token request rejected: {error_msg} (service_id: {service_cluster.service_id}, service_cluster: {service_cluster.name})"
+            )
+            return Response({"error": error_msg}, status=status.HTTP_403_FORBIDDEN)
 
         # Validate claims align with scope
         if invalid_claims := _validate_claims_for_scope(scope_class, workload_claims):

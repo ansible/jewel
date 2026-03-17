@@ -48,6 +48,12 @@ def valid_payload():
     }
 
 
+@pytest.fixture
+def controller_service_client(user, service_cluster_controller):
+    """Authenticated service client for controller service."""
+    return _create_service_client(user, service_cluster_controller)
+
+
 class TestWorkloadIdentityTokensAuthentication:
     """Tests for authentication and permission requirements."""
 
@@ -61,10 +67,10 @@ class TestWorkloadIdentityTokensAuthentication:
         response = user_api_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_superuser_can_access(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
-        """Superusers can access the endpoint."""
+    def test_superuser_cannot_access(self, admin_api_client, wit_url, valid_payload):
+        """Superusers cannot access the endpoint."""
         response = admin_api_client.post(wit_url, valid_payload, format="json")
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_platform_auditor_cannot_access(self, platform_auditor_api_client, wit_url, valid_payload, ensure_jwt_keys):
         """Platform auditors cannot access the endpoint."""
@@ -96,16 +102,16 @@ class TestWorkloadIdentityTokensValidation:
             pytest.param({"scope": "aap_controller_automation_job", "audience": "https://example.com", "claims": {}}, "claims", id="empty_claims"),
         ],
     )
-    def test_invalid_payloads_return_400(self, admin_api_client, wit_url, payload, expected_error_field):
+    def test_invalid_payloads_return_400(self, controller_service_client, wit_url, payload, expected_error_field):
         """Parametrized: Various invalid request payloads should cause 400 responses."""
-        response = admin_api_client.post(wit_url, payload, format="json")
+        response = controller_service_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert expected_error_field in response.data
 
-    def test_missing_all_required_fields_returns_400_with_all_errors(self, admin_api_client, wit_url):
+    def test_missing_all_required_fields_returns_400_with_all_errors(self, controller_service_client, wit_url):
         """Request missing all required fields returns 400 with all error messages."""
         payload = {}  # All required fields missing
-        response = admin_api_client.post(wit_url, payload, format="json")
+        response = controller_service_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "scope" in response.data
         assert "audience" in response.data
@@ -120,10 +126,10 @@ class TestWorkloadIdentityTokensValidation:
             True,
         ],
     )
-    def test_claims_not_dict_returns_400(self, admin_api_client, wit_url, invalid_claims):
+    def test_claims_not_dict_returns_400(self, controller_service_client, wit_url, invalid_claims):
         """Request with non-dict claims returns 400."""
         payload = {"scope": "aap_controller_automation_job", "audience": "https://example.com", "claims": invalid_claims}
-        response = admin_api_client.post(wit_url, payload, format="json")
+        response = controller_service_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "claims" in response.data
 
@@ -131,18 +137,18 @@ class TestWorkloadIdentityTokensValidation:
 class TestWorkloadIdentityTokensJWTGeneration:
     """Tests for JWT generation and content."""
 
-    def test_valid_request_returns_jwt(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_valid_request_returns_jwt(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """Valid request returns a signed JWT."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
         assert "jwt" in response.data
         assert isinstance(response.data["jwt"], str)
         # JWT should have 3 parts separated by dots
         assert len(response.data["jwt"].split(".")) == 3
 
-    def test_jwt_contains_standard_claims(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_jwt_contains_standard_claims(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """Returned JWT contains jti, iss, sub, aud, exp, iat."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         # Decode without verification to check claims structure
@@ -152,9 +158,9 @@ class TestWorkloadIdentityTokensJWTGeneration:
         for claim in ["jti", "iss", "sub", "aud", "exp", "iat"]:
             assert claim in decoded
 
-    def test_jwt_contains_workload_claims(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_jwt_contains_workload_claims(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """Returned JWT includes the custom claims from request."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
@@ -165,9 +171,9 @@ class TestWorkloadIdentityTokensJWTGeneration:
         assert decoded["aap_controller_project_name"] == "test-project"
         assert decoded["aap_controller_job_template_name"] == "test-template"
 
-    def test_jwt_exp_matches_configured_ttl_preference(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_jwt_exp_matches_configured_ttl_preference(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """JWT expiration is set to jwt_default_ttl_seconds preference value from iat."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
@@ -176,9 +182,9 @@ class TestWorkloadIdentityTokensJWTGeneration:
         expected_ttl = get_jwt_ttl_with_skew(get_preference_value("workload_identity", "jwt_default_ttl_seconds"))
         assert decoded["exp"] == decoded["iat"] + expected_ttl
 
-    def test_jwt_can_be_verified_with_public_key(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_jwt_can_be_verified_with_public_key(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """JWT can be decoded and verified using the gateway public key."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         # This should not raise - JWT is valid and signed correctly
@@ -190,9 +196,9 @@ class TestWorkloadIdentityTokensJWTGeneration:
         )
         assert decoded["aap_controller_job_name"] == "test-job"
 
-    def test_jwt_aud_claim_matches_audience_parameter(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_jwt_aud_claim_matches_audience_parameter(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """JWT aud claim matches the audience parameter from the request."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
@@ -207,18 +213,18 @@ class TestWorkloadIdentityTokensJWTGeneration:
             "https://vault.example.org",
         ],
     )
-    def test_jwt_aud_claim_with_various_audience_values(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys, audience):
+    def test_jwt_aud_claim_with_various_audience_values(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys, audience):
         """JWT aud claim correctly reflects various audience values."""
         valid_payload["audience"] = audience
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
         assert decoded["aud"] == audience
 
-    def test_jwt_sub_claim_format(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_jwt_sub_claim_format(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """JWT sub claim follows the expected format from scope.generate_sub_claim()."""
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
 
         decoded = jwt.decode(response.data["jwt"], options={"verify_signature": False})
@@ -228,19 +234,19 @@ class TestWorkloadIdentityTokensJWTGeneration:
 
 
 class TestWorkloadIdentityTokensScopeValidation:
-    def test_unknown_scope_returns_400(self, admin_api_client, wit_url):
+    def test_unknown_scope_returns_400(self, controller_service_client, wit_url):
         """Request with unknown scope returns 400."""
         payload = {
             "scope": "unknown_scope",
             "audience": "https://example.com",
             "claims": {"aap_controller_job_name": "test-job"},
         }
-        response = admin_api_client.post(wit_url, payload, format="json")
+        response = controller_service_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "error" in response.data
         assert response.data["error"] == "Unknown scope: unknown_scope"
 
-    def test_invalid_claims_for_scope_returns_400(self, admin_api_client, wit_url):
+    def test_invalid_claims_for_scope_returns_400(self, controller_service_client, wit_url):
         """Request with invalid claims for the scope returns 400."""
         payload = {
             "scope": "aap_controller_automation_job",
@@ -251,13 +257,13 @@ class TestWorkloadIdentityTokensScopeValidation:
                 "another_invalid_claim": "another-value",
             },
         }
-        response = admin_api_client.post(wit_url, payload, format="json")
+        response = controller_service_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "error" in response.data
         assert "invalid_claim_name" in response.data["error"]
         assert "another_invalid_claim" in response.data["error"]
 
-    def test_valid_claims_for_scope_returns_200(self, admin_api_client, wit_url, ensure_jwt_keys):
+    def test_valid_claims_for_scope_returns_200(self, controller_service_client, wit_url, ensure_jwt_keys):
         """Request with valid claims for the scope returns 200."""
         payload = {
             "scope": "aap_controller_automation_job",
@@ -269,7 +275,7 @@ class TestWorkloadIdentityTokensScopeValidation:
                 "aap_controller_job_id": "456",
             },
         }
-        response = admin_api_client.post(wit_url, payload, format="json")
+        response = controller_service_client.post(wit_url, payload, format="json")
         assert response.status_code == status.HTTP_200_OK
         assert "jwt" in response.data
 
@@ -284,10 +290,10 @@ class TestWorkloadIdentityTokensScopeValidation:
             pytest.param("aud", "https://wrong-audience.com", id="aud"),
         ],
     )
-    def test_reserved_claims_are_rejected(self, admin_api_client, wit_url, valid_payload, reserved_claim, malicious_value):
+    def test_reserved_claims_are_rejected(self, controller_service_client, wit_url, valid_payload, reserved_claim, malicious_value):
         """Reserved JWT claims in request are rejected as invalid for the scope."""
         valid_payload["claims"][reserved_claim] = malicious_value
-        response = admin_api_client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "error" in response.data
         assert reserved_claim in response.data["error"]
@@ -295,10 +301,25 @@ class TestWorkloadIdentityTokensScopeValidation:
 
 class TestWorkloadIdentityTokensServiceAuthorization:
 
-    def test_authorized_service_can_request_scope(self, user, service_cluster_controller, wit_url, valid_payload, ensure_jwt_keys):
+    def test_missing_service_cluster_returns_403(self, controller_service_client, wit_url, valid_payload):
+        """Request without service_cluster attribute returns 403."""
+        from aap_gateway_api.views.api.v1.workload_identity_tokens import WorkloadIdentityTokensView
+
+        original_post = WorkloadIdentityTokensView.post
+
+        def patched_post(self, request):
+            # Simulate missing service_cluster by setting it to None
+            request.service_cluster = None
+            return original_post(self, request)
+
+        with mock.patch.object(WorkloadIdentityTokensView, 'post', patched_post):
+            response = controller_service_client.post(wit_url, valid_payload, format="json")
+            assert response.status_code == status.HTTP_403_FORBIDDEN
+            assert response.data["error"] == "Service authentication required"
+
+    def test_authorized_service_can_request_scope(self, controller_service_client, wit_url, valid_payload):
         """Controller service can request controller scope."""
-        client = _create_service_client(user, service_cluster_controller)
-        response = client.post(wit_url, valid_payload, format="json")
+        response = controller_service_client.post(wit_url, valid_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
         assert "jwt" in response.data
 
@@ -318,44 +339,47 @@ class TestWorkloadIdentityTokensServiceAuthorization:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert response.data["error"] == f"Service '{service_type}' is not authorized for scope 'aap_controller_automation_job'"
 
-    def test_superuser_bypasses_service_authorization(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
-        """Superuser (non-service auth) can request any scope without service authorization check."""
+    def test_superuser_cannot_bypass_service_authorization(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+        """Superuser (non-service auth) cannot access the endpoint."""
         response = admin_api_client.post(wit_url, valid_payload, format="json")
-        assert response.status_code == status.HTTP_200_OK
-        assert "jwt" in response.data
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 class TestWorkloadIdentityTokensHTTPMethods:
-    """Tests to verify only POST is allowed."""
+    """
+    Tests to verify only POST is allowed.
+    ServiceTokenAuthentication defines the allowed HTTP methods for specific views, so disallowed
+    HTTP methods are expected to fail the authenticator and return 401 (not 405).
+    """
 
-    def test_get_returns_405(self, admin_api_client, wit_url):
-        """GET method is not allowed."""
-        response = admin_api_client.get(wit_url)
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    def test_get_returns_401(self, controller_service_client, wit_url):
+        """GET method returns 401."""
+        response = controller_service_client.get(wit_url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_put_returns_405(self, admin_api_client, wit_url):
-        """PUT method is not allowed."""
-        response = admin_api_client.put(wit_url, {}, format="json")
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    def test_put_returns_401(self, controller_service_client, wit_url):
+        """PUT method returns 401."""
+        response = controller_service_client.put(wit_url, {}, format="json")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_patch_returns_405(self, admin_api_client, wit_url):
-        """PATCH method is not allowed."""
-        response = admin_api_client.patch(wit_url, {}, format="json")
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    def test_patch_returns_401(self, controller_service_client, wit_url):
+        """PATCH method returns 401."""
+        response = controller_service_client.patch(wit_url, {}, format="json")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_delete_returns_405(self, admin_api_client, wit_url):
-        """DELETE method is not allowed."""
-        response = admin_api_client.delete(wit_url)
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+    def test_delete_returns_401(self, controller_service_client, wit_url):
+        """DELETE method returns 401."""
+        response = controller_service_client.delete(wit_url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 class TestWorkloadIdentityTokensLogging:
     """Tests for logging during validation."""
 
-    def test_unknown_scope_logs_rejection(self, caplog, admin_api_client, wit_url, valid_payload):
+    def test_unknown_scope_logs_rejection(self, caplog, controller_service_client, wit_url, valid_payload):
         valid_payload["scope"] = "unknown_scope"
         with caplog.at_level(logging.WARNING, logger="aap.gateway.views.workload_identity_tokens"):
-            admin_api_client.post(wit_url, valid_payload, format="json")
+            controller_service_client.post(wit_url, valid_payload, format="json")
             assert "Workload identity token request rejected: Unknown scope: unknown_scope" in caplog.text
 
     def test_unauthorized_service_logs_audit_details(self, user, service_cluster_eda, wit_url, valid_payload):
@@ -368,10 +392,10 @@ class TestWorkloadIdentityTokensLogging:
             assert f"service_id: {service_cluster_eda.service_id}" in log_message
             assert f"service_cluster: {service_cluster_eda.name}" in log_message
 
-    def test_invalid_claims_logs_rejection(self, caplog, admin_api_client, wit_url, valid_payload):
+    def test_invalid_claims_logs_rejection(self, caplog, controller_service_client, wit_url, valid_payload):
         valid_payload["claims"]["invalid_claim"] = "value"
         with caplog.at_level(logging.WARNING, logger="aap.gateway.views.workload_identity_tokens"):
-            admin_api_client.post(wit_url, valid_payload, format="json")
+            controller_service_client.post(wit_url, valid_payload, format="json")
             assert "Workload identity token request rejected:" in caplog.text
             assert "invalid_claim" in caplog.text
 
@@ -386,10 +410,10 @@ class TestWorkloadAwareTTL:
         assert actual_ttl == expected_ttl, f"Expected TTL {expected_ttl}s, got {actual_ttl}s"
         return decoded
 
-    def test_workload_ttl_zero_is_rejected(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys):
+    def test_workload_ttl_zero_is_rejected(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys):
         """Test that workload_ttl_seconds=0 is rejected by the serializer (min_value=1)."""
         payload = {**valid_payload, "workload_ttl_seconds": 0}
-        response = admin_api_client.post(wit_url, data=payload, format='json')
+        response = controller_service_client.post(wit_url, data=payload, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @pytest.mark.parametrize(
@@ -400,7 +424,7 @@ class TestWorkloadAwareTTL:
         ],
     )
     def test_workload_ttl_priority_2_uses_platform_fallback(
-        self, admin_api_client, wit_url, valid_payload, preference_manager, ensure_jwt_keys, workload_ttl, platform_default, expected_ttl
+        self, controller_service_client, wit_url, valid_payload, preference_manager, ensure_jwt_keys, workload_ttl, platform_default, expected_ttl
     ):
         """Test Priority 2: When workload_ttl_seconds is null or omitted, use platform default."""
         with preference_manager.set("workload_identity", "jwt_default_ttl_seconds", platform_default):
@@ -408,7 +432,7 @@ class TestWorkloadAwareTTL:
             if workload_ttl != "OMIT":
                 payload["workload_ttl_seconds"] = workload_ttl
 
-            response = admin_api_client.post(wit_url, data=payload, format='json')
+            response = controller_service_client.post(wit_url, data=payload, format='json')
             assert response.status_code == status.HTTP_200_OK
             # Verify TTL: platform default + clock skew (60)
             self._verify_jwt_ttl(response.data['jwt'], expected_ttl)
@@ -421,10 +445,10 @@ class TestWorkloadAwareTTL:
             pytest.param(7200, 7260, id="large-workload-ttl"),
         ],
     )
-    def test_clock_skew_always_applied(self, admin_api_client, wit_url, valid_payload, ensure_jwt_keys, workload_ttl, expected_ttl):
+    def test_clock_skew_always_applied(self, controller_service_client, wit_url, valid_payload, ensure_jwt_keys, workload_ttl, expected_ttl):
         """Test that 60s clock skew offset is always added to the workload TTL."""
         payload = {**valid_payload, "workload_ttl_seconds": workload_ttl}
-        response = admin_api_client.post(wit_url, data=payload, format='json')
+        response = controller_service_client.post(wit_url, data=payload, format='json')
 
         assert response.status_code == status.HTTP_200_OK
         self._verify_jwt_ttl(response.data['jwt'], expected_ttl)
