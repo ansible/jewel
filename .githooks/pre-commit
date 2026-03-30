@@ -5,18 +5,13 @@ if [ -z $GW_IGNORE_SYNTAX ] ; then
     echo $python_files_changed
     if [ "x$python_files_changed" != "x" ] ; then
         FAILED=0
-        for target in check_black check_flake8 ; do
+        for target in check_ruff check_ruff_format ; do
             CHECK_SYNTAX_FILES="${python_files_changed}" make ${target}
             if [ $? != 0 ] ; then
                 FAILED=1
             fi
             echo ""
         done
-        # We can't run isort on just a file name because it works differently
-        make check_isort
-        if [ $? != 0 ] ; then
-            FAILED=1
-        fi
         if [ $FAILED == 1 ] ; then
             exit 1
         fi

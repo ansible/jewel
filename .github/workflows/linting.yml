@@ -16,12 +16,10 @@ jobs:
       fail-fast: false
       matrix:
         tests:
-          - name: api-flake8
-            command: check_flake8
-          - name: api-black
-            command: check_black
-          - name: api-isort
-            command: check_isort
+          - name: api-ruff-check
+            command: check_ruff
+          - name: api-ruff-format
+            command: check_ruff_format
     steps:
       - name: Install make
         run: sudo apt install make

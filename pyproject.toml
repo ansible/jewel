@@ -45,26 +45,38 @@ build-backend = 'setuptools.build_meta'
 [project.scripts]
 aap-gateway-manage = "aap_gateway_api:manage"
 
-[tool.black]
+[tool.ruff]
 line-length = 160
-fast = true
-skip-string-normalization = true
-force-exclude = '''
-(
-   .*/migrations/
- | aap-dev/*
-)
-'''
+target-version = "py312"
+exclude = [
+    "migrations",
+    "django-ansible-base",
+    "aap-dev",
+    "services",
+    ".tox",
+]
 
-[tool.isort]
-profile = "black"
-line_length = 160
-extend_skip = ["aap_gateway_api/migrations", "django-ansible-base", "aap-dev", "services"]
-
-[tool.flake8]
-max-line-length = 160
+[tool.ruff.lint]
 extend-ignore = ["E203"]
-exclude = ['aap_gateway_api/migrations/*', '.tox', 'django-ansible-base', 'aap-dev/*', 'services/*']
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = false
+quote-style = "preserve"
+docstring-code-format = false
+
+[tool.ruff.lint.isort]
+force-wrap-aliases = false
+split-on-trailing-comma = false
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Migrations are auto-generated and should not be modified for style
+"aap_gateway_api/migrations/*" = ["E501", "F401", "F403"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
@@ -89,9 +101,6 @@ legacy_tox_ini = """
         312
         py311
         311
-        black
-        flake8
-        isort
         check-lint
 
     labels =
@@ -99,7 +108,7 @@ legacy_tox_ini = """
         312 = py312
         311 = py311
         check = check, check-migrations, check-oauth2-permissions, check-help-text
-        lint = flake8, black, isort
+        lint = ruff-check, ruff-format
 
     [docker:db]
     ## NOTE: If you see this failing with KeyError: 'Gateway' (Docker API 1.52+ removed that field),
@@ -212,31 +221,25 @@ legacy_tox_ini = """
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore
 
-    [testenv:flake8]
-    allowlist_externals = flake8
-    install_command = pip install {opts} {packages}
-    commands = flake8 {posargs:.}
+    [testenv:ruff-check]
+    deps =
+        ruff==0.14.1
+    docker =
+    commands = ruff check {posargs:.}
 
-    [testenv:black]
-    allowlist_externals = black
-    install_command = pip install {opts} {packages}
-    commands = black {posargs:.}
-
-    [testenv:isort]
-    allowlist_externals = isort
-    install_command = pip install {opts} {packages}
-    commands = isort {posargs:.}
+    [testenv:ruff-format]
+    deps =
+        ruff==0.14.1
+    docker =
+    commands = ruff format {posargs:.}
 
     [testenv:check-lint]
-    allowlist_externals =
-        black
-        flake8
-        isort
-    install_command = pip install {opts} {packages}
+    deps =
+        ruff==0.14.1
+    docker =
     commands =
-        black --check .
-        flake8 .
-        isort --check .
+        ruff check .
+        ruff format --check .
 """
 
 [tool.coverage.run]

@@ -114,9 +114,7 @@ Tests include coverage reporting. Coverage reports are generated in:
 ## Pre-commit Hooks
 
 The project uses pre-commit hooks that run automatically on commit:
-- **black**: Code formatting
-- **flake8**: Linting
-- **isort**: Import sorting
+- **ruff**: Fast Python linter and formatter (replaces black, flake8, and isort)
 
 ## Test Structure
 

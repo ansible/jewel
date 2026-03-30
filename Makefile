@@ -2,7 +2,7 @@ SHELL=/bin/bash
 
 # Prefer python 3.12 but take python3 if 3.12 is not installed
 PYTHON := $(notdir $(shell for i in python3.12 python3; do command -v $$i; done|sed 1q))
-CHECK_SYNTAX_FILES ?= aap_gateway_api/ aap-dev/
+CHECK_SYNTAX_FILES ?= aap_gateway_api/
 RM ?= /bin/rm
 UID := $(shell id -u)
 TOX_ARGS ?= ""
@@ -22,7 +22,7 @@ GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
 
 .PHONY: PYTHON_VERSION clean git_hooks_config \
-	check lint check_black check_flake8 check_isort \
+	check lint check_ruff check_ruff_format \
 	docker-compose plumb update_django_ansible_base_hash \
 	collection
 
@@ -51,17 +51,13 @@ check:
 lint:
 	tox -m lint
 
-## Run black syntax check
-check_black:
-	tox -e black -- --check $(CHECK_SYNTAX_FILES)
+## Run ruff format check
+check_ruff_format:
+	tox -e ruff-format -- --check $(CHECK_SYNTAX_FILES)
 
-## Run flake8 syntax check
-check_flake8:
-	tox -e flake8 -- $(CHECK_SYNTAX_FILES)
-
-## Run isort syntax check
-check_isort:
-	tox -e isort -- --check $(CHECK_SYNTAX_FILES)
+## Run ruff linting check
+check_ruff:
+	tox -e ruff-check -- $(CHECK_SYNTAX_FILES)
 
 check_help_text:
 	export GATEWAY_SECRET_KEY_FILE=tools/configs/dev_secret_key; python -m aap_gateway_api help_text_check --applications aap_gateway_api --ignore-file ./.help_text_check.ignore
