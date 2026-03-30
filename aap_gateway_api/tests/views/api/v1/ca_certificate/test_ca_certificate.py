@@ -16,7 +16,6 @@ from aap_gateway_api.permissions import ServiceTokenAuthOnly
 
 
 class TestCACertificateViews:
-
     def _calculate_sha256(self, pem_data):
         """Helper method to calculate SHA256 with consistent normalization."""
         normalized_pem = pem_data.strip().replace('\r\n', '\n').replace('\r', '\n')

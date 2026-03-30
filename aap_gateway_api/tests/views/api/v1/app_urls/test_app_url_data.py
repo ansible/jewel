@@ -37,7 +37,6 @@ def quick_mk_user(username):
 class AppUrlTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-
         Authenticator.objects.create(
             name="Test Local Authenticator",
             enabled=True,

@@ -6,10 +6,7 @@ from ansible_base.lib.workload_identity import SCOPE_REGISTRY
 from rest_framework import status
 
 from aap_gateway_api.authentication.workload_scopes_backend import WorkloadIdentityScopesBackend
-from aap_gateway_api.oidc_provider import (
-    OIDC_JWT_TTL_CLOCK_SKEW_SECONDS,
-    LazyPrivateKey,
-)
+from aap_gateway_api.oidc_provider import OIDC_JWT_TTL_CLOCK_SKEW_SECONDS, LazyPrivateKey
 from aap_gateway_api.preferences.registry import gateway_preference_registry
 from aap_gateway_api.utils.jwt_token import get_jwt_ttl_with_skew
 

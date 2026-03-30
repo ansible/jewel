@@ -120,7 +120,6 @@ def test_additional_route_api_port_cannot_start_with_api_prefix(admin_api_client
 
 
 def test_additional_route_api_port_cannot_start_with_plugin_prefix(admin_api_client, http_api_port_factory, service_cluster_eda):
-
     http_port = http_api_port_factory()
     url = get_relative_url('route-list')
     data = {

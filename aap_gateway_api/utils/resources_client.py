@@ -24,7 +24,6 @@ logger = logging.getLogger('aap.gateway.utils.resource_api_client')
 
 
 class GWResourceAPIClient(DABResourceAPIClient):
-
     def get_default_user(self):
         # This isn't great. Ideally we'd use the _system user, but it's somewhat buggy at the moment.
         # As a stopgap we'll load the first super user. If there aren't any, we'll just use the

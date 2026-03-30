@@ -54,7 +54,7 @@ def _get_session_jwt_keypair(request):
     if _SESSION_JWT_KEYPAIR is None:
         path = request.config.getoption("--jwt-keypair-file")
         if path is None:
-            raise RuntimeError("No --jwt-keypair-file provided.  Run tests via tox, which " "generates a keypair automatically, or pass the option manually.")
+            raise RuntimeError("No --jwt-keypair-file provided.  Run tests via tox, which generates a keypair automatically, or pass the option manually.")
         with open(path) as f:
             kp = json.load(f)
         _SESSION_JWT_KEYPAIR = namedtuple("RSAKeyPair", ["private", "public"])(**kp)

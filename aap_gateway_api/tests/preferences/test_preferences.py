@@ -318,7 +318,6 @@ def test_encrypted_manager(register_preference):
 
 @pytest.mark.parametrize("is_encrypted", [True, False])
 def test_get_default_value_by_preference(register_preference, is_encrypted):
-
     register_preference(section='general', preference_name='test_get_default', default='iam_default', preference_type="string", encrypted=is_encrypted)
 
     preference = gateway_preference_registry.get('test_get_default', 'general')

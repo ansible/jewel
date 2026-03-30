@@ -46,9 +46,7 @@ def _visible_teams(teams, organizations, org_admins_can_see_all=True):
             teams[organizations[1]][0],  # Team admin
             teams[organizations[2]][0],  # Team member
             teams[organizations[2]][1],  # Team admin
-        ] + teams[
-            organizations[4]
-        ]  # All teams from org where user is org admin
+        ] + teams[organizations[4]]  # All teams from org where user is org admin
 
 
 def _editable_teams(teams, organizations):
@@ -298,9 +296,9 @@ def test_team_org_admin_permissions_with_setting(user_api_client, user, teams, o
             # When False: org admin should see limited teams (from their own org + teams where they're member/admin)
             assert response.data['count'] == len(expected_teams), f"Org Admin should see {len(expected_teams)} teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
             assert actual_team_ids == expected_team_ids, "Org Admin should see limited teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
-            assert response.data['count'] < sum(
-                len(org_teams) for org_teams in teams.values()
-            ), "Org Admin should see fewer teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
+            assert response.data['count'] < sum(len(org_teams) for org_teams in teams.values()), (
+                "Org Admin should see fewer teams when ORG_ADMINS_CAN_SEE_ALL_USERS=False"
+            )
 
         # Test detail view for teams from different organizations
         # Test a team from an organization where user is NOT org admin and NOT team member/admin

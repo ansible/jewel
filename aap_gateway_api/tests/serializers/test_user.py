@@ -826,7 +826,6 @@ class TestUserSerializer:
 
 @pytest.mark.django_db
 class TestUsernameValidation:
-
     def _create_user(self, admin_api_client, username, password, authenticator_id, authenticator_uid):
         """Helper function to create a user via the API."""
         url = get_relative_url('user-list')
@@ -954,7 +953,6 @@ class TestUsernameValidation:
 
 @pytest.mark.django_db
 class TestUserUpdateRollbackScenario:
-
     def _create_user_with_authenticator(self, user, authenticator, uid="initial_uid"):
         """Helper function to create an AuthenticatorUser instance."""
         AuthenticatorUser.objects.create(user=user, provider=authenticator, uid=uid)
@@ -1119,9 +1117,9 @@ class TestUserCrossFieldValidation:
         payload = {'authenticator_uid': 'different_uid'}
         response = admin_api_client.patch(url, payload)
         assert response.status_code == status.HTTP_200_OK
-        assert (
-            response.data["authenticator_uid"] == local_user_bad_uid.username
-        ), "User authenticator_uid is not corrected on update for local authenticator users"
+        assert response.data["authenticator_uid"] == local_user_bad_uid.username, (
+            "User authenticator_uid is not corrected on update for local authenticator users"
+        )
 
     def test_uid_without_authenticators(self, admin_api_client, admin_user):
         url = get_relative_url('user-detail', kwargs={'pk': admin_user.id})

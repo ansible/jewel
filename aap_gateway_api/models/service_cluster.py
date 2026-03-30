@@ -198,8 +198,8 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
             max_route_timeout = self._max_route_timeout or 0
         else:
             max_route_timeout = (
-                self.routes.exclude(request_timeout_seconds__isnull=True).aggregate(max_timeout=Max('request_timeout_seconds'))['max_timeout']
-            ) or 0
+                (self.routes.exclude(request_timeout_seconds__isnull=True).aggregate(max_timeout=Max('request_timeout_seconds'))['max_timeout']) or 0
+            )
         return max(
             self.health_check_timeout_seconds,
             max_route_timeout,

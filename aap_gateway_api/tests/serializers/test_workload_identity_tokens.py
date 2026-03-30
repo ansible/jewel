@@ -220,20 +220,20 @@ class TestWorkloadIdentityTokenResponseSerializer:
 
     def test_jwt_with_whitespace(self):
         data_with_whitespace = {
-            'jwt': ('  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' 'eyJzdWIiOiIxMjM0NTY3ODkwIn0.' 'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U  '),
+            'jwt': ('  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U  '),
         }
         serializer = WorkloadIdentityTokenResponseSerializer(data=data_with_whitespace)
         assert serializer.is_valid(), f"Serializer errors: {serializer.errors}"
         assert serializer.validated_data['jwt'] == data_with_whitespace['jwt'].strip()
 
     def test_create_response_serializer(self):
-        jwt_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' 'eyJzdWIiOiIxMjM0NTY3ODkwIn0.' 'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
+        jwt_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
         serializer = WorkloadIdentityTokenResponseSerializer({'jwt': jwt_token})
         assert serializer.data == {'jwt': jwt_token}
 
     def test_extra_fields_ignored(self):
         data_with_extra = {
-            'jwt': ('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' 'eyJzdWIiOiIxMjM0NTY3ODkwIn0.' 'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'),
+            'jwt': ('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'),
             'extra_field': 'should be ignored',
         }
         serializer = WorkloadIdentityTokenResponseSerializer(data=data_with_extra)

@@ -1,6 +1,4 @@
-from aap_gateway_api.fields.serializers.multiple_choice_field import (
-    MultipleChoiceFieldWithoutEmptyEnum,
-)
+from aap_gateway_api.fields.serializers.multiple_choice_field import MultipleChoiceFieldWithoutEmptyEnum
 
 
 class TestMultipleChoiceFieldWithoutEmptyEnum:

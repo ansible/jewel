@@ -300,7 +300,6 @@ class TestWorkloadIdentityTokensScopeValidation:
 
 
 class TestWorkloadIdentityTokensServiceAuthorization:
-
     def test_missing_service_cluster_returns_403(self, controller_service_client, wit_url, valid_payload):
         """Request without service_cluster attribute returns 403."""
         from aap_gateway_api.views.api.v1.workload_identity_tokens import WorkloadIdentityTokensView

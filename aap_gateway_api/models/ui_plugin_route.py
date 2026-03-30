@@ -9,7 +9,6 @@ PLUGIN_PREFIX = "/plugin/"
 
 
 class UIPluginRoute(Route, AuditableModel):
-
     router_basename = 'ui_plugin_route'
 
     ui_plugin_path = models.CharField(
@@ -19,7 +18,6 @@ class UIPluginRoute(Route, AuditableModel):
     )
 
     def save(self, *args, **kwargs):
-
         service_cluster_name = ServiceCluster.objects.get(id=self.service_cluster.id).name
         # On a single HTTP port, you cannot have multiple routes pointing to the same plugin on a service cluster.
         # appending a unique service cluster name to the path ensures that the route is unique and different service

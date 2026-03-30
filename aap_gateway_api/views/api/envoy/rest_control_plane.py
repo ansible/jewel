@@ -15,13 +15,13 @@ from aap_gateway_api.models.service_cluster import ServiceCluster
 # with symbol_database.Default().pool.  Without this, ParseDict() will fail to
 # resolve the @type URLs embedded in the xDS resources Envoy expects.
 # isort: off
-from envoy.extensions.transport_sockets.tls.v3 import tls_pb2  # noqa: 401
-from envoy.extensions.filters.http.router.v3 import router_pb2  # noqa: 401
-from envoy.extensions.filters.http.lua.v3 import lua_pb2  # noqa: 401
-from envoy.extensions.access_loggers.stream.v3 import stream_pb2  # noqa: 401
-from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: 401
-from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: 401
-from envoy.service.secret.v3 import sds_pb2, sds_pb2_grpc  # noqa: 401
+from envoy.extensions.transport_sockets.tls.v3 import tls_pb2  # noqa: F401
+from envoy.extensions.filters.http.router.v3 import router_pb2  # noqa: F401
+from envoy.extensions.filters.http.lua.v3 import lua_pb2  # noqa: F401
+from envoy.extensions.access_loggers.stream.v3 import stream_pb2  # noqa: F401
+from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: F401
+from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: F401
+from envoy.service.secret.v3 import sds_pb2, sds_pb2_grpc  # noqa: F401
 from envoy.extensions.transport_sockets.tls.v3.secret_pb2 import Secret
 from aap_gateway_api.models.ca_certificate import CACertificate
 from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
