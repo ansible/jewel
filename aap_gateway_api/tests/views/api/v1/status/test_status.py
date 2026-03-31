@@ -470,7 +470,6 @@ def test_that_get_requests_are_async(get, admin_api_client, full_service_hierarc
 )
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
 def test_console_status(get, console_return, side_effect, expected_status):
-
     get.return_value = console_return
     get.side_effect = side_effect
 

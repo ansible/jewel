@@ -85,14 +85,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--merge-teams",
             type=bool,
-            help=("[IGNORED] If true, teams with the same names on different services will be combined. " "This flag is now ignored and defaults to True."),
+            help=("[IGNORED] If true, teams with the same names on different services will be combined. This flag is now ignored and defaults to True."),
             default=True,
         )
         parser.add_argument(
             "--merge-organizations",
             type=bool,
             help=(
-                "[IGNORED] If true, organizations with the same names on different services will be combined. " "This flag is now ignored and defaults to True."
+                "[IGNORED] If true, organizations with the same names on different services will be combined. This flag is now ignored and defaults to True."
             ),
             default=True,
         )
@@ -237,7 +237,7 @@ class Command(BaseCommand):
                 error = migration_results[service_slug]["error"]
                 self.stderr.write(f"  - {service_slug}: {error}")
 
-            raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. " "See error details above.")
+            raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
         else:
             # Validate superuser consistency across all services
             self._ensure_superuser_consistency(service_apis, user)
@@ -454,7 +454,7 @@ class Command(BaseCommand):
         """
         # if the resource is a user and there is only one validation error for email field, we can remove the field
         if resource_type_name == "shared.user" and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
-            self.stderr.write(f"Removing invalid email address \'{original_resource_data.data['email']}\' for user: {original_resource_data.data['username']}")
+            self.stderr.write(f"Removing invalid email address '{original_resource_data.data['email']}' for user: {original_resource_data.data['username']}")
             # we want to update the email to empty string
             updated_resource_data = original_resource_data.data
             updated_resource_data["email"] = ""
@@ -494,8 +494,7 @@ class Command(BaseCommand):
         if updated_resource_data is None:
             # updating didn't produce valid data for the resource, hence this resource is invalid
             self.stderr.write(
-                f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}'"
-                f" failed validation with errors: {str(original_resource_data.errors)}"
+                f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}' failed validation with errors: {str(original_resource_data.errors)}"
             )
             # Raising exception here to stop migration to draw attention to existence of invalid resources.
             raise RuntimeError("Stopping migration of resources because invalid, non-correctable, resource(s) were encountered.")
@@ -1297,7 +1296,7 @@ class Command(BaseCommand):
             actor_msg = f"username: {role_assignment.user.username}"
         elif isinstance(role_assignment, RoleTeamAssignment):
             actor_msg = f"team: {role_assignment.team.name}"
-        return f"{actor_msg}, " f"object_id: {role_assignment.object_id}, " f"role_definition_name: {role_assignment.role_definition.name}"
+        return f"{actor_msg}, object_id: {role_assignment.object_id}, role_definition_name: {role_assignment.role_definition.name}"
 
     @staticmethod
     def _get_role_definitions_to_exclude(service_type: str) -> List[str]:

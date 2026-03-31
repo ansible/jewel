@@ -135,7 +135,6 @@ class SettingSectionSerializer(serializers.Serializer):
 
             # Next, check for values that should be encrypted
             if new_value != ENCRYPTED_STRING:
-
                 masked_value = new_value
                 if registered_preference.encrypted:
                     masked_value = ENCRYPTED_STRING

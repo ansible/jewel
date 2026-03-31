@@ -1,9 +1,7 @@
 import logging
 import warnings
 
-from ansible_base.authentication.authenticator_plugins.utils import (
-    get_authenticator_plugin,
-)
+from ansible_base.authentication.authenticator_plugins.utils import get_authenticator_plugin
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
@@ -446,7 +444,6 @@ class UserSerializer(CommonUserSerializer):
         errors = {}
         # Skip deprecated field validation when associated_authenticators is present (new field takes precedence)
         if 'associated_authenticators' not in self.initial_data:
-
             if authenticators:
                 self._validate_authenticators_and_uid(authenticators, authenticator_uid, user_instance, current_authenticators, errors)
 
@@ -604,8 +601,7 @@ class UserSerializer(CommonUserSerializer):
                 new_uid = authenticator_uid
 
             logger.debug(
-                f"Updating UID to {new_uid} for user {new_username} "
-                f"(old username: {authenticator_user.user.username}) on {authenticator_user.provider.name}"
+                f"Updating UID to {new_uid} for user {new_username} (old username: {authenticator_user.user.username}) on {authenticator_user.provider.name}"
             )
 
             authenticator_user.uid = new_uid

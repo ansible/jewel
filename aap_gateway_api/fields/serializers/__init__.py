@@ -1,1 +1,1 @@
-from .json_list_field import JSONListField  # noqa: 401
+from .json_list_field import JSONListField  # noqa: F401

@@ -44,9 +44,9 @@ def test_feature_flags_list_admin(admin_api_client):
     # Test plan FF001 step 3: Verify response includes pagination capabilities
     assert 'count' in response.data, "Response must include count for pagination"
     assert 'results' in response.data, "Response must include results array"
-    assert (
-        'next' in response.data or 'previous' in response.data or response.data.get('count', 0) <= 50
-    ), "Pagination links should be available for large datasets"
+    assert 'next' in response.data or 'previous' in response.data or response.data.get('count', 0) <= 50, (
+        "Pagination links should be available for large datasets"
+    )
 
     # Test plan FF001 step 3: Verify filtering capabilities exist
     # Test with a common filter parameter
@@ -144,9 +144,9 @@ def test_feature_flags_filtering(admin_api_client):
         assert support_level_response.status_code == status.HTTP_200_OK, f"Filtering by support_level={support_level} should work per test plan FF001 step 8"
         if support_level_response.data['results']:
             for flag in support_level_response.data['results']:
-                assert (
-                    flag['support_level'] == support_level
-                ), f"All returned flags should have support_level={support_level} when filtered per test plan FF001 step 8"
+                assert flag['support_level'] == support_level, (
+                    f"All returned flags should have support_level={support_level} when filtered per test plan FF001 step 8"
+                )
 
     # Test plan FF001 step 8: Test filtering by labels (if supported)
     # Note: Labels filtering may not be implemented yet, testing basic functionality

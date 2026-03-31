@@ -5,7 +5,6 @@ from aap_gateway_api.utils import preferences
 
 
 class TestEncryptedManager:
-
     @pytest.fixture(scope="function", autouse=True)
     def create_and_get_preferences_once(self, admin_api_client, register_preference):
         register_preference(

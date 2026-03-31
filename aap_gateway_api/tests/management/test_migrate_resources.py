@@ -428,7 +428,6 @@ def test_correcting_user_service_id(
 
 @pytest.mark.django_db(transaction=True)
 def test_migrating_user_with_invalid_email(migration_service_invalid_users, admin_user, patched_load_rbac):
-
     # Since migration_service_invalid_users is the only DefaultServiceType service in this test,
     # the command will naturally process only that service
     cmd = MigrateCommand()
@@ -539,7 +538,6 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
         patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
         patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
     ):
-
         from requests.exceptions import HTTPError
 
         # Mock JWT creation to avoid public key parsing issues
@@ -709,7 +707,6 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
         patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
     ):
-
         # Mock JWT creation to avoid public key parsing issues
         mock_jwt.return_value = 'fake-jwt-token'
         mock_key.return_value = 'fake-key'
@@ -765,9 +762,9 @@ def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api
 
     # The error should indicate a constraint violation or duplicate/unique constraint
     error_message = str(exc_info.value).lower()
-    assert any(
-        keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]
-    ), f"Expected error message to indicate constraint violation, got: {exc_info.value}"
+    assert any(keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]), (
+        f"Expected error message to indicate constraint violation, got: {exc_info.value}"
+    )
 
     # Verify that only the first user has the authenticator with the email
     assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com").count() == 1
@@ -796,7 +793,10 @@ def test_delete_legacy_authenticators_with_controller_admin(admin_user, capsys):
     from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 
     legacy_auth = Authenticator.objects.create(
-        name="Legacy Controller Admin", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+        name="Legacy Controller Admin",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},  # Valid type for creation
     )
     # Use update() to bypass the model's save method validation
     Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin")
@@ -834,14 +834,20 @@ def test_delete_legacy_authenticators_multiple_types(admin_user, capsys):
     # Create authenticators with valid types first, then manually change their type to legacy types
     # This avoids module loading issues during creation
     legacy_auth1 = Authenticator.objects.create(
-        name="Legacy SSO", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+        name="Legacy SSO",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},  # Valid type for creation
     )
     # Use update() to bypass the model's save method validation
     Authenticator.objects.filter(id=legacy_auth1.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso")
     legacy_auth1.refresh_from_db()
 
     legacy_auth2 = Authenticator.objects.create(
-        name="Legacy Password", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+        name="Legacy Password",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},  # Valid type for creation
     )
     # Use update() to bypass the model's save method validation
     Authenticator.objects.filter(id=legacy_auth2.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_password")
@@ -897,7 +903,10 @@ def test_delete_legacy_authenticators_no_users(admin_user, capsys):
     # Create authenticator with valid type first, then manually change to legacy type
     # This avoids module loading issues during creation
     legacy_auth = Authenticator.objects.create(
-        name="Unused Legacy Auth", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+        name="Unused Legacy Auth",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},  # Valid type for creation
     )
     # Use update() to bypass the model's save method validation
     Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso")
@@ -927,7 +936,10 @@ def test_delete_legacy_authenticators_preserves_non_legacy(admin_user, capsys):
     # Create authenticator with valid type first, then manually change to legacy type
     # This avoids module loading issues during creation
     legacy_auth = Authenticator.objects.create(
-        name="Legacy Auth", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+        name="Legacy Auth",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},  # Valid type for creation
     )
     # Manually update the type to legacy type to avoid module loading
     Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.legacy_sso")
@@ -971,7 +983,10 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
 
     # Create a legacy authenticator that should be cleaned up during migration
     legacy_auth = Authenticator.objects.create(
-        name="Legacy Controller Admin", type="ansible_base.authentication.authenticator_plugins.ldap", enabled=True, configuration={}  # Valid type for creation
+        name="Legacy Controller Admin",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},  # Valid type for creation
     )
     # Use update() to bypass the model's save method validation
     Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin")
@@ -2086,7 +2101,6 @@ def test_ensure_controller_gateway_superusers_scenarios(
     mock_client.get_resource.side_effect = mock_get_resource
 
     with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient', return_value=mock_client):
-
         if expected_errors:
             # Test error scenarios
             from django.core.management.base import CommandError

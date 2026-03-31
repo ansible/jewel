@@ -48,6 +48,7 @@ Repository Specification Format:
     - Falls back to ansible/django-ansible-base if enterprise doesn't have the branch
     - Always clones to "django-ansible-base/" directory
 """
+
 import argparse
 import os
 import re
@@ -471,7 +472,7 @@ def main():
         print("Always-clone repos:")
         for variants in always_clone_repos:
             if len(variants) > 1:
-                print(f"  - {variants[0]} (with {len(variants)-1} alternate(s))")
+                print(f"  - {variants[0]} (with {len(variants) - 1} alternate(s))")
             else:
                 print(f"  - {variants[0]}")
 

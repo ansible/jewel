@@ -16,9 +16,7 @@ Content-Disposition: form-data; name=\"csrfmiddlewaretoken\"
 
 {bad_csrf_form_token}
 -----------------------------25667258076756890893396248524
-'''.replace(
-    linesep, "\r\n"
-)
+'''.replace(linesep, "\r\n")
 
 request_body_json = dumps(
     {
@@ -123,7 +121,6 @@ def _ext_auth():
 
 
 class MockSessionAuth(SessionAuthentication):
-
     def authenticate(self, request):
         # Skip authentication, start enforcing csrf verification
         self.enforce_csrf(request)
@@ -133,7 +130,6 @@ class MockSessionAuth(SessionAuthentication):
 
 @pytest.mark.django_db
 class TestExternalAuth:
-
     # Need to mock away close_old_connections, because we can't expect the application code to re-connect to the test db.
     @pytest.fixture(scope="class", autouse=True)
     def mock_close_old_connections(self):

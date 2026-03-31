@@ -91,7 +91,6 @@ class TestAuthenticate:
             patch.object(fallback_authenticator, '_should_attempt_controller_auth') as mock_should_attempt,
             patch.object(fallback_authenticator, '_get_controller_user') as mock_get_user,
         ):
-
             mock_should_attempt.return_value = (gateway_user, 'http://controller.example.com/api/controller/v2/me/')
             mock_get_user.return_value = controller_response_data
 
@@ -121,7 +120,6 @@ class TestAuthenticate:
             patch.object(fallback_authenticator, '_should_attempt_controller_auth') as mock_should_attempt,
             patch.object(fallback_authenticator, '_get_controller_user') as mock_get_user,
         ):
-
             mock_should_attempt.return_value = (gateway_user, 'http://controller.example.com/api/controller/v2/me/')
             mock_get_user.return_value = None
 
@@ -138,7 +136,6 @@ class TestAuthenticate:
             patch.object(fallback_authenticator, '_should_attempt_controller_auth') as mock_should_attempt,
             patch.object(fallback_authenticator, '_get_controller_user') as mock_get_user,
         ):
-
             mock_should_attempt.return_value = (gateway_user, 'http://controller.example.com/api/controller/v2/me/')
             mock_get_user.return_value = controller_response_data
 
@@ -155,7 +152,6 @@ class TestAuthenticate:
             patch.object(fallback_authenticator, '_should_attempt_controller_auth') as mock_should_attempt,
             patch.object(fallback_authenticator, '_get_controller_user') as mock_get_user,
         ):
-
             mock_should_attempt.return_value = (gateway_user, 'http://controller.example.com/api/controller/v2/me/')
             mock_get_user.return_value = controller_response_data
 

@@ -1,12 +1,6 @@
 import os
 
-from ansible_base.lib.dynamic_config import (
-    export,
-    factory,
-    load_envvars,
-    load_python_file_with_injected_context,
-    load_standard_settings_files,
-)
+from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_python_file_with_injected_context, load_standard_settings_files
 
 from .settings_utils import _GATEWAY_ETC_DIRECTORY, load_custom_envvars, load_grpc_settings, set_secret_key
 

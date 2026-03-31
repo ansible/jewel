@@ -237,7 +237,9 @@ class TestRoleDefinitionAPIValidation:
         """Test PATCH with invalid permissions returns 400 and preserves original permissions"""
         # First create a valid system role
         role_definition = RoleDefinition.objects.create(
-            name='Galaxy System Role PATCH Test', description='A system role for PATCH testing', content_type=None  # System role
+            name='Galaxy System Role PATCH Test',
+            description='A system role for PATCH testing',
+            content_type=None,  # System role
         )
         role_definition.permissions.add(galaxy_permission)
 
