@@ -338,7 +338,7 @@ class Command(BaseCommand):
         self.delete_legacy_authenticators()
 
         for r_type in self.resource_types_to_migrate.keys():
-            self.migrate_resource(r_type, service_slug)
+            self.migrate_resource(r_type)
 
         self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
         self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)
@@ -557,7 +557,6 @@ class Command(BaseCommand):
         resource_context: Dict[str, Any],
         validated_resource_data: Dict[str, Any],
         updated_service_resource: Dict[str, Any],
-        service_slug: str,
     ) -> bool:
         """
         Handle conflicts with existing resources in the Gateway.
@@ -658,7 +657,7 @@ class Command(BaseCommand):
             results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
         return results
 
-    def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any], service_slug: str) -> None:
+    def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any]) -> None:
         """
         Process and migrate a single resource item from upstream to Gateway.
 
@@ -712,9 +711,7 @@ class Command(BaseCommand):
         resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource, user_partial_migration)
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
-        create_gateway_resource = self._reconcile_existing_resource(
-            upstream_resource, resource_context, validated_resource_data, updated_service_resource, service_slug
-        )
+        create_gateway_resource = self._reconcile_existing_resource(upstream_resource, resource_context, validated_resource_data, updated_service_resource)
 
         # Run this as a transaction so that if the REST call to update the resource on the service fails
         # we also rollback any database changes that were made on the Gateway.
@@ -792,7 +789,7 @@ class Command(BaseCommand):
     is now managed externally by the Gateway.
     """
 
-    def migrate_resource(self, resource_type_name: str, service_slug: str) -> None:
+    def migrate_resource(self, resource_type_name: str) -> None:
         """
         Migrate all resources of a specific type from upstream service to Gateway.
 
@@ -866,7 +863,7 @@ class Command(BaseCommand):
                 break
 
             for upstream_resource_item in results:
-                self._process_and_migrate_resource_item(upstream_resource_item, resource_context, service_slug)
+                self._process_and_migrate_resource_item(upstream_resource_item, resource_context)
 
     def _set_gateway_user_use_controller_password_flag(self, username: str) -> None:
         gateway_user = self._get_gateway_user(username)
