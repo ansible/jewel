@@ -108,7 +108,7 @@ def set_system_user_password() -> bool:
         return False
 
 
-def set_system_user_managed_flag() -> None:
+def set_system_user_managed_flag() -> bool:
     system_user = get_system_user()
     if system_user.managed:
         return False
@@ -117,13 +117,12 @@ def set_system_user_managed_flag() -> None:
     return True
 
 
-def add_console_service_type() -> None:
+def add_console_service_type() -> bool:
     if flag_enabled("FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED"):
         # Add console.redhat.com service type
-        console_type = {
-            "name": "console",
-        }
-        ServiceType.objects.get_or_create(**console_type)
+        _obj, created = ServiceType.objects.get_or_create(name="console")
+        return created
+    return False
 
 
 def toggle_install_time_flags() -> None:

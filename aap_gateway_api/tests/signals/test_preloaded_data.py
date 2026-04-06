@@ -70,12 +70,16 @@ class TestCreatePreloadedData:
         AAPFlag.objects.all().delete()
         setattr(settings, "FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED", flag_value)
         seed_feature_flags()
-        add_console_service_type()
 
         if flag_value == 'False':
+            assert add_console_service_type() is False
             with pytest.raises(ServiceType.DoesNotExist):
                 ServiceType.objects.get(name="console")
         else:
+            assert add_console_service_type() is True
+            # Second call should return False (already exists)
+            assert add_console_service_type() is False
+
             console_type = ServiceType.objects.get(name="console")
 
             assert console_type.name == "console"
