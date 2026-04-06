@@ -1,5 +1,6 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
+from ansible_base.lib.utils.models import is_system_user
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
@@ -7,6 +8,7 @@ from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.policies import can_view_all_users, visible_users
 from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from aap_gateway_api.models import User
@@ -26,6 +28,11 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     queryset = User.objects.select_related("resource").all()
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
+
+    def perform_destroy(self, instance):
+        if is_system_user(instance):
+            raise ValidationError({"detail": "The system user cannot be deleted"})
+        super().perform_destroy(instance)
 
     def filter_queryset(self, qs):
         qs = visible_users(self.request.user, queryset=qs)

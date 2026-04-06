@@ -16,3 +16,11 @@ def test_system_user_not_in_user_list_view(admin_api_client, user_api_client, us
 
     for result in response.data['results']:
         assert result['id'] != system_user.pk
+
+
+def test_delete_system_user_returns_400(admin_api_client, system_user):
+    url = get_relative_url("user-detail", kwargs={"pk": system_user.pk})
+    response = admin_api_client.delete(url)
+    assert response.status_code == 400
+    assert "system user cannot be deleted" in str(response.data).lower()
+    system_user.refresh_from_db()
