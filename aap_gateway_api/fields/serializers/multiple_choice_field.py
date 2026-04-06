@@ -2,32 +2,20 @@ from rest_framework.serializers import MultipleChoiceField
 
 
 class MultipleChoiceFieldWithoutEmptyEnum(MultipleChoiceField):
-    """A MultipleChoiceField that prevents drf-spectacular from generating empty enums.
+    """A MultipleChoiceField that produces a valid OpenAPI array type via drf-spectacular.
 
-    When a MultipleChoiceField has empty choices (e.g., when no Authenticators exist
-    in the database during schema generation), drf-spectacular generates an invalid
-    OpenAPI schema component with an empty enum. This field uses _spectacular_annotation
-    to tell drf-spectacular to generate a simple array type instead of an enum when
-    choices are empty.
+    Uses _spectacular_annotation to always return a nullable array of integers,
+    preventing drf-spectacular from generating enums with mixed types
+    (e.g. [1, '', None]) which happens when allow_blank and allow_null are
+    combined with integer choice keys.
     """
 
     @property
     def _spectacular_annotation(self):
-        """Override schema generation to avoid empty enums.
+        """Override schema generation to produce a valid OpenAPI array type.
 
-        When choices are empty, returns a custom schema to prevent empty enum generation.
-        When choices exist, returns an empty dict to let drf-spectacular use its default
-        behavior (generating an enum with the available choices).
-
-        Note: When choices are empty, we default to 'string' type since DRF's
-        MultipleChoiceField serializes values as strings in JSON regardless of the
-        Python type of the choice values.
+        Always returns a custom schema to prevent drf-spectacular from generating
+        enums with mixed types (e.g. [1, '', None]) which happens when allow_blank
+        and allow_null are combined with integer choice keys.
         """
-        choices = getattr(self, 'choices', [])
-        if not choices:
-            # Override: return array type to prevent empty enum generation
-            # Use 'string' as default since DRF serializes MultipleChoiceField values
-            # as strings in JSON, regardless of the Python type of choice values
-            return {'field': {'type': 'array', 'items': {'type': 'string'}}}
-        # No override: return empty dict to let drf-spectacular use default enum generation
-        return {}
+        return {'field': {'type': 'array', 'items': {'type': 'integer'}, 'nullable': True}}
