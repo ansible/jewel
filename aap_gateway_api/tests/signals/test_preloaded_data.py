@@ -5,7 +5,7 @@ from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
 from aap_gateway_api.models import Organization, ServiceType
-from aap_gateway_api.signals.preloaded_data import add_console_service_type, create_default_organization, create_preload_data
+from aap_gateway_api.signals.preloaded_data import add_console_service_type, create_default_organization, create_preload_data, set_system_user_password
 
 
 class TestCreatePreloadedData:
@@ -14,6 +14,19 @@ class TestCreatePreloadedData:
         Organization.objects.all().delete()
         assert create_default_organization() is True, "We should have created the default organization"
         assert create_default_organization() is False, "We should not have recreated the default organization"
+
+    @pytest.mark.django_db
+    def test_set_system_user_password(self):
+        """set_system_user_password returns True when password was usable, False when already unusable."""
+        from ansible_base.lib.utils.models import get_system_user
+
+        # Ensure the system user starts with a usable password
+        system_user = get_system_user()
+        system_user.set_password("temporary")
+        system_user.save()
+
+        assert set_system_user_password() is True, "Should set unusable password on first call"
+        assert set_system_user_password() is False, "Should be a no-op when password is already unusable"
 
     @pytest.mark.django_db
     def test_default_org_created_by_default(self):

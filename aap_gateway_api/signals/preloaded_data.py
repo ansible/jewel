@@ -100,7 +100,7 @@ def create_managed_roles() -> None:
 def set_system_user_password() -> bool:
     # When the system user is created by a migration it can't call set_usable_password because is of class <__fake__.User>
     system_user = get_system_user()
-    if system_user.has_usable_password:
+    if system_user.has_usable_password():
         system_user.set_unusable_password()
         system_user.save()
         return True
