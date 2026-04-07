@@ -10,7 +10,7 @@ grpcio
 grpcio-tools
 protobuf>=5.29.5  # CVE-2025-4565
 psycopg
-pyjwt
+pyjwt>=2.12.0
 requests
 sqlparse>=0.5.2 
 uwsgi

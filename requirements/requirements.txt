@@ -54,7 +54,7 @@ psycopg==3.2.3
     # via -r requirements/requirements.in
 pycparser==2.22
     # via cffi
-pyjwt==2.10.1
+pyjwt==2.12.1
     # via -r requirements/requirements.in
 pyyaml==6.0.2
     # via -r requirements/requirements.in

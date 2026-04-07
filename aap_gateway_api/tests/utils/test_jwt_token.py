@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta
 from functools import partial
 from unittest import mock
 
+import jwt as pyjwt
 import pytest
 from ansible_base.rbac.models import RoleDefinition
 from django.contrib.contenttypes.models import ContentType
@@ -244,3 +246,66 @@ def test_jwt_token_with_resource_api_actions(user, preference_manager, rsa_keypa
         assert 'claims_hash' in decoded
         assert isinstance(decoded['claims_hash'], str)
         assert len(decoded['claims_hash']) == 64
+
+
+class TestCritHeaderValidation:
+    """Tests for CVE-2026-32597: PyJWT must reject tokens with unrecognized
+    critical ('crit') header extensions per RFC 7515 §4.1.11.
+
+    These tests verify that the upgraded PyJWT (>= 2.12.0) properly validates
+    the 'crit' header parameter at both the library level and through the
+    gateway's own decode paths.
+    """
+
+    def _build_rs256_token(self, rsa_keypair, extra_headers=None):
+        """Build an RS256-signed JWT with optional extra headers."""
+        payload = {
+            "sub": "test-user",
+            "iss": "ansible-issuer",
+            "aud": "ansible-services",
+            "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
+        }
+        return pyjwt.encode(payload, rsa_keypair.private, algorithm="RS256", headers=extra_headers or {})
+
+    def test_crit_with_unknown_extension_rejected(self, rsa_keypair):
+        """A token whose 'crit' header lists an unsupported extension MUST be rejected."""
+        token = self._build_rs256_token(rsa_keypair, extra_headers={"crit": ["x-custom-ext"], "x-custom-ext": "value"})
+
+        with pytest.raises(pyjwt.exceptions.InvalidTokenError, match="crit"):
+            pyjwt.decode(token, rsa_keypair.public, algorithms=["RS256"], audience="ansible-services")
+
+    def test_crit_with_empty_list_rejected(self, rsa_keypair):
+        """A token with an empty 'crit' list is malformed and MUST be rejected."""
+        token = self._build_rs256_token(rsa_keypair, extra_headers={"crit": []})
+
+        with pytest.raises(pyjwt.exceptions.InvalidTokenError, match="crit"):
+            pyjwt.decode(token, rsa_keypair.public, algorithms=["RS256"], audience="ansible-services")
+
+    def test_crit_rejected_through_gateway_decode(self, rsa_keypair, preference_manager):
+        """Tokens with 'crit' headers must also be rejected through decode_signed_jwt."""
+        with preference_manager.set_multiple(
+            {
+                ("proxy", "jwt_private_key"): rsa_keypair.private,
+                ("proxy", "jwt_public_key"): rsa_keypair.public,
+            }
+        ):
+            token = self._build_rs256_token(rsa_keypair, extra_headers={"crit": ["x-custom-ext"], "x-custom-ext": "value"})
+
+            with pytest.raises(pyjwt.exceptions.InvalidTokenError, match="crit"):
+                decode_signed_jwt(token)
+
+    def test_crit_rejected_even_without_signature_verification(self, rsa_keypair):
+        """The crit check fires before (or alongside) signature verification,
+        so even an unverified decode path must reject unknown critical extensions."""
+        token = self._build_rs256_token(rsa_keypair, extra_headers={"crit": ["x-custom-ext"], "x-custom-ext": "value"})
+
+        with pytest.raises(pyjwt.exceptions.InvalidTokenError, match="crit"):
+            pyjwt.decode(token, options={"verify_signature": False, "require": ["iss"]})
+
+    def test_normal_token_without_crit_accepted(self, rsa_keypair):
+        """Baseline: a well-formed token without 'crit' should decode normally."""
+        token = self._build_rs256_token(rsa_keypair)
+
+        decoded = pyjwt.decode(token, rsa_keypair.public, algorithms=["RS256"], audience="ansible-services")
+        assert decoded["sub"] == "test-user"
+        assert decoded["iss"] == "ansible-issuer"
