@@ -126,3 +126,10 @@ def load_oidc_provider_settings(settings: Dynaconf) -> None:
     logger.debug('Loading OIDC provider settings')
 
     settings.load_file(os.path.join(_MODULE_DIR, "oidc_provider.py"))
+
+    # Set OIDC issuer endpoint to FRONT_END_URL + /o
+    # This ensures the issuer in OIDC discovery metadata is consistent regardless of
+    # the Host header in the request, and matches the issuer used in workload identity tokens.
+    front_end_url = settings.get('FRONT_END_URL', '')
+    if front_end_url:
+        settings.set('OAUTH2_PROVIDER__OIDC_ISS_ENDPOINT', f'{front_end_url}/o')

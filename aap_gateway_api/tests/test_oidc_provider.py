@@ -241,3 +241,48 @@ class TestOIDCDiscoveryEndpoint:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert claim in data['claims_supported']
+
+
+class TestOIDCIssuerEndpoint:
+    """Tests for OIDC issuer endpoint derivation from FRONT_END_URL"""
+
+    def _create_dynaconf(self):
+        from ansible_base.lib.dynamic_config import factory
+
+        return factory(
+            'aap_gateway_api.tests.test_oidc_provider',
+            "GATEWAY_TEST",
+            settings_files=["defaults.py", "settings_dev.py"],
+        )
+
+    def test_oidc_iss_endpoint_derived_from_front_end_url(self):
+        """Verify OIDC_ISS_ENDPOINT is derived from FRONT_END_URL when configured"""
+        from aap_gateway_api.settings_utils import load_oidc_provider_settings
+
+        DYNACONF = self._create_dynaconf()
+        DYNACONF.set('FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', True)
+        DYNACONF.set('FRONT_END_URL', 'https://aap.example.com')
+        load_oidc_provider_settings(DYNACONF)
+        iss = DYNACONF.get('OAUTH2_PROVIDER', {}).get('OIDC_ISS_ENDPOINT')
+        assert iss == 'https://aap.example.com/o'
+
+    def test_oidc_iss_endpoint_not_set_when_front_end_url_empty(self):
+        """Verify OIDC_ISS_ENDPOINT is not set when FRONT_END_URL is empty string"""
+        from aap_gateway_api.settings_utils import load_oidc_provider_settings
+
+        DYNACONF = self._create_dynaconf()
+        DYNACONF.set('FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', True)
+        DYNACONF.set('FRONT_END_URL', '')
+        load_oidc_provider_settings(DYNACONF)
+        iss = DYNACONF.get('OAUTH2_PROVIDER', {}).get('OIDC_ISS_ENDPOINT')
+        assert iss is None
+
+    def test_oidc_iss_endpoint_not_set_when_front_end_url_not_configured(self):
+        """Verify OIDC_ISS_ENDPOINT is not set when FRONT_END_URL is not configured"""
+        from aap_gateway_api.settings_utils import load_oidc_provider_settings
+
+        DYNACONF = self._create_dynaconf()
+        DYNACONF.set('FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', True)
+        load_oidc_provider_settings(DYNACONF)
+        iss = DYNACONF.get('OAUTH2_PROVIDER', {}).get('OIDC_ISS_ENDPOINT')
+        assert iss is None
