@@ -6,6 +6,7 @@ django-crum
 django-dynamic-preferences
 django-extensions>=4.0 # python 3.12 support added in version 4: https://github.com/django-extensions/django-extensions/releases/tag/4.0
 django-flags
+drf-spectacular==0.26.5  # Pinning this since later versions break ATF client generation
 grpcio
 grpcio-tools
 protobuf>=5.29.5  # CVE-2025-4565
