@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 
 from ansible_base.lib.utils.response import get_relative_url
@@ -46,15 +47,19 @@ from aap_gateway_api.views.api.v1.team import TeamViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.user import UserViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.workload_identity_tokens import WorkloadIdentityTokensView  # noqa: F401
 
+logger = logging.getLogger('aap.gateway.views')
+
 
 def gateway_exception_handler(exc, context):
     """
     Override default API exception handler to catch IntegrityError exceptions.
     """
     if isinstance(exc, IntegrityError):
-        exc = ParseError(exc.args[0])
+        logger.warning("IntegrityError in API request", exc_info=exc)
+        exc = ParseError("A resource with these values already exists.")
     if isinstance(exc, FieldError):
-        exc = ParseError(exc.args[0])
+        logger.warning("FieldError in API request", exc_info=exc)
+        exc = ParseError("Invalid field in request.")
     return exception_handler(exc, context)
 
 
