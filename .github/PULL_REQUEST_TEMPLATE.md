@@ -5,10 +5,6 @@
 - Why is this change needed?
 - How does this change address the issue?
 
-```yaml
-release: # (required) "2.5" OR "2.6" OR "2.7" OR "devel"
-backport: # (optional) ["2.5", "2.6", "devel"]
-```
 
 ## Type of Change
 <!-- Mandatory: Check one or more boxes that apply -->
