@@ -9,7 +9,7 @@ grpcio
 grpcio-tools
 protobuf>=4.25.8  # CVE-2025-4565
 psycopg
-pyjwt
+pyjwt>=2.12.0
 requests
 sqlparse>=0.5.2 # https://github.com/ansible/aap-gateway/security/dependabot/16
 uwsgi
