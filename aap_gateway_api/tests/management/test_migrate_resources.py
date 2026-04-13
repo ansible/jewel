@@ -1,3 +1,4 @@
+import re
 import uuid
 from unittest.mock import Mock, patch
 
@@ -15,6 +16,7 @@ from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Te
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 SEP_CHAR = "_"
+_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
 
 # Friendly reminder to all who come after me, this test file uses test fixtures defined
 # in module: aap_gateway_api/tests/service_test_app/fixtures/migration_tests.py
@@ -729,11 +731,14 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         captured = capsys.readouterr()
         assert "Found 1 services to migrate" in captured.out
         assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
-        assert "hub" not in captured.out  # Hub should not be processed
-        assert "eda" not in captured.out  # EDA should not be processed
         assert "Successful migrations: 1" in captured.out
         assert "Failed migrations: 0" in captured.out
         assert "All services migration completed successfully!" in captured.out
+
+        # Sanitize the UUIDs from the output, hub and eda are small enough strings that they could appear in a UUID
+        sanitized_out = _UUID_RE.sub('<uuid>', captured.out)
+        assert "hub" not in sanitized_out  # Hub should not be processed
+        assert "eda" not in sanitized_out  # EDA should not be processed
 
 
 @pytest.mark.django_db(transaction=True)
