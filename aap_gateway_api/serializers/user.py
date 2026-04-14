@@ -13,7 +13,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
-from drf_spectacular.utils import extend_schema_serializer
+from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.fields import empty
@@ -26,6 +26,13 @@ from aap_gateway_api.utils import get_preference_value
 logger = logging.getLogger('aap.gateway.serializer.user')
 
 PASSWORD_DISABLED = 'Password Disabled'  # signal unusable passwords
+
+
+@extend_schema_field({'type': 'object', 'additionalProperties': {'type': 'object', 'properties': {'uid': {'type': 'string'}, 'email': {'type': 'string'}}}})
+class _AssociatedAuthenticatorsField(serializers.JSONField):
+    """JSONField with OpenAPI schema annotation for associated_authenticators."""
+
+    pass
 
 
 @extend_schema_serializer(
@@ -50,7 +57,7 @@ class UserSerializer(CommonUserSerializer):
         allow_blank=True,
         help_text=_("DEPRECATED: This field is deprecated and will be removed in a future version. Please use 'associated_authenticators' instead."),
     )
-    associated_authenticators = serializers.JSONField(write_only=True, required=False)
+    associated_authenticators = _AssociatedAuthenticatorsField(write_only=True, required=False)
 
     last_login_from = serializers.SerializerMethodField(
         help_text=_(
