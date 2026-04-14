@@ -1556,7 +1556,207 @@ class TestDeprecatedAuthenticatorFields:
         # Get the full response payload so we can update just a single field
         full_payload = response.data
         full_payload['email'] = 'newemail@example.com'
-        # Make a request to the user's API client to update the user's email, it should succeed
+        # Make a request to the admin API client to update the user's email, it should succeed (admin can change email)
         updated_response = admin_api_client.patch(url, full_payload, format='json')
         assert updated_response.status_code == 200
         assert updated_response.data['email'] == full_payload['email']
+
+
+@pytest.mark.django_db
+class TestIdentityFieldRestrictions:
+    """Tests for restricting username and email changes to admins and org admins."""
+
+    def test_superuser_can_change_username(self, admin_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = admin_api_client.patch(url, {'username': 'new_username'})
+        assert response.status_code == 200
+        assert response.data['username'] == 'new_username'
+
+    def test_superuser_can_change_email(self, admin_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = admin_api_client.patch(url, {'email': 'newemail@example.com'})
+        assert response.status_code == 200
+        assert response.data['email'] == 'newemail@example.com'
+
+    def test_superuser_can_change_both(self, admin_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = admin_api_client.patch(url, {'username': 'changed_user', 'email': 'changed@example.com'})
+        assert response.status_code == 200
+        assert response.data['username'] == 'changed_user'
+        assert response.data['email'] == 'changed@example.com'
+
+    def test_regular_user_cannot_change_own_username(self, user_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {'username': 'hacked_username'})
+        assert response.status_code == 400
+        assert 'username' in response.data
+        assert 'permission' in str(response.data['username'][0]).lower()
+
+    def test_regular_user_cannot_change_own_email(self, user_api_client, user):
+        user.email = 'original@example.com'
+        user.save()
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {'email': 'hacked@example.com'})
+        assert response.status_code == 400
+        assert 'email' in response.data
+        assert 'permission' in str(response.data['email'][0]).lower()
+
+    def test_regular_user_can_change_non_identity_fields(self, user_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {'first_name': 'NewFirst', 'last_name': 'NewLast'})
+        assert response.status_code == 200
+        assert response.data['first_name'] == 'NewFirst'
+        assert response.data['last_name'] == 'NewLast'
+
+    def test_regular_user_send_same_username_is_ok(self, user_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {'username': user.username, 'first_name': 'Updated'})
+        assert response.status_code == 200
+        assert response.data['first_name'] == 'Updated'
+
+    def test_regular_user_send_same_email_is_ok(self, user_api_client, user):
+        user.email = 'same@example.com'
+        user.save()
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {'email': 'same@example.com', 'first_name': 'Updated'})
+        assert response.status_code == 200
+        assert response.data['first_name'] == 'Updated'
+
+    def test_org_admin_can_change_username_when_manage_org_auth_true(self, user_api_client, user, organization, preference_manager):
+        target_user = User.objects.create(username='target_user', email='target@example.com')
+        organization.add_admin(user)
+        organization.add_member(target_user)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            url = get_relative_url('user-detail', kwargs={'pk': target_user.id})
+            response = user_api_client.patch(url, {'username': 'org_changed_username'})
+            assert response.status_code == 200
+            assert response.data['username'] == 'org_changed_username'
+
+    def test_org_admin_can_change_email_when_manage_org_auth_true(self, user_api_client, user, organization, preference_manager):
+        target_user = User.objects.create(username='target_user2', email='target2@example.com')
+        organization.add_admin(user)
+        organization.add_member(target_user)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            url = get_relative_url('user-detail', kwargs={'pk': target_user.id})
+            response = user_api_client.patch(url, {'email': 'org_changed@example.com'})
+            assert response.status_code == 200
+            assert response.data['email'] == 'org_changed@example.com'
+
+    def test_org_admin_cannot_change_username_when_manage_org_auth_false(self, user_api_client, user, organization, preference_manager):
+        organization.add_admin(user)
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', False):
+            url = get_relative_url('user-detail', kwargs={'pk': user.id})
+            response = user_api_client.patch(url, {'username': 'should_not_work'})
+            # When MANAGE_ORGANIZATION_AUTH=False, DAB permission layer blocks writes for non-superusers (403)
+            assert response.status_code == 403
+
+    def test_org_admin_cannot_change_email_when_manage_org_auth_false(self, user_api_client, user, organization, preference_manager):
+        organization.add_admin(user)
+        user.email = 'original@example.com'
+        user.save()
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', False):
+            url = get_relative_url('user-detail', kwargs={'pk': user.id})
+            response = user_api_client.patch(url, {'email': 'should_not_work@example.com'})
+            # When MANAGE_ORGANIZATION_AUTH=False, DAB permission layer blocks writes for non-superusers (403)
+            assert response.status_code == 403
+
+    def test_superuser_can_change_fields_regardless_of_manage_org_auth(self, admin_api_client, user, preference_manager):
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', False):
+            url = get_relative_url('user-detail', kwargs={'pk': user.id})
+            response = admin_api_client.patch(url, {'username': 'super_override', 'email': 'super@example.com'})
+            assert response.status_code == 200
+            assert response.data['username'] == 'super_override'
+            assert response.data['email'] == 'super@example.com'
+
+    @pytest.mark.parametrize('field,value', [('username', 'both_bad'), ('email', 'both_bad@example.com')])
+    def test_regular_user_change_identity_fields_errors(self, user_api_client, user, field, value):
+        if field == 'email':
+            user.email = 'existing@example.com'
+            user.save()
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {field: value})
+        assert response.status_code == 400
+        assert field in response.data
+
+    def test_org_admin_cannot_change_identity_fields_of_user_in_different_org(self, user_api_client, user, organization, organization_2, preference_manager):
+        """Org admin of Org B cannot change username/email of a user in Org A.
+
+        Even with ORG_ADMINS_CAN_SEE_ALL_USERS=True (can see the user), the
+        DAB permission layer blocks writes because the org admin doesn't
+        administer all of the target user's organizations.
+        """
+        joe = User.objects.create(username='joe', email='joe@example.com')
+        organization.add_member(joe)
+        organization_2.add_admin(user)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', True):
+                url = get_relative_url('user-detail', kwargs={'pk': joe.id})
+                response = user_api_client.patch(url, {'username': 'hacked_joe'})
+                assert response.status_code == 403
+
+                response = user_api_client.patch(url, {'email': 'hacked@example.com'})
+                assert response.status_code == 403
+
+    def test_org_admin_of_same_org_can_change_identity_fields(self, user_api_client, user, organization, preference_manager):
+        """Org admin of Org A can change username/email of a user in Org A."""
+        joe = User.objects.create(username='joe2', email='joe2@example.com')
+        organization.add_admin(user)
+        organization.add_member(joe)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            url = get_relative_url('user-detail', kwargs={'pk': joe.id})
+            response = user_api_client.patch(url, {'username': 'joe_renamed'})
+            assert response.status_code == 200
+            assert response.data['username'] == 'joe_renamed'
+
+    def test_org_admin_cannot_change_identity_fields_if_user_in_multiple_orgs(self, user_api_client, user, organization, organization_2, preference_manager):
+        """Org admin of only Org A cannot change identity fields if target user is also in Org B."""
+        joe = User.objects.create(username='multi_org_joe', email='multijoe@example.com')
+        organization.add_admin(user)
+        organization.add_member(joe)
+        organization_2.add_member(joe)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            url = get_relative_url('user-detail', kwargs={'pk': joe.id})
+            response = user_api_client.patch(url, {'username': 'should_fail'})
+            assert response.status_code == 403
+
+    def test_superuser_can_change_own_identity_fields(self, admin_api_client, admin_user):
+        """Superuser can change their own username and email."""
+        url = get_relative_url('user-detail', kwargs={'pk': admin_user.id})
+        response = admin_api_client.patch(url, {'username': 'super_self_renamed', 'email': 'super_self@example.com'})
+        assert response.status_code == 200
+        assert response.data['username'] == 'super_self_renamed'
+        assert response.data['email'] == 'super_self@example.com'
+
+    def test_org_admin_can_change_own_identity_fields_when_in_own_org(self, user_api_client, user, organization, preference_manager):
+        """Org admin who is also a member of their own org can change their own identity fields."""
+        organization.add_admin(user)
+        organization.add_member(user)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            url = get_relative_url('user-detail', kwargs={'pk': user.id})
+            response = user_api_client.patch(url, {'username': 'self_org_admin_renamed'})
+            assert response.status_code == 200
+            assert response.data['username'] == 'self_org_admin_renamed'
+
+    def test_org_admin_cannot_change_own_identity_fields_when_also_in_unmanaged_org(
+        self, user_api_client, user, organization, organization_2, preference_manager
+    ):
+        """Org admin of Org A but also member of Org B cannot change own identity fields.
+
+        Because can_change_user requires admin of ALL the target's orgs.
+        """
+        organization.add_admin(user)
+        organization.add_member(user)
+        organization_2.add_member(user)
+
+        with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
+            url = get_relative_url('user-detail', kwargs={'pk': user.id})
+            response = user_api_client.patch(url, {'username': 'should_not_work'})
+            assert response.status_code == 400
+            assert 'username' in response.data
+            assert 'permission' in str(response.data['username'][0]).lower()

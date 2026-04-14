@@ -7,6 +7,7 @@ from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.rbac.policies import can_change_user
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -171,11 +172,15 @@ class UserSerializer(CommonUserSerializer):
         AuthenticatorUser.objects.create(uid=uid, user=user_instance, provider=authenticator, email=email)
         return authenticator
 
-    def is_superuser_making_request(self) -> bool:
+    def _get_requesting_user(self):
         request = self.context.get('request', None)
-        if request and hasattr(request, 'user') and request.user.is_superuser:
-            return True
-        return False
+        if request and hasattr(request, 'user'):
+            return request.user
+        return None
+
+    def is_superuser_making_request(self) -> bool:
+        user = self._get_requesting_user()
+        return user is not None and user.is_superuser
 
     def validate_password(self, value: str) -> str:
         if not value or value in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
@@ -411,20 +416,46 @@ class UserSerializer(CommonUserSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
+    def _validate_identity_fields(self, data):
+        """Prevent unauthorized changes to username and email.
+
+        Delegates to DAB's can_change_user with can_self_edit=False so that
+        only superusers and org admins (who administer ALL of the target
+        user's organizations) may change username or email.
+        """
+        if self.instance is None:
+            return
+
+        identity_fields = {
+            'username': self.instance.username,
+            'email': self.instance.email,
+        }
+        identity_errors_if_not_allowed = {}
+        for field, current_value in identity_fields.items():
+            if field in data and data[field] != current_value:
+                identity_errors_if_not_allowed[field] = [_("You do not have permission to change the %(field)s field.") % {'field': field}]
+
+        requesting_user = self._get_requesting_user()
+        if not can_change_user(requesting_user, self.instance, can_self_edit=False):
+            raise ValidationError(identity_errors_if_not_allowed)
+
     def validate(self, data):
         """
         Perform cross-field validation for authenticators and authenticator_uid.
 
         This method:
-        1. Handles partial updates for authenticator_uid.
-        2. Validates authenticator and UID combinations:
+        1. Validates identity field changes (username/email) are authorized.
+        2. Handles partial updates for authenticator_uid.
+        3. Validates authenticator and UID combinations:
            - Ensures UID is present when adding/modifying authenticators.
            - Checks for UID conflicts across authenticators.
            - Validates new authenticators for conflicts.
-        3. Ensures authenticator_uid is empty when removing all authenticators.
+        4. Ensures authenticator_uid is empty when removing all authenticators.
 
         Raises ValidationError if any validation fails.
         """
+        self._validate_identity_fields(data)
+
         authenticators = data.get('authenticators')
         authenticator_uid = data.get('authenticator_uid')
 
