@@ -435,6 +435,9 @@ class UserSerializer(CommonUserSerializer):
             if field in data and data[field] != current_value:
                 identity_errors_if_not_allowed[field] = [_("You do not have permission to change the %(field)s field.") % {'field': field}]
 
+        if not identity_errors_if_not_allowed:
+            return
+
         requesting_user = self._get_requesting_user()
         if not can_change_user(requesting_user, self.instance, can_self_edit=False):
             raise ValidationError(identity_errors_if_not_allowed)
