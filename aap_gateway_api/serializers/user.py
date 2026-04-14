@@ -416,38 +416,29 @@ class UserSerializer(CommonUserSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
-    def _validate_identity_fields(self, data):
-        """Prevent unauthorized changes to username and email.
+    def _validate_email_change(self, data):
+        """Prevent unauthorized changes to email.
 
         Delegates to DAB's can_change_user with can_self_edit=False so that
         only superusers and org admins (who administer ALL of the target
-        user's organizations) may change username or email.
+        user's organizations) may change email.
         """
         if self.instance is None:
             return
 
-        identity_fields = {
-            'username': self.instance.username,
-            'email': self.instance.email,
-        }
-        identity_errors_if_not_allowed = {}
-        for field, current_value in identity_fields.items():
-            if field in data and data[field] != current_value:
-                identity_errors_if_not_allowed[field] = [_("You do not have permission to change the %(field)s field.") % {'field': field}]
-
-        if not identity_errors_if_not_allowed:
+        if 'email' not in data or data['email'] == self.instance.email:
             return
 
         requesting_user = self._get_requesting_user()
         if not can_change_user(requesting_user, self.instance, can_self_edit=False):
-            raise ValidationError(identity_errors_if_not_allowed)
+            raise ValidationError({'email': [_("You do not have permission to change the %(field)s field.") % {'field': 'email'}]})
 
     def validate(self, data):
         """
         Perform cross-field validation for authenticators and authenticator_uid.
 
         This method:
-        1. Validates identity field changes (username/email) are authorized.
+        1. Validates email changes are authorized.
         2. Handles partial updates for authenticator_uid.
         3. Validates authenticator and UID combinations:
            - Ensures UID is present when adding/modifying authenticators.
@@ -457,7 +448,7 @@ class UserSerializer(CommonUserSerializer):
 
         Raises ValidationError if any validation fails.
         """
-        self._validate_identity_fields(data)
+        self._validate_email_change(data)
 
         authenticators = data.get('authenticators')
         authenticator_uid = data.get('authenticator_uid')
