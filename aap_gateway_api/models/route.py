@@ -209,6 +209,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 "typed_filter_metadata": {},
             },
             "typed_per_filter_config": {},
+            "request_headers_to_remove": ["Subject"],
         }
 
         if StreamingServiceType.is_streaming_service(self.service_cluster.service_type.name):
@@ -217,7 +218,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         if self.enable_mtls:
             cfg["match"]["tls_context"] = {"presented": True, "validated": True}
-            cfg["request_headers_to_add"] = [{"header": {"key": "Subject", "value": "%DOWNSTREAM_PEER_SUBJECT%"}}]
+            cfg["request_headers_to_add"] = [{"header": {"key": "Subject", "value": "%DOWNSTREAM_PEER_SUBJECT%"}, "append": False}]
 
         if self.service_cluster.upstream_hostname:
             cfg["route"]["host_rewrite_literal"] = self.service_cluster.upstream_hostname
