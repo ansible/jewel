@@ -411,6 +411,7 @@ class TestRoute:
         assert routes[0]['match']['tls_context']['validated']
         assert routes[0]['request_headers_to_add'][0]['header']['key'] == 'Subject'
         assert routes[0]['request_headers_to_add'][0]['header']['value'] == '%DOWNSTREAM_PEER_SUBJECT%'
+        assert routes[0]['request_headers_to_add'][0]['append'] is False
 
     @pytest.mark.django_db
     def test_xds_route_config_disable_mtls(self, service_cluster_eda):
@@ -418,6 +419,53 @@ class TestRoute:
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=False)
         routes = route.get_xds_route_config()
         assert 'tls_context' not in routes[0]['match'].keys()
+
+    @pytest.mark.django_db
+    def test_xds_route_config_subject_header_removed_by_default(self, service_cluster_eda):
+        """Test that Subject header is removed from all requests by default to prevent spoofing."""
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        routes = route.get_xds_route_config()
+        assert 'request_headers_to_remove' in routes[0]
+        assert routes[0]['request_headers_to_remove'] == ['Subject']
+
+    @pytest.mark.django_db
+    def test_xds_route_config_mtls_subject_header_append_false(self, service_cluster_eda):
+        """Test that when mTLS is enabled, the Subject header is set with append=False to prevent spoofing."""
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=True)
+        routes = route.get_xds_route_config()
+
+        # Verify Subject header is removed by default
+        assert 'request_headers_to_remove' in routes[0]
+        assert routes[0]['request_headers_to_remove'] == ['Subject']
+
+        # Verify Subject header is added with append=False when mTLS is enabled
+        assert 'request_headers_to_add' in routes[0]
+        assert len(routes[0]['request_headers_to_add']) == 1
+        subject_header = routes[0]['request_headers_to_add'][0]
+        assert subject_header['header']['key'] == 'Subject'
+        assert subject_header['header']['value'] == '%DOWNSTREAM_PEER_SUBJECT%'
+        assert subject_header['append'] is False
+
+    @pytest.mark.django_db
+    def test_xds_route_config_mtls_disabled_no_subject_added(self, service_cluster_eda):
+        """Test that when mTLS is disabled, the Subject header is removed but not re-added."""
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=False)
+        routes = route.get_xds_route_config()
+
+        # Verify Subject header is removed
+        assert 'request_headers_to_remove' in routes[0]
+        assert routes[0]['request_headers_to_remove'] == ['Subject']
+
+        # Verify Subject header is NOT added when mTLS is disabled
+        assert 'request_headers_to_add' not in routes[0]
+
+    @pytest.mark.django_db
+    def test_xds_route_config_additional_route_subject_removed(self, service_cluster_eda):
+        """Test that AdditionalRoute also removes Subject header by default."""
+        route = AdditionalRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        routes = route.get_xds_route_config()
+        assert 'request_headers_to_remove' in routes[0]
+        assert routes[0]['request_headers_to_remove'] == ['Subject']
 
 
 class TestRouteRequestTimeout:
