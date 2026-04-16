@@ -122,7 +122,9 @@ class SecretDiscoverServiceView(XDSView):
         return Response(self.get_xds_response(Secret, [secret_resource]))
 
     def _collect_db_ca_certs(self) -> dict:
-        certs = [cert.pem_data for cert in CACertificate.objects.all()]
-        cert_data = "\n".join(certs)
-
-        return {"name": SDS_SECRET_CONFIG_NAME, "validation_context": {"trusted_ca": {"inline_string": cert_data}}}
+        pem_blocks = [(cert.pem_data or "").strip() for cert in CACertificate.objects.all()]
+        pem_blocks = [p for p in pem_blocks if p]
+        secret = {"name": SDS_SECRET_CONFIG_NAME, "validation_context": {}}
+        if pem_blocks:
+            secret["validation_context"]["trusted_ca"] = {"inline_string": "\n".join(pem_blocks)}
+        return secret

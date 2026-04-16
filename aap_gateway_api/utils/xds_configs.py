@@ -77,6 +77,7 @@ def transport_socket():
         "name": "envoy.transport_sockets.tls",
         "typed_config": {
             "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext",
+            "require_client_certificate": False,
             "common_tls_context": {
                 "tls_certificates": [
                     {

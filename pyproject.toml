@@ -146,6 +146,8 @@ legacy_tox_ini = """
     passenv = 
         ANSIBLE_GW_TEST_DB_HOST
         DB_PORT
+        GATEWAY_TEST_DIRS
+        PYTEST_NUM_PROCESSES
     ## The CFLAGS env variable below is a workaround for issue:
     ## https://github.com/xmlsec/python-xmlsec/issues/323
     setenv =
