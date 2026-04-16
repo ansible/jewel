@@ -48,6 +48,8 @@ jobs:
       (github.repository == 'ansible-automation-platform/aap-gateway' || github.repository == 'ansible-automation-platform/aap-gateway-debug')
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Download all individual coverage artifacts from Unit Tests workflow
       - name: Download coverage artifacts
@@ -200,6 +202,8 @@ jobs:
       (github.repository == 'ansible-automation-platform/aap-gateway' || github.repository == 'ansible-automation-platform/aap-gateway-debug')
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Download all individual coverage artifacts from Unit Tests workflow (optional for branch pushes)
       - name: Download coverage artifacts
