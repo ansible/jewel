@@ -1,16 +1,13 @@
 """
-Email Hijack Detection Command for AAP Gateway
+Detect Changed Emails Command for AAP Gateway
 
-Usage: python manage.py detect_email_hijack
+Usage:
+    aap-gateway-manage detect_changed_emails
+    aap-gateway-manage detect_changed_emails --audit
 
-Detects potential email hijacking by analyzing:
-  1. Activity stream for email changes
-  2. Users with both local and external authenticators
-  3. AuthenticatorUser.email vs User.email mismatches
-  4. Duplicate emails across users
-  5. Email changes made by non-superuser actors
-  6. Email changes where the new email matched another user
-  7. High-risk combo: email changed + dual authenticators
+Default mode shows email changes from the activity stream.
+With --audit, performs a full security analysis including authenticator
+linkage checks, duplicate detection, and high-risk scoring.
 """
 
 from collections import defaultdict
@@ -25,11 +22,18 @@ from django.core.management.base import BaseCommand
 User = get_user_model()
 
 SEPARATOR = "=" * 90
-SUB_SEPARATOR = "-" * 90
 
 
 class Command(BaseCommand):
-    help = "Detect potential email hijacking by scanning the activity stream and authenticator linkages."
+    help = "Detect email changes from the activity stream. Use --audit for full security analysis."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--audit',
+            action='store_true',
+            dest='audit',
+            help='Run full security audit: authenticator linkage, duplicates, and high-risk scoring.',
+        )
 
     def header(self, title):
         self.stdout.write(f"\n{SEPARATOR}")
@@ -37,23 +41,20 @@ class Command(BaseCommand):
         self.stdout.write(SEPARATOR)
 
     def handle(self, *args, **options):
+        audit = options['audit']
         email_changes = self._check_activity_stream()
-        dual_auth_users = self._check_dual_authenticators(
-            email_changes,
-        )
+
+        if not audit:
+            self._print_summary_basic(email_changes)
+            return
+
+        dual_auth_users = self._check_dual_authenticators(email_changes)
         mismatches = self._check_email_mismatches()
         duplicates = self._check_duplicate_emails()
-        non_super = self._check_non_superuser_changes(
-            email_changes,
-        )
-        suspicious = self._check_email_matches_other_user(
-            email_changes,
-        )
-        high_risk = self._check_high_risk_combo(
-            email_changes,
-            dual_auth_users,
-        )
-        self._print_summary(
+        non_super = self._check_non_superuser_changes(email_changes)
+        suspicious = self._check_email_matches_other_user(email_changes)
+        high_risk = self._check_high_risk_combo(email_changes, dual_auth_users)
+        self._print_summary_full(
             email_changes,
             dual_auth_users,
             mismatches,
@@ -64,10 +65,10 @@ class Command(BaseCommand):
         )
 
     # -----------------------------------------------------------------
-    # 1. Activity stream email changes
+    # Activity stream email changes (always shown)
     # -----------------------------------------------------------------
     def _check_activity_stream(self):
-        self.header("1. ACTIVITY STREAM: ALL EMAIL CHANGES ON USER OBJECTS")
+        self.header("EMAIL CHANGES IN ACTIVITY STREAM")
         user_ct = ContentType.objects.get_for_model(User)
         entries = (
             Entry.objects.filter(
@@ -81,7 +82,7 @@ class Command(BaseCommand):
 
         records = []
         if not entries.exists():
-            self.stdout.write("\n  No email changes found in the activity stream.")
+            self.stdout.write("\n  No email changes found in the activity stream.\n")
             return records
 
         self.stdout.write(f"\n  Found {entries.count()} email change(s):\n")
@@ -124,20 +125,15 @@ class Command(BaseCommand):
         return records
 
     # -----------------------------------------------------------------
-    # 2. Users with both local and external authenticators
+    # Audit-only checks below
     # -----------------------------------------------------------------
     def _check_dual_authenticators(self, email_changes):
-        self.header("2. USERS WITH LOCAL + EXTERNAL AUTHENTICATORS")
+        self.header("USERS WITH LOCAL + EXTERNAL AUTHENTICATORS")
         users_with_auth = defaultdict(lambda: {"local": [], "external": []})
-        auth_users = AuthenticatorUser.objects.select_related(
-            "user",
-            "provider",
-        ).all()
+        auth_users = AuthenticatorUser.objects.select_related("user", "provider").all()
         for au in auth_users:
             try:
-                plugin = get_authenticator_plugin(
-                    au.provider.type,
-                )
+                plugin = get_authenticator_plugin(au.provider.type)
                 auth_type = plugin.type
             except Exception:
                 auth_type = "unknown"
@@ -179,17 +175,11 @@ class Command(BaseCommand):
 
         return dual
 
-    # -----------------------------------------------------------------
-    # 3. AuthenticatorUser.email vs User.email mismatches
-    # -----------------------------------------------------------------
     def _check_email_mismatches(self):
-        self.header("3. AUTHENTICATOR EMAIL vs USER EMAIL MISMATCHES")
+        self.header("AUTHENTICATOR EMAIL vs USER EMAIL MISMATCHES")
         mismatches = []
         qs = (
-            AuthenticatorUser.objects.select_related(
-                "user",
-                "provider",
-            )
+            AuthenticatorUser.objects.select_related("user", "provider")
             .exclude(email__isnull=True)
             .exclude(email="")
         )
@@ -210,16 +200,11 @@ class Command(BaseCommand):
 
         return mismatches
 
-    # -----------------------------------------------------------------
-    # 4. Duplicate emails across users
-    # -----------------------------------------------------------------
     def _check_duplicate_emails(self):
-        self.header("4. DUPLICATE EMAILS ACROSS USERS")
+        self.header("DUPLICATE EMAILS ACROSS USERS")
 
         email_to_users = defaultdict(list)
-        qs = User.all_objects.exclude(
-            email__isnull=True,
-        ).exclude(email="")
+        qs = User.all_objects.exclude(email__isnull=True).exclude(email="")
         for u in qs:
             email_to_users[u.email.lower()].append(u)
 
@@ -238,11 +223,8 @@ class Command(BaseCommand):
 
         return dupes
 
-    # -----------------------------------------------------------------
-    # 5. Email changes by non-superuser actors
-    # -----------------------------------------------------------------
     def _check_non_superuser_changes(self, email_changes):
-        self.header("5. EMAIL CHANGES BY NON-SUPERUSER ACTORS")
+        self.header("EMAIL CHANGES BY NON-SUPERUSER ACTORS")
         non_super = [r for r in email_changes if r["actor_is_super"] is False]
 
         if not non_super:
@@ -260,11 +242,8 @@ class Command(BaseCommand):
 
         return non_super
 
-    # -----------------------------------------------------------------
-    # 6. Email changed to match another user
-    # -----------------------------------------------------------------
     def _check_email_matches_other_user(self, email_changes):
-        self.header("6. EMAIL CHANGES THAT MATCHED ANOTHER EXISTING USER'S EMAIL")
+        self.header("EMAIL CHANGES THAT MATCHED ANOTHER EXISTING USER'S EMAIL")
         suspicious = []
         for r in email_changes:
             if not r["new_email"]:
@@ -291,15 +270,8 @@ class Command(BaseCommand):
 
         return suspicious
 
-    # -----------------------------------------------------------------
-    # 7. High-risk: email changed + dual authenticators
-    # -----------------------------------------------------------------
-    def _check_high_risk_combo(
-        self,
-        email_changes,
-        dual_auth_users,
-    ):
-        self.header("7. HIGH-RISK: EMAIL CHANGED + LOCAL+EXTERNAL AUTHENTICATORS")
+    def _check_high_risk_combo(self, email_changes, dual_auth_users):
+        self.header("HIGH-RISK: EMAIL CHANGED + LOCAL+EXTERNAL AUTHENTICATORS")
         high_risk = [r for r in email_changes if r["target_user"] and r["target_user"].pk in dual_auth_users]
 
         if not high_risk:
@@ -323,9 +295,17 @@ class Command(BaseCommand):
         return high_risk
 
     # -----------------------------------------------------------------
-    # Summary
+    # Summaries
     # -----------------------------------------------------------------
-    def _print_summary(
+    def _print_summary_basic(self, email_changes):
+        self.stdout.write(f"  Total email changes found: {len(email_changes)}")
+        non_super = [r for r in email_changes if r["actor_is_super"] is False]
+        if non_super:
+            self.stdout.write(f"  Of which {len(non_super)} were by non-superuser actors.")
+            self.stdout.write("\n  Run with --audit for full security analysis.")
+        self.stdout.write(f"\n{SEPARATOR}\n")
+
+    def _print_summary_full(
         self,
         email_changes,
         dual_auth_users,
@@ -335,7 +315,7 @@ class Command(BaseCommand):
         suspicious,
         high_risk,
     ):
-        self.header("SUMMARY")
+        self.header("AUDIT SUMMARY")
         self.stdout.write(f"\n  Total email changes in activity stream:      {len(email_changes)}")
         self.stdout.write(f"  Users with local + external auth:             {len(dual_auth_users)}")
         self.stdout.write(f"  AuthUser vs User email mismatches:            {len(mismatches)}")
