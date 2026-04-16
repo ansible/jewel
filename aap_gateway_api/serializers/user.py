@@ -430,6 +430,9 @@ class UserSerializer(CommonUserSerializer):
             return
 
         requesting_user = self._get_requesting_user()
+        if requesting_user is None:
+            return
+
         if not can_change_user(requesting_user, self.instance, can_self_edit=False):
             raise ValidationError({'email': [_("You do not have permission to change the %(field)s field.") % {'field': 'email'}]})
 
