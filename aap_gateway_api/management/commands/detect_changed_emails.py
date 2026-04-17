@@ -127,28 +127,41 @@ class Command(BaseCommand):
     # -----------------------------------------------------------------
     # Audit-only checks below
     # -----------------------------------------------------------------
+    @staticmethod
+    def _classify_authenticator(au):
+        try:
+            plugin = get_authenticator_plugin(au.provider.type)
+            auth_type = plugin.type
+        except Exception:
+            auth_type = "unknown"
+        return "local" if auth_type == "local" else "external"
+
+    @staticmethod
+    def _build_auth_map():
+        users_with_auth = defaultdict(lambda: {"local": [], "external": []})
+        for au in AuthenticatorUser.objects.select_related("user", "provider").all():
+            bucket = Command._classify_authenticator(au)
+            users_with_auth[au.user_id][bucket].append({"name": au.provider.name, "type": au.provider.type, "uid": au.uid, "email": au.email})
+        return {uid: data for uid, data in users_with_auth.items() if data["local"] and data["external"]}
+
+    def _print_dual_user(self, user_id, data, changed_pks):
+        try:
+            u = User.all_objects.get(pk=user_id)
+            uname, uemail = u.username, u.email
+        except User.DoesNotExist:
+            uname, uemail = f"[DELETED pk={user_id}]", "N/A"
+
+        flag = " *** EMAIL WAS CHANGED ***" if user_id in changed_pks else ""
+        self.stdout.write(f"  User: {uname} (pk={user_id}, email={uemail}){flag}")
+        for a in data["local"]:
+            self.stdout.write(f"    [LOCAL]    {a['name']} | uid={a['uid']} | auth_email={a['email']}")
+        for a in data["external"]:
+            self.stdout.write(f"    [EXTERNAL] {a['name']} ({a['type']}) | uid={a['uid']} | auth_email={a['email']}")
+        self.stdout.write("")
+
     def _check_dual_authenticators(self, email_changes):
         self.header("USERS WITH LOCAL + EXTERNAL AUTHENTICATORS")
-        users_with_auth = defaultdict(lambda: {"local": [], "external": []})
-        auth_users = AuthenticatorUser.objects.select_related("user", "provider").all()
-        for au in auth_users:
-            try:
-                plugin = get_authenticator_plugin(au.provider.type)
-                auth_type = plugin.type
-            except Exception:
-                auth_type = "unknown"
-
-            bucket = "local" if auth_type == "local" else "external"
-            users_with_auth[au.user_id][bucket].append(
-                {
-                    "name": au.provider.name,
-                    "type": au.provider.type,
-                    "uid": au.uid,
-                    "email": au.email,
-                }
-            )
-
-        dual = {uid: data for uid, data in users_with_auth.items() if data["local"] and data["external"]}
+        dual = self._build_auth_map()
 
         if not dual:
             self.stdout.write("\n  No users found with both local and external authenticators.")
@@ -157,32 +170,14 @@ class Command(BaseCommand):
         self.stdout.write(f"\n  Found {len(dual)} user(s) with both local and external authenticators:\n")
         changed_pks = {r["target_user"].pk for r in email_changes if r["target_user"]}
         for user_id, data in dual.items():
-            try:
-                u = User.all_objects.get(pk=user_id)
-                uname = u.username
-                uemail = u.email
-            except User.DoesNotExist:
-                uname = f"[DELETED pk={user_id}]"
-                uemail = "N/A"
-
-            flag = " *** EMAIL WAS CHANGED ***" if user_id in changed_pks else ""
-            self.stdout.write(f"  User: {uname} (pk={user_id}, email={uemail}){flag}")
-            for a in data["local"]:
-                self.stdout.write(f"    [LOCAL]    {a['name']} | uid={a['uid']} | auth_email={a['email']}")
-            for a in data["external"]:
-                self.stdout.write(f"    [EXTERNAL] {a['name']} ({a['type']}) | uid={a['uid']} | auth_email={a['email']}")
-            self.stdout.write("")
+            self._print_dual_user(user_id, data, changed_pks)
 
         return dual
 
     def _check_email_mismatches(self):
         self.header("AUTHENTICATOR EMAIL vs USER EMAIL MISMATCHES")
         mismatches = []
-        qs = (
-            AuthenticatorUser.objects.select_related("user", "provider")
-            .exclude(email__isnull=True)
-            .exclude(email="")
-        )
+        qs = AuthenticatorUser.objects.select_related("user", "provider").exclude(email__isnull=True).exclude(email="")
         for au in qs:
             if au.user.email and au.email and au.email.lower() != au.user.email.lower():
                 mismatches.append(au)
