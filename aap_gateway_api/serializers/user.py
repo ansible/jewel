@@ -431,6 +431,7 @@ class UserSerializer(CommonUserSerializer):
 
         requesting_user = self._get_requesting_user()
         if requesting_user is None:
+            logger.debug("Skipping email change authorization: no requesting user in context (system sync path)")
             return
 
         if not can_change_user(requesting_user, self.instance, can_self_edit=False):
@@ -442,8 +443,9 @@ class UserSerializer(CommonUserSerializer):
 
         This method:
         1. Delegates to DAB's CommonUserSerializer.validate() for system user
-           protection and email change authorization.
-        2. Validates email changes are authorized (local enforcement).
+           protection and email change authorization (first line of defense).
+        2. Applies Gateway-local email policy via _validate_email_change as
+           a second line of defense (defense-in-depth).
         3. Handles partial updates for authenticator_uid.
         4. Validates authenticator and UID combinations:
            - Ensures UID is present when adding/modifying authenticators.

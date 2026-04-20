@@ -605,9 +605,10 @@ class TestGetOrCreateProcessorSerializerValidation:
         assert target_user.first_name == "NewFirst"
         assert target_user.last_name == "NewLast"
 
-    def test_serializer_exception_allows_update(self, target_user, superuser):
-        """If the serializer raises an unexpected exception the
-        update should still proceed (fail-open for robustness)."""
+    def test_serializer_exception_strips_sensitive_fields(self, target_user, superuser):
+        """If the serializer raises an unexpected exception,
+        sensitive fields (email, is_superuser, is_staff) are
+        stripped but non-sensitive fields still proceed."""
         processor = GetOrCreateProcessor(target_user)
 
         with (
@@ -621,9 +622,40 @@ class TestGetOrCreateProcessorSerializerValidation:
             ),
         ):
             processor.save(
-                {"first_name": "StillWorks"},
+                {
+                    "first_name": "StillWorks",
+                    "email": "evil@example.com",
+                    "is_superuser": True,
+                },
                 is_new=False,
             )
 
         target_user.refresh_from_db()
         assert target_user.first_name == "StillWorks"
+        assert target_user.email == "original@example.com"
+        assert target_user.is_superuser is False
+
+    def test_new_user_creation_bypasses_validation(self, regular_user):
+        """POST (is_new=True) for a genuinely new user creates
+        the user via update_or_create without Gateway serializer
+        validation, since there is no prior state to protect."""
+        processor = GetOrCreateProcessor(User(username="brand_new_user"))
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=regular_user,
+        ):
+            result = processor.save(
+                {
+                    "username": "brand_new_user",
+                    "email": "newuser@example.com",
+                    "first_name": "Brand",
+                    "last_name": "New",
+                },
+                is_new=True,
+            )
+
+        result.refresh_from_db()
+        assert result.username == "brand_new_user"
+        assert result.email == "newuser@example.com"
+        assert result.first_name == "Brand"

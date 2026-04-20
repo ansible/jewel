@@ -37,6 +37,9 @@ def _get_gateway_serializer_map():
     return _GATEWAY_SERIALIZER_MAP
 
 
+_SENSITIVE_FIELDS = frozenset({'email', 'is_superuser', 'is_staff'})
+
+
 class _SyncRequest:
     """Minimal request-like object that carries just enough
     context for Gateway serializers during resource-registry
@@ -47,6 +50,9 @@ class _SyncRequest:
         self.method = 'PATCH'
         self.data = {}
 
+    def __getattr__(self, name):
+        return None
+
 
 class GetOrCreateProcessor(ResourceTypeProcessor):
     def _validate_via_gateway_serializer(self, validated_data):
@@ -55,9 +61,8 @@ class GetOrCreateProcessor(ResourceTypeProcessor):
         reverse-sync payloads (email restrictions, field
         permissions, etc.).
 
-        Fields that fail validation are silently stripped from
-        validated_data and logged so the rest of the sync still
-        succeeds.
+        Fields that fail validation are stripped (with a warning
+        log) so the rest of the sync still succeeds.
         """
         if self.instance.pk is None:
             return
@@ -83,20 +88,35 @@ class GetOrCreateProcessor(ResourceTypeProcessor):
                 return
         except Exception:
             logger.exception(
-                "Unexpected error validating resource-registry payload for %s pk=%s; allowing update to proceed unfiltered.",
+                "Unexpected error validating resource-registry payload for %s pk=%s; stripping sensitive fields.",
                 self.instance.__class__.__name__,
                 self.instance.pk,
             )
+            for field in _SENSITIVE_FIELDS:
+                validated_data.pop(field, None)
+            return
+
+        if 'non_field_errors' in ser.errors:
+            logger.error(
+                "Cross-field validation failed for %s (pk=%s) via resource registry.  Requesting user: %s.  Errors: %s.  Clearing validated_data.",
+                self.instance.__class__.__name__,
+                self.instance.pk,
+                user,
+                ser.errors['non_field_errors'],
+            )
+            validated_data.clear()
             return
 
         for field_name, errors in ser.errors.items():
             if field_name in validated_data:
-                logger.warning(
-                    "Blocked field '%s' on %s (pk=%s) via resource registry.  Requesting user: %s.  Errors: %s",
+                log_fn = logger.error if field_name in _SENSITIVE_FIELDS else logger.warning
+                log_fn(
+                    "Blocked field '%s' on %s (pk=%s) via resource registry.  Requesting user: %s.  Attempted value: %r.  Errors: %s",
                     field_name,
                     self.instance.__class__.__name__,
                     self.instance.pk,
                     user,
+                    validated_data[field_name],
                     errors,
                 )
                 del validated_data[field_name]
@@ -107,17 +127,13 @@ class GetOrCreateProcessor(ResourceTypeProcessor):
         validated_data.
 
         If ``is_new`` is True (POST) this tries to find an
-        existing object by unique fields; if found it updates,
-        otherwise creates.
+        existing object by unique fields; if found it updates
+        (with validation), otherwise creates via
+        ``update_or_create`` without Gateway serializer
+        validation (new objects have no prior state to protect).
 
-        If ``is_new`` is False (PUT/PATCH) it sets the fields
-        directly.
-
-        In both update paths the data is first validated through
-        the Gateway's own serializer so that all business rules
-        (email restrictions, field permissions, etc.) are
-        enforced even though the request arrived via the resource
-        registry rather than the normal API.
+        If ``is_new`` is False (PUT/PATCH) it validates through
+        the Gateway serializer then sets the fields directly.
         """
         if is_new:
             lookup_fields = get_model_lookup_keys(self.instance.__class__)

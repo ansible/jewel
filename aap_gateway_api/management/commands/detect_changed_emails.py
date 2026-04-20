@@ -10,6 +10,7 @@ With --audit, performs a full security analysis including authenticator
 linkage checks, duplicate detection, and high-risk scoring.
 """
 
+import logging
 from collections import defaultdict
 
 from ansible_base.activitystream.models import Entry
@@ -18,6 +19,8 @@ from ansible_base.authentication.models import AuthenticatorUser
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -133,6 +136,7 @@ class Command(BaseCommand):
             plugin = get_authenticator_plugin(au.provider.type)
             auth_type = plugin.type
         except Exception:
+            logger.debug("Could not classify authenticator %s (type=%s), defaulting to 'unknown'", au.provider.name, au.provider.type)
             auth_type = "unknown"
         return "local" if auth_type == "local" else "external"
 
