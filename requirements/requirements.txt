@@ -4,6 +4,10 @@ argon2-cffi-bindings==21.2.0
     # via argon2-cffi
 asgiref==3.8.1
     # via django
+attrs==26.1.0
+    # via
+    #   jsonschema
+    #   referencing
 certifi==2024.8.30
     # via requests
 cffi==2.0.0
@@ -22,6 +26,7 @@ django==5.2.9
     #   django-extensions
     #   django-flags
     #   djangorestframework
+    #   drf-spectacular
 django-crum==0.7.9
     # via -r requirements/requirements.in
 django-dynamic-preferences==1.16.0
@@ -31,9 +36,11 @@ django-extensions==4.1
 django-flags==5.0.13
     # via -r requirements/requirements.in
 djangorestframework==3.15.2
-    # via -r requirements/requirements.in
+    # via
+    #   -r requirements/requirements.in
+    #   drf-spectacular
 drf-spectacular==0.29.0
-    # Pinning to align with DAB
+    # via -r requirements/requirements.in
 dynaconf==3.2.10
     # via -r requirements/requirements.in
 grpcio==1.68.1
@@ -45,6 +52,12 @@ grpcio-tools==1.68.1
     # via -r requirements/requirements.in
 idna==3.10
     # via requests
+inflection==0.5.1
+    # via drf-spectacular
+jsonschema==4.26.0
+    # via drf-spectacular
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 persisting-theory==1.0
     # via django-dynamic-preferences
 protobuf==5.29.5
@@ -59,9 +72,20 @@ pycparser==2.22
 pyjwt==2.12.1
     # via -r requirements/requirements.in
 pyyaml==6.0.2
-    # via -r requirements/requirements.in
+    # via
+    #   -r requirements/requirements.in
+    #   drf-spectacular
+referencing==0.36.2
+    # via
+    #   -r requirements/requirements.in
+    #   jsonschema
+    #   jsonschema-specifications
 requests==2.32.3
     # via -r requirements/requirements.in
+rpds-py==0.30.0
+    # via
+    #   jsonschema
+    #   referencing
 six==1.17.0
     # via django-dynamic-preferences
 sqlparse==0.5.3
@@ -69,7 +93,11 @@ sqlparse==0.5.3
     #   -r requirements/requirements.in
     #   django
 typing-extensions==4.12.2
-    # via psycopg
+    # via
+    #   psycopg
+    #   referencing
+uritemplate==4.2.0
+    # via drf-spectacular
 urllib3==2.6.3
     # via
     #   -r requirements/requirements.in

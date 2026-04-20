@@ -20,3 +20,4 @@ PyYAML
 urllib3>=2.6.3   # CVE-2025-66471 / AAP-62077
 argon2-cffi
 dynaconf>=3.2.10,<4.0.0
+referencing<0.37.0  # consistent with DAB pin from jsonschema-path
