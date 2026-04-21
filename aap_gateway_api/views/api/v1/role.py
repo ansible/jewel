@@ -1,6 +1,7 @@
 # django-ansible-base, RBAC and resource_registry highly involved here
 from ansible_base.rbac.api.serializers import RoleDefinitionSerializer, RoleTeamAssignmentSerializer
-from ansible_base.rbac.api.views import RoleDefinitionViewSet, RoleTeamAssignmentViewSet, RoleUserAssignmentViewSet
+from ansible_base.rbac.api.views import BaseAssignmentViewSet, RoleDefinitionViewSet, RoleTeamAssignmentViewSet, RoleUserAssignmentViewSet
+from ansible_base.rbac.policies import can_view_all_users
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from requests.exceptions import HTTPError
@@ -169,3 +170,19 @@ class GatewayRoleUserAssignmentViewSet(AssignmentSyncMixin, RoleUserAssignmentVi
 
 class GatewayRoleTeamAssignmentViewSet(AssignmentSyncMixin, RoleTeamAssignmentViewSet):
     serializer_class = GatewayRoleTeamAssignmentSerializer
+
+    def filter_queryset(self, qs):
+        if can_view_all_users(self.request.user):
+            # Superusers and org admins (when ORG_ADMINS_CAN_SEE_ALL_USERS is
+            # enabled) skip the visible_items filter from BaseAssignmentViewSet.
+            #
+            # The gateway does not enforce remote object permissions
+            # (ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS=False), so the
+            # RoleEvaluation cache that visible_items relies on is incomplete
+            # for remote objects (e.g. AWX job templates).  That causes
+            # visible_items to hide team assignments the org admin just created.
+            #
+            # DRF filter backends still apply query-param filtering
+            # (object_id, content_type, etc.).
+            return super(BaseAssignmentViewSet, self).filter_queryset(qs)
+        return super().filter_queryset(qs)
