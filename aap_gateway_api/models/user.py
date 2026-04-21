@@ -45,6 +45,14 @@ def password_is_usable(password):
 class User(AbstractDABUser, CommonModel, AuditableModel):
     # Enable audit log for this model
     audit_log_enabled = True
+
+    # Gateway enforces email-change policy in its own serializer
+    # (_validate_email_change) and in GetOrCreateProcessor for
+    # reverse-sync.  The ORM-level pre_save signal must be
+    # disabled because Gateway's SSO authentication pipeline
+    # updates user emails via direct ORM saves where CRUM has no
+    # requesting user set (mid-authentication), which would
+    # conflict with the signal's permission checks.
     EMAIL_ENFORCEMENT_VIA_SERIALIZER = True
 
     ignore_relations = [
