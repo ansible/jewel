@@ -1,3 +1,4 @@
-For all security related bugs, email security@ansible.com instead of using this issue tracker and you will receive a prompt response.
+# Security policy
 
-For more information on the Ansible community's practices regarding responsible disclosure, see https://www.ansible.com/security
+We encourage responsible disclosure practices for security vulnerabilities.
+Please read our [policies for reporting bugs](https://docs.ansible.com/ansible/devel/community/reporting_bugs_and_features.html#reporting-a-bug) to report a security issue.
