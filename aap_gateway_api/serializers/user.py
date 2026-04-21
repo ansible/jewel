@@ -431,6 +431,10 @@ class UserSerializer(CommonUserSerializer):
             return
 
         requesting_user = self._get_requesting_user()
+        if requesting_user is None:
+            logger.debug("Skipping email change authorization: no requesting user in context (system sync path)")
+            return
+
         if not can_change_user(requesting_user, self.instance, can_self_edit=False):
             raise ValidationError({'email': [_("You do not have permission to change the %(field)s field.") % {'field': 'email'}]})
 
@@ -439,16 +443,20 @@ class UserSerializer(CommonUserSerializer):
         Perform cross-field validation for authenticators and authenticator_uid.
 
         This method:
-        1. Validates email changes are authorized.
-        2. Handles partial updates for authenticator_uid.
-        3. Validates authenticator and UID combinations:
+        1. Delegates to DAB's CommonUserSerializer.validate() for system user
+           protection and email change authorization (first line of defense).
+        2. Applies Gateway-local email policy via _validate_email_change as
+           a second line of defense (defense-in-depth).
+        3. Handles partial updates for authenticator_uid.
+        4. Validates authenticator and UID combinations:
            - Ensures UID is present when adding/modifying authenticators.
            - Checks for UID conflicts across authenticators.
            - Validates new authenticators for conflicts.
-        4. Ensures authenticator_uid is empty when removing all authenticators.
+        5. Ensures authenticator_uid is empty when removing all authenticators.
 
         Raises ValidationError if any validation fails.
         """
+        data = super().validate(data)
         self._validate_email_change(data)
 
         authenticators = data.get('authenticators')

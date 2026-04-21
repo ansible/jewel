@@ -1,11 +1,13 @@
+from unittest.mock import patch
+
 import pytest
 from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
 from ansible_base.resource_registry.models import Resource, ResourceType
 from django.db import models
 from rest_framework.exceptions import ValidationError
 
-from aap_gateway_api.models import Organization
-from aap_gateway_api.resource_api import GatewayRoleDefinitionType
+from aap_gateway_api.models import Organization, User
+from aap_gateway_api.resource_api import GatewayRoleDefinitionType, GetOrCreateProcessor
 
 
 @pytest.mark.django_db
@@ -446,3 +448,214 @@ class TestGatewayRoleDefinitionType:
 
         # Test that all permissions are correctly converted
         assert {p.api_slug for p in resource.content_object.permissions.all()} == set(permission_slugs)
+
+
+@pytest.mark.django_db
+class TestGetOrCreateProcessorSerializerValidation:
+    """Verify that GetOrCreateProcessor routes reverse-sync
+    payloads through the Gateway's own serializers so that all
+    business rules are enforced."""
+
+    @pytest.fixture
+    def target_user(self):
+        return User.objects.create_user(
+            username="target_user",
+            email="original@example.com",
+            password="password123",
+        )
+
+    @pytest.fixture
+    def superuser(self):
+        return User.objects.create_user(
+            username="admin_user",
+            email="admin@example.com",
+            password="password123",
+            is_superuser=True,
+        )
+
+    @pytest.fixture
+    def regular_user(self):
+        return User.objects.create_user(
+            username="regular_user",
+            email="regular@example.com",
+            password="password123",
+        )
+
+    @pytest.mark.parametrize(
+        "requesting_user_fixture, new_email, expected_email",
+        [
+            pytest.param(
+                "superuser",
+                "new@example.com",
+                "new@example.com",
+                id="superuser-can-change-email",
+            ),
+            pytest.param(
+                "regular_user",
+                "hijacked@example.com",
+                "original@example.com",
+                id="regular-user-email-stripped",
+            ),
+            pytest.param(
+                None,
+                "synced@example.com",
+                "synced@example.com",
+                id="no-requesting-user-allowed",
+            ),
+        ],
+    )
+    def test_email_policy_on_update(
+        self,
+        request,
+        target_user,
+        requesting_user_fixture,
+        new_email,
+        expected_email,
+    ):
+        requesting_user = request.getfixturevalue(requesting_user_fixture) if requesting_user_fixture else None
+        processor = GetOrCreateProcessor(target_user)
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=requesting_user,
+        ):
+            processor.save(
+                {"email": new_email, "first_name": "Updated"},
+                is_new=False,
+            )
+
+        target_user.refresh_from_db()
+        assert target_user.email == expected_email
+        assert target_user.first_name == "Updated"
+
+    def test_same_email_is_always_allowed(self, target_user, regular_user):
+        """Submitting the same email should not be blocked."""
+        processor = GetOrCreateProcessor(target_user)
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=regular_user,
+        ):
+            processor.save(
+                {
+                    "email": "original@example.com",
+                    "first_name": "Updated",
+                },
+                is_new=False,
+            )
+
+        target_user.refresh_from_db()
+        assert target_user.email == "original@example.com"
+        assert target_user.first_name == "Updated"
+
+    def test_email_policy_on_post_existing_user(self, target_user, regular_user):
+        """POST (is_new=True) with existing user should still
+        enforce validation."""
+        processor = GetOrCreateProcessor(User(username="target_user"))
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=regular_user,
+        ):
+            result = processor.save(
+                {
+                    "username": "target_user",
+                    "email": "hijacked@example.com",
+                    "first_name": "PostUpdated",
+                },
+                is_new=True,
+            )
+
+        result.refresh_from_db()
+        assert result.email == "original@example.com"
+        assert result.first_name == "PostUpdated"
+
+    def test_non_user_model_passes_through(self):
+        """Organization updates should pass through the
+        OrganizationSerializer without issue."""
+        org = Organization.objects.create(name="test_org", description="old")
+        processor = GetOrCreateProcessor(org)
+        processor.save(
+            {"description": "new"},
+            is_new=False,
+        )
+        org.refresh_from_db()
+        assert org.description == "new"
+
+    def test_valid_fields_still_saved_when_one_is_stripped(self, target_user, regular_user):
+        """When email is blocked, first_name and last_name should
+        still be updated."""
+        processor = GetOrCreateProcessor(target_user)
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=regular_user,
+        ):
+            processor.save(
+                {
+                    "email": "hijacked@example.com",
+                    "first_name": "NewFirst",
+                    "last_name": "NewLast",
+                },
+                is_new=False,
+            )
+
+        target_user.refresh_from_db()
+        assert target_user.email == "original@example.com"
+        assert target_user.first_name == "NewFirst"
+        assert target_user.last_name == "NewLast"
+
+    def test_serializer_exception_strips_sensitive_fields(self, target_user, superuser):
+        """If the serializer raises an unexpected exception,
+        sensitive fields (email, is_superuser, is_staff) are
+        stripped but non-sensitive fields still proceed."""
+        processor = GetOrCreateProcessor(target_user)
+
+        with (
+            patch(
+                "aap_gateway_api.resource_api.get_current_user",
+                return_value=superuser,
+            ),
+            patch(
+                "aap_gateway_api.resource_api._get_gateway_serializer_map",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
+            processor.save(
+                {
+                    "first_name": "StillWorks",
+                    "email": "evil@example.com",
+                    "is_superuser": True,
+                },
+                is_new=False,
+            )
+
+        target_user.refresh_from_db()
+        assert target_user.first_name == "StillWorks"
+        assert target_user.email == "original@example.com"
+        assert target_user.is_superuser is False
+
+    def test_new_user_creation_bypasses_validation(self, regular_user):
+        """POST (is_new=True) for a genuinely new user creates
+        the user via update_or_create without Gateway serializer
+        validation, since there is no prior state to protect."""
+        processor = GetOrCreateProcessor(User(username="brand_new_user"))
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=regular_user,
+        ):
+            result = processor.save(
+                {
+                    "username": "brand_new_user",
+                    "email": "newuser@example.com",
+                    "first_name": "Brand",
+                    "last_name": "New",
+                },
+                is_new=True,
+            )
+
+        result.refresh_from_db()
+        assert result.username == "brand_new_user"
+        assert result.email == "newuser@example.com"
+        assert result.first_name == "Brand"
