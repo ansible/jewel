@@ -79,5 +79,9 @@ redis_password: redis_password
 redis_sentinel_username: redis_sentinel_username
 redis_sentinel_password: redis_sentinel_password
 
+# Envoy proxy
+envoy_proxy_image: mirror.gcr.io/envoyproxy/envoy
+envoy_proxy_version: v1.36.6
+
 # HAProxy
 proxy_container_version: latest

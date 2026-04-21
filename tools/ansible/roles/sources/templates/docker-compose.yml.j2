@@ -203,7 +203,7 @@ services:
   proxy1:
     container_name: aap_gw_proxy1
     hostname: proxy1
-    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
     command: --config-path /etc/envoy/envoy.yaml
     environment:
@@ -240,7 +240,7 @@ services:
   proxy{{ container_id }}:
     container_name: aap_gw_proxy_{{ container_id }}
     hostname: proxy{{ container_id }}
-    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
     command: --config-path /etc/envoy/envoy.yaml
     environment:

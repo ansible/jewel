@@ -196,13 +196,8 @@ services:
   proxy1:
     container_name: aap_gw_proxy1
     hostname: proxy1
-{% if container_engine == 'docker' %}
-    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
-{% else %}
-    image: ansible-automation-platform-25-gateway-proxy-rhel8
-    entrypoint: /usr/bin/envoy
-{% endif %}
     command: --config-path /etc/envoy/envoy.yaml
     environment:
       - ENVOY_UID=0
@@ -238,7 +233,7 @@ services:
   proxy{{ container_id }}:
     container_name: aap_gw_proxy_{{ container_id }}
     hostname: proxy{{ container_id }}
-    image: quay.io/maistra-dev/proxyv2-ubi8:2.4-latest
+    image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
     command: --config-path /etc/envoy/envoy.yaml
     environment:
