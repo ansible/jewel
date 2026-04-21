@@ -22,3 +22,5 @@ urllib3>=2.6.3   # CVE-2025-66471 / AAP-62077
 argon2-cffi
 dynaconf>=3.2.13,<4.0.0  # CVE-2026-33154
 referencing<0.37.0  # consistent with DAB pin from jsonschema-path
+jsonschema<4.26  # 4.26+ requires rpds-py>=0.25, incompatible with hermeto
+rpds-py<0.25  # hermeto does not support rpds-py>=0.25
