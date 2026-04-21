@@ -41,7 +41,7 @@ djangorestframework==3.15.2
     #   drf-spectacular
 drf-spectacular==0.29.0
     # via -r requirements/requirements.in
-dynaconf==3.2.10
+dynaconf==3.2.13
     # via -r requirements/requirements.in
 grpcio==1.68.1
     # via
