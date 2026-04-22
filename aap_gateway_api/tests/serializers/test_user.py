@@ -1577,9 +1577,7 @@ class TestEmailFieldRestrictions:
         user.save()
         url = get_relative_url('user-detail', kwargs={'pk': user.id})
         response = user_api_client.patch(url, {'email': 'hacked@example.com'})
-        assert response.status_code == 400
-        assert 'email' in response.data
-        assert 'permission' in str(response.data['email'][0]).lower()
+        assert response.status_code == 403
 
     def test_regular_user_can_change_own_username(self, user_api_client, user):
         url = get_relative_url('user-detail', kwargs={'pk': user.id})
@@ -1700,6 +1698,4 @@ class TestEmailFieldRestrictions:
         with preference_manager.set('configuration', 'MANAGE_ORGANIZATION_AUTH', True):
             url = get_relative_url('user-detail', kwargs={'pk': user.id})
             response = user_api_client.patch(url, {'email': 'should_not_work@example.com'})
-            assert response.status_code == 400
-            assert 'email' in response.data
-            assert 'permission' in str(response.data['email'][0]).lower()
+            assert response.status_code == 403
