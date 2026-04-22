@@ -375,10 +375,8 @@ register(
     preference_type="bool",
     help_text=_(
         "Enabling this feature allows users who log in via an external provider (e.g., LDAP, SAML) "
-        "to create OAuth 2.0 tokens for use with the AAP API. "
-        "An AAP token’s lifecycle is managed independently from the external authentication session. "
-        "Refer to the 'Manage OAuth2 token creation for external users' section in the "
-        "Red Hat Ansible documentation for details."
+        "to create OAuth 2.0 tokens for use with the gateway API. "
+        "A token’s lifecycle is managed independently from the external authentication session. "
     ),
     encrypted=False,
     label=_('Allow External Users to Create OAuth2 Tokens'),

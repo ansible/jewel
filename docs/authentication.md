@@ -155,8 +155,8 @@ An example authenticator payload ...
     "enabled": True,
     "order": 1,
     "configuration": {
-        "KEY": "ASASDASDASD",
-        "SECRET": "ADASDASDASDSA",
+        "KEY": "MY_KEY",
+        "SECRET": "MY_SECRET",
     }
 }
 ```
@@ -190,8 +190,8 @@ An example authenticator payload ...
     "configuration": {
         "URL: "https://github.mycorp.com",
         "API_URL": "https://github.mycorp.com/api",
-        "KEY": "33b6fb2fde086aadca12",
-        "SECRET": "REDACTED",
+        "KEY": "MY_KEY",
+        "SECRET": "MY_SECRET",
     }
 }
 ```
@@ -229,8 +229,8 @@ An example authenticator payload ...
     "order": 1,
     "configuration": {
         "CALLBACK_URL: "https://myapp.foobar.com/callback",
-        "KEY": "33b6fb2fde086aadca12",
-        "SECRET": "REDACTED",
+        "KEY": "MY_KEY",
+        "SECRET": "MY_SECRET",
     }
 }
 ```
@@ -251,8 +251,8 @@ An example authenticator payload ...
     "enabled": True,
     "order": 1,
     "configuration": {
-        "KEY": "33b6fb2fde086aadca12",
-        "SECRET": "REDACTED",
+        "KEY": "MY_KEY",
+        "SECRET": "MY_SECRET",
     }
 }
 ```
@@ -282,8 +282,8 @@ An example authenticator payload ...
     "configuration": {
         "OIDC_ENDPOINT: "https://myoidc.foobar.com",
         "VERIFY_SSL": true,
-        "KEY": "33b6fb2fde086aadca12",
-        "SECRET": "REDACTED",
+        "KEY": "MY_KEY",
+        "SECRET": "MY_SECRET",
     }
 }
 ```
@@ -305,7 +305,7 @@ An example authenticator payload ...
     "configuration": {
         "SERVER: "radius.example.com",
         "PORT": "1812"
-        "SECRET": "REDACTED",
+        "SECRET": "MY_SECRET",
     }
 }
 ```
