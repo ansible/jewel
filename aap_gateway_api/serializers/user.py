@@ -7,6 +7,7 @@ from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.rbac.policies import can_change_user
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -171,11 +172,15 @@ class UserSerializer(CommonUserSerializer):
         AuthenticatorUser.objects.create(uid=uid, user=user_instance, provider=authenticator, email=email)
         return authenticator
 
-    def is_superuser_making_request(self) -> bool:
+    def _get_requesting_user(self):
         request = self.context.get('request', None)
-        if request and hasattr(request, 'user') and request.user.is_superuser:
-            return True
-        return False
+        if request and hasattr(request, 'user'):
+            return request.user
+        return None
+
+    def is_superuser_making_request(self) -> bool:
+        user = self._get_requesting_user()
+        return user is not None and user.is_superuser
 
     def validate_password(self, value: str) -> str:
         if not value or value in [ENCRYPTED_STRING, PASSWORD_DISABLED]:
@@ -411,20 +416,48 @@ class UserSerializer(CommonUserSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
+    def _validate_email_change(self, data):
+        """Prevent unauthorized changes to email.
+
+        Delegates to DAB's can_change_user with can_self_edit=False so that
+        only superusers and org admins (who administer ALL of the target
+        user's organizations) may change email.
+        """
+        if self.instance is None:
+            return
+
+        if 'email' not in data or data['email'] == self.instance.email:
+            return
+
+        requesting_user = self._get_requesting_user()
+        if requesting_user is None:
+            logger.debug("Skipping email change authorization: no requesting user in context (system sync path)")
+            return
+
+        if not can_change_user(requesting_user, self.instance, can_self_edit=False):
+            raise ValidationError({'email': [_("You do not have permission to change the %(field)s field.") % {'field': 'email'}]})
+
     def validate(self, data):
         """
         Perform cross-field validation for authenticators and authenticator_uid.
 
         This method:
-        1. Handles partial updates for authenticator_uid.
-        2. Validates authenticator and UID combinations:
+        1. Delegates to DAB's CommonUserSerializer.validate() for system user
+           protection and email change authorization (first line of defense).
+        2. Applies Gateway-local email policy via _validate_email_change as
+           a second line of defense (defense-in-depth).
+        3. Handles partial updates for authenticator_uid.
+        4. Validates authenticator and UID combinations:
            - Ensures UID is present when adding/modifying authenticators.
            - Checks for UID conflicts across authenticators.
            - Validates new authenticators for conflicts.
-        3. Ensures authenticator_uid is empty when removing all authenticators.
+        5. Ensures authenticator_uid is empty when removing all authenticators.
 
         Raises ValidationError if any validation fails.
         """
+        data = super().validate(data)
+        self._validate_email_change(data)
+
         authenticators = data.get('authenticators')
         authenticator_uid = data.get('authenticator_uid')
 
