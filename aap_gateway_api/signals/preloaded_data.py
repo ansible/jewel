@@ -84,9 +84,7 @@ def set_jwt_key_pair() -> bool:
 
 def create_default_organization() -> bool:
     Organization = global_apps.get_model('aap_gateway_api', 'Organization')
-    _org, created = Organization.objects.get_or_create(
-        name='Default', defaults={'managed': True, 'description': 'The default organization for Ansible Automation Platform'}
-    )
+    _org, created = Organization.objects.get_or_create(name='Default', defaults={'managed': True, 'description': 'Specifies the default organization.'})
     return created
 
 

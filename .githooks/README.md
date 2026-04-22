@@ -21,7 +21,7 @@ Git hooks are simply executable files that follow the rules below:
 * have executable permissions
 * file name must correspond to git hook name with no extension(no `.sh` or `.py`) (see documentation section below)
 
-Return code other than zero(0) will cause the git operation that triggerred the hook to fail, while zero(0) return code indicates success and git opertaion will succeed.
+Return code other than zero(0) will cause the git operation that triggered the hook to fail, while zero(0) return code indicates success and git operation will succeed.
 
 ## Documentation
 

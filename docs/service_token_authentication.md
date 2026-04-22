@@ -42,4 +42,4 @@ Its an array of tuples with the following elements in them:
 
 This should handle most cases of access. However, there may be times when you need to grant the incoming user additional permissions. An example of this can be found in the `is_user_authorized` method. This is currently implemented for the `service-index-root` endpoint. 
 
-Additionally, if the view you are granting access to is protected by the `isSuperUserOrAuditor` or `isSuperUser` permission classes you need to add a popery to your view called `allow_service_token` and set it to True. This will allow the permissions classes to return True if the requesting user is the system user.
+Additionally, if the view you are granting access to is protected by the `isSuperUserOrAuditor` or `isSuperUser` permission classes you need to add a property to your view called `allow_service_token` and set it to True. This will allow the permissions classes to return True if the requesting user is the system user.
