@@ -12,7 +12,7 @@ sources_dest: '{{ playbook_dir | dirname }}/generated'
 docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default='docker compose') }} -f {{ sources_dest }}/docker-compose.yml"
 
 container_engine: docker
-gateway_image: 'quay.io/ansible/jewel:devel'
+gateway_image: 'quay.io/ansible/jewel:devel' # placeholder until public image available
 gateway_host_address: host-gateway
 gateway_services: "{{ enabled_services | default([], true) }}"
 gateway_container_name: aap_gw_1

@@ -7,7 +7,7 @@ gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 'localhost'
 container_engine: podman
-gateway_image: 'quay.io/ansible/jewel:devel'
+gateway_image: 'quay.io/ansible/jewel:devel' # placeholder until public image available
 gateway_host_address: host.containers.internal
 gateway_services: ['hub','controller','eda']
 gateway_container_name: aap_gw_1
