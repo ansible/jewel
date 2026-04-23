@@ -18,12 +18,17 @@ __pycache__
 /.eggs
 .coverage*
 coverage.xml
+coverage-*.xml
 coverage.json
 aap-gateway-test-results.xml
+junit-*.xml
 htmlcov
 *.tox
 /venv*
 /.venv*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Mac OS X
 *.DS_Store
@@ -37,6 +42,9 @@ htmlcov
 # Editors
 *.sw[poj]
 *~
+*.bak
+*.log
+nohup.out
 
 # SQLite
 *.sqlite3
@@ -47,12 +55,17 @@ htmlcov
 container-startup.yml
 container-startup.yml.backup
 tools/generated/*
+!tools/generated/.gitkeep
 
 # Gets created when testing sonar-scanner locally
 .scannerwork
+reports/
 
 # Avoid git-in-git nastiness
 /django-ansible-base
+
+# Ansible retry files
+*.retry
 
 # Dev
 aap_gateway_dev
@@ -75,6 +88,11 @@ AGENTS_USER.md
 # Ignore local Claude/Cursor settings (user-specific configurations)
 .claude/settings.local.json
 .cursor/settings.local.json
+
+# Secrets and environment files
+.env
+.env.*
+*credentials*.y*ml*
 
 # Ignore files created during workflows
 .github_mcp_env
