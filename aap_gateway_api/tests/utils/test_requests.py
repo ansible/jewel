@@ -378,8 +378,8 @@ class TestValidateRegularHostname:
             ("example.com", "https://example.com", None),
             ("sub.example.com", "https://sub.example.com", None),
             ("test.org", "https://test.org", None),
-            ("my-site.co.uk", "https://my-site.co.uk", None),
-            ("api-v2.example-site.com", "https://api-v2.example-site.com", None),
+            ("my-site.example.com", "https://my-site.example.com", None),
+            ("api-v2.example.com", "https://api-v2.example.com", None),
             # Invalid domain names
             ("example.c", "https://example.c", "invalid domain name: 'example.c'. Got: https://example.c"),
             ("test.123", "https://test.123", "invalid domain name: 'test.123'. Got: https://test.123"),

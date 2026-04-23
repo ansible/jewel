@@ -287,7 +287,7 @@ class TestWorkloadIdentityTokensScopeValidation:
             pytest.param("iat", 0, id="iat"),
             pytest.param("iss", "https://malicious-issuer.com", id="iss"),
             pytest.param("sub", "attacker-controlled-subject", id="sub"),
-            pytest.param("aud", "https://wrong-audience.com", id="aud"),
+            pytest.param("aud", "https://example.com", id="aud"),
         ],
     )
     def test_reserved_claims_are_rejected(self, controller_service_client, wit_url, valid_payload, reserved_claim, malicious_value):

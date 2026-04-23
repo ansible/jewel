@@ -71,8 +71,8 @@ Routes are the most complicated object to understand, so we'll explore some exam
 Service Cluster: EDA
 Nodes:
 
-- webhook.eda.com, tags: webhook
-- api.eda.com, tags: api
+- webhook.example.com, tags: webhook
+- api.example.com, tags: api
 
 **Example Route 1:**
 
@@ -85,10 +85,10 @@ enable_gateway_auth: true
 is_service_https: true
 ```
 
-This route will match any request on the gateway at `/api/eda/` and proxy them to both of the configured EDA nodes (webhook.eda.com and api.eda.com). In this case, the service port is 443 and service path is `/api/`, so all requests proxied through this route will go to one of the following URLs:
+This route will match any request on the gateway at `/api/eda/` and proxy them to both of the configured EDA nodes (webhook.example.com and api.example.com). In this case, the service port is 443 and service path is `/api/`, so all requests proxied through this route will go to one of the following URLs:
 
-- `https://webhook.eda.com:443/api/`
-- `https://api.eda.com:443/api/`
+- `https://webhook.example.com:443/api/`
+- `https://api.example.com:443/api/`
 
 The urls that are proxied for a route are formatted something like this: `{"https" if is_service_https else "http"}://{node_address}:{service_port}/{service_path}`.
 
@@ -109,11 +109,11 @@ is_service_https: false
 
 This route will only send traffic to the following URL:
 
-- `http://webhook.eda.com:8000/`
+- `http://webhook.example.com:8000/`
 
 We used `http` as the protocol, because of `is_service_https: false`, `/` for the path because of `service_path: "/"` and `8000` for the port because of `service_port: 8000`.
 
-In this case we're only routing to `webhook.eda.com` because of the `node_tags: "webhook"`.
+In this case we're only routing to `webhook.example.com` because of the `node_tags: "webhook"`.
 
 **Example Route 3:**
 
@@ -128,8 +128,8 @@ is_service_https: false
 
 This route is identical to the previous example, except we are also selecting the `api` nodes as well. It will result in load balancing requests to `/eda-webhooks/` on gateway between the following urls:
 
-- `http://webhook.eda.com:8000/`
-- `http://api.eda.com:8000/`
+- `http://webhook.example.com:8000/`
+- `http://api.example.com:8000/`
 
 ### Service API Routes
 

@@ -95,8 +95,8 @@ def check_csrf_origin(value: str) -> Optional[str]:
 
     Valid values include:
         * - Any origin (for development only)
-        https://domain.com - A specific server
-        https://*.domain.com - A group of subdomains on a domain
+        https://example.com - A specific server
+        https://*.example.com - A group of subdomains on a domain
         http://localhost:8000 - localhost with port number
         https://127.0.0.1 - IPv4 address
         https://192.168.1.1:8080 - IPv4 address with port

@@ -270,15 +270,15 @@ def test_get_notification_prefs():
 
     assert enabled_state
 
-    with override_settings(NOTIFICATION_RSS_FEED_URL="http://myurl.com"):
-        assert preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL") == "http://myurl.com"
+    with override_settings(NOTIFICATION_RSS_FEED_URL="http://example.com"):
+        assert preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL") == "http://example.com"
 
 
 @pytest.mark.django_db
 def test_set_notification_prefs():
     # (read only)
-    preferences.update_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL", value="http://notgonnawork.com/nope.xml")
-    assert preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL") != "http://notgonnawork.com/nope.xml"
+    preferences.update_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL", value="http://example.com/nope.xml")
+    assert preferences.get_preference_value(section="notification", name="NOTIFICATION_RSS_FEED_URL") != "http://example.com/nope.xml"
 
     preferences.update_preference_value(section="configuration", name="AAP_DEPLOYMENT_TYPE", value="rpm")
     assert preferences.get_preference_value(section="configuration", name="AAP_DEPLOYMENT_TYPE") != "rpm"

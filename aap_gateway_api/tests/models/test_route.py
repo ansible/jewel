@@ -173,18 +173,18 @@ class TestRoute:
 
     @pytest.mark.django_db
     def test_xds_route_config_host_rewrite_literal(self, service_cluster_eda):
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
         routes = route.get_xds_route_config()
-        assert routes[0]["route"]["host_rewrite_literal"] == "eda.com"
+        assert routes[0]["route"]["host_rewrite_literal"] == "example.com"
 
     @pytest.mark.django_db
     def test_xds_cluster_config_host_sni(self, service_cluster_eda):
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
         route.is_service_https = True
         cluster = route.get_xds_cluster_config()
-        assert cluster["transport_socket"]["typed_config"]["sni"] == "eda.com"
+        assert cluster["transport_socket"]["typed_config"]["sni"] == "example.com"
 
         service_cluster_eda.upstream_hostname = None
         cluster = route.get_xds_cluster_config()
@@ -199,7 +199,7 @@ class TestRoute:
         ],
     )
     def test_xds_cluster_config_health_checks_enabled(self, address, hostname, service_cluster_eda):
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         service_cluster_eda.health_checks_enabled = True
         service_cluster_eda.nodes.set(
             [
@@ -227,7 +227,7 @@ class TestRoute:
         "node_address,expected_health_check_hostname,upstream_hostname",
         [
             # Expanded IPv6 address
-            ("2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", "eda.com"),
+            ("2001:0db8:85a3:0000:0000:8a2e:0370:7334", "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]", "example.com"),
             # Compressed IPv6 address
             ("2001:db8:85a3::8a2e:370:7334", "[2001:db8:85a3::8a2e:370:7334]", "hub.com"),
             # IPv6 with leading zeros compressed
@@ -235,7 +235,7 @@ class TestRoute:
             # IPv6 loopback
             ("::1", "[::1]", "gateway.com"),
             # IPv6 already bracketed (should still work correctly)
-            ("[2001:db8::1]", "[2001:db8::1]", "eda.com"),
+            ("[2001:db8::1]", "[2001:db8::1]", "example.com"),
             # IPv4 address (should not be bracketed)
             ("192.168.1.1", "192.168.1.1", "hub.com"),
             ("10.0.0.1", "10.0.0.1", "controller.com"),
@@ -281,7 +281,7 @@ class TestRoute:
     @pytest.mark.django_db
     def test_xds_cluster_config_health_checks_disabled(self, service_cluster_eda):
         """Test proper behavior when health checks are disabled."""
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         service_cluster_eda.health_checks_enabled = False
         service_cluster_eda.nodes.set(
             [
@@ -322,7 +322,7 @@ class TestRoute:
     @pytest.mark.django_db
     def test_xds_cluster_config_mixed_ipv4_ipv6(self, service_cluster_eda):
         """Test mixed IPv4/IPv6 mode (v4 address for some service nodes, v6 for others)."""
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         service_cluster_eda.health_checks_enabled = True
         service_cluster_eda.nodes.set(
             [
@@ -404,7 +404,7 @@ class TestRoute:
 
     @pytest.mark.django_db
     def test_xds_route_config_enable_mtls(self, service_cluster_eda):
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=True)
         routes = route.get_xds_route_config()
         assert routes[0]['match']['tls_context']['presented']
@@ -415,7 +415,7 @@ class TestRoute:
 
     @pytest.mark.django_db
     def test_xds_route_config_disable_mtls(self, service_cluster_eda):
-        service_cluster_eda.upstream_hostname = "eda.com"
+        service_cluster_eda.upstream_hostname = "example.com"
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda, enable_mtls=False)
         routes = route.get_xds_route_config()
         assert 'tls_context' not in routes[0]['match'].keys()

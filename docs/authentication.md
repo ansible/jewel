@@ -228,7 +228,7 @@ An example authenticator payload ...
     "enabled": True,
     "order": 1,
     "configuration": {
-        "CALLBACK_URL: "https://myapp.foobar.com/callback",
+        "CALLBACK_URL": "https://myapp.example.com/callback",
         "KEY": "MY_KEY",
         "SECRET": "MY_SECRET",
     }
@@ -280,7 +280,7 @@ An example authenticator payload ...
     "enabled": True,
     "order": 1,
     "configuration": {
-        "OIDC_ENDPOINT: "https://myoidc.foobar.com",
+        "OIDC_ENDPOINT": "https://myoidc.example.com",
         "VERIFY_SSL": true,
         "KEY": "MY_KEY",
         "SECRET": "MY_SECRET",
