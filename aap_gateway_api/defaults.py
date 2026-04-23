@@ -246,6 +246,7 @@ LOGIN_URL = '/'
 LOGOUT_ALLOWED_HOSTS = []
 
 MIDDLEWARE = [
+    'ansible_base.lib.middleware.observability.ObservabilityMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -343,6 +344,21 @@ USE_TZ = True
 
 WSGI_APPLICATION = 'aap_gateway_api.wsgi.application'
 
+# Observability and Profiling Settings
+# ObservabilityMiddleware must be added to MIDDLEWARE manually.
+# Every request gets X-Request-ID and X-API-Total-Time by default.
+# Enable cProfile .prof file generation (heavy — use for debugging sessions only).
+ANSIBLE_BASE_PROFILING_ENABLED = False
+# Enable SQL query metrics and trace context injection (moderate overhead).
+ANSIBLE_BASE_PROFILING_SQL_ENABLED = False
+# Directory where cProfile .prof files are written (falls back to system temp directory).
+ANSIBLE_BASE_PROFILING_CPROFILE_DIR = '/var/cprofiling/aap_gateway_api'
+# URL path prefixes to exclude from profiling even when the flags are enabled.
+ANSIBLE_BASE_PROFILING_EXCLUDE_PATHS = [
+    '/api/gateway/v1/ping/',
+    '/up',
+    '/v3/discovery:',
+]
 
 # Override the ANSIBLE_BASE settings we want to
 ANSIBLE_BASE_ALLOW_CUSTOM_ROLES = True

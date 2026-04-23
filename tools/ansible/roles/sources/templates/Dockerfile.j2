@@ -85,7 +85,12 @@ RUN for dir in \
     for file in \
       /etc/nginx/gateway.crt \
       /etc/nginx/gateway.key ; \
-    do touch $file ; chmod g+rw $file ; chgrp root $file ; done
+    do touch $file ; chmod g+rw $file ; chgrp root $file ; done && \
+    for dir in \
+      /var/cprofiling \
+      /var/cprofiling/control_plane \
+      /var/cprofiling/aap_gateway_api ; \
+    do mkdir -m 0775 -p $dir ; chmod g+rwx $dir ; chown 1000 $dir ; done
 
 # This is required for the xds protobuf defintions in order for them
 # to be compatible with protobuf 3.21+. This should be removed

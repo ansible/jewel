@@ -8,11 +8,13 @@ from ansible_base.authentication.middleware import AuthenticatorBackendMiddlewar
 from ansible_base.jwt_consumer.common.util import generate_x_trusted_proxy_header
 from ansible_base.lib.logging import thread_local as logging_thread_local
 from ansible_base.lib.middleware.logging import LogRequestMiddleware
+from ansible_base.lib.middleware.observability import DEFAULT_EXCLUDE_PATHS
+from ansible_base.lib.middleware.profiling.profile_request import DABProfiler, SQLQueryMetrics
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.conf import settings
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.http import HttpRequest, parse_cookie
 from django.views.csrf import csrf_failure
 from envoy.config.core.v3.base_pb2 import HeaderValue, HeaderValueOption
@@ -326,7 +328,83 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
         """
         Instantiate a NEW instance to prevent state bleeding across threads.
         """
-        return _ExternalAuth().Check(request, context)
+        auth_instance = _ExternalAuth()
+
+        profiling_enabled = getattr(settings, 'ANSIBLE_BASE_PROFILING_ENABLED', False)
+        sql_enabled = getattr(settings, 'ANSIBLE_BASE_PROFILING_SQL_ENABLED', False)
+
+        # Fast path: If no profiling flags are enabled, skip all profiling overhead
+        if not profiling_enabled and not sql_enabled:
+            return auth_instance.Check(request, context)
+
+        # Skip profiling for excluded paths (health checks, discovery, etc.)
+        request_path = request.attributes.request.http.path
+        exclude_paths = getattr(settings, 'ANSIBLE_BASE_PROFILING_EXCLUDE_PATHS', DEFAULT_EXCLUDE_PATHS)
+        if any(request_path.startswith(prefix) for prefix in exclude_paths):
+            return auth_instance.Check(request, context)
+
+        return self._check_with_profiling(request, context, auth_instance, profiling_enabled, sql_enabled)
+
+    def _check_with_profiling(
+        self, request, context, auth_instance: _ExternalAuth, profiling_enabled: bool = False, sql_enabled: bool = False
+    ) -> external_auth_pb2.CheckResponse:
+        """Execute auth check with profiling instrumentation.
+
+        Wraps the auth check with optional cProfile and SQL query metrics.
+        Results are returned as response headers forwarded through Envoy to the client.
+
+        Response headers (added to ok_response only):
+            X-GRPC-Auth-Time: Wall-clock duration of the gRPC auth check (always set).
+            X-GRPC-Auth-Profile-File: Filesystem path to the .prof file on the gateway node (cProfile only).
+            X-GRPC-Auth-Node: CLUSTER_HOST_ID of the node that handled the request (always set).
+            X-GRPC-Auth-Query-Count: Number of SQL queries during auth (SQL only).
+            X-GRPC-Auth-Query-Time: Total time spent in SQL during auth (SQL only).
+        """
+        profiler = None
+        if profiling_enabled:
+            profiler = DABProfiler()
+            profiler.start()
+
+        start_time = time.time()
+
+        try:
+            if sql_enabled:
+                sql_metrics = SQLQueryMetrics()
+                with connection.execute_wrapper(sql_metrics):
+                    response = auth_instance.Check(request, context)
+            else:
+                response = auth_instance.Check(request, context)
+        except Exception:
+            if profiler:
+                request_id = getattr(auth_instance, 'request_id', None)
+                _, path = profiler.stop(profile_id=request_id)
+                if path:
+                    logger.info("gRPC auth check raised an exception; cProfile data saved to: %s", path)
+            raise
+
+        # Build profiling response headers
+        response_headers = []
+
+        response_headers.append(HeaderValueOption(header=HeaderValue(key='X-GRPC-Auth-Time', value=f'{time.time() - start_time:.3f}s')))
+
+        if profiler:
+            request_id = getattr(auth_instance, 'request_id', None)
+            _, cprofile_filename = profiler.stop(profile_id=request_id)
+            if cprofile_filename:
+                response_headers.append(HeaderValueOption(header=HeaderValue(key='X-GRPC-Auth-Profile-File', value=cprofile_filename)))
+                logger.info(f"cprofile enabled: cprofile_filename={cprofile_filename}")
+
+        response_headers.append(HeaderValueOption(header=HeaderValue(key='X-GRPC-Auth-Node', value=getattr(settings, "CLUSTER_HOST_ID", "Unknown"))))
+
+        if sql_enabled:
+            response_headers.append(HeaderValueOption(header=HeaderValue(key='X-GRPC-Auth-Query-Count', value=str(sql_metrics.query_count))))
+            response_headers.append(HeaderValueOption(header=HeaderValue(key='X-GRPC-Auth-Query-Time', value=f'{sql_metrics.query_time:.3f}s')))
+
+        # Add headers if we have any
+        if response_headers and response.HasField("ok_response"):
+            response.ok_response.response_headers_to_add.extend(response_headers)
+
+        return response
 
 
 def grpc_hook(server):

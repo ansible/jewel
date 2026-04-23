@@ -81,6 +81,8 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.key:/etc/ansible-automation-platform/gateway/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/etc/ansible-automation-platform/gateway/redis_ca.cert:z
       - $PWD/tools/configs/dev_secret_key:/etc/ansible-automation-platform/gateway/SECRET_KEY:z
+      - aap_gw_cprofiling:/var/cprofiling/aap_gateway_api
+      - grpc_server_cprofiling:/var/cprofiling/control_plane
     ulimits:
       nofile:
         soft: 4096
@@ -374,6 +376,10 @@ networks:
 volumes:
   aap_gw_db:
     name: aap_gw_db
+  aap_gw_cprofiling:
+    name: aap_gw_cprofiling
+  grpc_server_cprofiling:
+    name: grpc_server_cprofiling
 {% if enabled_containers['ldap'] | bool %}
   aap_gw_openldap_data:
     name: aap_gw_ldap_1

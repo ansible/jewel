@@ -3,6 +3,9 @@ from os import linesep
 from unittest import mock
 
 import pytest
+from envoy.service.auth.v3 import external_auth_pb2
+from envoy.type.v3 import http_status_pb2
+from google.rpc import status_pb2
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import SAFE_METHODS
 
@@ -692,3 +695,109 @@ class TestOAuth2ScopeValidation:
                         assert path in log_message, f"Path {path} should be in log message"
 
             assert response.status.code == 7, f"Should deny DELETE on {path} with read scope"
+
+
+@pytest.mark.django_db
+class TestProfilingExcludePaths:
+    @pytest.fixture(autouse=True)
+    def mock_close_old_connections(self):
+        with mock.patch("aap_gateway_api.proxy.control_plane.close_old_connections"):
+            yield
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/api/gateway/v1/ping/",
+            "/up",
+            "/v3/discovery:",
+        ],
+    )
+    @mock.patch("aap_gateway_api.proxy.control_plane.ExternalAuth._check_with_profiling")
+    def test_profiling_skipped_for_excluded_paths(self, mock_profiling, path, ext_auth, settings):
+        settings.ANSIBLE_BASE_PROFILING_ENABLED = True
+        request = Request(path=path)
+        ext_auth.Check(request, None)
+        mock_profiling.assert_not_called()
+
+    @mock.patch("aap_gateway_api.proxy.control_plane.ExternalAuth._check_with_profiling")
+    def test_profiling_called_for_non_excluded_paths(self, mock_profiling, ext_auth, settings):
+        settings.ANSIBLE_BASE_PROFILING_ENABLED = True
+        request = Request(path="/api/gateway/v1/organizations/")
+        ext_auth.Check(request, None)
+        mock_profiling.assert_called_once()
+
+
+@pytest.mark.django_db
+class TestCheckWithProfiling:
+    """Tests for _check_with_profiling to verify profiling instrumentation on gRPC auth checks."""
+
+    @pytest.fixture(autouse=True)
+    def mock_close_old_connections(self):
+        with mock.patch("aap_gateway_api.proxy.control_plane.close_old_connections"):
+            yield
+
+    @pytest.mark.parametrize(
+        "cprofile_file,use_denied,profiling_enabled,sql_enabled,expected,not_expected",
+        [
+            pytest.param(
+                "/tmp/cprofile-test.prof",
+                False,
+                True,
+                True,
+                ["X-GRPC-Auth-Time", "X-GRPC-Auth-Profile-File", "X-GRPC-Auth-Node", "X-GRPC-Auth-Query-Count", "X-GRPC-Auth-Query-Time"],
+                [],
+                id="all_headers",
+            ),
+            pytest.param(None, False, True, True, ["X-GRPC-Auth-Time", "X-GRPC-Auth-Node"], ["X-GRPC-Auth-Profile-File"], id="no_cprofile_file"),
+            pytest.param("/tmp/cprofile-test.prof", True, True, True, [], ["X-GRPC-Auth-Time", "X-GRPC-Auth-Node"], id="denied_response_no_headers"),
+            pytest.param(
+                "/tmp/cprofile-test.prof",
+                False,
+                True,
+                False,
+                ["X-GRPC-Auth-Time", "X-GRPC-Auth-Profile-File", "X-GRPC-Auth-Node"],
+                ["X-GRPC-Auth-Query-Count", "X-GRPC-Auth-Query-Time"],
+                id="cprofile_only",
+            ),
+            pytest.param(
+                None,
+                False,
+                False,
+                True,
+                ["X-GRPC-Auth-Time", "X-GRPC-Auth-Node", "X-GRPC-Auth-Query-Count", "X-GRPC-Auth-Query-Time"],
+                ["X-GRPC-Auth-Profile-File"],
+                id="sql_only",
+            ),
+        ],
+    )
+    @mock.patch("aap_gateway_api.proxy.control_plane.DABProfiler")
+    @mock.patch("aap_gateway_api.proxy.control_plane.SQLQueryMetrics")
+    def test_profiling_headers(
+        self, mock_sql_cls, mock_profiler_cls, cprofile_file, use_denied, profiling_enabled, sql_enabled, expected, not_expected, ext_auth, settings
+    ):
+        settings.ANSIBLE_BASE_PROFILING_ENABLED = profiling_enabled
+        settings.ANSIBLE_BASE_PROFILING_SQL_ENABLED = sql_enabled
+
+        mock_profiler = mock.MagicMock()
+        mock_profiler.stop.return_value = (0.123, cprofile_file)
+        mock_profiler_cls.return_value = mock_profiler
+
+        mock_sql_cls.return_value = mock.MagicMock(query_count=1, query_time=0.01)
+
+        if use_denied:
+            auth_response = external_auth_pb2.CheckResponse(
+                status=status_pb2.Status(code=7),
+                denied_response=external_auth_pb2.DeniedHttpResponse(status=http_status_pb2.HttpStatus(code=403)),
+            )
+        else:
+            auth_response = external_auth_pb2.CheckResponse(ok_response=external_auth_pb2.OkHttpResponse())
+
+        request = Request(path="/api/gateway/v1/organizations/")
+        with mock.patch.object(_ExternalAuth, "Check", return_value=auth_response):
+            response = ext_auth.Check(request, None)
+
+        header_keys = [h.header.key for h in response.ok_response.response_headers_to_add]
+        for key in expected:
+            assert key in header_keys, f"{key} should be present"
+        for key in not_expected:
+            assert key not in header_keys, f"{key} should not be present"
