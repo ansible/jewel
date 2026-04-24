@@ -1,0 +1,389 @@
+name: Backport Cherry-Pick
+
+on:
+  workflow_call:
+    inputs:
+      source_commits:
+        description: "Commit SHA(s) to backport — single SHA or comma-separated list (e.g., abc1234 or abc1234,def5678)"
+        required: true
+        type: string
+      target_branches:
+        description: "Comma-separated target branches"
+        required: true
+        type: string
+      jira_ticket:
+        description: "Jira ticket for tracking (e.g., AAP-12345)"
+        required: false
+        type: string
+        default: ""
+      source_branch:
+        description: "Branch where the commit must exist"
+        required: false
+        type: string
+        default: "devel"
+      conflict_label:
+        description: "Label applied to draft PRs with conflicts"
+        required: false
+        type: string
+        default: "backport-conflict"
+      jira_base_url:
+        description: "Base URL for Jira ticket links (overrides JIRA_BASE_URL variable)"
+        required: false
+        type: string
+      git_committer_name:
+        description: "Git committer name for cherry-picked commits"
+        required: false
+        type: string
+        default: "github-actions[bot]"
+      git_committer_email:
+        description: "Git committer email — must match the GPG key's UID for the Verified badge"
+        required: false
+        type: string
+        default: "41898282+github-actions[bot]@users.noreply.github.com"
+    secrets:
+      GPG_PRIVATE_KEY:
+        description: "Base64-encoded armored GPG private key for commit signing (no passphrase)"
+        required: true
+
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GPG_PRIVATE_KEY}" ]; then
+            echo "::error::GPG_PRIVATE_KEY secret is not set — commit signing is required"
+            exit 1
+          fi
+
+          # Import key — try base64-decoded first, fall back to raw armored
+          if echo "${GPG_PRIVATE_KEY}" | base64 -d 2>/dev/null | gpg --batch --import 2>/dev/null; then
+            echo "GPG key imported (base64-encoded)"
+          elif echo "${GPG_PRIVATE_KEY}" | gpg --batch --import 2>/dev/null; then
+            echo "GPG key imported (raw armored)"
+          else
+            echo "::error::Failed to import GPG key — check that GPG_PRIVATE_KEY is a valid armored key (optionally base64-encoded)"
+            exit 1
+          fi
+
+          GPG_LIST=$(gpg --list-secret-keys --keyid-format long --with-colons 2>&1) || true
+          KEY_ID=$(echo "${GPG_LIST}" | awk -F: '/^sec:/ {print $5; exit}')
+          KEY_FPR=$(echo "${GPG_LIST}" | awk -F: '/^fpr:/ {print $10; exit}')
+          if [ -z "${KEY_ID}" ]; then
+            echo "::error::Failed to import GPG key — no secret key found after import"
+            exit 1
+          fi
+
+          echo "${KEY_FPR}:6:" | gpg --import-ownertrust 2>/dev/null
+
+          # Verify the key works by signing a throwaway payload
+          if ! echo "test" | gpg --batch --sign --output /dev/null 2>/dev/null; then
+            echo "::error::GPG key cannot sign — verify the key has no passphrase and is not expired"
+            exit 1
+          fi
+
+          git config user.signingkey "${KEY_ID}"
+          git config commit.gpgsign true
+          git config gpg.program gpg
+
+      - name: Validate commits exist on source branch
+        id: validate
+        env:
+          SOURCE_COMMITS: ${{ inputs.source_commits }}
+          SOURCE: ${{ inputs.source_branch }}
+        run: |
+          # Parse and validate all commit SHAs
+          IFS=',' read -ra SHAS <<< "${SOURCE_COMMITS}"
+          VALIDATED_SHAS=()
+
+          for RAW_SHA in "${SHAS[@]}"; do
+            SHA=$(echo "${RAW_SHA}" | xargs)  # trim whitespace
+
+            if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
+              echo "::error::Commit ${SHA} does not exist in the repository"
+              exit 1
+            fi
+
+            if ! git merge-base --is-ancestor "${SHA}" "origin/${SOURCE}" 2>/dev/null; then
+              echo "::error::Commit ${SHA} is not on the ${SOURCE} branch"
+              exit 1
+            fi
+
+            FULL_SHA=$(git rev-parse "${SHA}")
+            VALIDATED_SHAS+=("${FULL_SHA}")
+          done
+
+          # Use the first SHA for branch naming
+          FIRST_SHA="${VALIDATED_SHAS[0]}"
+          SHA_SHORT=$(git rev-parse --short "${FIRST_SHA}")
+
+          # Build comma-separated list of full SHAs
+          FULL_SHA_LIST=$(IFS=','; echo "${VALIDATED_SHAS[*]}")
+
+          # Get subject from first commit for PR title
+          {
+            echo "commit_subject<<SUBJECT_EOF"
+            git log -1 --format='%s' "${FIRST_SHA}"
+            echo "SUBJECT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          # Build combined commit body from all commits
+          {
+            echo "commit_body<<BODY_EOF"
+            for FULL_SHA in "${VALIDATED_SHAS[@]}"; do
+              SUBJECT=$(git log -1 --format='%s' "${FULL_SHA}")
+              BODY=$(git log -1 --format='%b' "${FULL_SHA}")
+              SHORT=$(git rev-parse --short "${FULL_SHA}")
+              echo "### ${SHORT}: ${SUBJECT}"
+              if [ -n "${BODY}" ]; then
+                echo ""
+                echo "${BODY}"
+              fi
+              echo ""
+            done
+            echo "BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          # Detect if any commit is a merge commit
+          HAS_MERGE=false
+          for FULL_SHA in "${VALIDATED_SHAS[@]}"; do
+            PARENT_COUNT=$(git cat-file -p "${FULL_SHA}" | grep -c "^parent")
+            if [ "${PARENT_COUNT}" -ge 2 ]; then
+              HAS_MERGE=true
+              break
+            fi
+          done
+
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "full_sha_list=${FULL_SHA_LIST}" >> "$GITHUB_OUTPUT"
+          echo "commit_count=${#VALIDATED_SHAS[@]}" >> "$GITHUB_OUTPUT"
+          echo "has_merge=${HAS_MERGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Process backports
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA_SHORT: ${{ steps.validate.outputs.sha_short }}
+          FULL_SHA_LIST: ${{ steps.validate.outputs.full_sha_list }}
+          COMMIT_COUNT: ${{ steps.validate.outputs.commit_count }}
+          HAS_MERGE: ${{ steps.validate.outputs.has_merge }}
+          COMMIT_SUBJECT: ${{ steps.validate.outputs.commit_subject }}
+          COMMIT_BODY: ${{ steps.validate.outputs.commit_body }}
+          JIRA_TICKET: ${{ inputs.jira_ticket }}
+          TARGET_BRANCHES: ${{ inputs.target_branches }}
+          CONFLICT_LABEL_NAME: ${{ inputs.conflict_label }}
+          SOURCE_BRANCH_NAME: ${{ inputs.source_branch }}
+          SERVER_URL: ${{ github.server_url }}
+          JIRA_BASE_URL: ${{ inputs.jira_base_url || vars.JIRA_BASE_URL }}
+          GIT_COMMITTER_NAME_INPUT: ${{ inputs.git_committer_name }}
+          GIT_COMMITTER_EMAIL_INPUT: ${{ inputs.git_committer_email }}
+        run: |
+          set -euo pipefail
+
+          REPO="${GITHUB_REPOSITORY}"
+
+          # Configure git committer identity — email must match the GPG key's UID for the "Verified" badge
+          git config user.name "${GIT_COMMITTER_NAME_INPUT}"
+          git config user.email "${GIT_COMMITTER_EMAIL_INPUT}"
+
+          # Ensure conflict label exists
+          gh label create "${CONFLICT_LABEL_NAME}" --color "D93F0B" --description "Backport has merge conflicts requiring manual resolution" --force --repo "${REPO}"
+
+          # Build Jira link if provided
+          JIRA_LINE=""
+          if [ -n "${JIRA_TICKET}" ]; then
+            if [ -z "${JIRA_BASE_URL}" ]; then
+              echo "::error::Jira ticket '${JIRA_TICKET}' was specified but no Jira base URL is configured. Set the JIRA_BASE_URL repository variable or pass jira_base_url input."
+              exit 1
+            fi
+            JIRA_LINE="| **Jira** | [${JIRA_TICKET}](${JIRA_BASE_URL}/${JIRA_TICKET}) |"
+          fi
+
+          # Parse full SHA list
+          IFS=',' read -ra COMMIT_SHAS <<< "${FULL_SHA_LIST}"
+
+          # Build commit links for PR body
+          COMMIT_LINKS=""
+          for FULL_SHA in "${COMMIT_SHAS[@]}"; do
+            SHORT=$(git rev-parse --short "${FULL_SHA}")
+            COMMIT_LINKS="${COMMIT_LINKS}| [\`${SHORT}\`](${SERVER_URL}/${REPO}/commit/${FULL_SHA}) "
+          done
+
+          # Split target branches and process each
+          IFS=',' read -ra BRANCHES <<< "${TARGET_BRANCHES}"
+
+          for TARGET in "${BRANCHES[@]}"; do
+            TARGET=$(echo "${TARGET}" | xargs)  # trim whitespace
+            echo ""
+            echo "=========================================="
+            echo "Processing backport to ${TARGET} (${COMMIT_COUNT} commit(s))"
+            echo "=========================================="
+
+            # Check if target branch exists
+            if ! git rev-parse --verify "origin/${TARGET}" &>/dev/null; then
+              echo "::error::Target branch '${TARGET}' does not exist. Skipping."
+              continue
+            fi
+
+            BACKPORT_BRANCH="backport/${SHA_SHORT}/${TARGET}"
+
+            # Check if backport branch already exists
+            if git rev-parse --verify "origin/${BACKPORT_BRANCH}" &>/dev/null; then
+              EXISTING_PR=$(gh pr list --head "${BACKPORT_BRANCH}" --base "${TARGET}" --json number,url --jq '.[0].url // empty' --repo "${REPO}")
+              if [ -n "${EXISTING_PR}" ]; then
+                echo "::warning::Backport branch '${BACKPORT_BRANCH}' already exists with PR: ${EXISTING_PR}. Skipping."
+              else
+                echo "::warning::Backport branch '${BACKPORT_BRANCH}' already exists. Skipping."
+              fi
+              continue
+            fi
+
+            # Start from the target branch
+            git checkout "origin/${TARGET}" --detach
+            git checkout -b "${BACKPORT_BRANCH}"
+
+            # Cherry-pick all commits in order
+            CHERRY_PICK_SUCCESS=true
+            FAILED_SHA=""
+            for FULL_SHA in "${COMMIT_SHAS[@]}"; do
+              PARENT_COUNT=$(git cat-file -p "${FULL_SHA}" | grep -c "^parent")
+              if [ "${PARENT_COUNT}" -ge 2 ]; then
+                echo "Detected merge commit ${FULL_SHA}, using -m 1"
+                if ! git cherry-pick -x -S -m 1 "${FULL_SHA}" 2>/dev/null; then
+                  CHERRY_PICK_SUCCESS=false
+                  FAILED_SHA="${FULL_SHA}"
+                  break
+                fi
+              else
+                if ! git cherry-pick -x -S "${FULL_SHA}" 2>/dev/null; then
+                  CHERRY_PICK_SUCCESS=false
+                  FAILED_SHA="${FULL_SHA}"
+                  break
+                fi
+              fi
+            done
+
+            if [ "${CHERRY_PICK_SUCCESS}" = "true" ]; then
+              # Check for empty cherry-pick (already applied)
+              if git diff --quiet "origin/${TARGET}" "${BACKPORT_BRANCH}" 2>/dev/null; then
+                echo "::warning::Commit(s) appear to already be present on ${TARGET}. Skipping."
+                git checkout "${SOURCE_BRANCH_NAME}"
+                git branch -D "${BACKPORT_BRANCH}"
+                continue
+              fi
+
+              git push origin "${BACKPORT_BRANCH}"
+
+              # Build PR body via heredoc
+              cat > /tmp/pr_body.md <<PRBODY_EOF
+          ## Backport
+
+          | | |
+          |---|---|
+          | **Source commit(s)** | ${COMMIT_LINKS}|
+          | **Source branch** | \`${SOURCE_BRANCH_NAME}\` |
+          | **Target branch** | \`${TARGET}\` |
+          ${JIRA_LINE}
+
+          ---
+
+          ${COMMIT_BODY}
+          PRBODY_EOF
+
+              PR_TITLE="[backport → ${TARGET}] ${COMMIT_SUBJECT}"
+              if [ "${COMMIT_COUNT}" -gt 1 ]; then
+                PR_TITLE="[backport → ${TARGET}] ${COMMIT_SUBJECT} (+$((COMMIT_COUNT - 1)) more)"
+              fi
+
+              gh pr create \
+                --repo "${REPO}" \
+                --head "${BACKPORT_BRANCH}" \
+                --base "${TARGET}" \
+                --title "${PR_TITLE}" \
+                --body-file /tmp/pr_body.md
+
+              echo "Backport PR created for ${TARGET}"
+
+            else
+              # Cherry-pick failed — abort, create placeholder commit, and push
+              git cherry-pick --abort 2>/dev/null || true
+              FAILED_SHORT=$(git rev-parse --short "${FAILED_SHA}")
+              git commit -S --allow-empty -m "Placeholder: backport requires manual cherry-pick (conflict on ${FAILED_SHORT})"
+              git push origin "${BACKPORT_BRANCH}"
+
+              # Build conflict PR body
+              CHERRY_PICK_CMDS=""
+              for FULL_SHA in "${COMMIT_SHAS[@]}"; do
+                PARENT_COUNT=$(git cat-file -p "${FULL_SHA}" | grep -c "^parent")
+                if [ "${PARENT_COUNT}" -ge 2 ]; then
+                  CHERRY_PICK_CMDS="${CHERRY_PICK_CMDS}git cherry-pick -x -m 1 ${FULL_SHA}\n"
+                else
+                  CHERRY_PICK_CMDS="${CHERRY_PICK_CMDS}git cherry-pick -x ${FULL_SHA}\n"
+                fi
+              done
+
+              cat > /tmp/pr_body.md <<PRBODY_EOF
+          ## Backport — Manual Resolution Required
+
+          The cherry-pick failed on commit \`${FAILED_SHA}\` when backporting to \`${TARGET}\`.
+
+          | | |
+          |---|---|
+          | **Source commit(s)** | ${COMMIT_LINKS}|
+          | **Failed on** | [\`${FAILED_SHORT}\`](${SERVER_URL}/${REPO}/commit/${FAILED_SHA}) |
+          | **Source branch** | \`${SOURCE_BRANCH_NAME}\` |
+          | **Target branch** | \`${TARGET}\` |
+          ${JIRA_LINE}
+
+          ### How to resolve
+
+          \`\`\`bash
+          git fetch origin ${TARGET}
+          git checkout -b ${BACKPORT_BRANCH} origin/${TARGET}
+          $(echo -e "${CHERRY_PICK_CMDS}")# resolve conflicts as needed
+          git push origin ${BACKPORT_BRANCH} --force-with-lease
+          \`\`\`
+
+          > **Note:** If this backport conflicts, check whether other pending backport PRs to \`${TARGET}\` need to be merged first.
+          PRBODY_EOF
+
+              PR_TITLE="[backport → ${TARGET}] ${COMMIT_SUBJECT} (CONFLICTS)"
+              if [ "${COMMIT_COUNT}" -gt 1 ]; then
+                PR_TITLE="[backport → ${TARGET}] ${COMMIT_SUBJECT} (+$((COMMIT_COUNT - 1)) more) (CONFLICTS)"
+              fi
+
+              PR_URL=$(gh pr create \
+                --repo "${REPO}" \
+                --head "${BACKPORT_BRANCH}" \
+                --base "${TARGET}" \
+                --title "${PR_TITLE}" \
+                --body-file /tmp/pr_body.md \
+                --draft)
+
+              # Add conflict label
+              PR_NUMBER="${PR_URL##*/}"
+              gh pr edit "${PR_NUMBER}" --add-label "${CONFLICT_LABEL_NAME}" --repo "${REPO}"
+
+              echo "Draft PR created for ${TARGET} with conflicts (manual resolution required)"
+            fi
+
+            # Return to source branch for next iteration
+            git checkout "${SOURCE_BRANCH_NAME}"
+          done
+
+          echo ""
+          echo "=========================================="
+          echo "Backport processing complete"
+          echo "=========================================="
