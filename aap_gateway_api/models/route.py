@@ -42,7 +42,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     http_port = models.ForeignKey(
         HTTPPort, related_name="routes", blank=False, on_delete=models.CASCADE, help_text=_("The port on the gateway to listen to traffic on.")
     )
-    service_cluster = models.ForeignKey(ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text=_("The Ansible service to route traffic to."))
+    service_cluster = models.ForeignKey(
+        ServiceCluster, related_name="routes", on_delete=models.CASCADE, help_text=_("The Ansible service to route traffic to.")
+    )
 
     service_port = models.IntegerField(
         blank=False, validators=[MaxValueValidator(65535), MinValueValidator(1)], help_text=_("The port on the service cluster to route traffic to.")

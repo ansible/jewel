@@ -7,7 +7,6 @@ from rest_framework.test import APIClient
 from aap_gateway_api.models import Organization, User
 
 
-
 def mk_app(
     name="Test OAuth2 Application",
     description="Created for testing app_url API endpoint.",
