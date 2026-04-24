@@ -22,9 +22,10 @@ class TestGenerateVersion:
 
     def test_falls_back_to_setuptools_scm(self):
         scm_version = "0.1.dev1+gabcdef"
+        fake_scm = mock.MagicMock(get_version=mock.Mock(return_value=scm_version))
         with (
             mock.patch("os.path.exists", return_value=False),
-            mock.patch("setuptools_scm.get_version", return_value=scm_version, create=True),
+            mock.patch.dict("sys.modules", {"setuptools_scm": fake_scm}),
         ):
             assert generate_version() == scm_version
 
