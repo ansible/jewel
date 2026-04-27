@@ -1,6 +1,6 @@
 # Jewel
 
-Jewel provides the source code for the Gateway API used in Red Hat Ansible Automation Platform.
+Jewel provides the source code for the Gateway API used by Ansible services built as Django Ansible Base (DAB) applications.
 
 
 > The project name, Jewel, refers to a precious stone known as the Eye of the Sea from the same novel that originated the word Ansible, Ursula K. Le Guin's *Rocannon's World*.
