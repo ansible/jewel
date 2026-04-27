@@ -503,22 +503,6 @@ register(
     settings_bound=True,
 )
 
-register(
-    section="feature_flags",
-    preference_name="RUNTIME_FEATURE_FLAGS_UI",
-    required=False,
-    default=getattr(settings, "RUNTIME_FEATURE_FLAGS_UI", False),
-    preference_type="bool",
-    help_text=_(
-        "Controls whether the feature flags UI page is displayed. This is currently set through settings. "
-        "If you'd like to change this please update the RUNTIME_FEATURE_FLAGS_UI setting in your configuration."
-    ),
-    label=_('Feature Flags UI Page'),
-    read_only=True,
-    encrypted=False,
-    settings_bound=True,
-)
-
 # Only register OIDC workload identity preferences when feature is enabled
 if getattr(settings, 'FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED', False):
     register(

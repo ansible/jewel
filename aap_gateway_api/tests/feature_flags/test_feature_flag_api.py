@@ -453,7 +453,6 @@ def test_feature_flags_detail(admin_api_client, feature_flag, value):
     'preference',
     [
         ("RUNTIME_FEATURE_FLAGS"),
-        ("RUNTIME_FEATURE_FLAGS_UI"),
     ],
 )
 def test_feature_flags_preferences(admin_api_client, preference):

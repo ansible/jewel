@@ -401,7 +401,6 @@ RESOURCE_SERVER_SYNC_ENABLED = False
 
 # Runtime feature flag settings
 RUNTIME_FEATURE_FLAGS = False
-RUNTIME_FEATURE_FLAGS_UI = False
 
 SDS_CLUSTER_NAMES = ["gateway-control-plane-rest"]
 SDS_REFRESH_DELAY_PROTOBUF_DURATION = "5s"
