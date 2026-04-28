@@ -1,0 +1,45 @@
+---
+name: Auto-Close PR
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-close:
+    if: vars.AUTO_CLOSE_PR_BRANCHES != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if PR targets a protected branch
+        id: check
+        env:
+          PROTECTED_BRANCHES: ${{ vars.AUTO_CLOSE_PR_BRANCHES }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          for branch in $PROTECTED_BRANCHES; do
+            if [ "$branch" = "$PR_BASE" ]; then
+              echo "match=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "match=false" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR
+        if: steps.check.outputs.match == 'true' && vars.AUTO_CLOSE_PR_MESSAGE != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MESSAGE: ${{ vars.AUTO_CLOSE_PR_MESSAGE }}
+        run: gh pr comment "$PR_NUMBER" --body "$MESSAGE"
+
+      - name: Close PR
+        if: steps.check.outputs.match == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr close "$PR_NUMBER"
