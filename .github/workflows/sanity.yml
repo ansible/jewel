@@ -107,5 +107,3 @@ jobs:
       pr_base: ${{ github.event.pull_request.base.ref }}
       pr_head_repo: ${{ github.event.pull_request.head.repo.full_name }}
       pr_body: ${{ github.event.pull_request.body }}
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
