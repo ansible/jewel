@@ -1,6 +1,54 @@
 name: Backport Cherry-Pick
 
 on:
+  # This workflow support two types of triggers:
+  # - workflow_dispatch: allows manual invocation via the GitHub UI or the gh CLI
+  #     e.g.  gh workflow run backport.yml -f source_commits="abc1234" -f target_branches="stable-2.6"
+  # - workflow_call: allows invocation from another GitHub Actions workflow
+  #
+  # IMPORTANT: Keep the inputs sections of both triggers in sync!
+  # They must define the same inputs with the same types and defaults.
+  # If you add, remove, or rename an input, make the same update in both triggers.
+  # Note: Secrets are only specified for workflow_call trigger.
+  workflow_dispatch:
+    inputs:
+      source_commits:
+        description: "Commit SHA(s) to backport — single SHA or comma-separated list (e.g., abc1234 or abc1234,def5678)"
+        required: true
+        type: string
+      target_branches:
+        description: "Comma-separated target branches"
+        required: true
+        type: string
+      jira_ticket:
+        description: "Jira ticket for tracking (e.g., AAP-12345)"
+        required: false
+        type: string
+        default: ""
+      source_branch:
+        description: "Branch where the commit must exist"
+        required: false
+        type: string
+        default: "devel"
+      conflict_label:
+        description: "Label applied to draft PRs with conflicts"
+        required: false
+        type: string
+        default: "backport-conflict"
+      jira_base_url:
+        description: "Base URL for Jira ticket links (overrides JIRA_BASE_URL variable)"
+        required: false
+        type: string
+      git_committer_name:
+        description: "Git committer name for cherry-picked commits"
+        required: false
+        type: string
+        default: "github-actions[bot]"
+      git_committer_email:
+        description: "Git committer email — must match the GPG key's UID for the Verified badge"
+        required: false
+        type: string
+        default: "41898282+github-actions[bot]@users.noreply.github.com"
   workflow_call:
     inputs:
       source_commits:
