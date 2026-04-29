@@ -1,5 +1,5 @@
 [project]
-name = "jewel"
+name = "aap-gateway"
 authors = [{ name = "Ansible community", email = "info@ansible.com" }]
 description = "gateway"
 readme = "README.md"
