@@ -458,7 +458,8 @@ jobs:
           \`\`\`bash
           git fetch origin ${TARGET}
           git checkout -b ${BACKPORT_BRANCH} origin/${TARGET}
-          $(echo -e "${MANUAL_CMDS}")# If conflicts occur, resolve them, then:
+          $(echo -e "${MANUAL_CMDS}")
+          # If conflicts occur, resolve them, then:
           #   For git am: git am --continue
           #   For git apply: git add . && git commit
           git push origin ${BACKPORT_BRANCH} --force-with-lease
