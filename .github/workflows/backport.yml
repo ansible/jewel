@@ -410,10 +410,16 @@ jobs:
 
           ### How to resolve
 
+          Use the instructions below to get the code checked out locally.
+
+          **NOTE:** ⚠️ The git remote name \`origin\` might be different in your setup!
+          In the commands below, the \`origin\` refers to: ${REPO}
+          If you have different remote name for this repository, use your name instead of \`origin\`.
+          
           \`\`\`bash
           git fetch origin ${TARGET}
           git checkout -b ${BACKPORT_BRANCH} origin/${TARGET}
-          $(echo -e "${CHERRY_PICK_CMDS}")# resolve conflicts as needed
+          $(echo -e "${CHERRY_PICK_CMDS}") # resolve conflicts as needed
           git push origin ${BACKPORT_BRANCH} --force-with-lease
           \`\`\`
 
