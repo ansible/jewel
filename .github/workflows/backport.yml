@@ -344,7 +344,8 @@ jobs:
                     fi
                     echo "(cherry picked from commit ${FULL_SHA})"
                   } > /tmp/commit_msg.txt
-                  git commit -S -F /tmp/commit_msg.txt
+                  ORIG_AUTHOR=$(git log -1 --format='%an <%ae>' "${FULL_SHA}")
+                  git commit -S -F /tmp/commit_msg.txt --author="${ORIG_AUTHOR}"
                 else
                   APPLY_SUCCESS=false
                   FAILED_SHA="${FULL_SHA}"
