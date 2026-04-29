@@ -349,6 +349,9 @@ jobs:
                 else
                   APPLY_SUCCESS=false
                   FAILED_SHA="${FULL_SHA}"
+                  FAILED_SHA="${FULL_SHA}"
+                  # Clean up failed apply state
+                  git reset --hard HEAD 2>/dev/null || true
                   break
                 fi
               else
