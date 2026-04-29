@@ -341,6 +341,7 @@ jobs:
                     echo ""
                     if [ -n "${ORIG_BODY}" ]; then
                       echo "${ORIG_BODY}"
+                      echo ""
                     fi
                     echo "(cherry picked from commit ${FULL_SHA})"
                   } > /tmp/commit_msg.txt
