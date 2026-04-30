@@ -218,6 +218,10 @@ LOGGING = {
             'handlers': ['console', 'file'],
             'level': 'WARNING',
         },
+        'dispatcherd': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
         'django': {
             'handlers': ['console', 'file'],
             'level': 'WARNING',

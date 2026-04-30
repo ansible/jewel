@@ -34,6 +34,7 @@ def get_dispatcherd_config():
                     "conninfo": _get_conninfo(),
                 },
                 "sync_connection_factory": "ansible_base.lib.utils.db.psycopg_connection_from_django",
+                "max_connection_idle_seconds": None,
                 "channels": [
                     getattr(settings, "CLUSTER_HOST_ID", "gateway"),
                     "gateway_broadcast",
