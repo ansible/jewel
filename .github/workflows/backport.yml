@@ -5,7 +5,7 @@
 # The PAT needs fine-grained permissions: Contents (read/write), Pull requests (read/write),
 # and Issues (read/write).
 
-name: Backport Cherry-Pick
+name: Backport
 
 on:
   # This workflow support two types of triggers:
@@ -47,7 +47,7 @@ on:
         required: false
         type: string
       git_committer_name:
-        description: "Git committer name for cherry-picked commits"
+        description: "Git committer name for backported commits"
         required: false
         type: string
         default: "github-actions[bot]"
@@ -86,7 +86,7 @@ on:
         required: false
         type: string
       git_committer_name:
-        description: "Git committer name for cherry-picked commits"
+        description: "Git committer name for backported commits"
         required: false
         type: string
         default: "github-actions[bot]"
@@ -315,28 +315,69 @@ jobs:
             git checkout "origin/${TARGET}" --detach
             git checkout -b "${BACKPORT_BRANCH}"
 
-            # Cherry-pick all commits in order
-            CHERRY_PICK_SUCCESS=true
+            # Apply commits using format-patch + git am --3way instead of cherry-pick.
+            # This patch-based approach works even when branch histories have diverged
+            # (e.g., after a history rewrite on the source branch), because it operates
+            # on the actual file diffs rather than requiring a common ancestor.
+            # The --3way flag uses blob SHAs from the patch header to reconstruct a
+            # 3-way merge, producing standard conflict markers when conflicts occur.
+            APPLY_SUCCESS=true
             FAILED_SHA=""
             for FULL_SHA in "${COMMIT_SHAS[@]}"; do
+              COMMIT_SHORT=$(git rev-parse --short "${FULL_SHA}")
               PARENT_COUNT=$(git cat-file -p "${FULL_SHA}" | grep -c "^parent")
+
               if [ "${PARENT_COUNT}" -ge 2 ]; then
-                echo "Detected merge commit ${FULL_SHA}, using -m 1"
-                if ! git cherry-pick -x -S -m 1 "${FULL_SHA}" 2>/dev/null; then
-                  CHERRY_PICK_SUCCESS=false
+                # Merge commits: format-patch doesn't support merge commits, so we
+                # extract the diff against the first parent and apply it manually.
+                echo "Applying merge commit ${COMMIT_SHORT} (diff against first parent)"
+                if git diff "${FULL_SHA}^1" "${FULL_SHA}" | git apply --3way --index; then
+                  # Build commit message preserving original subject/body and adding
+                  # a cherry-pick reference (equivalent to cherry-pick -x)
+                  ORIG_SUBJECT=$(git log -1 --format='%s' "${FULL_SHA}")
+                  ORIG_BODY=$(git log -1 --format='%b' "${FULL_SHA}")
+                  {
+                    echo "${ORIG_SUBJECT}"
+                    echo ""
+                    if [ -n "${ORIG_BODY}" ]; then
+                      echo "${ORIG_BODY}"
+                      echo ""
+                    fi
+                    echo "(cherry picked from commit ${FULL_SHA})"
+                  } > /tmp/commit_msg.txt
+                  ORIG_AUTHOR=$(git log -1 --format='%an <%ae>' "${FULL_SHA}")
+                  git commit -S -F /tmp/commit_msg.txt --author="${ORIG_AUTHOR}"
+                else
+                  APPLY_SUCCESS=false
                   FAILED_SHA="${FULL_SHA}"
+                  # Clean up failed apply state
+                  git reset --hard HEAD 2>/dev/null || true
                   break
                 fi
               else
-                if ! git cherry-pick -x -S "${FULL_SHA}" 2>/dev/null; then
-                  CHERRY_PICK_SUCCESS=false
+                # Regular commits: use format-patch to generate a patch that preserves
+                # authorship and commit message, then apply with git am --3way.
+                echo "Applying commit ${COMMIT_SHORT} via format-patch + am --3way"
+                if git format-patch -1 "${FULL_SHA}" --stdout | git am --3way; then
+                  # git am preserves the original author and message, but doesn't add
+                  # the "(cherry picked from ...)" reference that cherry-pick -x does.
+                  # Amend the commit to append it and GPG-sign.
+                  {
+                    git log -1 --format='%B'
+                    echo "(cherry picked from commit ${FULL_SHA})"
+                  } > /tmp/commit_msg.txt
+                  git commit --amend -S -F /tmp/commit_msg.txt
+                else
+                  APPLY_SUCCESS=false
                   FAILED_SHA="${FULL_SHA}"
+                  # Clean up the failed am state
+                  git am --abort 2>/dev/null || true
                   break
                 fi
               fi
             done
 
-            if [ "${CHERRY_PICK_SUCCESS}" = "true" ]; then
+            if [ "${APPLY_SUCCESS}" = "true" ]; then
               # Check for empty cherry-pick (already applied)
               if git diff --quiet "origin/${TARGET}" "${BACKPORT_BRANCH}" 2>/dev/null; then
                 echo "::warning::Commit(s) appear to already be present on ${TARGET}. Skipping."
@@ -378,27 +419,29 @@ jobs:
               echo "Backport PR created for ${TARGET}"
 
             else
-              # Cherry-pick failed — abort, create placeholder commit, and push
-              git cherry-pick --abort 2>/dev/null || true
+              # Patch apply failed — clean up working tree and create placeholder commit
+              git reset --hard HEAD 2>/dev/null || true
               FAILED_SHORT=$(git rev-parse --short "${FAILED_SHA}")
-              git commit -S --allow-empty -m "Placeholder: backport requires manual cherry-pick (conflict on ${FAILED_SHORT})"
+              git commit -S --allow-empty -m "Placeholder: backport requires manual resolution (conflict on ${FAILED_SHORT})"
               git push origin "${BACKPORT_BRANCH}"
 
-              # Build conflict PR body
-              CHERRY_PICK_CMDS=""
+              # Build manual resolution commands for the PR body.
+              # For regular commits: format-patch + am --3way (same approach as the automated step).
+              # For merge commits: diff against first parent + apply --3way.
+              MANUAL_CMDS=""
               for FULL_SHA in "${COMMIT_SHAS[@]}"; do
                 PARENT_COUNT=$(git cat-file -p "${FULL_SHA}" | grep -c "^parent")
                 if [ "${PARENT_COUNT}" -ge 2 ]; then
-                  CHERRY_PICK_CMDS="${CHERRY_PICK_CMDS}git cherry-pick -x -m 1 ${FULL_SHA}\n"
+                  MANUAL_CMDS="${MANUAL_CMDS}git diff ${FULL_SHA}^1 ${FULL_SHA} | git apply --3way\n"
                 else
-                  CHERRY_PICK_CMDS="${CHERRY_PICK_CMDS}git cherry-pick -x ${FULL_SHA}\n"
+                  MANUAL_CMDS="${MANUAL_CMDS}git format-patch -1 ${FULL_SHA} --stdout | git am --3way\n"
                 fi
               done
 
               cat > /tmp/pr_body.md <<PRBODY_EOF
           ## Backport — Manual Resolution Required
 
-          The cherry-pick failed on commit \`${FAILED_SHA}\` when backporting to \`${TARGET}\`.
+          The patch apply failed on commit \`${FAILED_SHA}\` when backporting to \`${TARGET}\`.
 
           | | |
           |---|---|
@@ -410,10 +453,19 @@ jobs:
 
           ### How to resolve
 
+          Use the instructions below to get the code checked out locally.
+
+          **NOTE:** ⚠️ The git remote name \`origin\` might be different in your setup!
+          In the commands below, the \`origin\` refers to: ${REPO}
+          If you have different remote name for this repository, use your name instead of \`origin\`.
+
           \`\`\`bash
           git fetch origin ${TARGET}
           git checkout -b ${BACKPORT_BRANCH} origin/${TARGET}
-          $(echo -e "${CHERRY_PICK_CMDS}")# resolve conflicts as needed
+          $(echo -e "${MANUAL_CMDS}")
+          # If conflicts occur, resolve them, then:
+          #   For git am: git am --continue
+          #   For git apply: git add . && git commit
           git push origin ${BACKPORT_BRANCH} --force-with-lease
           \`\`\`
 
