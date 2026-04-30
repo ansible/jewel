@@ -16,7 +16,7 @@ Epic: [AAP-59888](https://redhat.atlassian.net/browse/AAP-59888)
 
 **Last updated**: 2026-04-30
 
-AAP-65393 (core implementation) is code-complete and ready for review. The dispatch module, management commands, settings defaults, app config wiring, and unit tests are all in place. No stories have been merged yet.
+AAP-65393 (core implementation) is code-complete, tested in a dev environment, and in review. The dispatch module, management commands, settings defaults, app config wiring, logging config, and unit tests are all in place. The broker self-check is disabled due to a psycopg 3.2.x compatibility issue (see [Known Issues](#known-issues)).
 
 ---
 
@@ -48,7 +48,18 @@ aap_gateway_api/
 | Dependency | Source | Purpose |
 | --- | --- | --- |
 | `dispatcherd` | [PyPI](https://pypi.org/project/dispatcherd/) | Background task processing via pg_notify |
+| `psycopg` | [PyPI](https://pypi.org/project/psycopg/) | PostgreSQL adapter (v3.x) — see [Known Issues](#known-issues) for version-specific caveats |
 | `psycopg_connection_from_django()` | `ansible_base.lib.utils.db` (DAB) | Obtain a raw psycopg connection from Django's DB config |
+
+### Logging
+
+A `dispatcherd` logger is configured in `aap_gateway_api/defaults.py` at WARNING level by default. Set to DEBUG for troubleshooting:
+
+```python
+LOGGING['loggers']['dispatcherd']['level'] = 'DEBUG'
+```
+
+Without this logger, all dispatcherd internal log output is silently dropped (discovered during initial dev testing — EDA has the same logger configured).
 
 ### References
 
@@ -62,7 +73,7 @@ aap_gateway_api/
 
 ### AAP-65393: Implement dispatcherd in Gateway
 
-**Story**: [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | **Status**: In Progress
+**Story**: [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | **Status**: In Review
 
 This is the foundational story. All other stories depend on it.
 
@@ -93,7 +104,7 @@ This is the foundational story. All other stories depend on it.
 - Created: `aap_gateway_api/tests/dispatch/test_config.py` — 5 tests for config module
 - Created: `aap_gateway_api/tests/dispatch/test_management_commands.py` — 4 tests for management commands
 - Modified: `requirements/requirements.in` — added `dispatcherd`
-- Modified: `aap_gateway_api/defaults.py` — added `DISPATCHERD_MIN_WORKERS = 2`, `DISPATCHERD_MAX_WORKERS = 4`
+- Modified: `aap_gateway_api/defaults.py` — added `DISPATCHERD_MIN_WORKERS`, `DISPATCHERD_MAX_WORKERS`, and `dispatcherd` logger
 - Modified: `aap_gateway_api/apps.py` — calls `dispatcherd_setup(get_dispatcherd_config())` in `ready()`
 
 #### Configuration Details
@@ -117,6 +128,7 @@ The config dict passed to `dispatcherd.config.setup()` and `run_service()`:
                 "conninfo": "<built from DATABASES['default']>",
             },
             "sync_connection_factory": "ansible_base.lib.utils.db.psycopg_connection_from_django",
+            "max_connection_idle_seconds": None,  # disabled, see Known Issues
             "channels": [
                 "<CLUSTER_HOST_ID>",   # node-specific channel
                 "gateway_broadcast",   # cluster-wide broadcast channel
@@ -130,6 +142,8 @@ The config dict passed to `dispatcherd.config.setup()` and `run_service()`:
 ```
 
 The `conninfo` string is built from `settings.DATABASES["default"]` using the same approach as EDA (host, port, dbname, user, password, SSL options). The `sync_connection_factory` points to DAB's `psycopg_connection_from_django` which reuses Django's existing DB connection.
+
+The broker self-check (`max_connection_idle_seconds`) is disabled because of a psycopg 3.2.x compatibility issue — see [Known Issues](#known-issues) for details.
 
 ---
 
@@ -409,11 +423,50 @@ Run window: <start> – <end> UTC
 
 ---
 
+## Known Issues
+
+### psycopg 3.2.x does not deliver same-connection notifications
+
+**Discovered**: 2026-04-30 during AAP-65393 dev testing
+**Affects**: dispatcherd broker self-check (health monitor)
+**Workaround**: `"max_connection_idle_seconds": None` in broker config
+
+dispatcherd's pg_notify broker includes a self-check mechanism: after `max_connection_idle_seconds` of idle time, it sends a NOTIFY on a dedicated self-check channel and expects to receive it back. The NOTIFY is sent via the same async psycopg connection that is doing the LISTEN. In psycopg 3.2.x (confirmed with 3.2.3), **notifications sent by a connection to itself are not delivered through the `notifies()` API**. This causes the self-check to always fail with:
+
+```
+RuntimeError: self check message for broker <id> did not arrive in 30.x seconds
+```
+
+This was verified independently:
+
+```python
+# Same-connection notification — FAILS (no notification received)
+conn = await psycopg.AsyncConnection.connect(conninfo, autocommit=True)
+await conn.execute("LISTEN ch")
+await conn.execute("SELECT pg_notify('ch', 'hello')")
+async for n in conn.notifies(timeout=5): ...  # times out
+
+# Two-connection notification — WORKS
+listener = await psycopg.AsyncConnection.connect(conninfo, autocommit=True)
+await listener.execute("LISTEN ch")
+sender = psycopg.connect(conninfo, autocommit=True)
+sender.execute("NOTIFY ch, 'hello'")
+async for n in listener.notifies(timeout=5): ...  # receives notification
+```
+
+The self-check is a connection health monitor — it is **not** required for core dispatcherd functionality (task dispatch, control commands). Disabling it via `max_connection_idle_seconds: None` is safe. If dispatcherd upstream changes the self-check to use a separate connection, or if a future psycopg version fixes same-connection notification delivery, this workaround can be removed.
+
+**Upstream bugs to file**:
+- psycopg: same-connection notifications not delivered via `notifies()` in 3.2.x
+- dispatcherd: broker self-check assumes same-connection NOTIFY is received, should use separate connection
+
+---
+
 ## Progress Tracker
 
 | Story | Summary | Status | Depends On |
 | --- | --- | --- | --- |
-| [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | Implement dispatcherd in Gateway | In Progress | — |
+| [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | Implement dispatcherd in Gateway | In Review | — |
 | [AAP-65394](https://redhat.atlassian.net/browse/AAP-65394) | Add dispatcherd to supervisord config | Backlog | AAP-65393 |
 | [AAP-65395](https://redhat.atlassian.net/browse/AAP-65395) | Add dispatcherd health check to ping | Backlog | AAP-65393 |
 | [AAP-65396](https://redhat.atlassian.net/browse/AAP-65396) | Update Gateway container build | Backlog | AAP-65393 |
