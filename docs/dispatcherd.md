@@ -16,7 +16,7 @@ Epic: [AAP-59888](https://redhat.atlassian.net/browse/AAP-59888)
 
 **Last updated**: 2026-04-30
 
-No stories have been merged yet. AAP-65393 (core implementation) is in progress.
+AAP-65393 (core implementation) is code-complete and ready for review. The dispatch module, management commands, settings defaults, app config wiring, and unit tests are all in place. No stories have been merged yet.
 
 ---
 
@@ -84,25 +84,52 @@ This is the foundational story. All other stories depend on it.
 
 #### Files Created / Modified
 
-<!-- TODO: List all files created or modified once this story is complete.
-     Example:
-     - Created: aap_gateway_api/dispatch/__init__.py
-     - Created: aap_gateway_api/dispatch/config.py
-     - Modified: requirements/requirements.in
--->
+- Created: `aap_gateway_api/dispatch/__init__.py`
+- Created: `aap_gateway_api/dispatch/config.py` — `get_dispatcherd_config()` and `_get_conninfo()`
+- Created: `aap_gateway_api/dispatch/pre_fork.py` — pre-fork Django setup (closes DB/cache connections before fork)
+- Created: `aap_gateway_api/management/commands/dispatcherd.py` — runs the service
+- Created: `aap_gateway_api/management/commands/dispatcherctl.py` — control interface (alive, status, etc.)
+- Created: `aap_gateway_api/tests/dispatch/__init__.py`
+- Created: `aap_gateway_api/tests/dispatch/test_config.py` — 5 tests for config module
+- Created: `aap_gateway_api/tests/dispatch/test_management_commands.py` — 4 tests for management commands
+- Modified: `requirements/requirements.in` — added `dispatcherd`
+- Modified: `aap_gateway_api/defaults.py` — added `DISPATCHERD_MIN_WORKERS = 2`, `DISPATCHERD_MAX_WORKERS = 4`
+- Modified: `aap_gateway_api/apps.py` — calls `dispatcherd_setup(get_dispatcherd_config())` in `ready()`
 
 #### Configuration Details
 
-<!-- TODO: Document the actual config dict structure passed to run_service() once finalized.
-     Example:
-     ```python
-     {
-         "node_name": settings.CLUSTER_HOST_ID,
-         "queues": [...],
-         ...
-     }
-     ```
--->
+The config dict passed to `dispatcherd.config.setup()` and `run_service()`:
+
+```python
+{
+    "version": 2,
+    "service": {
+        "process_manager_cls": "ForkServerManager",
+        "process_manager_kwargs": {
+            "preload_modules": ["aap_gateway_api.dispatch.pre_fork"],
+        },
+        "min_workers": 2,   # from settings.DISPATCHERD_MIN_WORKERS
+        "max_workers": 4,   # from settings.DISPATCHERD_MAX_WORKERS
+    },
+    "brokers": {
+        "pg_notify": {
+            "config": {
+                "conninfo": "<built from DATABASES['default']>",
+            },
+            "sync_connection_factory": "ansible_base.lib.utils.db.psycopg_connection_from_django",
+            "channels": [
+                "<CLUSTER_HOST_ID>",   # node-specific channel
+                "gateway_broadcast",   # cluster-wide broadcast channel
+            ],
+            "default_publish_channel": "gateway_broadcast",
+        }
+    },
+    "producers": {},
+    "publish": {"default_broker": "pg_notify"},
+}
+```
+
+The `conninfo` string is built from `settings.DATABASES["default"]` using the same approach as EDA (host, port, dbname, user, password, SSL options). The `sync_connection_factory` points to DAB's `psycopg_connection_from_django` which reuses Django's existing DB connection.
 
 ---
 

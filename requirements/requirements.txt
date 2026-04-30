@@ -18,6 +18,8 @@ charset-normalizer==3.4.0
     # via requests
 cryptography==46.0.5
     # via -r requirements/requirements.in
+dispatcherd==2026.3.25
+    # via -r requirements/requirements.in
 django==5.2.9
     # via
     #   -r requirements/requirements.in
@@ -76,6 +78,7 @@ pyjwt==2.12.1
 pyyaml==6.0.2
     # via
     #   -r requirements/requirements.in
+    #   dispatcherd
     #   drf-spectacular
 referencing==0.36.2
     # via
