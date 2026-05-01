@@ -19,8 +19,6 @@ def get_dispatcherd_config():
                     "conninfo": psycopg_conn_string_from_settings_dict(settings.DATABASES["default"]),
                 },
                 "sync_connection_factory": "ansible_base.lib.utils.db.psycopg_connection_from_django",
-                # psycopg 3.2.x doesn't deliver same-connection notifications, which breaks the broker self-check
-                "max_connection_idle_seconds": None,
                 "channels": [
                     getattr(settings, "CLUSTER_HOST_ID", "gateway"),
                     "gateway_broadcast",

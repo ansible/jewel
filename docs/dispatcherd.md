@@ -14,9 +14,9 @@ Epic: [AAP-59888](https://redhat.atlassian.net/browse/AAP-59888)
 
 <!-- Update this section after each story is completed so the next person gets a quick snapshot. -->
 
-**Last updated**: 2026-04-30
+**Last updated**: 2026-05-01
 
-AAP-65393 (core implementation) is code-complete, tested in a dev environment, and in review. The dispatch module, management commands, settings defaults, app config wiring, logging config, and unit tests are all in place. The broker self-check is disabled due to a psycopg 3.2.x compatibility issue (see [Known Issues](#known-issues)).
+AAP-65393 (core implementation) is code-complete, tested in a dev environment, and in review. The dispatch module, management commands, settings defaults, app config wiring, logging config, and unit tests are all in place.
 
 ---
 
@@ -48,7 +48,7 @@ aap_gateway_api/
 | Dependency | Source | Purpose |
 | --- | --- | --- |
 | `dispatcherd` | [PyPI](https://pypi.org/project/dispatcherd/) | Background task processing via pg_notify |
-| `psycopg` | [PyPI](https://pypi.org/project/psycopg/) | PostgreSQL adapter (v3.x) — see [Known Issues](#known-issues) for version-specific caveats |
+| `psycopg` | [PyPI](https://pypi.org/project/psycopg/) | PostgreSQL adapter (v3.x) — requires ≥3.2.10 for same-connection notification support |
 | `psycopg_conn_string_from_settings_dict()` | `ansible_base.lib.utils.db` (DAB) | Build a properly-escaped conninfo string from Django's DB config |
 | `psycopg_connection_from_django()` | `ansible_base.lib.utils.db` (DAB) | Obtain a raw psycopg connection from Django's DB config |
 
@@ -129,7 +129,6 @@ The config dict passed to `dispatcherd.config.setup()` and `run_service()`:
                 "conninfo": "<built from DATABASES['default']>",
             },
             "sync_connection_factory": "ansible_base.lib.utils.db.psycopg_connection_from_django",
-            "max_connection_idle_seconds": None,  # disabled, see Known Issues
             "channels": [
                 "<CLUSTER_HOST_ID>",   # node-specific channel
                 "gateway_broadcast",   # cluster-wide broadcast channel
@@ -143,8 +142,6 @@ The config dict passed to `dispatcherd.config.setup()` and `run_service()`:
 ```
 
 The `conninfo` string is built from `settings.DATABASES["default"]` using DAB's `psycopg_conn_string_from_settings_dict()` from `ansible_base.lib.utils.db`, which delegates to `psycopg.conninfo.make_conninfo()` for proper escaping of special characters in passwords and other values. The `sync_connection_factory` points to DAB's `psycopg_connection_from_django` which reuses Django's existing DB connection.
-
-The broker self-check (`max_connection_idle_seconds`) is disabled because of a psycopg 3.2.x compatibility issue — see [Known Issues](#known-issues) for details.
 
 ---
 
@@ -426,40 +423,20 @@ Run window: <start> – <end> UTC
 
 ## Known Issues
 
-### psycopg 3.2.x does not deliver same-connection notifications
+### psycopg 3.2.3 did not deliver same-connection notifications (RESOLVED)
 
 **Discovered**: 2026-04-30 during AAP-65393 dev testing
-**Affects**: dispatcherd broker self-check (health monitor)
-**Workaround**: `"max_connection_idle_seconds": None` in broker config
+**Resolved**: 2026-05-01 — confirmed fixed in psycopg 3.2.10
 
-dispatcherd's pg_notify broker includes a self-check mechanism: after `max_connection_idle_seconds` of idle time, it sends a NOTIFY on a dedicated self-check channel and expects to receive it back. The NOTIFY is sent via the same async psycopg connection that is doing the LISTEN. In psycopg 3.2.x (confirmed with 3.2.3), **notifications sent by a connection to itself are not delivered through the `notifies()` API**. This causes the self-check to always fail with:
+During initial dev testing with psycopg 3.2.3, dispatcherd's pg_notify broker self-check always failed because notifications sent by a connection to itself were not delivered through the `notifies()` API. This caused:
 
 ```
 RuntimeError: self check message for broker <id> did not arrive in 30.x seconds
 ```
 
-This was verified independently:
+The workaround was `"max_connection_idle_seconds": None` in the broker config to disable the self-check. After upgrading to psycopg 3.2.10 (required for dispatcherd compatibility), same-connection notifications work correctly and no workaround is needed. The broker self-check now functions as designed.
 
-```python
-# Same-connection notification — FAILS (no notification received)
-conn = await psycopg.AsyncConnection.connect(conninfo, autocommit=True)
-await conn.execute("LISTEN ch")
-await conn.execute("SELECT pg_notify('ch', 'hello')")
-async for n in conn.notifies(timeout=5): ...  # times out
-
-# Two-connection notification — WORKS
-listener = await psycopg.AsyncConnection.connect(conninfo, autocommit=True)
-await listener.execute("LISTEN ch")
-sender = psycopg.connect(conninfo, autocommit=True)
-sender.execute("NOTIFY ch, 'hello'")
-async for n in listener.notifies(timeout=5): ...  # receives notification
-```
-
-The self-check is a connection health monitor — it is **not** required for core dispatcherd functionality (task dispatch, control commands). Disabling it via `max_connection_idle_seconds: None` is safe. If dispatcherd upstream changes the self-check to use a separate connection, or if a future psycopg version fixes same-connection notification delivery, this workaround can be removed.
-
-**Upstream bugs to file**:
-- psycopg: same-connection notifications not delivered via `notifies()` in 3.2.x
-- dispatcherd: broker self-check assumes same-connection NOTIFY is received, should use separate connection
+If a future psycopg regression reintroduces this issue, set `"max_connection_idle_seconds": None` in the pg_notify broker config to disable the self-check without affecting core functionality.
 
 ---
 

@@ -37,7 +37,7 @@ def test_config_broker_settings():
     assert broker["sync_connection_factory"] == "ansible_base.lib.utils.db.psycopg_connection_from_django"
     assert broker["default_publish_channel"] == "gateway_broadcast"
     assert "gateway_broadcast" in broker["channels"]
-    assert broker["max_connection_idle_seconds"] is None
+    assert "max_connection_idle_seconds" not in broker
 
 
 @pytest.mark.django_db
