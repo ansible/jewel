@@ -49,6 +49,7 @@ aap_gateway_api/
 | --- | --- | --- |
 | `dispatcherd` | [PyPI](https://pypi.org/project/dispatcherd/) | Background task processing via pg_notify |
 | `psycopg` | [PyPI](https://pypi.org/project/psycopg/) | PostgreSQL adapter (v3.x) — see [Known Issues](#known-issues) for version-specific caveats |
+| `psycopg_conn_string_from_settings_dict()` | `ansible_base.lib.utils.db` (DAB) | Build a properly-escaped conninfo string from Django's DB config |
 | `psycopg_connection_from_django()` | `ansible_base.lib.utils.db` (DAB) | Obtain a raw psycopg connection from Django's DB config |
 
 ### Logging
@@ -86,7 +87,7 @@ This is the foundational story. All other stories depend on it.
 | Config | `config.py` — use `CLUSTER_HOST_ID` (Django setting) for the node name. Configure a broadcast queue. Config dict is passed to dispatcherd's `run_service()`. |
 | Management commands | `aap_gateway_api/management/commands/dispatcherd.py` and `dispatcherctl.py` |
 | Unit tests | `aap_gateway_api/tests/dispatch/` — cover config module and management commands |
-| DB connection | Use DAB's `psycopg_connection_from_django()` from `ansible_base.lib.utils.db` |
+| DB connection | Use DAB's `psycopg_conn_string_from_settings_dict()` for conninfo and `psycopg_connection_from_django` as the sync connection factory, both from `ansible_base.lib.utils.db` |
 
 #### Constraints
 
@@ -96,13 +97,13 @@ This is the foundational story. All other stories depend on it.
 #### Files Created / Modified
 
 - Created: `aap_gateway_api/dispatch/__init__.py`
-- Created: `aap_gateway_api/dispatch/config.py` — `get_dispatcherd_config()` and `_get_conninfo()`
+- Created: `aap_gateway_api/dispatch/config.py` — `get_dispatcherd_config()`
 - Created: `aap_gateway_api/dispatch/pre_fork.py` — pre-fork Django setup (closes DB/cache connections before fork)
 - Created: `aap_gateway_api/management/commands/dispatcherd.py` — runs the service
 - Created: `aap_gateway_api/management/commands/dispatcherctl.py` — control interface (alive, status, etc.)
 - Created: `aap_gateway_api/tests/dispatch/__init__.py`
-- Created: `aap_gateway_api/tests/dispatch/test_config.py` — 5 tests for config module
-- Created: `aap_gateway_api/tests/dispatch/test_management_commands.py` — 4 tests for management commands
+- Created: `aap_gateway_api/tests/dispatch/test_config.py` — 9 tests for config module
+- Created: `aap_gateway_api/tests/dispatch/test_management_commands.py` — 5 tests for management commands
 - Modified: `requirements/requirements.in` — added `dispatcherd`
 - Modified: `aap_gateway_api/defaults.py` — added `DISPATCHERD_MIN_WORKERS`, `DISPATCHERD_MAX_WORKERS`, and `dispatcherd` logger
 - Modified: `aap_gateway_api/apps.py` — calls `dispatcherd_setup(get_dispatcherd_config())` in `ready()`
@@ -141,7 +142,7 @@ The config dict passed to `dispatcherd.config.setup()` and `run_service()`:
 }
 ```
 
-The `conninfo` string is built from `settings.DATABASES["default"]` using the same approach as EDA (host, port, dbname, user, password, SSL options). The `sync_connection_factory` points to DAB's `psycopg_connection_from_django` which reuses Django's existing DB connection.
+The `conninfo` string is built from `settings.DATABASES["default"]` using DAB's `psycopg_conn_string_from_settings_dict()` from `ansible_base.lib.utils.db`, which delegates to `psycopg.conninfo.make_conninfo()` for proper escaping of special characters in passwords and other values. The `sync_connection_factory` points to DAB's `psycopg_connection_from_django` which reuses Django's existing DB connection.
 
 The broker self-check (`max_connection_idle_seconds`) is disabled because of a psycopg 3.2.x compatibility issue — see [Known Issues](#known-issues) for details.
 
