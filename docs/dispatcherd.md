@@ -105,6 +105,7 @@ This is the foundational story. All other stories depend on it.
 - Created: `aap_gateway_api/tests/dispatch/test_config.py` — 9 tests for config module
 - Created: `aap_gateway_api/tests/dispatch/test_management_commands.py` — 5 tests for management commands
 - Modified: `requirements/requirements.in` — added `dispatcherd[pg_notify]`
+- Modified: `requirements/requirements.txt` — compiled; pins dispatcherd and psycopg ≥3.2.10
 - Modified: `aap_gateway_api/defaults.py` — added `DISPATCHERD_MIN_WORKERS`, `DISPATCHERD_MAX_WORKERS`, and `dispatcherd` logger
 - Modified: `aap_gateway_api/apps.py` — calls `dispatcherd_setup(get_dispatcherd_config())` in `ready()`
 
