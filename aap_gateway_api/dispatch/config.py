@@ -1,20 +1,5 @@
+from ansible_base.lib.utils.db import psycopg_conn_string_from_settings_dict
 from django.conf import settings
-
-
-def _get_conninfo():
-    db = settings.DATABASES["default"]
-    db_options = db.get("OPTIONS", {})
-    return (
-        f"host={db.get('HOST', 'localhost')} "
-        f"port={db.get('PORT', 5432)} "
-        f"dbname={db.get('NAME', '')} "
-        f"user={db.get('USER', '')} "
-        f"password={db.get('PASSWORD', '')} "
-        f"sslmode={db_options.get('sslmode', 'allow')} "
-        f"sslcert={db_options.get('sslcert', '')} "
-        f"sslkey={db_options.get('sslkey', '')} "
-        f"sslrootcert={db_options.get('sslrootcert', '')}"
-    )
 
 
 def get_dispatcherd_config():
@@ -31,9 +16,10 @@ def get_dispatcherd_config():
         "brokers": {
             "pg_notify": {
                 "config": {
-                    "conninfo": _get_conninfo(),
+                    "conninfo": psycopg_conn_string_from_settings_dict(settings.DATABASES["default"]),
                 },
                 "sync_connection_factory": "ansible_base.lib.utils.db.psycopg_connection_from_django",
+                # psycopg 3.2.x doesn't deliver same-connection notifications, which breaks the broker self-check
                 "max_connection_idle_seconds": None,
                 "channels": [
                     getattr(settings, "CLUSTER_HOST_ID", "gateway"),

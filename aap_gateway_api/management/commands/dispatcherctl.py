@@ -40,11 +40,11 @@ class Command(BaseCommand):
             _register_control_arguments(command_parser, CONTROL_ARG_SCHEMAS.get(command))
 
     def handle(self, *args, **options) -> None:
-        command = options.get("command")
+        command = options.pop("command", None)
         if not command:
             raise CommandError("No dispatcher control command specified")
 
-        for django_opt in ("verbosity", "traceback", "no_color", "force_color", "skip_checks"):
+        for django_opt in ("verbosity", "traceback", "no_color", "force_color", "skip_checks", "settings", "pythonpath"):
             options.pop(django_opt, None)
 
         expected_replies = options.pop("expected_replies", 1)

@@ -37,10 +37,11 @@ class MyAppConfig(AppConfig):
         signals.post_migrate.connect(_initialize_data, sender=self, weak=False)
         preference_updated.connect(_notify_on_preference_update)
 
-        # Load the signals and feature flag conditions
         from dispatcherd.config import setup as dispatcherd_setup
 
-        import aap_gateway_api.signals  # noqa 401
         from aap_gateway_api.dispatch.config import get_dispatcherd_config
 
         dispatcherd_setup(get_dispatcherd_config())
+
+        # Load the signals and feature flag conditions
+        import aap_gateway_api.signals  # noqa 401

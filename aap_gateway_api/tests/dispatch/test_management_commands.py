@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 
 @pytest.mark.django_db
@@ -52,3 +53,15 @@ def test_dispatcherctl_alive_command(mock_setup, mock_get_control):
     mock_setup.assert_called_once()
     mock_ctl.control_with_reply.assert_called_once()
     assert "alive" in out.getvalue()
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.management.commands.dispatcherctl.get_control_from_settings")
+@mock.patch("aap_gateway_api.management.commands.dispatcherctl.dispatcherd_setup")
+def test_dispatcherctl_fewer_replies_raises_error(mock_setup, mock_get_control):
+    mock_ctl = mock.MagicMock()
+    mock_ctl.control_with_reply.return_value = []
+    mock_get_control.return_value = mock_ctl
+
+    with pytest.raises(CommandError, match="fewer replies"):
+        call_command("dispatcherctl", "alive")

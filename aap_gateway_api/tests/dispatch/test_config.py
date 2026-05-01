@@ -1,6 +1,8 @@
 from unittest import mock
 
+import psycopg
 import pytest
+from django.test import override_settings
 
 from aap_gateway_api.dispatch.config import get_dispatcherd_config
 
@@ -35,50 +37,70 @@ def test_config_broker_settings():
     assert broker["sync_connection_factory"] == "ansible_base.lib.utils.db.psycopg_connection_from_django"
     assert broker["default_publish_channel"] == "gateway_broadcast"
     assert "gateway_broadcast" in broker["channels"]
+    assert broker["max_connection_idle_seconds"] is None
 
 
 @pytest.mark.django_db
+@override_settings(CLUSTER_HOST_ID="test-node-1")
 def test_config_uses_cluster_host_id():
-    with mock.patch("aap_gateway_api.dispatch.config.settings") as mock_settings:
-        mock_settings.CLUSTER_HOST_ID = "test-node-1"
-        mock_settings.DISPATCHERD_MIN_WORKERS = 2
-        mock_settings.DISPATCHERD_MAX_WORKERS = 4
-        mock_settings.DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.postgresql",
-                "NAME": "test",
-                "USER": "test",
-                "PASSWORD": "test",
-                "HOST": "localhost",
-                "PORT": 5432,
-                "OPTIONS": {},
-            }
-        }
-
-        config = get_dispatcherd_config()
-        channels = config["brokers"]["pg_notify"]["channels"]
-        assert "test-node-1" in channels
-        assert "gateway_broadcast" in channels
+    config = get_dispatcherd_config()
+    channels = config["brokers"]["pg_notify"]["channels"]
+    assert "test-node-1" in channels
+    assert "gateway_broadcast" in channels
 
 
 @pytest.mark.django_db
+@override_settings(DISPATCHERD_MIN_WORKERS=1, DISPATCHERD_MAX_WORKERS=8)
 def test_config_worker_settings_override():
-    with mock.patch("aap_gateway_api.dispatch.config.settings") as mock_settings:
-        mock_settings.DISPATCHERD_MIN_WORKERS = 1
-        mock_settings.DISPATCHERD_MAX_WORKERS = 8
-        mock_settings.CLUSTER_HOST_ID = "node"
-        mock_settings.DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.postgresql",
-                "NAME": "test",
-                "USER": "test",
-                "PASSWORD": "test",
-                "HOST": "localhost",
-                "PORT": 5432,
-                "OPTIONS": {},
-            }
-        }
+    config = get_dispatcherd_config()
+    assert config["service"]["min_workers"] == 1
+    assert config["service"]["max_workers"] == 8
 
+
+@pytest.mark.django_db
+def test_conninfo_uses_dab_utility():
+    """Verify conninfo is built via DAB's psycopg_conn_string_from_settings_dict."""
+    config = get_dispatcherd_config()
+    conninfo = config["brokers"]["pg_notify"]["config"]["conninfo"]
+    assert isinstance(conninfo, str)
+    assert len(conninfo) > 0
+
+
+@pytest.mark.django_db
+def test_conninfo_special_chars_in_password():
+    """Passwords with special characters must be properly escaped in conninfo."""
+    mock_conninfo = psycopg.conninfo.make_conninfo(dbname="testdb", user="testuser", password="p@ss w0rd='tricky\"", host="localhost", port="5432")
+    with mock.patch("aap_gateway_api.dispatch.config.psycopg_conn_string_from_settings_dict", return_value=mock_conninfo):
         config = get_dispatcherd_config()
-        assert config["service"]["min_workers"] == 1
-        assert config["service"]["max_workers"] == 8
+        conninfo = config["brokers"]["pg_notify"]["config"]["conninfo"]
+        parsed = psycopg.conninfo.conninfo_to_dict(conninfo)
+        assert parsed["password"] == "p@ss w0rd='tricky\""
+
+
+@pytest.mark.django_db
+def test_conninfo_with_ssl_options():
+    """SSL options from DATABASES OPTIONS are passed through to conninfo."""
+    mock_conninfo = psycopg.conninfo.make_conninfo(
+        dbname="testdb",
+        user="testuser",
+        password="testpass",
+        host="db.example.com",
+        port="5433",
+        sslmode="verify-full",
+    )
+    with mock.patch("aap_gateway_api.dispatch.config.psycopg_conn_string_from_settings_dict", return_value=mock_conninfo):
+        config = get_dispatcherd_config()
+        conninfo = config["brokers"]["pg_notify"]["config"]["conninfo"]
+        parsed = psycopg.conninfo.conninfo_to_dict(conninfo)
+        assert parsed["host"] == "db.example.com"
+        assert parsed["port"] == "5433"
+        assert parsed["sslmode"] == "verify-full"
+
+
+@pytest.mark.django_db
+def test_conninfo_is_parseable():
+    """The generated conninfo string must be parseable by psycopg."""
+    config = get_dispatcherd_config()
+    conninfo = config["brokers"]["pg_notify"]["config"]["conninfo"]
+    parsed = psycopg.conninfo.conninfo_to_dict(conninfo)
+    assert "dbname" in parsed
