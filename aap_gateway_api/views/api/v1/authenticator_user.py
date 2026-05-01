@@ -6,6 +6,7 @@ from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
@@ -26,6 +27,10 @@ class AuthenticatorUserViewSet(GatewayReadOnlyModelViewSet):
     serializer_class = AuthenticatorUserSerializer
     permission_classes = [OAuth2ScopePermission, IsSuperuserOrAuditor]
 
+    @extend_schema(
+        request=AuthenticatorUserMoveSerializer,
+        responses={200: AuthenticatorUserSerializer},
+    )
     @action(detail=True, methods=['post'], serializer_class=AuthenticatorUserMoveSerializer)
     @transaction.atomic
     def move(self, request, pk=None):
