@@ -18,7 +18,7 @@ charset-normalizer==3.4.0
     # via requests
 cryptography==46.0.5
     # via -r requirements/requirements.in
-dispatcherd==2026.3.25
+dispatcherd[pg-notify]==2026.3.25
     # via -r requirements/requirements.in
 django==5.2.9
     # via
@@ -69,8 +69,10 @@ protobuf==5.29.5
     #   -r requirements/requirements.in
     #   grpcio-tools
     #   xds-protos
-psycopg==3.2.3
-    # via -r requirements/requirements.in
+psycopg==3.2.10
+    # via
+    #   -r requirements/requirements.in
+    #   dispatcherd
 pycparser==2.22
     # via cffi
 pyjwt==2.12.1
