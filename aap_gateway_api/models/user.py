@@ -174,8 +174,12 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
     def get_is_platform_auditor(self):
         if not hasattr(self, '_is_platform_auditor'):
-            # For performance purposes, catch the value from the database
-            self._is_platform_auditor = self.fetch_platform_auditor_membership()
+            # Prefer the queryset annotation (set by UserViewSet.get_queryset on list views)
+            # to avoid a per-object .exists() query during serialization.
+            if hasattr(self, '_annotated_is_platform_auditor'):
+                self._is_platform_auditor = self._annotated_is_platform_auditor
+            else:
+                self._is_platform_auditor = self.fetch_platform_auditor_membership()
         return self._is_platform_auditor
 
     def set_is_platform_auditor(self, value):
