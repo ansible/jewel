@@ -40,6 +40,16 @@ def test_dispatcherd_command_handles_keyboard_interrupt(mock_setup, mock_run_ser
 
 
 @pytest.mark.django_db
+@mock.patch("aap_gateway_api.management.commands.dispatcherd.run_dispatcherd_service")
+@mock.patch("aap_gateway_api.management.commands.dispatcherd.dispatcherd_setup")
+def test_dispatcherd_command_verbosity_zero_suppresses_output(mock_setup, mock_run_service):
+    out = StringIO()
+    call_command("dispatcherd", verbosity=0, stdout=out)
+
+    assert out.getvalue() == ""
+
+
+@pytest.mark.django_db
 @mock.patch("aap_gateway_api.management.commands.dispatcherctl.get_control_from_settings")
 @mock.patch("aap_gateway_api.management.commands.dispatcherctl.dispatcherd_setup")
 def test_dispatcherctl_alive_command(mock_setup, mock_get_control):
@@ -65,3 +75,9 @@ def test_dispatcherctl_fewer_replies_raises_error(mock_setup, mock_get_control):
 
     with pytest.raises(CommandError, match="fewer replies"):
         call_command("dispatcherctl", "alive")
+
+
+@pytest.mark.django_db
+def test_dispatcherctl_no_subcommand_raises_error():
+    with pytest.raises((CommandError, SystemExit)):
+        call_command("dispatcherctl")

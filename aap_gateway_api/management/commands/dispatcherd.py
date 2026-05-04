@@ -25,5 +25,5 @@ class Command(BaseCommand):
         try:
             run_dispatcherd_service()
         except KeyboardInterrupt:
-            self.stdout.write(self.style.WARNING("dispatcherd shutdown requested."))
+            self.stdout.write("dispatcherd shutdown requested.")
             logger.info("dispatcherd shutdown requested.")
