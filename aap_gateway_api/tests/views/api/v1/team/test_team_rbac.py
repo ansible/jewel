@@ -1,9 +1,9 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleUserAssignment
 from django.urls import reverse
 
-from aap_gateway_api.models import User
+from aap_gateway_api.models import Organization, User
 from aap_gateway_api.tests.views.api.v1.conftest import api_get_and_assert
 
 
@@ -399,7 +399,7 @@ class TestTeamOptions:
 
 
 @pytest.mark.django_db
-def test_team_users_associate_propagates_to_role_user_access(admin_api_client, organization, team, org_member_rd):
+def test_team_users_associate_propagates_to_role_user_access(admin_api_client, organization, team):
     """Regression test for AAP-50880.
 
     Users added to a team via the deprecated /api/v1/teams/N/users/associate/ endpoint
@@ -411,9 +411,16 @@ def test_team_users_associate_propagates_to_role_user_access(admin_api_client, o
     """
     rando = User.objects.create(username='rando-aap50880')
 
-    # Assign the Organization Member role to the team for the organization.
-    # This is what makes team membership grant access to the organization.
-    org_member_rd.give_permission(team, organization)
+    # Create a custom org-level role that CAN be assigned to teams.
+    # The managed Organization Member role is blocked by ANSIBLE_BASE_ALLOW_TEAM_ORG_MEMBER=False,
+    # so we use a custom role following the pattern from DAB's test_access_lists.py.
+    org_ct = DABContentType.objects.get_for_model(Organization)
+    org_viewer_rd = RoleDefinition.objects.create_from_permissions(
+        permissions=['view_organization'],
+        name='test-org-viewer',
+        content_type=org_ct,
+    )
+    org_viewer_rd.give_permission(team, organization)
 
     # Add rando to the team via the deprecated gateway endpoint (the old API path).
     # This must create a RoleUserAssignment via give_permission(), not a raw M2M add.
