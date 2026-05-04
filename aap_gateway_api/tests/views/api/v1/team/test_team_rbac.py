@@ -1,6 +1,7 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleUserAssignment
+from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+from django.urls import reverse
 
 from aap_gateway_api.models import User
 from aap_gateway_api.tests.views.api.v1.conftest import api_get_and_assert
@@ -395,3 +396,53 @@ class TestTeamOptions:
         response = admin_api_client.options(url)
         assert response.status_code == 200
         assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for superuser"
+
+
+@pytest.mark.django_db
+def test_team_users_associate_propagates_to_role_user_access(admin_api_client, organization, team, org_member_rd):
+    """Regression test for AAP-50880.
+
+    Users added to a team via the deprecated /api/v1/teams/N/users/associate/ endpoint
+    must appear in role_user_access for objects the team has a role on.
+
+    The endpoint must call RoleDefinition.give_permission() (creating a RoleUserAssignment),
+    not the raw M2M .add() path, so that DAB's RBAC evaluation tables are populated and
+    the user is visible in role_user_access with type='team'.
+    """
+    rando = User.objects.create(username='rando-aap50880')
+
+    # Assign the Organization Member role to the team for the organization.
+    # This is what makes team membership grant access to the organization.
+    org_member_rd.give_permission(team, organization)
+
+    # Add rando to the team via the deprecated gateway endpoint (the old API path).
+    # This must create a RoleUserAssignment via give_permission(), not a raw M2M add.
+    associate_url = get_relative_url('team-users-associate', kwargs={'pk': team.pk})
+    response = admin_api_client.post(associate_url, data={'instances': [rando.id]})
+    assert response.status_code == 204, f"Associate call failed: {response.data}"
+
+    # A RoleUserAssignment must exist for rando on the team (TeamMember role).
+    # Without this, the RBAC evaluation chain is broken and role_user_access won't show rando.
+    team_member_rd = RoleDefinition.objects.get(name='Team Member')
+    assert RoleUserAssignment.objects.filter(user=rando, role_definition=team_member_rd).exists(), (
+        "No RoleUserAssignment created for rando after team-users-associate — "
+        "perform_associate must call give_permission(), not the raw M2M manager"
+    )
+
+    # Check that rando appears in role_user_access for the organization.
+    access_url = reverse('role-user-access', kwargs={'pk': organization.pk, 'model_name': 'shared.organization'})
+    response = admin_api_client.get(access_url)
+    assert response.status_code == 200
+
+    usernames = {u['username'] for u in response.data['results']}
+    assert rando.username in usernames, (
+        f"rando not found in role_user_access after being added to team via old API. "
+        f"Found users: {usernames}"
+    )
+
+    # The access must be attributed to team membership (type='team'), not a direct assignment.
+    rando_entry = next(u for u in response.data['results'] if u['username'] == rando.username)
+    assignment_types = [a['type'] for a in rando_entry['object_role_assignments']]
+    assert 'team' in assignment_types, (
+        f"Expected team-type access for rando, got: {assignment_types}"
+    )
