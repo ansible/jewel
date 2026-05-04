@@ -425,8 +425,7 @@ def test_team_users_associate_propagates_to_role_user_access(admin_api_client, o
     # Without this, the RBAC evaluation chain is broken and role_user_access won't show rando.
     team_member_rd = RoleDefinition.objects.get(name='Team Member')
     assert RoleUserAssignment.objects.filter(user=rando, role_definition=team_member_rd).exists(), (
-        "No RoleUserAssignment created for rando after team-users-associate — "
-        "perform_associate must call give_permission(), not the raw M2M manager"
+        "No RoleUserAssignment created for rando after team-users-associate — perform_associate must call give_permission(), not the raw M2M manager"
     )
 
     # Check that rando appears in role_user_access for the organization.
@@ -435,14 +434,9 @@ def test_team_users_associate_propagates_to_role_user_access(admin_api_client, o
     assert response.status_code == 200
 
     usernames = {u['username'] for u in response.data['results']}
-    assert rando.username in usernames, (
-        f"rando not found in role_user_access after being added to team via old API. "
-        f"Found users: {usernames}"
-    )
+    assert rando.username in usernames, f"rando not found in role_user_access after being added to team via old API. Found users: {usernames}"
 
     # The access must be attributed to team membership (type='team'), not a direct assignment.
     rando_entry = next(u for u in response.data['results'] if u['username'] == rando.username)
     assignment_types = [a['type'] for a in rando_entry['object_role_assignments']]
-    assert 'team' in assignment_types, (
-        f"Expected team-type access for rando, got: {assignment_types}"
-    )
+    assert 'team' in assignment_types, f"Expected team-type access for rando, got: {assignment_types}"
