@@ -121,9 +121,10 @@ DYNAMIC_PREFERENCES = {
 # This is used to make API HTTP requests from the gateway to the services that
 # are configured to run behind it for operations like syncing and migration.
 ENVOY_HOSTNAME = "localhost"
-# Since envoy buffer limits are "soft limits", this needs to be comfortably higher than GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH;
+# Envoy buffer limits are "soft limits". Set to 250 MiB to support large container image uploads.
+# Must be comfortably higher than GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH.
 # how much higher depends on network throughput, 3 MiB higher is the absolute minimum I could set without error 413s.
-ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 2**20 * 25
+ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES = 262144000  # 250 MiB
 ENVOY_VERIFY_HTTPS_CERTIFICATES = True
 
 # Set to desired external URL (load balancer, proxy, etc.)
