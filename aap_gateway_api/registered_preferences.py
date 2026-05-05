@@ -146,7 +146,7 @@ register(
 register(
     section="proxy",
     preference_name="idle_timeout",
-    default=600,
+    default=15,
     required=True,
     preference_type="int",
     help_text=_(
