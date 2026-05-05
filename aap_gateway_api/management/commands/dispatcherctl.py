@@ -62,4 +62,4 @@ class Command(BaseCommand):
             logger.error(f"Obtained only {len(returned)} of {expected_replies}")
             raise CommandError("dispatcherctl returned fewer replies than expected")
 
-        self.stdout.write(yaml.dump(returned, default_flow_style=False))
+        self.stdout.write(yaml.safe_dump(returned, default_flow_style=False))
