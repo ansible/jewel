@@ -8,7 +8,7 @@ We are very happy to receive contributions from the community in any form.
 This repository adheres to the following principles:
 
 * **Open**: Contribution is always welcome.
-* **Respectful**: See the [Code of Conduct](https://github.com/ansible/jewel/blob/devel/CODE-OF-CONDUCT.md).
+* **Respectful**: See the [Code of Conduct](CODE-OF-CONDUCT.md).
 * **Transparent and accessible**: Work and collaboration should be done in public.
 * **Merit**: Ideas and contributions are accepted according to their merit and alignment with the project objectives and principles.
 
@@ -16,7 +16,7 @@ This repository adheres to the following principles:
 
 By contributing to Jewel, you agree to the Developer Certificate of Origin (DCO).
 This document was created by the Linux Kernel community and is a simple statement that you, as a contributor, have the legal right to make the contribution.
-See the [DCO](https://github.com/ansible/jewel/blob/devel/DCO) file for details.
+See the [DCO](DCO) file for details.
 
 ## How to contribute
 
@@ -40,7 +40,7 @@ Describe the problem you are solving and why the existing behavior is insufficie
    tox -e py312
    ```
 4. Submit a pull request against `devel`. Reference any related issues.
-5. Sign off your commits to agree to the [DCO](https://github.com/ansible/jewel/blob/devel/DCO).
+5. Sign off your commits to agree to the [DCO](DCO).
 
 A patch should have a minimum of two reviews from maintainers before it is merged.
 Contributors should not review or merge their own patches except in exceptional cases.
@@ -97,7 +97,7 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   tox -e py312
   ```
-  See [TESTING.md](https://github.com/ansible/jewel/blob/devel/TESTING.md) for the full testing guide.
+  See [TESTING.md](TESTING.md) for the full testing guide.
 * **Linting**: Run `make lint` to auto-format with ruff.
 * **Docker**: Run `make docker-compose` to start a full development environment.
 
