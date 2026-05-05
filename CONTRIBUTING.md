@@ -23,13 +23,7 @@ See the [DCO](https://github.com/ansible/jewel/blob/devel/DCO) file for details.
 ### Reporting bugs
 
 Open a [GitHub issue in the `ansible/jewel` repo](https://github.com/ansible/jewel/issues) with a clear description of the problem.
-Please include the following information:
-
-* The git commit (`git rev-parse HEAD`)
-* Steps to reproduce the issue
-* Expected and actual results
-* Python version and relevant environment details (OS version, Django version, etc.)
-* Log output or error tracebacks, if applicable
+The [bug report template](https://github.com/ansible/jewel/issues/new?template=bug_report.yml) will guide you through providing the necessary information.
 
 ### Suggesting enhancements
 
