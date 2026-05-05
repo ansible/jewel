@@ -60,7 +60,7 @@ Jewel supports several authentication methods including:
 * OAuth2 personal access tokens
 * service-to-service JWT authentication
 
-Most of these backends are implemented through [django-ansible-base](https://github.com/ansible/django-ansible-base).
+Most of these backends are implemented through [django-ansible-base](https://github.com/ansible/django-ansible-base) (see [`ansible_base/authentication/`](https://github.com/ansible/django-ansible-base/tree/devel/ansible_base/authentication)).
 We welcome contributions that add new authentication backends or improve existing ones.
 
 Here are some starting points:
