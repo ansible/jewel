@@ -1,6 +1,6 @@
 # Contributing to the Jewel project
 
-The Jewel project is [licensed under Apache 2.0](https://github.com/ansible/jewel/blob/devel/LICENSE) and accepts contributions through GitHub pull requests.
+The Jewel project is [licensed under Apache 2.0](LICENSE) and accepts contributions through GitHub pull requests.
 We are very happy to receive contributions from the community in any form.
 
 ## Principles
