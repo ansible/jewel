@@ -112,12 +112,14 @@ See [Reporting Bugs](#reporting-bugs) above.
 Jewel uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting.
 Pre-commit hooks in `.githooks/` enforce these checks on staged files automatically.
 
-CI runs the following checks on every pull request:
+CI runs the following checks, and more, on every pull request:
 
 * `tox -e ruff-check`: lint violations
 * `tox -e ruff-format`: formatting violations
 * `tox -e check-migrations`: migration consistency
 * `tox -e check-oauth2-permissions`: OAuth2 permission validation
+
+NOTE: A pull request can not be merged with any failing CI issues.
 
 ## Getting help
 
