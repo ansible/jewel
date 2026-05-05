@@ -22,7 +22,7 @@ See the [DCO](https://github.com/ansible/jewel/blob/devel/DCO) file for details.
 
 ### Reporting bugs
 
-Open a GitHub issue with a clear description of the problem.
+Open a [GitHub issue in the `ansible/jewel` repo](https://github.com/ansible/jewel/issues) with a clear description of the problem.
 Please include the following information:
 
 * The git commit (`git rev-parse HEAD`)
