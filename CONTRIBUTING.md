@@ -42,9 +42,6 @@ Describe the problem you are solving and why the existing behavior is insufficie
 4. Submit a pull request against `devel`. Reference any related issues.
 5. Sign off your commits to agree to the [DCO](DCO).
 
-A patch should have a minimum of two reviews from maintainers before it is merged.
-Contributors should not review or merge their own patches except in exceptional cases.
-
 ## Where to contribute
 
 ### Authentication backends
