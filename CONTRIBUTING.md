@@ -99,7 +99,7 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   See [TESTING.md](https://github.com/ansible/jewel/blob/devel/TESTING.md) for the full testing guide.
 * **Linting**: Run `make lint` to auto-format with ruff.
-* **Containers**: Run `make docker-compose` to start a full development environment.
+* **Docker**: Run `make docker-compose` to start a full development environment.
 
 ## Code quality
 
