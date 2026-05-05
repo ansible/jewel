@@ -80,6 +80,9 @@ CACHES = {
 
 CLUSTER_HOST_ID = socket.gethostname()
 
+DISPATCHERD_MIN_WORKERS = 2
+DISPATCHERD_MAX_WORKERS = 4
+
 # Status endpoint for console.redhat.com
 CRC_STATUS_URL = "https://status.redhat.com/api/v2/summary.json"
 
@@ -213,6 +216,10 @@ LOGGING = {
             'propagate': False,  # Prevent propagation to the root aap logger
         },
         'ansible_base': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+        },
+        'dispatcherd': {
             'handlers': ['console', 'file'],
             'level': 'WARNING',
         },
