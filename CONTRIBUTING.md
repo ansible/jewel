@@ -12,7 +12,7 @@ This repository adheres to the following principles:
 * **Transparent and accessible**: Work and collaboration should be done in public.
 * **Merit**: Ideas and contributions are accepted according to their merit and alignment with the project objectives and principles.
 
-## Certificate of origin
+## Certificate of Origin
 
 By contributing to Jewel, you agree to the Developer Certificate of Origin (DCO).
 This document was created by the Linux Kernel community and is a simple statement that you, as a contributor, have the legal right to make the contribution.
