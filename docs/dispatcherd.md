@@ -14,9 +14,11 @@ Epic: [AAP-59888](https://redhat.atlassian.net/browse/AAP-59888)
 
 <!-- Update this section after each story is completed so the next person gets a quick snapshot. -->
 
-**Last updated**: 2026-05-01
+**Last updated**: 2026-05-06
 
 AAP-65393 (core implementation) is code-complete, tested in a dev environment, and in review. The dispatch module, management commands, settings defaults, app config wiring, logging config, and unit tests are all in place.
+
+AAP-65394 (supervisord config) is code-complete. The dispatcher program block has been added to supervisord.conf and the podman startup config has been updated with gateway status endpoint preferences.
 
 ---
 
@@ -148,7 +150,7 @@ The `conninfo` string is built from `settings.DATABASES["default"]` using DAB's 
 
 ### AAP-65394: Add dispatcherd to supervisord configuration
 
-**Story**: [AAP-65394](https://redhat.atlassian.net/browse/AAP-65394) | **Status**: Backlog
+**Story**: [AAP-65394](https://redhat.atlassian.net/browse/AAP-65394) | **Status**: In Review
 **Depends on**: AAP-65393
 
 #### Requirements
@@ -157,7 +159,7 @@ The `conninfo` string is built from `settings.DATABASES["default"]` using DAB's 
 | --- | --- |
 | Config file | `tools/configs/supervisord.conf` |
 | Program block | `[program:dispatcher]` |
-| Command | `/usr/bin/aap-gateway-manage dispatcherctl start` |
+| Command | `/usr/bin/aap-gateway-manage dispatcherd` |
 | Group | Add `dispatcher` to the `gateway-processes` group |
 | `autorestart` | `true` |
 | `stopasgroup` | `false` |
@@ -169,7 +171,8 @@ The `conninfo` string is built from `settings.DATABASES["default"]` using DAB's 
 
 #### Files Modified
 
-<!-- TODO: Confirm exact changes to supervisord.conf once complete -->
+- Modified: `tools/configs/supervisord.conf` — added `[program:dispatcher]` block; added `dispatcher` to `gateway-processes` group
+- Modified: `tools/configs/container-startup-podman.yml` — added `gateway_preferences` for status endpoint timeout and TLS verify settings
 
 ---
 
@@ -446,7 +449,7 @@ If a future psycopg regression reintroduces this issue, set `"max_connection_idl
 | Story | Summary | Status | Depends On |
 | --- | --- | --- | --- |
 | [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | Implement dispatcherd in Gateway | In Review | — |
-| [AAP-65394](https://redhat.atlassian.net/browse/AAP-65394) | Add dispatcherd to supervisord config | Backlog | AAP-65393 |
+| [AAP-65394](https://redhat.atlassian.net/browse/AAP-65394) | Add dispatcherd to supervisord config | In Review | AAP-65393 |
 | [AAP-65395](https://redhat.atlassian.net/browse/AAP-65395) | Add dispatcherd health check to ping | Backlog | AAP-65393 |
 | [AAP-65396](https://redhat.atlassian.net/browse/AAP-65396) | Update Gateway container build | Backlog | AAP-65393 |
 | [AAP-65397](https://redhat.atlassian.net/browse/AAP-65397) | Baseline performance test | Backlog | AAP-65396 |
