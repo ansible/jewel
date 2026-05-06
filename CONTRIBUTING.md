@@ -39,7 +39,7 @@ Describe the problem you are solving and why the existing behavior is insufficie
    make lint
    tox -e py312
    ```
-4. Submit a pull request against `devel`. Reference any related issues.
+4. Submit a pull request against `devel`. Complete the [pull request template](https://github.com/ansible/jewel/blob/devel/.github/PULL_REQUEST_TEMPLATE.md) and reference any related issues.
 5. Sign off your commits to agree to the [DCO](DCO).
 
 ## Where to contribute
@@ -67,8 +67,8 @@ Here are some starting points:
 
 ### Performance optimizations
 
-Jewel proxies requests to downstream services through an Envoy-based proxy layer with gRPC-driven configuration.
-There are opportunities to improve proxy throughput, JWT validation efficiency, and cache performance.
+Jewel proxies requests to downstream services through an Envoy-based proxy layer that uses HTTP/REST based configuration with gRPC authentication.
+We welcome contributions that improve proxy throughput, JWT validation efficiency, and cache performance.
 
 Here are some starting points:
 
