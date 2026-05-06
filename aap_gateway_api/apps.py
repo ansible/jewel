@@ -16,11 +16,11 @@ def _initialize_preferences(sender, **kwargs):
 
 
 def _notify_on_preference_update(sender, section, name, old_value, new_value, **kwargs):
-    '''
+    """
     This signal gets called when a preference is updated. We use it to call the on_update
     method of the preference if it exists. This means we don't have to hardcode preference
     names and sections here in the signal handler.
-    '''
+    """
     from aap_gateway_api.preferences import gateway_preference_registry
 
     preference = gateway_preference_registry.get(name, section)
@@ -29,13 +29,19 @@ def _notify_on_preference_update(sender, section, name, old_value, new_value, **
 
 
 class MyAppConfig(AppConfig):
-    name = 'aap_gateway_api'
+    name = "aap_gateway_api"
     verbose_name = "Gateway"
 
     def ready(self):
         signals.post_migrate.connect(_initialize_preferences, sender=self, weak=False)
         signals.post_migrate.connect(_initialize_data, sender=self, weak=False)
         preference_updated.connect(_notify_on_preference_update)
+
+        from dispatcherd.config import setup as dispatcherd_setup
+
+        from aap_gateway_api.dispatch.config import get_dispatcherd_config
+
+        dispatcherd_setup(get_dispatcherd_config())
 
         # Load the signals and feature flag conditions
         import aap_gateway_api.signals  # noqa 401
