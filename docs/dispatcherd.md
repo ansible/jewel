@@ -16,7 +16,7 @@ Epic: [AAP-59888](https://redhat.atlassian.net/browse/AAP-59888)
 
 **Last updated**: 2026-05-06
 
-AAP-65393 (core implementation) is code-complete, tested in a dev environment, and in review. The dispatch module, management commands, settings defaults, app config wiring, logging config, and unit tests are all in place.
+AAP-65393 (core implementation) is complete and merged. The dispatch module, management commands, settings defaults, app config wiring, logging config, and unit tests are all in place.
 
 AAP-65394 (supervisord config) is code-complete. The dispatcher program block has been added to supervisord.conf and the podman startup config has been updated with gateway status endpoint preferences.
 
@@ -76,7 +76,7 @@ Without this logger, all dispatcherd internal log output is silently dropped (di
 
 ### AAP-65393: Implement dispatcherd in Gateway
 
-**Story**: [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | **Status**: In Review
+**Story**: [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | **Status**: Complete
 
 This is the foundational story. All other stories depend on it.
 
@@ -448,7 +448,7 @@ If a future psycopg regression reintroduces this issue, set `"max_connection_idl
 
 | Story | Summary | Status | Depends On |
 | --- | --- | --- | --- |
-| [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | Implement dispatcherd in Gateway | In Review | — |
+| [AAP-65393](https://redhat.atlassian.net/browse/AAP-65393) | Implement dispatcherd in Gateway | Complete | — |
 | [AAP-65394](https://redhat.atlassian.net/browse/AAP-65394) | Add dispatcherd to supervisord config | In Review | AAP-65393 |
 | [AAP-65395](https://redhat.atlassian.net/browse/AAP-65395) | Add dispatcherd health check to ping | Backlog | AAP-65393 |
 | [AAP-65396](https://redhat.atlassian.net/browse/AAP-65396) | Update Gateway container build | Backlog | AAP-65393 |
