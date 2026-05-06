@@ -1,4 +1,5 @@
 import copy
+import logging
 from typing import Optional
 
 from ansible_base.feature_flags.models import AAPFlag
@@ -6,6 +7,7 @@ from ansible_base.rbac.models import DABPermission, RoleDefinition
 from ansible_base.resource_registry.registry import ParentResource, ResourceConfig, ServiceAPIConfig, SharedResource
 from ansible_base.resource_registry.shared_types import FeatureFlagType, OrganizationType, RoleDefinitionType, TeamType, UserType
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor
+from crum import get_current_user
 from django.db.models import Model
 from rest_framework import serializers
 from rest_framework.serializers import ValidationError
@@ -13,33 +15,148 @@ from rest_framework.serializers import ValidationError
 from aap_gateway_api import models
 from aap_gateway_api.utils.models import get_model_lookup_keys
 
+logger = logging.getLogger('aap.gateway.resource_api')
+
+_GATEWAY_SERIALIZER_MAP = None
+
+
+def _get_gateway_serializer_map():
+    """Lazy-load the model → serializer mapping to avoid
+    circular imports at module level."""
+    global _GATEWAY_SERIALIZER_MAP
+    if _GATEWAY_SERIALIZER_MAP is None:
+        from aap_gateway_api.serializers.organization import OrganizationSerializer
+        from aap_gateway_api.serializers.team import TeamSerializer
+        from aap_gateway_api.serializers.user import UserSerializer
+
+        _GATEWAY_SERIALIZER_MAP = {
+            models.User: UserSerializer,
+            models.Organization: OrganizationSerializer,
+            models.Team: TeamSerializer,
+        }
+    return _GATEWAY_SERIALIZER_MAP
+
+
+_SENSITIVE_FIELDS = frozenset({'email', 'is_superuser', 'is_staff'})
+
+
+class _SyncRequest:
+    """Minimal request-like object that carries just enough
+    context for Gateway serializers during resource-registry
+    operations."""
+
+    def __init__(self, user):
+        self.user = user
+        self.method = 'PATCH'
+        self.data = {}
+
+    def __getattr__(self, name):
+        return None
+
 
 class GetOrCreateProcessor(ResourceTypeProcessor):
+    def _validate_via_gateway_serializer(self, validated_data):
+        """Run validated_data through the Gateway serializer for
+        this model so that *all* its validation rules apply to
+        reverse-sync payloads (email restrictions, field
+        permissions, etc.).
+
+        Fields that fail validation are stripped (with a warning
+        log) so the rest of the sync still succeeds.
+        """
+        if self.instance.pk is None:
+            return
+
+        try:
+            ser_cls = _get_gateway_serializer_map().get(self.instance.__class__)
+            if ser_cls is None:
+                return
+
+            user = get_current_user()
+            request = _SyncRequest(user) if user else None
+
+            ser = ser_cls(
+                instance=self.instance,
+                data=validated_data,
+                partial=True,
+                context={
+                    'request': request,
+                    'view': None,
+                },
+            )
+            if ser.is_valid():
+                return
+        except Exception:
+            logger.exception(
+                "Unexpected error validating resource-registry payload for %s pk=%s; stripping sensitive fields.",
+                self.instance.__class__.__name__,
+                self.instance.pk,
+            )
+            for field in _SENSITIVE_FIELDS:
+                validated_data.pop(field, None)
+            return
+
+        if 'non_field_errors' in ser.errors:
+            logger.error(
+                "Cross-field validation failed for %s (pk=%s) via resource registry.  Requesting user: %s.  Errors: %s.  Clearing validated_data.",
+                self.instance.__class__.__name__,
+                self.instance.pk,
+                user,
+                ser.errors['non_field_errors'],
+            )
+            validated_data.clear()
+            return
+
+        for field_name, errors in ser.errors.items():
+            if field_name in validated_data:
+                log_fn = logger.error if field_name in _SENSITIVE_FIELDS else logger.warning
+                log_fn(
+                    "Blocked field '%s' on %s (pk=%s) via resource registry.  Requesting user: %s.  Attempted value: %r.  Errors: %s",
+                    field_name,
+                    self.instance.__class__.__name__,
+                    self.instance.pk,
+                    user,
+                    validated_data[field_name],
+                    errors,
+                )
+                del validated_data[field_name]
+
     def save(self, validated_data, is_new=False):
         """
-        Save the resource instance using the provided validated_data.
-        If `is_new` is True (i.e: for POST requests), this method tries to find an existing object using the model's unique fields.
-        If found, it updates the existing objects. If not, it creates a new one.
-        If `is_new` is False (i.e: for PUT/ PATCH requests), this method sets the fields in validated_data accordingly.
-        """
+        Save the resource instance using the provided
+        validated_data.
 
+        If ``is_new`` is True (POST) this tries to find an
+        existing object by unique fields; if found it updates
+        (with validation), otherwise creates via
+        ``update_or_create`` without Gateway serializer
+        validation (new objects have no prior state to protect).
+
+        If ``is_new`` is False (PUT/PATCH) it validates through
+        the Gateway serializer then sets the fields directly.
+        """
         if is_new:
-            # find the fields of this model that can be used to find an existing instance
             lookup_fields = get_model_lookup_keys(self.instance.__class__)
 
-            # get the look up fields kwargs that are present in the validated_data without modifying the input data
             validated_data = copy.deepcopy(validated_data)
             lookup_kwargs = {k: validated_data.pop(k) for k in lookup_fields if k in validated_data}
 
-            # we use update_or_create to ensure idempotency for repeated POSTS
-            # this is to support cases where multiple services might make simultaneous requests to create a shared resource.
-            # If a resource is being created locally in a service and the resource already exists on Gateway, the local resource
-            # should be linked to the resource in Gateway
-            self.instance, changed = self.instance.__class__.objects.update_or_create(**lookup_kwargs, defaults=validated_data)
-            # At this point, changed = True if a new object was created, False if the object existed.
-            # Now check if any of the object fields were updated.
-            changed = changed or any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
-            return (changed, self.instance)
+            existing = self.instance.__class__.objects.filter(**lookup_kwargs).first()
+            if existing:
+                self.instance = existing
+                self._validate_via_gateway_serializer(validated_data)
+                changed = any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
+                for k, val in validated_data.items():
+                    setattr(self.instance, k, val)
+                if changed:
+                    self.instance.save()
+                return (changed, self.instance)
+            else:
+                self.instance, created = self.instance.__class__.objects.update_or_create(**lookup_kwargs, defaults=validated_data)
+                changed = created or any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
+                return (changed, self.instance)
+
+        self._validate_via_gateway_serializer(validated_data)
 
         changed_fields = []
         for k, val in validated_data.items():
