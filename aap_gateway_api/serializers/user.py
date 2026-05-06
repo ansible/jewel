@@ -891,8 +891,8 @@ class UserSerializer(CommonUserSerializer):
 
         ret['managed'] = obj.managed
 
-        # Get the users associated authenticator users
-        authentications = AuthenticatorUser.objects.filter(user=obj)
+        # Get the users associated authenticator users (uses prefetched data when available)
+        authentications = obj.authenticator_users.all()
 
         # Add last login results but only for yourself unless you are a superuser or auditor
         request = self.context.get('request', None)

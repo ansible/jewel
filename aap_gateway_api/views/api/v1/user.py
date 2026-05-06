@@ -1,4 +1,4 @@
-from ansible_base.authentication.models import Authenticator
+from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.authentication.serializers import AuthenticatorSerializer
 from ansible_base.lib.utils.models import is_system_user
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
@@ -7,7 +7,7 @@ from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
 from ansible_base.rbac.models import RoleUserAssignment
 from ansible_base.rbac.policies import can_view_all_users, visible_users
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Prefetch
 from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -28,7 +28,11 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     resource_purpose = "authenticated platform users with permissions assigned directly or via team membership"
 
     model = User
-    queryset = User.objects.select_related("resource").all()
+    queryset = (
+        User.objects.select_related("resource", "last_login_from")
+        .prefetch_related(Prefetch('authenticator_users', queryset=AuthenticatorUser.objects.select_related('provider')))
+        .all()
+    )
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
@@ -43,7 +47,11 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
 
     def get_queryset(self):
         if self.detail:
-            return User.all_objects.select_related("resource").all()
+            return (
+                User.all_objects.select_related("resource", "last_login_from")
+                .prefetch_related(Prefetch('authenticator_users', queryset=AuthenticatorUser.objects.select_related('provider')))
+                .all()
+            )
         qs = super().get_queryset()
         # Note: get_platform_auditor_role() does a DB lookup per call (ManagedRoleManager
         # cache is not populated). Single query, negligible vs the N+1 queries eliminated.
@@ -94,7 +102,11 @@ class DeprecatedRelatedUserViewSet(DABOAuth2UserViewsetMixin, GatewayModelViewSe
     deprecated_message = "This endpoint is deprecated and will be removed in a future release. Use /api/gateway/v1/role_user_assignments/ instead."
 
     model = User
-    queryset = User.objects.select_related("resource").all()
+    queryset = (
+        User.objects.select_related("resource", "last_login_from")
+        .prefetch_related(Prefetch('authenticator_users', queryset=AuthenticatorUser.objects.select_related('provider')))
+        .all()
+    )
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
