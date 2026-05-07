@@ -491,7 +491,7 @@ register(
     section="feature_flags",
     preference_name="RUNTIME_FEATURE_FLAGS",
     required=False,
-    default=getattr(settings, "RUNTIME_FEATURE_FLAGS", False),
+    default=getattr(settings, "RUNTIME_FEATURE_FLAGS", True),
     preference_type="bool",
     help_text=_(
         "Controls whether toggling of runtime flags is allowed. This is currently set through settings. "
