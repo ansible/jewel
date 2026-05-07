@@ -90,7 +90,7 @@ def ensure_settings_bound_preferences():
     if not hasattr(settings, 'NOTIFICATION_RSS_FEED_URL'):
         setattr(settings, 'NOTIFICATION_RSS_FEED_URL', 'https://announcements.ansiblecloud.redhat.com/feed.atom')
     if not hasattr(settings, 'RUNTIME_FEATURE_FLAGS'):
-        setattr(settings, 'RUNTIME_FEATURE_FLAGS', False)
+        setattr(settings, 'RUNTIME_FEATURE_FLAGS', True)
 
 
 def pytest_configure():
