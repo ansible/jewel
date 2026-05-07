@@ -17,6 +17,12 @@ gateway_container_name: aap_gw_1
 redis_cluster_enabled: False
 redis_tls_enabled: True
 
+### Gateway preferences that will be set
+# Dev-only: self-signed certs. Do NOT use in production.
+gateway_preferences:
+  status_endpoint_backend_timeout_seconds: 10
+  status_endpoint_backend_verify: false
+
 ### Sidecars (uncomment to enable):
 # keycloak_enabled: True
 # ldap_enabled: True
