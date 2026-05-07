@@ -96,8 +96,6 @@ legacy_tox_ini = """
         check-oauth2-permissions
         check-help-text
         py312
-        py312-django42
-        py312-django52
         312
         py311
         311
@@ -137,7 +135,7 @@ legacy_tox_ini = """
     deps =
         -r{toxinidir}/requirements/requirements_test.txt
 
-    [testenv:py311,py312,py312-django42,py312-django52]
+    [testenv:py311,py312]
     allowlist_externals =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
