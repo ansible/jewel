@@ -1,9 +1,11 @@
 import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
+from django.core.cache import cache
 from django.test import override_settings
 
 from aap_gateway_api.models import Preference
+from aap_gateway_api.preferences import gateway_preference_registry
 from aap_gateway_api.serializers.preferences import SettingSectionSerializer
 
 
@@ -36,14 +38,21 @@ def test_process_fields_aoc_read_only_options_page(is_cloud_install, admin_api_c
     ],
 )
 def test_process_fields_aoc_change_read_only_setting(is_cloud_install, expected_response_code, admin_api_client):
-    with override_settings(ANSIBLE_BASE_MANAGED_CLOUD_INSTALL=is_cloud_install):
-        preference_name = "gateway_token_name"
-        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'all'})
-        response = admin_api_client.put(url, {preference_name: 'testing'})
-        assert response.status_code == expected_response_code
-        if is_cloud_install:
-            assert 'gateway_token_name' in response.data
-            assert response.data[preference_name] == f"{preference_name} is read-only by AoC environment"
+    preference_name = "gateway_token_name"
+    try:
+        with override_settings(ANSIBLE_BASE_MANAGED_CLOUD_INSTALL=is_cloud_install):
+            url = get_relative_url('setting-section-list', kwargs={'category_slug': 'all'})
+            response = admin_api_client.put(url, {preference_name: 'testing'})
+            assert response.status_code == expected_response_code
+            if is_cloud_install:
+                assert 'gateway_token_name' in response.data
+                assert response.data[preference_name] == f"{preference_name} is read-only by AoC environment"
+    finally:
+        # The DB change is rolled back by the test's savepoint, but the preference
+        # cache (fakeredis) is not transactional.  Clear the stale cache entry so
+        # subsequent tests read the real value from DB.
+        cache_key = gateway_preference_registry.manager().get_cache_key("proxy", preference_name)
+        cache.delete(cache_key)
 
 
 def test_secret_field_retains_original_value_when_passed_encrypted_marker(admin_api_client, register_preference):
