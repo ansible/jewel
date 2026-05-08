@@ -131,12 +131,12 @@ class TestValidatorUserinfoClaims:
         assert 'aap_organizations' in claims
         org_entry = next((o for o in claims['aap_organizations'] if o['name'] == organization.name), None)
         assert org_entry is not None
-        assert org_entry['role'] == 'member'
+        assert org_entry['roles'] == ['member']
         assert 'aap_teams' in claims
         team_entry = next((t for t in claims['aap_teams'] if t['name'] == team.name), None)
         assert team_entry is not None
         assert team_entry['organization'] == organization.name
-        assert team_entry['role'] == 'member'
+        assert team_entry['roles'] == ['member']
 
     def test_userinfo_excludes_roles_without_scope(self, admin_user):
         validator = GatewayOIDCValidator()
@@ -184,8 +184,12 @@ class TestValidatorUserinfoClaims:
 
         org_names = {o['name'] for o in claims['aap_organizations']}
         assert org_names == {'Org Alpha', 'Org Beta'}
+        for org_entry in claims['aap_organizations']:
+            assert org_entry['roles'] == ['member']
         team_names = {t['name'] for t in claims['aap_teams']}
         assert team_names == {'Team X', 'Team Y'}
+        for team_entry in claims['aap_teams']:
+            assert team_entry['roles'] == ['member']
 
     def test_userinfo_admin_vs_member_roles(self, user_factory, organization_factory, team_factory):
         """Admin and member roles are correctly distinguished."""
@@ -209,14 +213,14 @@ class TestValidatorUserinfoClaims:
 
         admin_org = next(o for o in claims['aap_organizations'] if o['name'] == 'Admin Org')
         member_org = next(o for o in claims['aap_organizations'] if o['name'] == 'Member Org')
-        assert admin_org['role'] == 'admin'
-        assert member_org['role'] == 'member'
+        assert admin_org['roles'] == ['admin']
+        assert member_org['roles'] == ['member']
 
         admin_team = next(t for t in claims['aap_teams'] if t['name'] == 'Admin Team')
         member_team = next(t for t in claims['aap_teams'] if t['name'] == 'Member Team')
-        assert admin_team['role'] == 'admin'
+        assert admin_team['roles'] == ['admin']
         assert admin_team['organization'] == 'Admin Org'
-        assert member_team['role'] == 'member'
+        assert member_team['roles'] == ['member']
         assert member_team['organization'] == 'Member Org'
 
     def test_roles_scope_without_openid(self, admin_user, organization):
@@ -342,8 +346,8 @@ class TestValidatorUserinfoClaims:
 
         admin_entry = next(o for o in claims['aap_organizations'] if o['name'] == 'Org Where Admin')
         member_entry = next(o for o in claims['aap_organizations'] if o['name'] == 'Org Where Member')
-        assert admin_entry['role'] == 'admin'
-        assert member_entry['role'] == 'member'
+        assert admin_entry['roles'] == ['admin']
+        assert member_entry['roles'] == ['member']
 
     def test_special_characters_in_org_team_names(self, user_factory, organization_factory, team_factory):
         """Org/team names with unicode, colons, slashes serialize correctly in claims."""
@@ -369,6 +373,116 @@ class TestValidatorUserinfoClaims:
         assert team_entry is not None
         assert team_entry['name'] == 'Team — émojis & slashes/colons:'
         assert team_entry['organization'] == org.name
+
+    def test_superuser_no_explicit_memberships(self, admin_user, organization_factory, team_factory):
+        """Superuser with no explicit org/team assignments gets empty arrays.
+
+        Platform-level access is conveyed by aap_system_role, not org/team claims.
+        """
+        organization_factory('Org That Exists')
+        team_factory('Team That Exists', organization_factory('Another Org'))
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = admin_user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        assert claims['aap_organizations'] == []
+        assert claims['aap_teams'] == []
+        assert claims['aap_system_role'] == 'system_administrator'
+
+    def test_superuser_with_explicit_memberships(self, admin_user, organization_factory, team_factory):
+        """Superuser with explicit assignments only shows those, not all objects."""
+        org_assigned = organization_factory('Assigned Org')
+        org_not_assigned = organization_factory('Not Assigned Org')
+        team_assigned = team_factory('Assigned Team', org_assigned)
+        team_factory('Not Assigned Team', org_not_assigned)
+
+        RoleDefinition.objects.managed.org_member.give_permission(admin_user, org_assigned)
+        RoleDefinition.objects.managed.team_member.give_permission(admin_user, team_assigned)
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = admin_user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        org_names = {o['name'] for o in claims['aap_organizations']}
+        assert org_names == {'Assigned Org'}
+        team_names = {t['name'] for t in claims['aap_teams']}
+        assert team_names == {'Assigned Team'}
+        assert claims['aap_system_role'] == 'system_administrator'
+
+    def test_user_both_admin_and_member_same_org(self, user_factory, organization_factory, team_factory):
+        """User with both admin and member roles on the same org/team gets both in roles list."""
+        user = user_factory('dual_role_user')
+        org = organization_factory('Dual Role Org')
+        team = team_factory('Dual Role Team', org)
+
+        RoleDefinition.objects.managed.org_admin.give_permission(user, org)
+        RoleDefinition.objects.managed.org_member.give_permission(user, org)
+        RoleDefinition.objects.managed.team_admin.give_permission(user, team)
+        RoleDefinition.objects.managed.team_member.give_permission(user, team)
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        org_entry = next(o for o in claims['aap_organizations'] if o['name'] == 'Dual Role Org')
+        assert org_entry['roles'] == ['admin', 'member']
+
+        team_entry = next(t for t in claims['aap_teams'] if t['name'] == 'Dual Role Team')
+        assert team_entry['roles'] == ['admin', 'member']
+
+    def test_platform_auditor_only_explicit_memberships(self, user_factory, organization_factory, team_factory):
+        """Platform auditor only sees explicit assignments, not all objects."""
+        user = user_factory('auditor_explicit')
+        user.is_platform_auditor = True
+        user.save()
+
+        org_assigned = organization_factory('Auditor Assigned Org')
+        org_not_assigned = organization_factory('Auditor Not Assigned Org')
+        team_assigned = team_factory('Auditor Assigned Team', org_assigned)
+        team_factory('Auditor Not Assigned Team', org_not_assigned)
+
+        RoleDefinition.objects.managed.org_member.give_permission(user, org_assigned)
+        RoleDefinition.objects.managed.team_member.give_permission(user, team_assigned)
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        assert {o['name'] for o in claims['aap_organizations']} == {'Auditor Assigned Org'}
+        assert {t['name'] for t in claims['aap_teams']} == {'Auditor Assigned Team'}
+        assert claims['aap_system_role'] == 'system_auditor'
+
+    def test_missing_role_definitions_degrades_gracefully(self, user_factory, organization_factory):
+        """If managed RoleDefinitions are missing, return empty claims instead of crashing."""
+        user = user_factory('missing_rd_user')
+        org = organization_factory('Some Org')
+        RoleDefinition.objects.managed.org_member.give_permission(user, org)
+
+        RoleDefinition.objects.filter(name='Organization Member').delete()
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        assert claims['aap_organizations'] == []
+        assert claims['aap_teams'] == []
+        assert claims['aap_system_role'] == 'normal_user'
 
 
 class TestValidatorDiscoveryClaims:
