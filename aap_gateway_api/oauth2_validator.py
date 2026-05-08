@@ -45,31 +45,55 @@ class GatewayOIDCValidator(OAuth2Validator):
         Role claims use the aap_ prefix to avoid collision with other OIDC providers.
         Structured objects are used instead of flat strings because org/team names
         can contain arbitrary characters (including colons, slashes, etc.):
-        - aap_organizations: [{"name": "...", "role": "admin|member"}, ...]
-        - aap_teams: [{"name": "...", "organization": "...", "role": "admin|member"}, ...]
+        - aap_organizations: [{"name": "...", "roles": ["admin", "member"]}, ...]
+        - aap_teams: [{"name": "...", "organization": "...", "roles": ["admin", "member"]}, ...]
         - aap_system_role: scalar string (system_administrator, system_auditor, or normal_user)
+
+        Claims reflect explicit RoleUserAssignment records only; implicit superuser
+        access is not included (platform-level access is conveyed by aap_system_role).
         """
         claims = super().get_userinfo_claims(request)
         user = request.user
 
         if user and getattr(user, 'is_authenticated', False) and 'roles' in request.scopes:
+            from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+
             from aap_gateway_api.models import Organization, Team
 
-            # Determine org memberships with role type (admin vs member)
-            admin_org_ids = set(Organization.access_qs(user, 'change').values_list('pk', flat=True))
-            member_orgs = Organization.access_qs(user, 'member')
-            claims['aap_organizations'] = [{'name': org.name, 'role': 'admin' if org.pk in admin_org_ids else 'member'} for org in member_orgs]
+            role_defs = {
+                rd.name: rd for rd in RoleDefinition.objects.filter(name__in=['Organization Admin', 'Organization Member', 'Team Admin', 'Team Member'])
+            }
+            org_admin_id = role_defs['Organization Admin'].id
+            org_member_id = role_defs['Organization Member'].id
+            team_admin_id = role_defs['Team Admin'].id
+            team_member_id = role_defs['Team Member'].id
 
-            # Determine team memberships with role type (admin vs member)
-            admin_team_ids = set(Team.access_qs(user, 'change').values_list('pk', flat=True))
-            member_teams = Team.access_qs(user, 'member').select_related('organization')
+            org_roles = {}
+            for obj_id, rd_id in RoleUserAssignment.objects.filter(
+                user=user,
+                role_definition_id__in=[org_admin_id, org_member_id],
+            ).values_list('object_id', 'role_definition_id'):
+                org_roles.setdefault(obj_id, [])
+                org_roles[obj_id].append('admin' if rd_id == org_admin_id else 'member')
+
+            orgs_by_pk = {str(org.pk): org for org in Organization.objects.filter(pk__in=org_roles.keys())}
+            claims['aap_organizations'] = [
+                {'name': orgs_by_pk[obj_id].name, 'roles': sorted(roles)} for obj_id, roles in org_roles.items() if obj_id in orgs_by_pk
+            ]
+
+            team_roles = {}
+            for obj_id, rd_id in RoleUserAssignment.objects.filter(
+                user=user,
+                role_definition_id__in=[team_admin_id, team_member_id],
+            ).values_list('object_id', 'role_definition_id'):
+                team_roles.setdefault(obj_id, [])
+                team_roles[obj_id].append('admin' if rd_id == team_admin_id else 'member')
+
+            teams_by_pk = {str(t.pk): t for t in Team.objects.filter(pk__in=team_roles.keys()).select_related('organization')}
             claims['aap_teams'] = [
-                {
-                    'name': team.name,
-                    'organization': team.organization.name,
-                    'role': 'admin' if team.pk in admin_team_ids else 'member',
-                }
-                for team in member_teams
+                {'name': teams_by_pk[obj_id].name, 'organization': teams_by_pk[obj_id].organization.name, 'roles': sorted(roles)}
+                for obj_id, roles in team_roles.items()
+                if obj_id in teams_by_pk
             ]
 
             if user.is_superuser:
