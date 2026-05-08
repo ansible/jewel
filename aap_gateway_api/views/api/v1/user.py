@@ -13,6 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from aap_gateway_api.managers.user import with_auth_prefetch
 from aap_gateway_api.models import User
 from aap_gateway_api.serializers import UserSerializer
 from aap_gateway_api.utils.rbac import get_platform_auditor_role
@@ -28,7 +29,7 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
     resource_purpose = "authenticated platform users with permissions assigned directly or via team membership"
 
     model = User
-    queryset = User.objects.select_related("resource").all()
+    queryset = with_auth_prefetch(User.objects).all()
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
@@ -43,7 +44,7 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
 
     def get_queryset(self):
         if self.detail:
-            return User.all_objects.select_related("resource").all()
+            return with_auth_prefetch(User.all_objects).all()
         qs = super().get_queryset()
         # Note: get_platform_auditor_role() does a DB lookup per call (ManagedRoleManager
         # cache is not populated). Single query, negligible vs the N+1 queries eliminated.
@@ -94,7 +95,7 @@ class DeprecatedRelatedUserViewSet(DABOAuth2UserViewsetMixin, GatewayModelViewSe
     deprecated_message = "This endpoint is deprecated and will be removed in a future release. Use /api/gateway/v1/role_user_assignments/ instead."
 
     model = User
-    queryset = User.objects.select_related("resource").all()
+    queryset = with_auth_prefetch(User.objects).all()
     serializer_class = UserSerializer
     permission_classes = [OAuth2ScopePermission, AnsibleBaseUserPermissions]
 
