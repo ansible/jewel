@@ -465,6 +465,25 @@ class TestValidatorUserinfoClaims:
         assert {t['name'] for t in claims['aap_teams']} == {'Auditor Assigned Team'}
         assert claims['aap_system_role'] == 'system_auditor'
 
+    def test_missing_role_definitions_degrades_gracefully(self, user_factory, organization_factory):
+        """If managed RoleDefinitions are missing, return empty claims instead of crashing."""
+        user = user_factory('missing_rd_user')
+        org = organization_factory('Some Org')
+        RoleDefinition.objects.managed.org_member.give_permission(user, org)
+
+        RoleDefinition.objects.filter(name='Organization Member').delete()
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        assert claims['aap_organizations'] == []
+        assert claims['aap_teams'] == []
+        assert claims['aap_system_role'] == 'normal_user'
+
 
 class TestValidatorDiscoveryClaims:
     def test_discovery_claims_include_user_identity(self):
