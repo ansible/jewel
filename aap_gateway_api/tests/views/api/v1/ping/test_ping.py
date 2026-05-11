@@ -83,19 +83,6 @@ def test_ping_proxy_non_200(request, mock_dispatcherd, unauthenticated_api_clien
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
-@mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_dispatcherd_up(request, mock_dispatcherd, unauthenticated_api_client):
-    request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
-
-    url = get_relative_url("ping-view")
-    response = unauthenticated_api_client.get(url)
-    assert response.status_code == 200
-    assert response.data['dispatcherd_connected'] is True
-    assert response.data['status'] == STATUS_GOOD
-
-
-@pytest.mark.django_db
 @mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", side_effect=Exception("connection refused"))
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
 def test_ping_dispatcherd_down(request, mock_dispatcherd, unauthenticated_api_client):

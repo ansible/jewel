@@ -12,7 +12,7 @@ from aap_gateway_api.serializers.status import PingSerializer
 from aap_gateway_api.version import get_aap_version
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('aap.gateway.views.api.v1.ping')
 
 
 class PingView(AnsibleBaseView):
