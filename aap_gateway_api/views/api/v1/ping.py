@@ -20,6 +20,11 @@ class PingView(AnsibleBaseView):
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
 
+    def _check_dispatcherd(self):
+        from dispatcherd.factories import get_control_from_settings
+
+        get_control_from_settings().control_with_reply("alive", timeout=getattr(settings, "DISPATCHERD_HEALTH_CHECK_TIMEOUT", 5))
+
     def get(self, request):
         timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
         ignore_cert = getattr(settings, "PING_PAGE_CHECK_IGNORE_CERT", False)
@@ -59,6 +64,13 @@ class PingView(AnsibleBaseView):
             response.update(
                 {'status': STATUS_DEGRADED, 'db_connected': False, 'db_exception': type(e).__name__, 'proxy_exception_type': 'Skipped, DB unavailable.'}
             )
+
+        # Dispatcherd check is informational only — does not affect overall status
+        try:
+            self._check_dispatcherd()
+            response['dispatcherd_connected'] = True
+        except Exception:
+            response['dispatcherd_connected'] = False
 
         serialized = self.serializer_class(response)
         return Response(serialized.data)
