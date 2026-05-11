@@ -27,8 +27,9 @@ def test_ping_all_up(request, mock_dispatcherd, unauthenticated_api_client):
 
 
 @pytest.mark.django_db
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_db_down(request, unauthenticated_api_client):
+def test_ping_db_down(request, mock_dispatcherd, unauthenticated_api_client):
     request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
 
     with mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_db", side_effect=DatabaseError):
@@ -40,8 +41,9 @@ def test_ping_db_down(request, unauthenticated_api_client):
 
 
 @pytest.mark.django_db
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_proxy_exception(request, unauthenticated_api_client, service_cluster_gateway):
+def test_ping_proxy_exception(request, mock_dispatcherd, unauthenticated_api_client, service_cluster_gateway):
     request.side_effect = Exception('testing')
 
     HTTPPort(name="api", number=9080, is_api_port=True).save()
@@ -60,8 +62,9 @@ def test_ping_proxy_exception(request, unauthenticated_api_client, service_clust
 
 
 @pytest.mark.django_db
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_proxy_non_200(request, unauthenticated_api_client, service_cluster_gateway):
+def test_ping_proxy_non_200(request, mock_dispatcherd, unauthenticated_api_client, service_cluster_gateway):
     request.return_value = mock.Mock(status_code=500, json=lambda: {"test": "test"})
 
     HTTPPort(name="api", number=9080, is_api_port=True).save()

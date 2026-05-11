@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import requests
@@ -11,6 +12,8 @@ from aap_gateway_api.serializers.status import PingSerializer
 from aap_gateway_api.version import get_aap_version
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
+logger = logging.getLogger(__name__)
+
 
 class PingView(AnsibleBaseView):
     permission_classes = []
@@ -21,6 +24,7 @@ class PingView(AnsibleBaseView):
             cursor.execute("SELECT 1")
 
     def _check_dispatcherd(self):
+        """Raises on failure — the alive command either gets a reply or throws."""
         from dispatcherd.factories import get_control_from_settings
 
         get_control_from_settings().control_with_reply("alive", timeout=getattr(settings, "DISPATCHERD_HEALTH_CHECK_TIMEOUT", 5))
@@ -70,6 +74,7 @@ class PingView(AnsibleBaseView):
             self._check_dispatcherd()
             response['dispatcherd_connected'] = True
         except Exception:
+            logger.warning("Dispatcherd health check failed", exc_info=True)
             response['dispatcherd_connected'] = False
 
         serialized = self.serializer_class(response)
