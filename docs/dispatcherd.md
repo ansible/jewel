@@ -162,12 +162,12 @@ The `conninfo` string is built from `settings.DATABASES["default"]` using DAB's 
 | Command | `/usr/bin/aap-gateway-manage dispatcherd` |
 | Group | Add `dispatcher` to the `gateway-processes` group |
 | `autorestart` | `true` |
-| `stopasgroup` | `false` |
-| `killasgroup` | `false` |
+| `stopasgroup` | `true` |
+| `killasgroup` | `true` |
 
 #### Constraints
 
-- `stopasgroup` and `killasgroup` must be `false` so dispatcherd can be independently restarted without affecting other Gateway processes.
+- `stopasgroup` and `killasgroup` must be `true`. Each supervisord program gets its own OS process group (PGID), so the signal only reaches the dispatcher's process tree — not nginx, uwsgi, or other gateway processes. Without this, the bash wrapper (`aap-gateway-manage`) absorbs SIGTERM and the Python dispatcherd process is never signaled, leaving orphaned processes on every restart.
 
 #### Files Modified
 
