@@ -1,4 +1,4 @@
-cryptography >= 46.0.5 # Updated for CVE-2026-26007
+cryptography >= 46.0.7 # CVE-2026-39892
 Django>=5.2.8,<5.3 # Django 5.2 LTS - see AAP-55610
 djangorestframework
 django-crum
