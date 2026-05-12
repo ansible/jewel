@@ -32,6 +32,7 @@ class PingSerializer(serializers.Serializer):
     proxy_connected = serializers.BooleanField(required=False)
     proxy_status_code = serializers.IntegerField(required=False)
     proxy_exception_type = serializers.CharField(required=False)
+    dispatcherd_connected = serializers.BooleanField(required=False)
 
 
 class RedisResponseSerializer(serializers.Serializer):
