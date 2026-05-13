@@ -47,15 +47,13 @@ on:
         required: false
         type: string
       git_committer_name:
-        description: "Git committer name for backported commits"
+        description: "Git committer name (falls back to BACKPORT_COMMITTER_NAME variable, then github-actions[bot])"
         required: false
         type: string
-        default: "github-actions[bot]"
       git_committer_email:
-        description: "Git committer email — must match the GPG key's UID for the Verified badge"
+        description: "Git committer email — must match the GPG key's UID for Verified badge (falls back to BACKPORT_COMMITTER_EMAIL variable, then github-actions[bot] email)"
         required: false
         type: string
-        default: "41898282+github-actions[bot]@users.noreply.github.com"
   workflow_call:
     inputs:
       source_commits:
@@ -86,15 +84,13 @@ on:
         required: false
         type: string
       git_committer_name:
-        description: "Git committer name for backported commits"
+        description: "Git committer name (falls back to BACKPORT_COMMITTER_NAME variable, then github-actions[bot])"
         required: false
         type: string
-        default: "github-actions[bot]"
       git_committer_email:
-        description: "Git committer email — must match the GPG key's UID for the Verified badge"
+        description: "Git committer email — must match the GPG key's UID for Verified badge (falls back to BACKPORT_COMMITTER_EMAIL variable, then github-actions[bot] email)"
         required: false
         type: string
-        default: "41898282+github-actions[bot]@users.noreply.github.com"
     secrets:
       GPG_PRIVATE_KEY:
         description: "Base64-encoded armored GPG private key for commit signing (no passphrase)"
@@ -248,8 +244,8 @@ jobs:
           SOURCE_BRANCH_NAME: ${{ inputs.source_branch }}
           SERVER_URL: ${{ github.server_url }}
           JIRA_BASE_URL: ${{ inputs.jira_base_url || vars.JIRA_BASE_URL }}
-          GIT_COMMITTER_NAME_INPUT: ${{ inputs.git_committer_name }}
-          GIT_COMMITTER_EMAIL_INPUT: ${{ inputs.git_committer_email }}
+          GIT_COMMITTER_NAME_INPUT: ${{ inputs.git_committer_name || vars.BACKPORT_COMMITTER_NAME || 'github-actions[bot]' }}
+          GIT_COMMITTER_EMAIL_INPUT: ${{ inputs.git_committer_email || vars.BACKPORT_COMMITTER_EMAIL || '41898282+github-actions[bot]@users.noreply.github.com' }}
         run: |
           set -euo pipefail
 
