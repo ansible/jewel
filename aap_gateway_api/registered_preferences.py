@@ -292,6 +292,23 @@ register(
 
 register(
     section="configuration",
+    preference_name="SESSIONS_PER_USER",
+    required=False,
+    default=-1,
+    preference_type="int_range",
+    help_text=_(
+        "Maximum number of simultaneous logged-in sessions allowed per user. "
+        "-1 means unlimited (no enforcement). "
+        "0 means only one session is allowed (any other session is terminated on login). "
+        "A positive number N allows N additional concurrent sessions beyond the first."
+    ),
+    min_value=-1,
+    encrypted=False,
+    label=_('Maximum Number of Simultaneous Logged In Sessions'),
+)
+
+register(
+    section="configuration",
     preference_name="DEFAULT_PAGE_SIZE",
     required=False,
     default=50,
