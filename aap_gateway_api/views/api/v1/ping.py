@@ -24,10 +24,11 @@ class PingView(AnsibleBaseView):
             cursor.execute("SELECT 1")
 
     def _check_dispatcherd(self):
-        """Raises on failure — the alive command either gets a reply or throws."""
+        """Returns True if dispatcherd responds to alive, False if no reply, or raises on error."""
         from dispatcherd.factories import get_control_from_settings
 
-        get_control_from_settings().control_with_reply("alive", timeout=getattr(settings, "DISPATCHERD_HEALTH_CHECK_TIMEOUT", 5))
+        reply = get_control_from_settings().control_with_reply("alive", timeout=getattr(settings, "DISPATCHERD_HEALTH_CHECK_TIMEOUT", 5))
+        return bool(reply)
 
     def get(self, request):
         timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
@@ -71,8 +72,7 @@ class PingView(AnsibleBaseView):
 
         # Dispatcherd check is informational only — does not affect overall status
         try:
-            self._check_dispatcherd()
-            response['dispatcherd_connected'] = True
+            response['dispatcherd_connected'] = self._check_dispatcherd()
         except Exception:
             logger.warning("Dispatcherd health check failed", exc_info=True)
             response['dispatcherd_connected'] = False
