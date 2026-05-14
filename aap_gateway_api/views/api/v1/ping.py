@@ -27,7 +27,7 @@ class PingView(AnsibleBaseView):
         """Returns True if dispatcherd responds to alive, False if no reply, or raises on error."""
         from dispatcherd.factories import get_control_from_settings
 
-        reply = get_control_from_settings().control_with_reply("alive", timeout=getattr(settings, "DISPATCHERD_HEALTH_CHECK_TIMEOUT", 5))
+        reply = get_control_from_settings().control_with_reply("alive", timeout=getattr(settings, "DISPATCHERD_HEALTH_CHECK_TIMEOUT", 0.25))
         return bool(reply)
 
     def get(self, request):
