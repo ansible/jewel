@@ -10,7 +10,7 @@ from aap_gateway_api.version import get_aap_version
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", return_value=True)
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
 def test_ping_all_up(request, mock_dispatcherd, unauthenticated_api_client):
     request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
@@ -27,7 +27,7 @@ def test_ping_all_up(request, mock_dispatcherd, unauthenticated_api_client):
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", return_value=True)
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
 def test_ping_db_down(request, mock_dispatcherd, unauthenticated_api_client):
     request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
@@ -41,7 +41,7 @@ def test_ping_db_down(request, mock_dispatcherd, unauthenticated_api_client):
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", return_value=True)
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
 def test_ping_proxy_exception(request, mock_dispatcherd, unauthenticated_api_client, service_cluster_gateway):
     request.side_effect = Exception('testing')
@@ -62,7 +62,7 @@ def test_ping_proxy_exception(request, mock_dispatcherd, unauthenticated_api_cli
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", return_value=True)
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
 def test_ping_proxy_non_200(request, mock_dispatcherd, unauthenticated_api_client, service_cluster_gateway):
     request.return_value = mock.Mock(status_code=500, json=lambda: {"test": "test"})
@@ -83,15 +83,28 @@ def test_ping_proxy_non_200(request, mock_dispatcherd, unauthenticated_api_clien
 
 
 @pytest.mark.django_db
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", side_effect=Exception("connection refused"))
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", return_value=False)
 @mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_dispatcherd_down(request, mock_dispatcherd, unauthenticated_api_client):
-    """Dispatcherd failure must not degrade overall status (informational only)."""
+def test_ping_dispatcherd_not_running(request, mock_dispatcherd, unauthenticated_api_client):
+    """Dispatcherd not running (empty alive reply) must not degrade overall status."""
     request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
 
     url = get_relative_url("ping-view")
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 200
     assert response.data['dispatcherd_connected'] is False
-    # Status must remain GOOD — dispatcherd is not a critical dependency
+    assert response.data['status'] == STATUS_GOOD
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd", side_effect=Exception("connection refused"))
+@mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
+def test_ping_dispatcherd_exception(request, mock_dispatcherd, unauthenticated_api_client):
+    """Dispatcherd error must not degrade overall status (informational only)."""
+    request.return_value = mock.Mock(status_code=200, json=lambda: {"test": "test"})
+
+    url = get_relative_url("ping-view")
+    response = unauthenticated_api_client.get(url)
+    assert response.status_code == 200
+    assert response.data['dispatcherd_connected'] is False
     assert response.data['status'] == STATUS_GOOD
