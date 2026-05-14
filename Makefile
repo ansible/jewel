@@ -178,6 +178,7 @@ collection:
 			ansible-galaxy collection install git@github.com:ansible/ansible.platform.git; \
 		fi; \
 	fi;
+	pip install requests
 
 ## Build the docker containers
 docker-compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
