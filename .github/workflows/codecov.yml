@@ -28,17 +28,13 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
       - name: Download coverage artifacts
-        uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: Unit Tests
           run_id: ${{ github.event.workflow_run.id }}
-          pattern: coverage-*
+          name: coverage-
+          name_is_regexp: true
 
       - name: Discover coverage files and PR number
         id: coverage
@@ -51,8 +47,13 @@ jobs:
           csv=$(echo "$files" | paste -sd ',' -)
           echo "file_list=$csv" >> "$GITHUB_OUTPUT"
 
-          first=$(echo "$files" | head -1)
-          pr=$(grep -m 1 '<!-- PR' "$first" 2>/dev/null | awk '{print $3}' || true)
+          pr=""
+          for f in $files; do
+            pr=$(grep -oP '<!-- PR \K\d+' "$f" 2>/dev/null | head -1)
+            if [ -n "$pr" ]; then
+              break
+            fi
+          done
           echo "pr_number=$pr" >> "$GITHUB_OUTPUT"
           if [ -n "$pr" ]; then
             echo "Detected PR #$pr from coverage artifact"
