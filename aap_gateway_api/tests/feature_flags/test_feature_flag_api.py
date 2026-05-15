@@ -322,7 +322,7 @@ def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime
     - If a feature flag is set at install time, it becomes READ-ONLY and cannot be changed at runtime
     - Runtime feature flags can only be toggled if they were NOT explicitly set at install time
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
     try:
         created_flag = AAPFlag.objects.get(name=feature_flag)
     except AAPFlag.DoesNotExist:
@@ -346,7 +346,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
     - If a flag was set at install-time and is removed from install configuration,
       it reverts to allowing runtime toggles
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
     try:
         created_flag = AAPFlag.objects.get(name=feature_flag)
     except AAPFlag.DoesNotExist:
@@ -372,7 +372,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
 @pytest.mark.parametrize(
     'feature_flag',
     [
-        ('FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED'),
+        ('FEATURE_INDIRECT_NODE_COUNTING_ENABLED'),
     ],
 )
 def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enabled, feature_flag):
@@ -485,22 +485,22 @@ def test_feature_flag_install_time_value_applied_on_rerun():
     If a flag was previously toggled at runtime but is now specified at install-time,
     the install-time value takes precedence.
     """
-    flag_name = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    flag_name = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     with override_settings(RUNTIME_FEATURE_FLAGS=True):
-        # Assert flag is true by default for FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED
-        assert flag_enabled(flag_name) is True
+        # FEATURE_INDIRECT_NODE_COUNTING_ENABLED defaults to False
+        assert flag_enabled(flag_name) is False
 
-        # Set flag setting to False to simulate install-time configuration
-        with override_settings(**{flag_name: False}):
+        # Set flag setting to True to simulate install-time configuration
+        with override_settings(**{flag_name: True}):
             seed_feature_flags()
             # seed_feature_flags only updates value for NEW flags, existing flags keep their value
-            assert flag_enabled(flag_name) is True
+            assert flag_enabled(flag_name) is False
 
             # toggle_install_time_flags applies install-time values to existing flags
             toggle_install_time_flags()
             # Install-time value should be applied, overriding the current value
-            assert flag_enabled(flag_name) is False
+            assert flag_enabled(flag_name) is True
 
 
 @pytest.mark.django_db
@@ -508,21 +508,21 @@ def test_feature_flag_install_time_update_allowed():
     """
     Tests that install time updates are allowed if RUNTIME_FEATURE_FLAGS is disabled
     """
-    flag_name = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    flag_name = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     with override_settings(RUNTIME_FEATURE_FLAGS=False):
-        # Assert flag is true by default for FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED
-        assert flag_enabled(flag_name) is True
+        # FEATURE_INDIRECT_NODE_COUNTING_ENABLED defaults to False
+        assert flag_enabled(flag_name) is False
 
-        # Set flag setting to true to test that install-time updates work
-        with override_settings(**{flag_name: False}):
+        # Set flag setting to True to test that install-time updates work
+        with override_settings(**{flag_name: True}):
             seed_feature_flags()
-            assert flag_enabled(flag_name) is True  # Still true initially
+            assert flag_enabled(flag_name) is False  # Still false initially
 
             # Re-toggle install time update
             # Ensure flag is updated if 'RUNTIME_FEATURE_FLAGS' is disabled
             toggle_install_time_flags()
-            assert flag_enabled(flag_name) is False  # Now updated to False
+            assert flag_enabled(flag_name) is True  # Now updated to True
 
 
 @pytest.mark.django_db
@@ -617,7 +617,7 @@ def test_feature_flag_activity_stream_integration_superuser_operations(admin_api
     - Objects affected are tracked
     - Operations can be retrieved for auditing
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     # Get the flag for operations
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -677,7 +677,7 @@ def test_feature_flag_activity_stream_integration_auditor_operations(platform_au
     This test verifies that auditor operations (which should mostly be read-only) can be
     properly logged, and that failed write operations by auditors can also be tracked.
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     # Get the flag for testing
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -715,7 +715,7 @@ def test_feature_flag_activity_stream_integration_normal_user_operations(user_ap
     This test verifies that normal user operations (which should be denied) can be properly logged,
     especially focusing on failed access attempts for security auditing.
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     # Get the flag for testing
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -752,7 +752,7 @@ def test_feature_flag_activity_stream_api_access(admin_api_client, runtime_featu
     This test ensures that feature flag activity stream entries are accessible
     through the activity stream API endpoint for audit purposes.
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     # Get the flag for operations
     flag_obj = AAPFlag.objects.get(name=feature_flag)
@@ -808,7 +808,7 @@ def test_feature_flag_activity_stream_comprehensive_metadata_tracking(admin_api_
     This test performs a complete feature flag operation cycle and demonstrates how all
     required metadata can be captured in activity stream entries for comprehensive auditing.
     """
-    feature_flag = "FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED"
+    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
 
     # Get the flag for activity stream queries
     flag_obj = AAPFlag.objects.get(name=feature_flag)
