@@ -26,7 +26,7 @@ jobs:
       actions: read
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
-      (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
+      !github.event.repository.fork
     steps:
       - name: Download coverage artifacts
         uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
