@@ -44,11 +44,12 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           name: coverage-
           name_is_regexp: true
+          path: codecov-artifacts
 
       - name: Discover coverage files and PR number
         id: coverage
         run: |
-          files=$(find . -name "coverage-*.xml" -type f)
+          files=$(find codecov-artifacts -name "coverage-*.xml" -type f)
           count=$(echo "$files" | grep -c . || true)
           echo "Found $count coverage file(s):"
           echo "$files"
