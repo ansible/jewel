@@ -235,7 +235,7 @@ All service fixtures depend on `ensure_jwt_keys` for authentication:
 
 **Service Fixtures:**
 - `simulated_controller_resource_api`
-- `simmulated_hub_resource_api`
+- `simulated_hub_resource_api`
 - `simulated_eda_resource_api`
 - `migration_service*` (all variants)
 
