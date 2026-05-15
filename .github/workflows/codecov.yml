@@ -28,6 +28,15 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       !github.event.repository.fork
     steps:
+      # Codecov needs the source tree to map coverage XML paths to actual files.
+      # This checks out the PR head in a workflow_run context, but no code from
+      # the checkout is executed — only downloaded artifacts are processed.
+      # persist-credentials: false prevents GITHUB_TOKEN from leaking via git config.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
       - name: Download coverage artifacts
         uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         with:
