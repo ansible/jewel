@@ -27,7 +27,8 @@
 #
 # JOB 2: sonar-pr-analysis (for PRs)
 # - Runs when: Unit Tests finished after a pull_request event
-# - Steps: Download coverage → Get PR info → Get changed files → Run SonarCloud PR analysis
+# - Steps: Download coverage → Get PR info → Verify base branch is in SONAR_BRANCHES →
+#          Get changed files → Run SonarCloud PR analysis
 # - Scans: All changed files in the PR (Python, YAML, JSON, etc.)
 # - Quality gate: Focuses on new/changed code in PR only
 #
@@ -78,13 +79,12 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           if [ "$EVENT_TYPE" = "pull_request" ]; then
-            # For PRs we need the base branch, but workflow_run doesn't expose it directly.
-            # We allow all PRs through the gate; the base branch is validated implicitly
-            # because the PR targets a branch that itself must be in SONAR_BRANCHES to
-            # receive branch analysis. PR analysis focuses on changed code quality.
+            # workflow_run doesn't expose the PR base branch, so we can't check it here.
+            # Allow PRs through the gate; the PR analysis job resolves the base branch
+            # via the GitHub API and rechecks it against SONAR_BRANCHES before scanning.
             echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
             echo "allowed=true" >> "$GITHUB_OUTPUT"
-            echo "✅ PR analysis is always allowed when SONAR_BRANCHES is configured"
+            echo "✅ PR event — deferring base branch check to PR analysis job"
             exit 0
           fi
 
@@ -119,9 +119,12 @@ jobs:
       needs.gate.outputs.allowed == 'true' &&
       github.event.workflow_run.event == 'pull_request'
     steps:
+      # Pin to the exact commit that the Unit Tests workflow ran against,
+      # since workflow_run context defaults to the repo's default branch.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       # Download all individual coverage artifacts from Unit Tests workflow
       - name: Download coverage artifacts
@@ -132,13 +135,16 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           pattern: coverage-*
 
-      # Extract PR metadata from workflow_run event
+      # Extract PR metadata from workflow_run event and verify the PR targets
+      # a branch listed in SONAR_BRANCHES. If the base branch doesn't match,
+      # the step exits cleanly and the scan is skipped.
       - name: Set PR metadata and prepare files for analysis
         env:
           COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
           REPO_NAME: ${{ github.event.repository.full_name }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_BRANCHES: ${{ vars.SONAR_BRANCHES }}
         run: |
           # Find all downloaded coverage XML files
           coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
@@ -170,12 +176,32 @@ jobs:
           PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
           PR_HEAD=$(echo "$PR_DATA" | jq -r '.head.ref')
 
+          # Verify the PR base branch is in SONAR_BRANCHES before proceeding
+          base_allowed=false
+          IFS=',' read -ra patterns <<< "$SONAR_BRANCHES"
+          for pattern in "${patterns[@]}"; do
+            pattern=$(echo "$pattern" | xargs)
+            # shellcheck disable=SC2254
+            case "$PR_BASE" in
+              $pattern)
+                base_allowed=true
+                break
+                ;;
+            esac
+          done
+
+          if [ "$base_allowed" = "false" ]; then
+            echo "⏭️ PR base branch '$PR_BASE' does not match any pattern in SONAR_BRANCHES: $SONAR_BRANCHES"
+            echo "⏭️ Skipping SonarCloud analysis for this PR."
+            exit 0
+          fi
+
           # Print summary
           echo "🔍 SonarCloud Analysis Decision Summary"
           echo "========================================"
           echo "├── CI Event: ✅ Pull Request"
           echo "├── PR Number: #$PR_NUMBER"
-          echo "├── Base Branch: $PR_BASE"
+          echo "├── Base Branch: $PR_BASE (✅ matches SONAR_BRANCHES)"
           echo "├── Head Branch: $PR_HEAD"
           echo "├── Repo: $REPO_NAME"
 
@@ -189,7 +215,7 @@ jobs:
           # Get all changed files from PR (with error handling)
           files=""
           if [ -n "$PR_NUMBER" ]; then
-            if gh api repos/$REPO_NAME/pulls/$PR_NUMBER/files --jq '.[].filename' > /tmp/pr_files.txt 2>/tmp/pr_error.txt; then
+            if gh api --paginate repos/$REPO_NAME/pulls/$PR_NUMBER/files --jq '.[].filename' > /tmp/pr_files.txt 2>/tmp/pr_error.txt; then
               files=$(cat /tmp/pr_files.txt)
             else
               echo "├── Changed Files: ⚠️  Could not fetch (likely test repo or PR not found)"
@@ -238,13 +264,6 @@ jobs:
             echo "└── Result: ✅ Running SonarCloud analysis"
           fi
 
-      - name: Add base branch
-        if: env.PR_NUMBER != ''
-        run: |
-          gh pr checkout ${{ env.PR_NUMBER }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
@@ -270,9 +289,12 @@ jobs:
       needs.gate.outputs.allowed == 'true' &&
       github.event.workflow_run.event == 'push'
     steps:
+      # Pin to the exact commit that the Unit Tests workflow ran against,
+      # since workflow_run context defaults to the repo's default branch.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       # Download all individual coverage artifacts from Unit Tests workflow (optional for branch pushes)
       - name: Download coverage artifacts
