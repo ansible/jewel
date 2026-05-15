@@ -1,0 +1,36 @@
+# Codecov configuration for jewel
+# Coverage exclusions mirror sonar.coverage.exclusions in sonar-project.properties
+# Keep both in sync when adding or removing patterns.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+    patch:
+      default:
+        target: auto
+
+ignore:
+  - "**/tests/**"
+  - "**/.tox/**"
+  - "**/test_*.py"
+  - "**/*_test.py"
+  - "**/conftest.py"
+  - "**/migrations/**"
+  - "**/settings*.py"
+  - "**/defaults.py"
+  - "**/grpc_defaults.py"
+  - "**/manage.py"
+  - "**/wsgi.py"
+  - "**/asgi.py"
+  - "**/__main__.py"
+  - "**/*.js"
+  - "aap-dev/**"
+  - "tools/scripts/**"
+
+flags:
+  unit-tests:
+    paths:
+      - aap_gateway_api/
+    carryforward: true

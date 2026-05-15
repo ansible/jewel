@@ -1,0 +1,74 @@
+# Codecov coverage upload for jewel
+#
+# Triggered after Unit Tests complete (workflow_run), so coverage artifacts
+# are always available before upload. Mirrors the sonar-pr.yml pattern.
+#
+# JOB 1: codecov-upload (for both PRs and branch pushes)
+# - Downloads coverage XML artifacts produced by unit-test matrix jobs
+# - Uploads all coverage files to Codecov with the unit-tests flag
+# - PR events: Codecov posts a coverage summary comment on the PR
+# - Push events: establishes baseline coverage for diff calculations
+
+name: Codecov
+on:
+  workflow_run:
+    workflows:
+      - Unit Tests
+    types:
+      - completed
+
+jobs:
+  codecov-upload:
+    name: Upload coverage to Codecov
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      !github.event.repository.fork
+    steps:
+      - name: Download coverage artifacts
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
+        with:
+          workflow: Unit Tests
+          run_id: ${{ github.event.workflow_run.id }}
+          name: coverage-
+          name_is_regexp: true
+
+      - name: Discover coverage files and PR number
+        id: coverage
+        run: |
+          files=$(find . -name "coverage-*.xml" -type f)
+          count=$(echo "$files" | grep -c . || true)
+          echo "Found $count coverage file(s):"
+          echo "$files"
+
+          csv=$(echo "$files" | paste -sd ',' -)
+          echo "file_list=$csv" >> "$GITHUB_OUTPUT"
+
+          pr=""
+          for f in $files; do
+            pr=$(grep -oP '<!-- PR \K\d+' "$f" 2>/dev/null | head -1)
+            if [ -n "$pr" ]; then
+              break
+            fi
+          done
+          echo "pr_number=$pr" >> "$GITHUB_OUTPUT"
+          if [ -n "$pr" ]; then
+            echo "Detected PR #$pr from coverage artifact"
+          else
+            echo "No PR number found (branch push)"
+          fi
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+        with:
+          files: ${{ steps.coverage.outputs.file_list }}
+          flags: unit-tests
+          fail_ci_if_error: true
+          override_commit: ${{ github.event.workflow_run.head_sha }}
+          override_branch: ${{ github.event.workflow_run.head_branch }}
+          override_pr: ${{ steps.coverage.outputs.pr_number }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
