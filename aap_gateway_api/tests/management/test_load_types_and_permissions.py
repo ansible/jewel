@@ -103,7 +103,10 @@ class TestLoadTypesAndPermissions:
 
         # Initialize command and call the method
         command = Command()
-        command.load_types_and_permissions(mock_service_apis, mock_user)
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+
+        # Verify no services failed
+        assert failed == []
 
         # Verify client was created with correct parameters
         mock_client_class.assert_called_once_with(mock_service_apis[0], raise_if_bad_request=True, user=mock_user)
@@ -153,7 +156,10 @@ class TestLoadTypesAndPermissions:
 
         # Initialize command and call the method
         command = Command()
-        command.load_types_and_permissions(mock_service_apis, mock_user)
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+
+        # Verify no services failed
+        assert failed == []
 
         # Verify client was created for each service
         assert mock_client_class.call_count == 2
@@ -166,7 +172,7 @@ class TestLoadTypesAndPermissions:
 
     @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
     def test_load_types_error_non_200_status(self, mock_client_class, mock_user, mock_service_apis):
-        """Test error handling when types API returns non-200 status"""
+        """Test that non-200 status for types is caught and the service is reported as failed"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
@@ -178,13 +184,13 @@ class TestLoadTypesAndPermissions:
 
         command = Command()
 
-        # Should raise RuntimeError for non-200 status
-        with pytest.raises(RuntimeError, match=r"Service test-service role types gave 500 code"):
-            command.load_types_and_permissions(mock_service_apis, mock_user)
+        # Should not raise, but return the failed service slug
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+        assert failed == ["test-service"]
 
     @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
     def test_load_permissions_error_non_200_status(self, mock_client_class, mock_user, mock_service_apis, types_response_data):
-        """Test error handling when permissions API returns non-200 status"""
+        """Test that non-200 status for permissions is caught and the service is reported as failed"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
@@ -202,13 +208,13 @@ class TestLoadTypesAndPermissions:
 
         command = Command()
 
-        # Should raise RuntimeError for non-200 status
-        with pytest.raises(RuntimeError, match=r"Service test-service permissions gave 403 code"):
-            command.load_types_and_permissions(mock_service_apis, mock_user)
+        # Should not raise, but return the failed service slug
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+        assert failed == ["test-service"]
 
     @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
     def test_load_types_error_extra_pages(self, mock_client_class, mock_user, mock_service_apis):
-        """Test error handling when types response has pagination"""
+        """Test that pagination in types response is caught and the service is reported as failed"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
@@ -222,13 +228,13 @@ class TestLoadTypesAndPermissions:
 
         command = Command()
 
-        # Should raise RuntimeError for extra pages
-        with pytest.raises(RuntimeError, match=r"Service test-service has extra pages of types"):
-            command.load_types_and_permissions(mock_service_apis, mock_user)
+        # Should not raise, but return the failed service slug
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+        assert failed == ["test-service"]
 
     @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
     def test_load_permissions_error_extra_pages(self, mock_client_class, mock_user, mock_service_apis, types_response_data):
-        """Test error handling when permissions response has pagination"""
+        """Test that pagination in permissions response is caught and the service is reported as failed"""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
@@ -248,9 +254,108 @@ class TestLoadTypesAndPermissions:
 
         command = Command()
 
-        # Should raise RuntimeError for extra pages
-        with pytest.raises(RuntimeError, match=r"Service test-service has extra pages of types"):
-            command.load_types_and_permissions(mock_service_apis, mock_user)
+        # Should not raise, but return the failed service slug
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+        assert failed == ["test-service"]
+
+    @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
+    def test_load_types_partial_failure_continues(self, mock_client_class, mock_user, types_response_data, permissions_response_data):
+        """Test that when one service fails, the method continues to the next service and loads its data"""
+        # Create two mock services: first will fail, second will succeed
+        mock_service_failing = Mock()
+        mock_service_failing.api_slug = "failing-service"
+        mock_service_success = Mock()
+        mock_service_success.api_slug = "success-service"
+        mock_service_apis = [mock_service_failing, mock_service_success]
+
+        # Setup failing client for first service
+        mock_client_failing = Mock()
+        mock_failing_types_response = Mock()
+        mock_failing_types_response.status_code = 500
+        mock_failing_types_response.data = "Internal Server Error"
+        mock_client_failing.list_role_types.return_value = mock_failing_types_response
+
+        # Setup successful client for second service
+        mock_client_success = Mock()
+        mock_success_types_response = Mock()
+        mock_success_types_response.status_code = 200
+        mock_success_types_response.json.return_value = types_response_data
+        mock_client_success.list_role_types.return_value = mock_success_types_response
+
+        mock_success_permissions_response = Mock()
+        mock_success_permissions_response.status_code = 200
+        mock_success_permissions_response.json.return_value = permissions_response_data
+        mock_client_success.list_role_permissions.return_value = mock_success_permissions_response
+
+        # Return different clients for different service APIs
+        mock_client_class.side_effect = [mock_client_failing, mock_client_success]
+
+        command = Command()
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+
+        # Only the failing service should be in the failed list
+        assert failed == ["failing-service"]
+
+        # Content types from the successful service should be created
+        assert DABContentType.objects.filter(api_slug="shared.team").exists()
+        assert DABContentType.objects.filter(api_slug="shared.organization").exists()
+        assert DABContentType.objects.filter(api_slug="awx.inventory").exists()
+
+        # Permissions from the successful service should be created
+        assert DABPermission.objects.filter(api_slug="awx.add_inventory").exists()
+        assert DABPermission.objects.filter(api_slug="awx.view_inventory").exists()
+
+    @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
+    def test_load_types_connection_error_continues(self, mock_client_class, mock_user, types_response_data, permissions_response_data):
+        """Test that a ConnectionError from one service does not prevent loading from subsequent services"""
+        # Create two mock services: first raises ConnectionError, second succeeds
+        mock_service_failing = Mock()
+        mock_service_failing.api_slug = "unreachable-service"
+        mock_service_success = Mock()
+        mock_service_success.api_slug = "reachable-service"
+        mock_service_apis = [mock_service_failing, mock_service_success]
+
+        # First service raises ConnectionError when creating the client
+        mock_client_success = Mock()
+        mock_success_types_response = Mock()
+        mock_success_types_response.status_code = 200
+        mock_success_types_response.json.return_value = types_response_data
+        mock_client_success.list_role_types.return_value = mock_success_types_response
+
+        mock_success_permissions_response = Mock()
+        mock_success_permissions_response.status_code = 200
+        mock_success_permissions_response.json.return_value = permissions_response_data
+        mock_client_success.list_role_permissions.return_value = mock_success_permissions_response
+
+        # The first client creation raises ConnectionError, the second succeeds
+        mock_client_class.side_effect = [ConnectionError("Connection refused"), mock_client_success]
+
+        command = Command()
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+
+        # The unreachable service should be in the failed list
+        assert failed == ["unreachable-service"]
+
+        # Content types from the reachable service should still be created
+        assert DABContentType.objects.filter(api_slug="shared.team").exists()
+        assert DABContentType.objects.filter(api_slug="awx.inventory").exists()
+
+    @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
+    def test_load_types_all_services_fail(self, mock_client_class, mock_user):
+        """Test that when all services fail, the method returns all slugs without raising"""
+        mock_service1 = Mock()
+        mock_service1.api_slug = "service1"
+        mock_service2 = Mock()
+        mock_service2.api_slug = "service2"
+        mock_service_apis = [mock_service1, mock_service2]
+
+        # Both clients fail
+        mock_client_class.side_effect = [ConnectionError("Connection refused"), ConnectionError("Connection refused")]
+
+        command = Command()
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+
+        assert failed == ["service1", "service2"]
 
     @patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient')
     def test_database_objects_creation_details(self, mock_client_class, mock_user, mock_service_apis, types_response_data, permissions_response_data):
@@ -270,7 +375,8 @@ class TestLoadTypesAndPermissions:
         mock_client.list_role_permissions.return_value = mock_permissions_response
 
         command = Command()
-        command.load_types_and_permissions(mock_service_apis, mock_user)
+        failed = command.load_types_and_permissions(mock_service_apis, mock_user)
+        assert failed == []
 
         shared_team = DABContentType.objects.get(api_slug="shared.team")
         assert shared_team.service == "shared"

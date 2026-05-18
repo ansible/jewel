@@ -198,7 +198,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}")
 
         # For RBAC management, load in types and permissions from all other components
-        self.load_types_and_permissions(service_apis, user)
+        failed_type_services = self.load_types_and_permissions(service_apis, user)
+        if failed_type_services:
+            self.stderr.write(
+                self.style.WARNING(f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services.")
+            )
 
         # Track migration results
         migration_results = {}
@@ -258,36 +262,46 @@ class Command(BaseCommand):
             self.stdout.write("\nAll services migration completed successfully!")
 
     def load_types_and_permissions(self, service_apis, user):
+        failed_services = []
         for service_api in service_apis:
             service_slug = service_api.api_slug
-            client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
-            big_page_filter = {"page_size": "200"}
+            try:
+                client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
+                big_page_filter = {"page_size": "200"}
 
-            # Load types into system
-            response = client.list_role_types(filters=big_page_filter)
+                # Load types into system
+                response = client.list_role_types(filters=big_page_filter)
 
-            if response.status_code != 200:
-                raise RuntimeError(f'Service {service_slug} role types gave {response.status_code} code, data: {response.data}')
+                if response.status_code != 200:
+                    raise RuntimeError(f'Service {service_slug} role types gave {response.status_code} code, data: {response.data}')
 
-            data = response.json()
+                data = response.json()
 
-            if data['next']:
-                raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
+                if data['next']:
+                    raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
 
-            DABContentType.objects.load_remote_objects(data['results'])
+                DABContentType.objects.load_remote_objects(data['results'])
 
-            # Load permissions into system, these reference the types above
-            response = client.list_role_permissions(filters=big_page_filter)
+                # Load permissions into system, these reference the types above
+                response = client.list_role_permissions(filters=big_page_filter)
 
-            if response.status_code != 200:
-                raise RuntimeError(f'Service {service_slug} permissions gave {response.status_code} code, data: {response.data}')
+                if response.status_code != 200:
+                    raise RuntimeError(f'Service {service_slug} permissions gave {response.status_code} code, data: {response.data}')
 
-            data = response.json()
+                data = response.json()
 
-            if data['next']:
-                raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
+                if data['next']:
+                    raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
 
-            DABPermission.objects.load_remote_objects(data['results'], update_managed=True)
+                DABPermission.objects.load_remote_objects(data['results'], update_managed=True)
+            except Exception as e:
+                self.stderr.write(
+                    f"Warning: Failed to load types and permissions from {service_slug}: {e}. "
+                    f"Role definitions referencing this service's types will not be available until the next successful migration."
+                )
+                failed_services.append(service_slug)
+                continue
+        return failed_services
 
     def _migrate_single_service(
         self,
