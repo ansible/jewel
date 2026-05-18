@@ -1,4 +1,3 @@
-import re
 import uuid
 from unittest.mock import Mock, patch
 
@@ -16,7 +15,7 @@ from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Te
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 SEP_CHAR = "_"
-_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
+
 
 # Friendly reminder to all who come after me, this test file uses test fixtures defined
 # in module: aap_gateway_api/tests/service_test_app/fixtures/migration_tests.py
@@ -701,6 +700,11 @@ def test_multi_service_migration(
 def test_single_service_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
     """Test migration with only a single service available"""
 
+    # Use a deterministic slug so random hex can't contain "eda" or "hub"
+    service_api_route_controller.api_slug = "test-controller-slug"
+    service_api_route_controller.gateway_path = "/api/test-controller-slug/"
+    service_api_route_controller.save()
+
     # Mock successful migration for the controller service
     with (
         patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
@@ -735,10 +739,8 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         assert "Failed migrations: 0" in captured.out
         assert "All services migration completed successfully!" in captured.out
 
-        # Sanitize the UUIDs from the output, hub and eda are small enough strings that they could appear in a UUID
-        sanitized_out = _UUID_RE.sub('<uuid>', captured.out)
-        assert "hub" not in sanitized_out  # Hub should not be processed
-        assert "eda" not in sanitized_out  # EDA should not be processed
+        assert "hub" not in captured.out
+        assert "eda" not in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
