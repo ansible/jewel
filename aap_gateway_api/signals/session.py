@@ -6,7 +6,7 @@ from ansible_base.lib.logging import log_auth_event
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY, get_user_model
 from django.contrib.sessions.models import Session
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -49,27 +49,24 @@ def track_user_session(sender, instance, **kwargs):
     if not user:
         return
 
-    # get_or_create handles the race where two concurrent requests
-    # both reach this point for the same session.  The OneToOneField
-    # on session enforces uniqueness at the DB level.
-    try:
-        _, created = UserSessionMembership.objects.get_or_create(
-            user_id=user_pk,
-            session=session,
-            defaults={'created': timezone.now()},
-        )
-    except IntegrityError:
-        # Another transaction already created the membership
-        return
+    with transaction.atomic():
+        try:
+            _, created = UserSessionMembership.objects.get_or_create(
+                user_id=user_pk,
+                session=session,
+                defaults={'created': timezone.now()},
+            )
+        except IntegrityError:
+            return
 
-    # Session updates (e.g. extending expiry) re-trigger post_save —
-    # only enforce the limit for genuinely new sessions.
-    if not created:
-        return
+        if not created:
+            return
 
-    expired_memberships = UserSessionMembership.get_active_memberships_over_limit(user_pk)
-    if expired_memberships:
-        session_keys = [m.session_id for m in expired_memberships]
-        for key in session_keys:
-            SessionStore(key).delete()
-        log_auth_event(f"Session limit enforced for user {user.username}: evicted {len(session_keys)} session(s) (SESSIONS_PER_USER limit exceeded)")
+        expired_memberships = UserSessionMembership.get_active_memberships_over_limit(user_pk)
+        if expired_memberships:
+            session_keys = [m.session_id for m in expired_memberships]
+            for key in session_keys:
+                SessionStore(key).delete()
+            log_auth_event(
+                f"Session limit enforced for user {user.username}: evicted {len(session_keys)} session(s) (MAX_EXTRA_SESSIONS_PER_USER limit exceeded)"
+            )

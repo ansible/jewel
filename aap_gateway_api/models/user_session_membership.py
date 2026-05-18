@@ -38,7 +38,7 @@ class UserSessionMembership(models.Model):
         from aap_gateway_api.utils.preferences import get_setting
 
         try:
-            limit = get_setting('SESSIONS_PER_USER')
+            limit = get_setting('MAX_EXTRA_SESSIONS_PER_USER')
         except SettingNotSetException:
             return []
 
@@ -52,7 +52,7 @@ class UserSessionMembership(models.Model):
         # all memberships into Python.  select_for_update() prevents
         # two concurrent logins from both reading the same count and
         # each keeping their own session, exceeding the limit.
-        active = UserSessionMembership.objects.select_for_update().filter(user_id=user_id, session__expire_date__gt=now).order_by('-created')
+        active = UserSessionMembership.objects.select_for_update().filter(user_id=user_id, session__expire_date__gt=now).order_by('-created', '-pk')
 
         # limit is the number of *additional* sessions beyond the first.
         # So the total allowed is limit + 1.  A limit of 0 means only the

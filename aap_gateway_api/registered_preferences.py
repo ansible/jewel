@@ -292,7 +292,7 @@ register(
 
 register(
     section="configuration",
-    preference_name="SESSIONS_PER_USER",
+    preference_name="MAX_EXTRA_SESSIONS_PER_USER",
     required=False,
     default=-1,
     preference_type="int_range",
@@ -303,6 +303,7 @@ register(
         "A positive number N allows N additional concurrent sessions beyond the first."
     ),
     min_value=-1,
+    max_value=100,
     encrypted=False,
     label=_('Maximum Number of Simultaneous Logged In Sessions'),
 )
