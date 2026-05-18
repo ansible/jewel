@@ -1,5 +1,7 @@
 from django.conf import settings
 
+from aap_gateway_api.common.envoy import DOWNSTREAM_TLS_CONTEXT, EXT_AUTHZ_FILTER, HTTP_CONNECTION_MANAGER, HTTP_ROUTER, LUA_FILTER, STDOUT_ACCESS_LOG
+
 SDS_SECRET_CONFIG_NAME = "validation_context_sds"
 
 
@@ -7,7 +9,7 @@ def path_rewrite_filter():
     return {
         "name": "lua_path_rewrite",
         "typed_config": {
-            "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
+            "@type": LUA_FILTER,
             "source_codes": {"rewrite.lua": {"filename": settings.GATEWAY_PATH_REWRITE_SCRIPT_FILE}},
         },
     }
@@ -17,7 +19,7 @@ def external_auth_filter():
     return {
         "name": "envoy.filters.http.ext_authz",
         "typed_config": {
-            "@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz",
+            "@type": EXT_AUTHZ_FILTER,
             "grpc_service": {
                 "envoy_grpc": {"cluster_name": "gateway_control_plane"},
                 "timeout": settings.GRPC_SERVER_AUTH_SERVICE_TIMEOUT,
@@ -35,14 +37,14 @@ def external_auth_filter():
 
 
 def http_router_filter():
-    return {"name": "envoy.filters.http.router", "typed_config": {"@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router"}}
+    return {"name": "envoy.filters.http.router", "typed_config": {"@type": HTTP_ROUTER}}
 
 
 def network_manager_filter(http_filters=[], routes=[]):
     return {
         "name": "envoy.filters.network.http_connection_manager",
         "typed_config": {
-            "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+            "@type": HTTP_CONNECTION_MANAGER,
             "stat_prefix": "ingress_http",
             "upgrade_configs": [
                 {"upgrade_type": "websocket"},
@@ -50,7 +52,7 @@ def network_manager_filter(http_filters=[], routes=[]):
             "access_log": [
                 {
                     "name": "envoy.access_loggers.stdout",
-                    "typed_config": {"@type": "type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog"},
+                    "typed_config": {"@type": STDOUT_ACCESS_LOG},
                 },
             ],
             "http_filters": http_filters,
@@ -76,7 +78,7 @@ def transport_socket():
     return {
         "name": "envoy.transport_sockets.tls",
         "typed_config": {
-            "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext",
+            "@type": DOWNSTREAM_TLS_CONTEXT,
             "require_client_certificate": False,
             "common_tls_context": {
                 "tls_certificates": [

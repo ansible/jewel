@@ -16,6 +16,7 @@ from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverSe
 
 logger = logging.getLogger('aap.gateway.urls')
 
+API_GATEWAY_V1_PREFIX = "api/gateway/v1/"
 
 user_access_view = UserAccessViewSet.as_view({'get': 'list'})
 team_access_view = TeamAccessViewSet.as_view({'get': 'list'})
@@ -26,44 +27,48 @@ register_converter(IntOrUUIDConverter, "int_or_uuid")
 
 urlpatterns = [
     # Load base URLs first
-    path('api/gateway/v1/', include(api_version_urls)),
+    path(API_GATEWAY_V1_PREFIX, include(api_version_urls)),
     path('api/gateway/', include(api_urls)),
     path('', include(root_urls)),
     # Extra DAB RBAC views that need to be included because we exclude it from api_version_urls
     path(r'role_metadata/', RoleMetadataView.as_view(), name="role-metadata"),
-    path('api/gateway/v1/role_user_access/<str:model_name>/<int_or_uuid:pk>/', user_access_view, name="role-user-access"),
-    path('api/gateway/v1/role_team_access/<str:model_name>/<int_or_uuid:pk>/', team_access_view, name="role-team-access"),
+    path(f'{API_GATEWAY_V1_PREFIX}role_user_access/<str:model_name>/<int_or_uuid:pk>/', user_access_view, name="role-user-access"),
+    path(f'{API_GATEWAY_V1_PREFIX}role_team_access/<str:model_name>/<int_or_uuid:pk>/', team_access_view, name="role-team-access"),
     path(
-        'api/gateway/v1/role_user_access/<str:model_name>/<int_or_uuid:pk>/<str:actor_pk>/',
+        f'{API_GATEWAY_V1_PREFIX}role_user_access/<str:model_name>/<int_or_uuid:pk>/<str:actor_pk>/',
         user_access_assignment_view,
         name='role-user-access-assignments',
     ),
     path(
-        'api/gateway/v1/role_team_access/<str:model_name>/<int_or_uuid:pk>/<str:actor_pk>/',
+        f'{API_GATEWAY_V1_PREFIX}role_team_access/<str:model_name>/<int_or_uuid:pk>/<str:actor_pk>/',
         team_access_assignment_view,
         name='role-team-access-assignments',
     ),
     path('admin/', admin.site.urls),
     path('api/', views.ApiRootView.as_view(), name='api_root_view'),
     path('api/gateway/', views.GatewayRootView.as_view(), name='api_gateway_root_view'),
-    path('api/gateway/v1/', views.V1RootView.as_view(), name='api_gateway_v1_root_view'),
-    path('api/gateway/v1/jwt_key/', views.JWTKeyView.as_view(), name='jwt-key-view'),
-    path('api/gateway/v1/ping/', views.PingView.as_view(), name='ping-view'),
-    path('api/gateway/v1/status/', views.StatusView.as_view(), name='status-view'),
-    re_path('api/gateway/v1/users/(?P<pk>[0-9]+)/teams/', views.UserTeamViewSet.as_view({'get': 'list'}), name='user-teams-list'),
-    re_path('api/gateway/v1/users/(?P<pk>[0-9]+)/organizations/', views.UserOrganizationViewSet.as_view({'get': 'list'}), name='user-organizations-list'),
+    path(API_GATEWAY_V1_PREFIX, views.V1RootView.as_view(), name='api_gateway_v1_root_view'),
+    path(f'{API_GATEWAY_V1_PREFIX}jwt_key/', views.JWTKeyView.as_view(), name='jwt-key-view'),
+    path(f'{API_GATEWAY_V1_PREFIX}ping/', views.PingView.as_view(), name='ping-view'),
+    path(f'{API_GATEWAY_V1_PREFIX}status/', views.StatusView.as_view(), name='status-view'),
+    re_path(f'{API_GATEWAY_V1_PREFIX}users/(?P<pk>[0-9]+)/teams/', views.UserTeamViewSet.as_view({'get': 'list'}), name='user-teams-list'),
+    re_path(
+        f'{API_GATEWAY_V1_PREFIX}users/(?P<pk>[0-9]+)/organizations/',
+        views.UserOrganizationViewSet.as_view({'get': 'list'}),
+        name='user-organizations-list',
+    ),
     path(
-        'api/gateway/v1/login/',
+        f'{API_GATEWAY_V1_PREFIX}login/',
         views.LoggedLoginView.as_view(template_name='rest_framework/login.html', extra_context={'inside_login_context': True}),
         name='login',
     ),
-    path('api/gateway/v1/logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
-    path('api/gateway/v1/me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
-    path('api/gateway/v1/session/', views.SessionView.as_view(), name='session-view'),
+    path(f'{API_GATEWAY_V1_PREFIX}logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
+    path(f'{API_GATEWAY_V1_PREFIX}me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
+    path(f'{API_GATEWAY_V1_PREFIX}session/', views.SessionView.as_view(), name='session-view'),
     # settings
-    re_path(r'api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/$', views.SettingSectionView.as_view(), name='setting-section-list'),
+    re_path(rf'{API_GATEWAY_V1_PREFIX}settings/(?P<category_slug>[a-z0-9_]+)/$', views.SettingSectionView.as_view(), name='setting-section-list'),
     re_path(
-        r'^api/gateway/v1/settings/(?P<category_slug>[a-z0-9_]+)/(?P<preference_name>[a-zA-Z0-9_]+)/$',
+        rf'^{API_GATEWAY_V1_PREFIX}settings/(?P<category_slug>[a-z0-9_]+)/(?P<preference_name>[a-zA-Z0-9_]+)/$',
         views.SettingPreferenceView.as_view(),
         name='setting-detail',
     ),
@@ -72,15 +77,15 @@ urlpatterns = [
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
     path('v3/discovery:secrets', SecretDiscoverServiceView.as_view(), name='sds'),
     # Social auth
-    path('api/gateway/v1/', include(router.urls)),
-    path('api/gateway/v1/', include(resource_api_urls)),
-    path('api/gateway/v1/', include(rbac_service_urls)),
+    path(API_GATEWAY_V1_PREFIX, include(router.urls)),
+    path(API_GATEWAY_V1_PREFIX, include(resource_api_urls)),
+    path(API_GATEWAY_V1_PREFIX, include(rbac_service_urls)),
     # JWT claims endpoint
-    path('api/gateway/v1/jwt_claims/<str:user_ansible_id>/', views.JWTClaimsView.as_view(), name='jwt-claims-view'),
+    path(f'{API_GATEWAY_V1_PREFIX}jwt_claims/<str:user_ansible_id>/', views.JWTClaimsView.as_view(), name='jwt-claims-view'),
     # OIDC Workload Identity endpoints (behind feature flag)
     flagged_path(
         'FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED',
-        'api/gateway/v1/workload_identity_tokens/',
+        f'{API_GATEWAY_V1_PREFIX}workload_identity_tokens/',
         views.WorkloadIdentityTokensView.as_view(),
         name='workload-identity-tokens-view',
         state=True,

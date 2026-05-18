@@ -4,6 +4,13 @@ from typing import Optional
 
 from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.rbac.models import DABPermission, RoleDefinition
+from ansible_base.resource_registry.constants import (
+    SHARED_AAP_FLAG_RESOURCE_TYPE,
+    SHARED_ORGANIZATION_RESOURCE_TYPE,
+    SHARED_ROLE_DEFINITION_RESOURCE_TYPE,
+    SHARED_TEAM_RESOURCE_TYPE,
+    SHARED_USER_RESOURCE_TYPE,
+)
 from ansible_base.resource_registry.registry import ParentResource, ResourceConfig, ServiceAPIConfig, SharedResource
 from ansible_base.resource_registry.shared_types import FeatureFlagType, OrganizationType, RoleDefinitionType, TeamType, UserType
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor
@@ -250,11 +257,11 @@ class GatewayRoleDefinitionType(RoleDefinitionType):
 class APIConfig(ServiceAPIConfig):
     service_type = "aap"
     custom_resource_processors = {
-        "shared.organization": GetOrCreateProcessor,
-        "shared.team": GetOrCreateProcessor,
-        "shared.user": GetOrCreateProcessor,
-        "shared.roledefinition": GatewayRoleDefinitionProcessor,
-        "shared.aapflag": GetOrCreateProcessor,
+        SHARED_ORGANIZATION_RESOURCE_TYPE: GetOrCreateProcessor,
+        SHARED_TEAM_RESOURCE_TYPE: GetOrCreateProcessor,
+        SHARED_USER_RESOURCE_TYPE: GetOrCreateProcessor,
+        SHARED_ROLE_DEFINITION_RESOURCE_TYPE: GatewayRoleDefinitionProcessor,
+        SHARED_AAP_FLAG_RESOURCE_TYPE: GetOrCreateProcessor,
     }
 
 

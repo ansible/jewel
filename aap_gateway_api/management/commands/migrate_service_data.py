@@ -7,6 +7,13 @@ from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
 from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
+from ansible_base.resource_registry.constants import (
+    SHARED_AAP_FLAG_RESOURCE_TYPE,
+    SHARED_ORGANIZATION_RESOURCE_TYPE,
+    SHARED_ROLE_DEFINITION_RESOURCE_TYPE,
+    SHARED_TEAM_RESOURCE_TYPE,
+    SHARED_USER_RESOURCE_TYPE,
+)
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -133,38 +140,38 @@ class Command(BaseCommand):
         # The order here matters. Organizations need to be migrated first.
         self.resource_types_to_migrate = OrderedDict()
 
-        self.resource_types_to_migrate["shared.organization"] = {
+        self.resource_types_to_migrate[SHARED_ORGANIZATION_RESOURCE_TYPE] = {
             "merge": merge_organizations,
-            "type": ResourceType.objects.get(name="shared.organization"),
+            "type": ResourceType.objects.get(name=SHARED_ORGANIZATION_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
             ],
         }
-        self.resource_types_to_migrate["shared.team"] = {
+        self.resource_types_to_migrate[SHARED_TEAM_RESOURCE_TYPE] = {
             "merge": merge_teams,
-            "type": ResourceType.objects.get(name="shared.team"),
+            "type": ResourceType.objects.get(name=SHARED_TEAM_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
                 "organization",
             ],
         }
-        self.resource_types_to_migrate["shared.user"] = {
+        self.resource_types_to_migrate[SHARED_USER_RESOURCE_TYPE] = {
             "merge": True,  # only indicates we merge the admin user
-            "type": ResourceType.objects.get(name="shared.user"),
+            "type": ResourceType.objects.get(name=SHARED_USER_RESOURCE_TYPE),
             "unique_fields": [
                 "username",
             ],
         }
-        self.resource_types_to_migrate["shared.roledefinition"] = {
+        self.resource_types_to_migrate[SHARED_ROLE_DEFINITION_RESOURCE_TYPE] = {
             "merge": True,  # the JWT roles are already shared effectively
-            "type": ResourceType.objects.get(name="shared.roledefinition"),
+            "type": ResourceType.objects.get(name=SHARED_ROLE_DEFINITION_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
             ],
         }
-        self.resource_types_to_migrate["shared.aapflag"] = {
+        self.resource_types_to_migrate[SHARED_AAP_FLAG_RESOURCE_TYPE] = {
             "merge": True,
-            "type": ResourceType.objects.get(name="shared.aapflag"),
+            "type": ResourceType.objects.get(name=SHARED_AAP_FLAG_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
                 "condition",
@@ -452,7 +459,7 @@ class Command(BaseCommand):
         Used for producing updated resource data for resource that failed validation.
         """
         # if the resource is a user and there is only one validation error for email field, we can remove the field
-        if resource_type_name == "shared.user" and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
+        if resource_type_name == SHARED_USER_RESOURCE_TYPE and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
             self.stderr.write(f"Removing invalid email address '{original_resource_data.data['email']}' for user: {original_resource_data.data['username']}")
             # we want to update the email to empty string
             updated_resource_data = original_resource_data.data
@@ -649,7 +656,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Items remaining: {data['count']}")
         results = data['results']
         # As special case exclude the system user, since Gateway excludes this in its own resources
-        if resource_type_name == 'shared.user':
+        if resource_type_name == SHARED_USER_RESOURCE_TYPE:
             # SYSTEM_USERNAME can theoretically vary by service
             # Currently, the system username is None in controller, and in hub and eda it's the same as gateway's,
             # If Hub and EDA system username is updated to != gateway's, we are migrating it too and we should avoid it
@@ -698,7 +705,7 @@ class Command(BaseCommand):
         validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
         # Sync superuser flags for user resources
-        if resource_context["type_name"] == "shared.user":
+        if resource_context["type_name"] == SHARED_USER_RESOURCE_TYPE:
             upstream_resource = self._sync_user_superuser_flag(upstream_resource, validated_resource_data)
             # Re-validate after potential superuser flag changes
             validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
@@ -941,7 +948,7 @@ class Command(BaseCommand):
         # Get all users from the shared resource registry (no service_id filter since
         # after migration all resources have Gateway's service_id)
         filters = {
-            "content_type__resource_type__name": "shared.user",
+            "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
         }
 
         controller_superusers = set()
@@ -995,7 +1002,7 @@ class Command(BaseCommand):
 
         filters = {
             "service_id": str(service_id()),
-            "content_type__resource_type__name": "shared.user",
+            "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
         }
 
         demoted_users = []
@@ -1046,7 +1053,9 @@ class Command(BaseCommand):
 
         gateway_service_id = service_id()
         partially_migrated_resources = (
-            Resource.objects.filter(content_type__resource_type__name="shared.user").exclude(service_id=gateway_service_id).select_related('content_type')
+            Resource.objects.filter(content_type__resource_type__name=SHARED_USER_RESOURCE_TYPE)
+            .exclude(service_id=gateway_service_id)
+            .select_related('content_type')
         )
 
         total_partially_migrated_users = len(partially_migrated_resources)

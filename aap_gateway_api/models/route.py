@@ -6,7 +6,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
-from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
+from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
@@ -205,7 +205,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             cfg["transport_socket"] = {
                 "name": "envoy.transport_sockets.tls",
                 "typed_config": {
-                    "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
+                    "@type": UPSTREAM_TLS_CONTEXT,
                     "common_tls_context": {
                         "tls_params": {
                             "tls_maximum_protocol_version": "TLSv1_3",
@@ -265,7 +265,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             cfg["metadata"]["filter_metadata"] = {"envoy.filters.http.lua": {"prefix": self.gateway_path, "prefix_rewrite": self.service_path}}
 
             cfg["typed_per_filter_config"]["envoy.filters.http.lua"] = {
-                "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.LuaPerRoute",
+                "@type": LUA_PER_ROUTE,
                 "name": "rewrite.lua",
             }
 
