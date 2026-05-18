@@ -43,8 +43,8 @@ class TestUserSessionMembership:
         store = SessionStore()
         store['some_key'] = 'some_value'
         store.create()
-        session = Session.objects.get(session_key=store.session_key)
-        with mock.patch.object(session, 'get_decoded', side_effect=ValueError("corrupted")):
+        with mock.patch.object(Session, 'get_decoded', side_effect=ValueError("corrupted")):
+            session = Session.objects.get(session_key=store.session_key)
             session.save()
         assert not UserSessionMembership.objects.filter(session_id=store.session_key).exists()
 
@@ -54,6 +54,18 @@ class TestUserSessionMembership:
         store[SESSION_KEY] = 'not-a-number'
         store.create()
         assert not UserSessionMembership.objects.filter(session_id=store.session_key).exists()
+
+    def test_no_membership_for_deleted_user(self):
+        """A session referencing a user PK that no longer exists should be skipped."""
+        store = SessionStore()
+        store[SESSION_KEY] = '999999'
+        store.create()
+        assert not UserSessionMembership.objects.filter(session_id=store.session_key).exists()
+
+    def test_str_representation(self, admin_user):
+        key = _create_session_for_user(admin_user)
+        membership = UserSessionMembership.objects.get(user=admin_user, session_id=key)
+        assert str(membership) == f'{admin_user.pk} / {key}'
 
     def test_session_update_does_not_trigger_eviction(self, admin_user, preference_manager):
         """Updating an existing session (e.g. extending expiry) must not create a new membership or trigger eviction."""
