@@ -6,10 +6,10 @@ coverage:
   status:
     project:
       default:
-        target: auto
+        target: 90%
     patch:
       default:
-        target: auto
+        target: 90%
 
 ignore:
   - "**/tests/**"
