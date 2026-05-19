@@ -2,17 +2,25 @@
 # Coverage exclusions mirror sonar.coverage.exclusions in sonar-project.properties
 # Keep both in sync when adding or removing patterns.
 
+# Explicitly override org-level config that disables all checks:
+# Org config has: comment: false, changes: false, patch: false,
+#                 flag_coverage_not_uploaded_behavior: exclude, annotations: false
+# This config flips everything to the opposite to enable status checks
+
 github_checks:
-  annotations: true
+  annotations: true  # Org has: false
 
 coverage:
   status:
     project:
       default:
         target: auto
+        flag_coverage_not_uploaded_behavior: include  # Org has: exclude
     patch:
       default:
         target: 90%
+        flag_coverage_not_uploaded_behavior: include  # Org has: exclude
+    changes: true  # Org has: false
 
 ignore:
   - "**/tests/**"
@@ -33,11 +41,11 @@ ignore:
   - "tools/scripts/**"
 
 comment:
-  layout: "diff, flags, files"
-  behavior: default
-  require_changes: false
+  require_changes: false  # Org has: comment: false (entire section disabled)
   require_base: false
   require_head: true
+  layout: "diff, flags, files"
+  behavior: default
   hide_project_coverage: false
 
 flags:
