@@ -1858,7 +1858,7 @@
     "clientOfflineSessionIdleTimeout": "0",
     "cibaInterval": "5"
   },
-  "keycloakVersion": "15.0.2",
+  "keycloakVersion": "26.0",
   "userManagedAccessAllowed": false,
   "clientProfiles": {
     "profiles": []
@@ -1868,32 +1868,23 @@
   },
   "users" : [ {
     "id" : "32559338-d619-47e5-839c-cd8c70e4221e",
-    "createdTimestamp" : 1638304914519,
     "username" : "gateway_unpriv",
     "enabled" : true,
-    "totp" : false,
     "emailVerified" : true,
     "firstName" : "Gateway",
     "lastName" : "Unpriv",
     "email" : "noone@nowhere.com",
     "credentials" : [ {
-      "id" : "724329fd-66af-4973-ac17-02b7e7b6d33b",
       "type" : "password",
-      "createdDate" : 1639095379005,
-      "secretData" : "{\"value\":\"mV1b4nP7BC1G4pY9wlo3IWArn3a5y7w96WpivmMdQaSYENBZF/vz0dMvz8cx4mVPahH/tzScb2vZnN/GzEL0gg==\",\"salt\":\"QN6A8ckQ0o02eUl4crwgxQ==\",\"additionalParameters\":{}}",
-      "credentialData" : "{\"hashIterations\":27500,\"algorithm\":\"pbkdf2-sha256\",\"additionalParameters\":{}}"
+      "value" : "{{ keycloak_password }}",
+      "temporary" : false
     } ],
-    "disableableCredentialTypes" : [ ],
-    "requiredActions" : [ ],
     "realmRoles" : [ "default-roles-gateway realm" ],
-    "notBefore" : 0,
     "groups" : [ ]
   }, {
     "id" : "667ec049-cdf3-45d0-a4dc-0465f7505954",
-    "createdTimestamp" : 1638394966440,
     "username" : "gateway_admin",
     "enabled" : true,
-    "totp" : false,
     "emailVerified" : true,
     "firstName" : "Gateway",
     "lastName" : "Admin",
@@ -1902,23 +1893,16 @@
       "is_superuser" : [ "true" ]
     },
     "credentials" : [ {
-      "id" : "51bcbebe-f17e-43c1-a549-8ab13c906bff",
       "type" : "password",
-      "createdDate" : 1639095348459,
-      "secretData" : "{\"value\":\"kIzb+2QOUGmdPPntBYrdcjQYPYUH5Hd1o9x/23aBiF4o/zhQDKhikCwc8dnXjwZu0oQ8zR6EPfRET8P79IS8Nw==\",\"salt\":\"dDs/XM3LZj4agFeD/EFDTw==\",\"additionalParameters\":{}}",
-      "credentialData" : "{\"hashIterations\":27500,\"algorithm\":\"pbkdf2-sha256\",\"additionalParameters\":{}}"
+      "value" : "{{ keycloak_password }}",
+      "temporary" : false
     } ],
-    "disableableCredentialTypes" : [ ],
-    "requiredActions" : [ ],
     "realmRoles" : [ "default-roles-gateway realm" ],
-    "notBefore" : 0,
     "groups" : [ "admins" ]
   }, {
     "id" : "cbe48149-3bc5-49a1-a616-c8a5c8a3a88f",
-    "createdTimestamp" : 1638394708362,
     "username" : "gateway_auditor",
     "enabled" : true,
-    "totp" : false,
     "emailVerified" : true,
     "firstName" : "Gateway",
     "lastName" : "Auditor",
@@ -1927,16 +1911,11 @@
       "is_system_auditor" : [ "true" ]
     },
     "credentials" : [ {
-      "id" : "f94e759e-ddcf-41b4-b088-8f00d481eae4",
       "type" : "password",
-      "createdDate" : 1639095365091,
-      "secretData" : "{\"value\":\"lr+KxXSfE42YGDgqN/PLukyUXAwD3+RjFW/RmqrGJ+N3B/+zuAYuxGJ7tfjb7U74CAxuimGNoaZoy3Gj7ObB/w==\",\"salt\":\"6PXPj4PMJ7iA2SS5N+r08g==\",\"additionalParameters\":{}}",
-      "credentialData" : "{\"hashIterations\":27500,\"algorithm\":\"pbkdf2-sha256\",\"additionalParameters\":{}}"
+      "value" : "{{ keycloak_password }}",
+      "temporary" : false
     } ],
-    "disableableCredentialTypes" : [ ],
-    "requiredActions" : [ ],
     "realmRoles" : [ "default-roles-gateway realm" ],
-    "notBefore" : 0,
     "groups" : [ "auditors" ]
   } ]
 }

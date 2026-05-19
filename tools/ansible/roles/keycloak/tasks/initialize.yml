@@ -39,9 +39,11 @@
       register: pg_initialization
       when: "'0 rows' in db_check.stdout"
 
-    - name: Start keycloak
-      shell:
-        cmd: "{{ docker_compose_cmd }} up keycloak -d --wait"
+    - name: Create keycloak certs directory
+      file:
+        path: "{{ keycloak_certs_dir }}"
+        state: directory
+        mode: '0755'
 
     - name: Generate certificates for keycloak
       command: 'openssl req -new -x509 -days 365 -nodes -out {{ public_key_file }} -keyout {{ private_key_file }} -subj "{{ cert_subject }}"'
@@ -52,6 +54,10 @@
       command: 'openssl x509 -pubkey -noout -in {{ public_key_file }} -out {{ public_key_cert }}'
       args:
         creates: "{{ public_key_cert }}"
+
+    - name: Start keycloak
+      shell:
+        cmd: "{{ docker_compose_cmd }} up keycloak -d --wait"
 
     - name: Load certs, existing and new SAML settings
       set_fact:
@@ -108,6 +114,27 @@
       when: "'0 rows' in realm_check.stdout"
       register: realm_status
       changed_when: realm_status.status == 201
+
+    - name: Set passwords for gateway realm users
+      uri:
+        url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/users/{{ item.id }}/reset-password"
+        method: PUT
+        body_format: json
+        body:
+          type: password
+          value: "{{ keycloak_password }}"
+          temporary: false
+        validate_certs: False
+        headers:
+          Authorization: "Bearer {{ keycloak_response.json.access_token }}"
+        status_code: [204]
+      loop:
+        - { id: "667ec049-cdf3-45d0-a4dc-0465f7505954", name: "gateway_admin" }
+        - { id: "32559338-d619-47e5-839c-cd8c70e4221e", name: "gateway_unpriv" }
+        - { id: "cbe48149-3bc5-49a1-a616-c8a5c8a3a88f", name: "gateway_auditor" }
+      loop_control:
+        label: "{{ item.name }}"
+      when: realm_status is changed
 
   always:
     - name: Shutdown containers we started

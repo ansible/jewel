@@ -302,15 +302,28 @@ services:
     user: "${UID:-1000}"
     ports:
       - "{{ keycloak_exposed_port }}:8443"
+    command: start-dev
     environment:
-      KEYCLOAK_USER: "{{ keycloak_username }}"
-      KEYCLOAK_PASSWORD: "{{ keycloak_password }}"
-      DB_VENDOR: postgres
-      DB_ADDR: db
-      DB_DATABASE: keycloak
-      DB_USER: {{ db_username }}
-      DB_PASSWORD: {{ db_password }}
-      DB_PORT: 5432
+      KC_BOOTSTRAP_ADMIN_USERNAME: "{{ keycloak_username }}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "{{ keycloak_password }}"
+      KC_DB: postgres
+      KC_DB_URL_HOST: db
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: {{ db_username }}
+      KC_DB_PASSWORD: {{ db_password }}
+      KC_DB_URL_PORT: "5432"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/tls.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/tls.key
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - {{ sources_dest }}/keycloak_certs:/opt/keycloak/certs:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
     depends_on:
       - db
     networks:
