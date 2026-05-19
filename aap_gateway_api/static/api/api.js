@@ -4,6 +4,12 @@
  * All Rights Reserved
  *************************************************/
 
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(";").shift();
+}
+
 $(function() {
 
   // Add syntax highlighting to examples in description.
@@ -12,9 +18,13 @@ $(function() {
 
   // Make links from relative URLs to resources.
   $('span.str').each(function() {
-    var s = $(this).html();
-    if (s.match(/^\"\/.+\/\"$/) || s.match(/^\"\/.+\/\?.*\"$/)) {
-      $(this).html('"<a href=' + s + '>' + s.replaceAll('"', '') + '</a>"');
+    const s = $(this).text();
+    const m = s.match(/^"(\/[A-Za-z0-9_.~:/?#[\]@!$&'()*+,;=%-]+\/(?:\?[A-Za-z0-9_.~:/?#[\]@!$&'()*+,;=%-]*)?)"$/);
+    if (m) {
+      const a = document.createElement('a');
+      a.href = encodeURI(m[1]);
+      a.textContent = m[1];
+      $(this).empty().append('"').append(a).append('"');
     }
   });
 
@@ -26,13 +36,19 @@ $(function() {
       return $(this).text() === '"hosts"';
     }).each(function() {
       $(this).nextUntil('span.pun:contains("]")').filter('span.str').each(function() {
-        if ($(this).text().match(/^\".+\"$/)) {
-          var s = $(this).text().replaceAll('"', '');
-          $(this).html('"<a href="' + '?host=' + s + '">' + s + '</a>"');
+        if ($(this).text().match(/^".+"$/)) {
+          const s = $(this).text().replaceAll('"', '');
+          const a = document.createElement('a');
+          a.href = `?host=${encodeURIComponent(s)}`;
+          a.textContent = s;
+          $(this).empty().append('"').append(a).append('"');
         }
         else if ($(this).text() !== '"') {
-          var s = $(this).text();
-          $(this).html('<a href="' + '?host=' + s + '">' + s + '</a>');
+          const s = $(this).text();
+          const a = document.createElement('a');
+          a.href = `?host=${encodeURIComponent(s)}`;
+          a.textContent = s;
+          $(this).empty().append(a);
         }
       });
     });
@@ -42,13 +58,13 @@ $(function() {
   if ($('.description').html()) {
     $('.description').addClass('prettyprint').parent().css('float', 'none');
     $('.hidden a.hide-description').prependTo('.description');
-    $('a.hide-description').click(function() {
+    $('a.hide-description').on('click', function() {
       $(this).tooltip('hide');
       $('.description').slideUp('fast');
       return false;
     });
     $('.hidden a.toggle-description').appendTo('.page-header h1');
-    $('a.toggle-description').click(function() {
+    $('a.toggle-description').on('click', function() {
       $(this).tooltip('hide');
       $('.description').slideToggle('fast');
       return false;
@@ -57,11 +73,11 @@ $(function() {
 
   $('[data-toggle="tooltip"]').tooltip();
 
-  if ($(window).scrollTop() >= 115) {
+  if ($(globalThis).scrollTop() >= 115) {
     $('body').addClass('show-title');
   }
-  $(window).scroll(function() {
-    if ($(window).scrollTop() >= 115) {
+  $(globalThis).on('scroll', function() {
+    if ($(globalThis).scrollTop() >= 115) {
       $('body').addClass('show-title');
     }
     else {
@@ -69,7 +85,7 @@ $(function() {
     }
   });
 
-  $('a.resize').click(function() {
+  $('a.resize').on('click', function() {
     $(this).tooltip('hide');
     if ($(this).find('span.glyphicon-resize-full').size()) {
       $(this).find('span.glyphicon').addClass('glyphicon-resize-small').removeClass('glyphicon-resize-full');
@@ -84,13 +100,8 @@ $(function() {
     return false;
   });
 
-  function getCookie(name) {
-    var value = "; " + document.cookie;
-    var parts = value.split("; " + name + "=");
-    if (parts.length == 2) return parts.pop().split(";").shift();
-  }
-  if (getCookie('api_width') == 'wide') {
-    $('a.resize').click();
+  if (getCookie('api_width') === 'wide') {
+    $('a.resize').trigger('click');
   }
 
 });
