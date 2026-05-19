@@ -88,6 +88,7 @@ def test_users_are_updated(
     admin_api_client,
     patched_resource_client,
     patched_all_services_resource_client,
+    ensure_jwt_keys,
 ):
     username = "my_username"
 
@@ -121,6 +122,7 @@ def test_teams_are_updated(
     admin_api_client,
     patched_resource_client,
     patched_all_services_resource_client,
+    ensure_jwt_keys,
 ):
     url = get_relative_url("organization-list")
     response = admin_api_client.post(url, data={"name": "my_org_name"})
