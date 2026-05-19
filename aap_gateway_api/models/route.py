@@ -13,6 +13,7 @@ from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
 
 API_PREFIX = "/api/"
+TYPE_KEY = "@type"
 
 
 class Route(UniqueNamedCommonModel, AuditableModel):
@@ -205,7 +206,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             cfg["transport_socket"] = {
                 "name": "envoy.transport_sockets.tls",
                 "typed_config": {
-                    "@type": UPSTREAM_TLS_CONTEXT,
+                    TYPE_KEY: UPSTREAM_TLS_CONTEXT,
                     "common_tls_context": {
                         "tls_params": {
                             "tls_maximum_protocol_version": "TLSv1_3",
@@ -265,18 +266,18 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             cfg["metadata"]["filter_metadata"] = {"envoy.filters.http.lua": {"prefix": self.gateway_path, "prefix_rewrite": self.service_path}}
 
             cfg["typed_per_filter_config"]["envoy.filters.http.lua"] = {
-                "@type": LUA_PER_ROUTE,
+                TYPE_KEY: LUA_PER_ROUTE,
                 "name": "rewrite.lua",
             }
 
         if not self.enable_gateway_auth:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
-                "@type": EXT_AUTH_PER_ROUTE,
+                TYPE_KEY: EXT_AUTH_PER_ROUTE,
                 "disabled": not self.enable_gateway_auth,
             }
         else:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
-                "@type": EXT_AUTH_PER_ROUTE,
+                TYPE_KEY: EXT_AUTH_PER_ROUTE,
                 "check_settings": {
                     # map<string, string> to be sent to auth server per route
                     "context_extensions": {
@@ -324,7 +325,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     'metadata': {},
                     'typed_per_filter_config': {
                         EXT_AUTH_FILTER: {
-                            "@type": EXT_AUTH_PER_ROUTE,
+                            TYPE_KEY: EXT_AUTH_PER_ROUTE,
                             "check_settings": {
                                 "context_extensions": {
                                     "is_internal_route": self.is_internal_route_string(),
@@ -351,7 +352,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     'metadata': {},
                     'typed_per_filter_config': {
                         EXT_AUTH_FILTER: {
-                            "@type": EXT_AUTH_PER_ROUTE,
+                            TYPE_KEY: EXT_AUTH_PER_ROUTE,
                             "check_settings": {
                                 "context_extensions": {
                                     "is_internal_route": self.is_internal_route_string(),
