@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      statuses: write
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       !github.event.repository.fork
@@ -72,6 +73,7 @@ jobs:
           fi
 
       - name: Upload to Codecov
+        id: codecov
         uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
         with:
           url: ${{ vars.CODECOV_URL }}
@@ -83,3 +85,23 @@ jobs:
           override_pr: ${{ steps.coverage.outputs.pr_number }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      # workflow_run check runs are associated with the default branch, not the
+      # PR commit, so required status checks on PRs never see them. Post an
+      # explicit commit status on the original head SHA to close that gap.
+      - name: Set commit status
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const sha = '${{ github.event.workflow_run.head_sha }}';
+            const state = '${{ steps.codecov.outcome }}' === 'success' ? 'success' : 'failure';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha,
+              state,
+              context: 'Upload coverage to Codecov',
+              description: state === 'success' ? 'Coverage uploaded' : 'Coverage upload failed',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
