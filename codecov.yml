@@ -2,6 +2,9 @@
 # Coverage exclusions mirror sonar.coverage.exclusions in sonar-project.properties
 # Keep both in sync when adding or removing patterns.
 
+github_checks:
+  annotations: true
+
 coverage:
   status:
     project:
