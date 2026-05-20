@@ -1,5 +1,6 @@
 import io
 import os
+import re
 from unittest.mock import patch
 
 import pytest
@@ -137,6 +138,84 @@ def test_preference_rotation(settings):
     assert decrypt_with_key(new_cipher, new_key) == "my-secret-pref-value"
 
 
+@pytest.mark.django_db(transaction=True)
+def test_authenticator_config_rotation(settings):
+    """Authenticator.configuration encrypted sub-fields are re-encrypted."""
+    from ansible_base.authentication.models import Authenticator
+
+    old_key = settings.SECRET_KEY
+    new_key = "new-auth-config-key"
+
+    secret_val = encrypt_with_key("my-oidc-secret", old_key)
+    authenticator = Authenticator.objects.create(
+        name="Test OIDC Rotator",
+        enabled=True,
+        create_objects=True,
+        type="ansible_base.authentication.authenticator_plugins.oidc",
+        configuration={
+            "ACCESS_TOKEN_URL": "https://idp.example.com/token",
+            "AUTHORIZATION_URL": "https://idp.example.com/auth",
+            "KEY": "my-client-id",
+            "SECRET": secret_val,
+        },
+    )
+
+    out = io.StringIO()
+    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
+        call_command("rotate_secret_key", use_custom_key=True, stdout=out)
+
+    assert "re-encrypted" in out.getvalue()
+
+    authenticator.refresh_from_db()
+    new_secret = authenticator.configuration.get("SECRET", "")
+    assert ENCRYPTED_STRING in new_secret
+    assert new_secret != secret_val
+    assert decrypt_with_key(new_secret, new_key) == "my-oidc-secret"
+    assert authenticator.configuration["KEY"] == "my-client-id"
+
+
+# ── Graceful skip on decryption failure ──────────────────────────────────
+
+
+@pytest.mark.django_db(transaction=True)
+def test_undecryptable_row_is_skipped(settings):
+    """Rows encrypted with a different key are skipped without aborting."""
+    from aap_gateway_api.models import Preference
+
+    old_key = settings.SECRET_KEY
+    new_key = "new-skip-test-key"
+    wrong_key = "completely-different-key"
+
+    good_cipher = encrypt_with_key("good-value", old_key)
+    bad_cipher = encrypt_with_key("bad-value", wrong_key)
+
+    Preference.objects.update_or_create(section="test_skip", name="good_pref", defaults={"raw_value": good_cipher})
+    Preference.objects.update_or_create(section="test_skip", name="bad_pref", defaults={"raw_value": bad_cipher})
+
+    out = io.StringIO()
+    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
+        call_command("rotate_secret_key", use_custom_key=True, stdout=out)
+
+    assert "re-encrypted" in out.getvalue()
+
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT raw_value FROM aap_gateway_api_preference WHERE section = %s AND name = %s",
+            ["test_skip", "bad_pref"],
+        )
+        bad_after = cur.fetchone()[0]
+    assert bad_after == bad_cipher
+
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT raw_value FROM aap_gateway_api_preference WHERE section = %s AND name = %s",
+            ["test_skip", "good_pref"],
+        )
+        good_after = cur.fetchone()[0]
+    assert good_after != good_cipher
+    assert decrypt_with_key(good_after, new_key) == "good-value"
+
+
 # ── Auto-generated key ──────────────────────────────────────────────────
 
 
@@ -151,7 +230,9 @@ def test_auto_generated_key_printed_once(settings):
     output = out.getvalue()
     lines = [ln for ln in output.splitlines() if ln.strip()]
     assert any("re-encrypted" in ln for ln in lines)
-    key_line = lines[-1]
+    key_candidates = [ln for ln in lines if not re.search(r"re-encrypted|cache", ln, re.IGNORECASE)]
+    assert len(key_candidates) == 1, f"Expected exactly one key line, got: {key_candidates}"
+    key_line = key_candidates[0]
     assert len(key_line) > 10
     assert output.count(key_line) == 1
 
@@ -159,13 +240,21 @@ def test_auto_generated_key_printed_once(settings):
 # ── Cache flush ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
-def test_cache_flush_message(settings):
-    """The command reports cache flushing in both dry-run and normal modes."""
-    settings.SECRET_KEY = "test-cache-flush-key"
+@pytest.mark.django_db(transaction=True)
+def test_cache_flush_message_dry_run(settings):
+    """--dry-run reports that the preference cache would be flushed."""
     out = io.StringIO()
-    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": "new-key-cache"}):
+    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": "new-key-cache-dry"}):
         call_command("rotate_secret_key", use_custom_key=True, dry_run=True, stdout=out)
+    assert "cache" in out.getvalue().lower()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_cache_flush_message_normal(settings):
+    """Normal mode reports that the preference cache was flushed."""
+    out = io.StringIO()
+    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": "new-key-cache-normal"}):
+        call_command("rotate_secret_key", use_custom_key=True, stdout=out)
     assert "cache" in out.getvalue().lower()
 
 
@@ -173,24 +262,35 @@ def test_cache_flush_message(settings):
 
 
 class TestEncryptionHelpers:
+    """Unit tests for the gateway-local encryption helpers."""
+
     def test_round_trip(self):
+        """Encrypt then decrypt returns the original value."""
         key = "my-custom-key-material"
         encrypted = encrypt_with_key("hello-world", key)
         assert ENCRYPTED_STRING in encrypted
         assert decrypt_with_key(encrypted, key) == "hello-world"
 
     def test_different_keys_produce_different_ciphertext(self):
+        """Same plaintext encrypted with different keys yields different ciphertext."""
         val = "same-value"
         enc1 = encrypt_with_key(val, "key-one")
         enc2 = encrypt_with_key(val, "key-two")
         assert enc1 != enc2
 
     def test_wrong_key_fails(self):
+        """Decryption with the wrong key raises InvalidToken."""
         encrypted = encrypt_with_key("secret", "correct-key")
         with pytest.raises(InvalidToken):
             decrypt_with_key(encrypted, "wrong-key")
 
+    def test_decrypt_rejects_non_encrypted_input(self):
+        """decrypt_with_key raises ValueError for input without the encrypted marker."""
+        with pytest.raises(ValueError, match="does not start with"):
+            decrypt_with_key("plain-text-value", "any-key")
+
     def test_json_types_preserved(self):
+        """JSON-serialisable types survive an encrypt/decrypt round trip."""
         key = "test-json-key"
         for val in ["string", 42, True, None, {"nested": "dict"}, [1, 2, 3]]:
             encrypted = encrypt_with_key(val, key)

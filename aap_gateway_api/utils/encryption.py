@@ -48,6 +48,8 @@ def encrypt_with_key(value: Any, key_material: str) -> str:
 
 def decrypt_with_key(value: str, key_material: str) -> Any:
     """Decrypt DAB-format ciphertext using *key_material*."""
+    if not value.startswith(ENCRYPTED_MARKER):
+        raise ValueError(f'Value does not start with {ENCRYPTED_MARKER!r}')
     raw = value[len(ENCRYPTED_MARKER) :]
     if raw.startswith('UTF8$'):
         raw = raw[len('UTF8$') :]

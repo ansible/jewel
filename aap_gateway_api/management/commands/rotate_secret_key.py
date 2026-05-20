@@ -34,6 +34,7 @@ from ansible_base.lib.abstract_models.common import AbstractCommonModel
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
@@ -129,7 +130,7 @@ class Command(BaseCommand):
             for field_name in field_names:
                 try:
                     field_obj = model._meta.get_field(field_name)
-                except Exception:
+                except FieldDoesNotExist:
                     logger.warning("Model %s declares encrypted field %r but has no such DB column", model.__name__, field_name)
                     continue
                 total += self._reencrypt_column(model, field_obj.column, dry_run)
@@ -209,7 +210,8 @@ class Command(BaseCommand):
     def _rotate_preferences(self, dry_run: bool) -> int:
         from aap_gateway_api.models import Preference
 
-        select_sql = self._build_preference_select_sql(Preference)
+        first_page_sql = self._build_preference_select_sql(Preference, with_pk_bound=False)
+        next_page_sql = self._build_preference_select_sql(Preference, with_pk_bound=True)
         update_sql = self._build_preference_update_sql(Preference)
         count = 0
         last_pk = None
@@ -217,9 +219,9 @@ class Command(BaseCommand):
         while True:
             with connection.cursor() as cur:
                 if last_pk is None:
-                    cur.execute(select_sql.format(pk_clause=""))
+                    cur.execute(first_page_sql)
                 else:
-                    cur.execute(select_sql.format(pk_clause="AND {pk} > %s ".format(pk=connection.ops.quote_name(Preference._meta.pk.column))), [last_pk])
+                    cur.execute(next_page_sql, [last_pk])
                 rows = cur.fetchall()
             if not rows:
                 break
@@ -240,21 +242,28 @@ class Command(BaseCommand):
         return count
 
     @staticmethod
-    def _build_preference_select_sql(model) -> str:
+    def _build_preference_select_sql(model, *, with_pk_bound: bool) -> str:
         """Build paginated SELECT for preference scanning.
 
-        Returns a format string with a ``{pk_clause}`` placeholder that
-        is filled in at call time (empty for the first page, ``AND pk > %s``
-        for subsequent pages).
+        When *with_pk_bound* is ``True`` the query includes a
+        ``WHERE ... AND pk > %s`` predicate for keyset pagination.
+        The first page is fetched without this predicate so no
+        assumption about the PK type is needed.
 
         Safe from SQL injection: all identifiers originate from Django
         model metadata and are quoted via the database backend.
         """
         qn = connection.ops.quote_name
-        return ("SELECT {pk}, {val} FROM {table} WHERE {val} IS NOT NULL {{pk_clause}}ORDER BY {pk} LIMIT {limit}").format(
-            pk=qn(model._meta.pk.column),
-            val=qn('raw_value'),
-            table=qn(model._meta.db_table),
+        pk = qn(model._meta.pk.column)
+        val = qn('raw_value')
+        table = qn(model._meta.db_table)
+
+        pk_clause = "AND {pk} > %s ".format(pk=pk) if with_pk_bound else ""
+        return "SELECT {pk}, {val} FROM {table} WHERE {val} IS NOT NULL {pk_clause}ORDER BY {pk} LIMIT {limit}".format(
+            pk=pk,
+            val=val,
+            table=table,
+            pk_clause=pk_clause,
             limit=_FETCH_BATCH_SIZE,
         )
 
