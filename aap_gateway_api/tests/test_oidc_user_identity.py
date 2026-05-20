@@ -500,11 +500,13 @@ class TestValidatorUserinfoClaims:
 
     def test_orphaned_org_role_assignments(self, user_factory, organization_factory):
         """RoleUserAssignments pointing to deleted orgs are skipped with a warning."""
+        from aap_gateway_api.models import Organization
+
         user = user_factory('orphan_org_user')
         org = organization_factory('Soon Deleted Org')
         RoleDefinition.objects.managed.org_member.give_permission(user, org)
 
-        org.delete()
+        Organization.objects.filter(pk=org.pk).delete()
 
         validator = GatewayOIDCValidator()
         request = MagicMock()
@@ -517,12 +519,14 @@ class TestValidatorUserinfoClaims:
 
     def test_orphaned_team_role_assignments(self, user_factory, organization_factory, team_factory):
         """RoleUserAssignments pointing to deleted teams are skipped with a warning."""
+        from aap_gateway_api.models import Team
+
         user = user_factory('orphan_team_user')
         org = organization_factory('Org For Orphan Team')
         team = team_factory('Soon Deleted Team', org)
         RoleDefinition.objects.managed.team_member.give_permission(user, team)
 
-        team.delete()
+        Team.objects.filter(pk=team.pk).delete()
 
         validator = GatewayOIDCValidator()
         request = MagicMock()
