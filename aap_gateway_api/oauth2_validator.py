@@ -65,7 +65,11 @@ class GatewayOIDCValidator(OAuth2Validator):
         if not (user and getattr(user, 'is_authenticated', False) and 'roles' in request.scopes):
             return claims
 
-        org_claims, team_claims = self._build_role_claims(user)
+        try:
+            org_claims, team_claims = self._build_role_claims(user)
+        except Exception:
+            logger.exception("Failed to build role claims for user %s", user.pk)
+            org_claims, team_claims = [], []
         claims['aap_organizations'] = org_claims
         claims['aap_teams'] = team_claims
         claims['aap_system_role'] = self._get_system_role(user)
