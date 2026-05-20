@@ -213,8 +213,10 @@ class Command(BaseCommand):
     def _build_authenticator_update_sql() -> str:
         """Build UPDATE for authenticator config re-encryption.
 
-        The ``%s::jsonb`` cast ensures the text parameter is correctly
-        stored in the jsonb column regardless of the database adapter.
+        Uses the PostgreSQL-specific ``::jsonb`` cast to ensure the text
+        parameter is stored correctly in the ``jsonb`` column.  This is
+        not portable to SQLite or MySQL, but the gateway requires
+        PostgreSQL in both production and test environments.
 
         Safe from SQL injection: all identifiers originate from Django
         model metadata and are quoted via the database backend.
