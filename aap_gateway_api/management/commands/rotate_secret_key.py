@@ -148,35 +148,51 @@ class Command(BaseCommand):
             rows = cur.fetchall()
 
         for pk, auth_type, config in rows:
-            if not config:
+            config = self._parse_config(config)
+            if config is None:
                 continue
-            if isinstance(config, str):
-                config = json.loads(config)
-            if not isinstance(config, dict):
-                continue
-            try:
-                plugin = get_authenticator_plugin(auth_type)
-            except ImportError:
-                logger.warning("Cannot load plugin %r for Authenticator pk=%s; skipping", auth_type, pk)
-                continue
-            encrypted_fields = getattr(plugin, 'configuration_encrypted_fields', [])
-            changed = False
-            for field in encrypted_fields:
-                val = config.get(field)
-                if not val or not isinstance(val, str) or ENCRYPTED_STRING not in val:
-                    continue
-                try:
-                    clear = decrypt_with_key(val, self.old_key)
-                except Exception:
-                    logger.warning("Cannot decrypt Authenticator pk=%s field %r with the current SECRET_KEY; skipping", pk, field)
-                    continue
-                config[field] = encrypt_with_key(clear, self.new_key)
-                changed = True
-                total += 1
+            changed, field_count = self._reencrypt_authenticator_fields(pk, auth_type, config)
+            total += field_count
             if changed and not dry_run:
                 with connection.cursor() as ucur:
                     ucur.execute(update_sql, [json.dumps(config), pk])
         return total
+
+    @staticmethod
+    def _parse_config(config) -> dict | None:
+        """Normalise a configuration value to a dict, or ``None`` if unusable."""
+        if not config:
+            return None
+        if isinstance(config, str):
+            config = json.loads(config)
+        return config if isinstance(config, dict) else None
+
+    def _reencrypt_authenticator_fields(self, pk, auth_type: str, config: dict) -> tuple[bool, int]:
+        """Re-encrypt encrypted sub-fields within a single authenticator's configuration.
+
+        Returns ``(changed, field_count)`` where *changed* is ``True``
+        if any field was modified and *field_count* is the number of
+        fields re-encrypted.
+        """
+        try:
+            plugin = get_authenticator_plugin(auth_type)
+        except ImportError:
+            logger.warning("Cannot load plugin %r for Authenticator pk=%s; skipping", auth_type, pk)
+            return False, 0
+        encrypted_fields = getattr(plugin, 'configuration_encrypted_fields', [])
+        changed = False
+        count = 0
+        for field in encrypted_fields:
+            val = config.get(field)
+            if not val or not isinstance(val, str) or ENCRYPTED_STRING not in val:
+                continue
+            clear = self._try_decrypt(val, label=f"Authenticator pk={pk} field {field!r}")
+            if clear is None:
+                continue
+            config[field] = encrypt_with_key(clear, self.new_key)
+            changed = True
+            count += 1
+        return changed, count
 
     @staticmethod
     def _build_authenticator_select_sql() -> str:
@@ -218,33 +234,7 @@ class Command(BaseCommand):
         first_page_sql = self._build_preference_select_sql(Preference, with_pk_bound=False)
         next_page_sql = self._build_preference_select_sql(Preference, with_pk_bound=True)
         update_sql = self._build_preference_update_sql(Preference)
-        count = 0
-        last_pk = None
-
-        while True:
-            with connection.cursor() as cur:
-                if last_pk is None:
-                    cur.execute(first_page_sql)
-                else:
-                    cur.execute(next_page_sql, [last_pk])
-                rows = cur.fetchall()
-            if not rows:
-                break
-            last_pk = rows[-1][0]
-            for pk, raw in rows:
-                if not raw or ENCRYPTED_STRING not in str(raw):
-                    continue
-                try:
-                    clear = decrypt_with_key(raw, self.old_key)
-                except Exception:
-                    logger.warning("Cannot decrypt Preference pk=%s with the current SECRET_KEY; skipping", pk)
-                    continue
-                new_val = encrypt_with_key(clear, self.new_key)
-                if not dry_run:
-                    with connection.cursor() as ucur:
-                        ucur.execute(update_sql, [new_val, pk])
-                count += 1
-        return count
+        return self._paginated_reencrypt(first_page_sql, next_page_sql, update_sql, dry_run, label="Preference")
 
     @staticmethod
     def _build_preference_select_sql(model, *, with_pk_bound: bool) -> str:
@@ -302,7 +292,61 @@ class Command(BaseCommand):
         except Exception:
             logger.warning("Could not clear preference cache; manual cache flush may be needed.", exc_info=True)
 
-    # ── Shared column re-encryption ──────────────────────────────────────
+    # ── Shared helpers ──────────────────────────────────────────────────
+
+    def _try_decrypt(self, value: str, *, label: str):
+        """Attempt to decrypt *value* with the old key, returning the cleartext or ``None``."""
+        try:
+            return decrypt_with_key(value, self.old_key)
+        except Exception:
+            logger.warning("Cannot decrypt %s with the current SECRET_KEY; skipping", label)
+            return None
+
+    def _paginated_reencrypt(
+        self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str
+    ) -> int:
+        """Paginate through rows and re-encrypt values.
+
+        Used by both ``_reencrypt_column`` and ``_rotate_preferences``
+        to avoid duplicating the pagination and per-row re-encryption
+        logic.
+        """
+        count = 0
+        last_pk = None
+        while True:
+            with connection.cursor() as cur:
+                if last_pk is None:
+                    cur.execute(first_page_sql)
+                else:
+                    cur.execute(next_page_sql, [last_pk])
+                rows = cur.fetchall()
+            if not rows:
+                break
+            last_pk = rows[-1][0]
+            for pk, raw in rows:
+                new_val = self._reencrypt_value(raw, label=f"{label} pk={pk}")
+                if new_val is None:
+                    continue
+                if not dry_run:
+                    with connection.cursor() as ucur:
+                        ucur.execute(update_sql, [new_val, pk])
+                count += 1
+        return count
+
+    def _reencrypt_value(self, raw, *, label: str) -> str | None:
+        """Decrypt a single value with the old key and re-encrypt with the new key.
+
+        Returns the new ciphertext, or ``None`` if the value is not
+        encrypted or cannot be decrypted.
+        """
+        if not raw or ENCRYPTED_STRING not in str(raw):
+            return None
+        clear = self._try_decrypt(raw, label=label)
+        if clear is None:
+            return None
+        return encrypt_with_key(clear, self.new_key)
+
+    # ── SQL builders ─────────────────────────────────────────────────────
 
     @staticmethod
     def _build_column_select_sql(model, column_name, *, with_pk_bound: bool) -> str:
@@ -348,29 +392,5 @@ class Command(BaseCommand):
         first_page_sql = self._build_column_select_sql(model, column_name, with_pk_bound=False)
         next_page_sql = self._build_column_select_sql(model, column_name, with_pk_bound=True)
         update_sql = self._build_column_update_sql(model, column_name)
-        count = 0
-        last_pk = None
-        while True:
-            with connection.cursor() as cur:
-                if last_pk is None:
-                    cur.execute(first_page_sql)
-                else:
-                    cur.execute(next_page_sql, [last_pk])
-                rows = cur.fetchall()
-            if not rows:
-                break
-            last_pk = rows[-1][0]
-            for pk, raw in rows:
-                if not raw or ENCRYPTED_STRING not in str(raw):
-                    continue
-                try:
-                    clear = decrypt_with_key(raw, self.old_key)
-                except Exception:
-                    logger.warning("Cannot decrypt %s.%s pk=%s with the current SECRET_KEY; skipping", model.__name__, column_name, pk)
-                    continue
-                new_val = encrypt_with_key(clear, self.new_key)
-                if not dry_run:
-                    with connection.cursor() as ucur:
-                        ucur.execute(update_sql, [new_val, pk])
-                count += 1
-        return count
+        label = f"{model.__name__}.{column_name}"
+        return self._paginated_reencrypt(first_page_sql, next_page_sql, update_sql, dry_run, label=label)
