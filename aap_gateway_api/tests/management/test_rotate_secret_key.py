@@ -141,6 +141,8 @@ def test_preference_rotation(settings):
 @pytest.mark.django_db(transaction=True)
 def test_authenticator_config_rotation(settings):
     """Authenticator.configuration encrypted sub-fields are re-encrypted."""
+    import json
+
     from ansible_base.authentication.models import Authenticator
 
     old_key = settings.SECRET_KEY
@@ -166,12 +168,24 @@ def test_authenticator_config_rotation(settings):
 
     assert "re-encrypted" in out.getvalue()
 
-    authenticator.refresh_from_db()
-    new_secret = authenticator.configuration.get("SECRET", "")
+    qn = connection.ops.quote_name
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT {config} FROM {table} WHERE {pk} = %s".format(
+                config=qn("configuration"),
+                table=qn(Authenticator._meta.db_table),
+                pk=qn(Authenticator._meta.pk.column),
+            ),
+            [authenticator.pk],
+        )
+        raw_config = cur.fetchone()[0]
+
+    config = json.loads(raw_config) if isinstance(raw_config, str) else raw_config
+    new_secret = config["SECRET"]
     assert ENCRYPTED_STRING in new_secret
     assert new_secret != secret_val
     assert decrypt_with_key(new_secret, new_key) == "my-oidc-secret"
-    assert authenticator.configuration["KEY"] == "my-client-id"
+    assert config["KEY"] == "my-client-id"
 
 
 # ── Graceful skip on decryption failure ──────────────────────────────────
@@ -180,8 +194,6 @@ def test_authenticator_config_rotation(settings):
 @pytest.mark.django_db(transaction=True)
 def test_undecryptable_row_is_skipped(settings):
     """Rows encrypted with a different key are skipped without aborting."""
-    from aap_gateway_api.models import Preference
-
     old_key = settings.SECRET_KEY
     new_key = "new-skip-test-key"
     wrong_key = "completely-different-key"
@@ -189,8 +201,17 @@ def test_undecryptable_row_is_skipped(settings):
     good_cipher = encrypt_with_key("good-value", old_key)
     bad_cipher = encrypt_with_key("bad-value", wrong_key)
 
-    Preference.objects.update_or_create(section="test_skip", name="good_pref", defaults={"raw_value": good_cipher})
-    Preference.objects.update_or_create(section="test_skip", name="bad_pref", defaults={"raw_value": bad_cipher})
+    with connection.cursor() as cur:
+        cur.execute(
+            "INSERT INTO aap_gateway_api_preference (section, name, raw_value) VALUES (%s, %s, %s)"
+            " ON CONFLICT (section, name) DO UPDATE SET raw_value = EXCLUDED.raw_value",
+            ["test_skip", "good_pref", good_cipher],
+        )
+        cur.execute(
+            "INSERT INTO aap_gateway_api_preference (section, name, raw_value) VALUES (%s, %s, %s)"
+            " ON CONFLICT (section, name) DO UPDATE SET raw_value = EXCLUDED.raw_value",
+            ["test_skip", "bad_pref", bad_cipher],
+        )
 
     out = io.StringIO()
     with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
