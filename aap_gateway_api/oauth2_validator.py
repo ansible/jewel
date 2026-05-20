@@ -62,71 +62,86 @@ class GatewayOIDCValidator(OAuth2Validator):
         claims = super().get_userinfo_claims(request)
         user = request.user
 
-        if user and getattr(user, 'is_authenticated', False) and 'roles' in request.scopes:
-            from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+        if not (user and getattr(user, 'is_authenticated', False) and 'roles' in request.scopes):
+            return claims
 
-            from aap_gateway_api.models import Organization, Team
-
-            expected_names = ['Organization Admin', 'Organization Member', 'Team Admin', 'Team Member']
-            role_defs = {rd.name: rd for rd in RoleDefinition.objects.filter(name__in=expected_names)}
-
-            missing = set(expected_names) - role_defs.keys()
-            if missing:
-                logger.error("OIDC role claims unavailable: missing RoleDefinition(s): %s", ', '.join(sorted(missing)))
-                claims['aap_organizations'] = []
-                claims['aap_teams'] = []
-            else:
-                org_admin_id = role_defs['Organization Admin'].id
-                org_member_id = role_defs['Organization Member'].id
-                team_admin_id = role_defs['Team Admin'].id
-                team_member_id = role_defs['Team Member'].id
-
-                org_roles = {}
-                for obj_id, rd_id in RoleUserAssignment.objects.filter(
-                    user=user,
-                    role_definition_id__in=[org_admin_id, org_member_id],
-                ).values_list('object_id', 'role_definition_id'):
-                    org_roles.setdefault(obj_id, set())
-                    org_roles[obj_id].add('admin' if rd_id == org_admin_id else 'member')
-
-                orgs_by_pk = {str(org.pk): org for org in Organization.objects.filter(pk__in=org_roles.keys())}
-                orphaned_orgs = set(org_roles.keys()) - set(orgs_by_pk.keys())
-                if orphaned_orgs:
-                    logger.warning("User %s has RoleUserAssignment(s) for non-existent Organization(s): %s", user.pk, orphaned_orgs)
-                claims['aap_organizations'] = sorted(
-                    [{'name': orgs_by_pk[obj_id].name, 'roles': sorted(roles)} for obj_id, roles in org_roles.items() if obj_id in orgs_by_pk],
-                    key=lambda o: o['name'],
-                )
-
-                team_roles = {}
-                for obj_id, rd_id in RoleUserAssignment.objects.filter(
-                    user=user,
-                    role_definition_id__in=[team_admin_id, team_member_id],
-                ).values_list('object_id', 'role_definition_id'):
-                    team_roles.setdefault(obj_id, set())
-                    team_roles[obj_id].add('admin' if rd_id == team_admin_id else 'member')
-
-                teams_by_pk = {str(t.pk): t for t in Team.objects.filter(pk__in=team_roles.keys()).select_related('organization')}
-                orphaned_teams = set(team_roles.keys()) - set(teams_by_pk.keys())
-                if orphaned_teams:
-                    logger.warning("User %s has RoleUserAssignment(s) for non-existent Team(s): %s", user.pk, orphaned_teams)
-                claims['aap_teams'] = sorted(
-                    [
-                        {'name': teams_by_pk[obj_id].name, 'organization': teams_by_pk[obj_id].organization.name, 'roles': sorted(roles)}
-                        for obj_id, roles in team_roles.items()
-                        if obj_id in teams_by_pk
-                    ],
-                    key=lambda t: (t['organization'], t['name']),
-                )
-
-            if user.is_superuser:
-                claims['aap_system_role'] = 'system_administrator'
-            elif getattr(user, 'is_platform_auditor', False):
-                claims['aap_system_role'] = 'system_auditor'
-            else:
-                claims['aap_system_role'] = 'normal_user'
+        try:
+            org_claims, team_claims = self._build_role_claims(user)
+        except Exception:
+            logger.exception("Failed to build role claims for user %s", user.pk)
+            org_claims, team_claims = [], []
+        claims['aap_organizations'] = org_claims
+        claims['aap_teams'] = team_claims
+        claims['aap_system_role'] = self._get_system_role(user)
 
         return claims
+
+    @staticmethod
+    def _get_system_role(user):
+        if user.is_superuser:
+            return 'system_administrator'
+        if getattr(user, 'is_platform_auditor', False):
+            return 'system_auditor'
+        return 'normal_user'
+
+    @staticmethod
+    def _build_role_claims(user):
+        from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+
+        from aap_gateway_api.models import Organization, Team
+
+        expected_names = ['Organization Admin', 'Organization Member', 'Team Admin', 'Team Member']
+        role_defs = {rd.name: rd for rd in RoleDefinition.objects.filter(name__in=expected_names)}
+
+        missing = set(expected_names) - role_defs.keys()
+        if missing:
+            logger.error("OIDC role claims unavailable: missing RoleDefinition(s): %s", ', '.join(sorted(missing)))
+            return [], []
+
+        org_admin_id = role_defs['Organization Admin'].id
+        org_member_id = role_defs['Organization Member'].id
+        team_admin_id = role_defs['Team Admin'].id
+        team_member_id = role_defs['Team Member'].id
+
+        org_roles = {}
+        for obj_id, rd_id in RoleUserAssignment.objects.filter(
+            user=user,
+            role_definition_id__in=[org_admin_id, org_member_id],
+        ).values_list('object_id', 'role_definition_id'):
+            org_roles.setdefault(obj_id, set())
+            org_roles[obj_id].add('admin' if rd_id == org_admin_id else 'member')
+
+        orgs_by_pk = {str(org.pk): org for org in Organization.objects.filter(pk__in=org_roles.keys())}
+        orphaned_orgs = set(org_roles.keys()) - set(orgs_by_pk.keys())
+        if orphaned_orgs:
+            logger.warning("User %s has RoleUserAssignment(s) for non-existent Organization(s): %s", user.pk, orphaned_orgs)
+        org_claims = sorted(
+            [{'name': orgs_by_pk[obj_id].name, 'roles': sorted(roles)} for obj_id, roles in org_roles.items() if obj_id in orgs_by_pk],
+            key=lambda o: o['name'],
+        )
+
+        team_roles = {}
+        for obj_id, rd_id in RoleUserAssignment.objects.filter(
+            user=user,
+            role_definition_id__in=[team_admin_id, team_member_id],
+        ).values_list('object_id', 'role_definition_id'):
+            team_roles.setdefault(obj_id, set())
+            team_roles[obj_id].add('admin' if rd_id == team_admin_id else 'member')
+
+        teams_by_pk = {str(t.pk): t for t in Team.objects.filter(pk__in=team_roles.keys()).select_related('organization')}
+        orphaned_teams = set(team_roles.keys()) - set(teams_by_pk.keys())
+        if orphaned_teams:
+            logger.warning("User %s has RoleUserAssignment(s) for non-existent Team(s): %s", user.pk, orphaned_teams)
+        team_claims = sorted(
+            [
+                {'name': teams_by_pk[obj_id].name, 'organization': teams_by_pk[obj_id].organization.name, 'roles': sorted(roles)}
+                for obj_id, roles in team_roles.items()
+                if obj_id in teams_by_pk
+            ],
+            key=lambda t: (t['organization'], t['name']),
+        )
+
+        return org_claims, team_claims
 
     def get_discovery_claims(self, request):
         """Advertise all supported claims in OIDC discovery."""
