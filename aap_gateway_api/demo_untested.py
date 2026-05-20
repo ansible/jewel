@@ -1,3 +1,4 @@
+# Untested demo module for Codecov testing
 def process_data(items):
     results = []
     for item in items:
