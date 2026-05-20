@@ -145,10 +145,8 @@ def test_authenticator_config_rotation(settings):
 
     from ansible_base.authentication.models import Authenticator
 
-    old_key = settings.SECRET_KEY
     new_key = "new-auth-config-key"
 
-    secret_val = encrypt_with_key("my-oidc-secret", old_key)
     authenticator = Authenticator.objects.create(
         name="Test OIDC Rotator",
         enabled=True,
@@ -158,9 +156,23 @@ def test_authenticator_config_rotation(settings):
             "ACCESS_TOKEN_URL": "https://idp.example.com/token",
             "AUTHORIZATION_URL": "https://idp.example.com/auth",
             "KEY": "my-client-id",
-            "SECRET": secret_val,
+            "SECRET": "my-oidc-secret",
         },
     )
+
+    qn = connection.ops.quote_name
+    config_sql = "SELECT {config} FROM {table} WHERE {pk} = %s".format(
+        config=qn("configuration"),
+        table=qn(Authenticator._meta.db_table),
+        pk=qn(Authenticator._meta.pk.column),
+    )
+
+    with connection.cursor() as cur:
+        cur.execute(config_sql, [authenticator.pk])
+        raw_before = cur.fetchone()[0]
+    before = json.loads(raw_before) if isinstance(raw_before, str) else raw_before
+    old_secret = before["SECRET"]
+    assert ENCRYPTED_STRING in old_secret
 
     out = io.StringIO()
     with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
@@ -168,24 +180,15 @@ def test_authenticator_config_rotation(settings):
 
     assert "re-encrypted" in out.getvalue()
 
-    qn = connection.ops.quote_name
     with connection.cursor() as cur:
-        cur.execute(
-            "SELECT {config} FROM {table} WHERE {pk} = %s".format(
-                config=qn("configuration"),
-                table=qn(Authenticator._meta.db_table),
-                pk=qn(Authenticator._meta.pk.column),
-            ),
-            [authenticator.pk],
-        )
-        raw_config = cur.fetchone()[0]
-
-    config = json.loads(raw_config) if isinstance(raw_config, str) else raw_config
-    new_secret = config["SECRET"]
+        cur.execute(config_sql, [authenticator.pk])
+        raw_after = cur.fetchone()[0]
+    after = json.loads(raw_after) if isinstance(raw_after, str) else raw_after
+    new_secret = after["SECRET"]
     assert ENCRYPTED_STRING in new_secret
-    assert new_secret != secret_val
+    assert new_secret != old_secret
     assert decrypt_with_key(new_secret, new_key) == "my-oidc-secret"
-    assert config["KEY"] == "my-client-id"
+    assert after["KEY"] == "my-client-id"
 
 
 # ── Graceful skip on decryption failure ──────────────────────────────────
