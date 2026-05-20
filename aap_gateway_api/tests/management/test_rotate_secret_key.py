@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import re
 from unittest.mock import patch
@@ -314,11 +315,12 @@ def test_rotate_encrypted_fields_skips_missing_field(settings, caplog):
     cmd.new_key = "test-field-not-exist-key"
     cmd._skipped_count = 0
 
-    with patch(
-        "aap_gateway_api.management.commands.rotate_secret_key._iter_models_with_encrypted_fields",
-        return_value=[(ServiceCluster, ["nonexistent_field_xyz"])],
-    ):
-        total = cmd._rotate_encrypted_fields(dry_run=False)
+    with caplog.at_level(logging.WARNING, logger="aap.gateway.management.rotate_secret_key"):
+        with patch(
+            "aap_gateway_api.management.commands.rotate_secret_key._iter_models_with_encrypted_fields",
+            return_value=[(ServiceCluster, ["nonexistent_field_xyz"])],
+        ):
+            total = cmd._rotate_encrypted_fields(dry_run=False)
 
     assert total == 0
     assert "nonexistent_field_xyz" in caplog.text
@@ -331,9 +333,10 @@ def test_flush_preference_cache_failure_is_graceful(settings, caplog):
 
     cmd = Command()
 
-    with patch("aap_gateway_api.preferences.gateway_preference_registry") as mock_registry:
-        mock_registry.manager.side_effect = RuntimeError("cache unavailable")
-        cmd._flush_preference_cache(dry_run=False)
+    with caplog.at_level(logging.WARNING, logger="aap.gateway.management.rotate_secret_key"):
+        with patch("aap_gateway_api.preferences.gateway_preference_registry") as mock_registry:
+            mock_registry.manager.side_effect = RuntimeError("cache unavailable")
+            cmd._flush_preference_cache(dry_run=False)
 
     assert "Could not clear preference cache" in caplog.text
 
