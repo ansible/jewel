@@ -217,10 +217,15 @@ def test_undecryptable_row_is_skipped(settings):
         )
 
     out = io.StringIO()
+    err = io.StringIO()
     with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
-        call_command("rotate_secret_key", use_custom_key=True, stdout=out)
+        call_command("rotate_secret_key", use_custom_key=True, stdout=out, stderr=err)
 
     assert "re-encrypted" in out.getvalue()
+
+    warning = err.getvalue()
+    assert "could not be decrypted" in warning
+    assert "old SECRET_KEY must be preserved" in warning
 
     with connection.cursor() as cur:
         cur.execute(

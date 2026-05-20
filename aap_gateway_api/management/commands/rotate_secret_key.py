@@ -32,6 +32,7 @@ from ansible_base.authentication.authenticator_plugins.utils import get_authenti
 from ansible_base.authentication.models import Authenticator
 from ansible_base.lib.abstract_models.common import AbstractCommonModel
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from cryptography.fernet import InvalidToken
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
@@ -105,6 +106,8 @@ class Command(BaseCommand):
         if self.new_key == self.old_key:
             raise CommandError("New encryption key is identical to the current SECRET_KEY; rotation aborted.")
 
+        self._skipped_count = 0
+
         total = 0
         total += self._rotate_encrypted_fields(dry_run)
         total += self._rotate_authenticator_configs(dry_run)
@@ -118,6 +121,15 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f"{total} value(s) re-encrypted.")
             self.stdout.write("Preference cache flushed.")
+
+        if self._skipped_count > 0:
+            self.stderr.write(
+                self.style.WARNING(
+                    f"WARNING: {self._skipped_count} value(s) could not be decrypted "
+                    f"and were NOT re-encrypted. The old SECRET_KEY must be preserved "
+                    f"for these rows. See log for details."
+                )
+            )
 
         if not dry_run and not use_custom_key:
             self.stdout.write(self.new_key)
@@ -164,7 +176,10 @@ class Command(BaseCommand):
         if not config:
             return None
         if isinstance(config, str):
-            config = json.loads(config)
+            try:
+                config = json.loads(config)
+            except json.JSONDecodeError:
+                return None
         return config if isinstance(config, dict) else None
 
     def _reencrypt_authenticator_fields(self, pk, auth_type: str, config: dict) -> tuple[bool, int]:
@@ -176,7 +191,7 @@ class Command(BaseCommand):
         """
         try:
             plugin = get_authenticator_plugin(auth_type)
-        except ImportError:
+        except Exception:
             logger.warning("Cannot load plugin %r for Authenticator pk=%s; skipping", auth_type, pk)
             return False, 0
         encrypted_fields = getattr(plugin, 'configuration_encrypted_fields', [])
@@ -297,11 +312,18 @@ class Command(BaseCommand):
     # ── Shared helpers ──────────────────────────────────────────────────
 
     def _try_decrypt(self, value: str, *, label: str):
-        """Attempt to decrypt *value* with the old key, returning the cleartext or ``None``."""
+        """Attempt to decrypt *value* with the old key, returning the cleartext or ``None``.
+
+        Only catches ``InvalidToken`` (wrong key) and ``ValueError``
+        (malformed ciphertext format).  Any other exception is a
+        programming error and is allowed to propagate, rolling back the
+        ``@transaction.atomic`` block.
+        """
         try:
             return decrypt_with_key(value, self.old_key)
-        except Exception:
+        except (InvalidToken, ValueError):
             logger.warning("Cannot decrypt %s with the current SECRET_KEY; skipping", label)
+            self._skipped_count += 1
             return None
 
     def _paginated_reencrypt(self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str) -> int:
