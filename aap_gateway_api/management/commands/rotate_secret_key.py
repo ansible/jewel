@@ -302,9 +302,7 @@ class Command(BaseCommand):
             logger.warning("Cannot decrypt %s with the current SECRET_KEY; skipping", label)
             return None
 
-    def _paginated_reencrypt(
-        self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str
-    ) -> int:
+    def _paginated_reencrypt(self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str) -> int:
         """Paginate through rows and re-encrypt values.
 
         Used by both ``_reencrypt_column`` and ``_rotate_preferences``
