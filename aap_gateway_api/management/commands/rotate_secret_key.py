@@ -72,7 +72,12 @@ class Command(BaseCommand):
     that a failure at any point rolls back all changes automatically.
     """
 
-    help = "Re-encrypt all gateway database secrets after rotating SECRET_KEY. Covers encrypted model fields, Authenticator config, and Preferences."
+    help = (
+        "Re-encrypt all gateway database secrets after rotating SECRET_KEY. "
+        "Covers encrypted model fields, Authenticator config, and Preferences. "
+        "Workflow: stop traffic, run this command, update the deployment secret "
+        "with the printed key, then restart services."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(

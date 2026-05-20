@@ -287,6 +287,57 @@ def test_cache_flush_message_normal(settings):
     assert "cache" in out.getvalue().lower()
 
 
+# ── Defensive path coverage ──────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_parse_config_malformed_json():
+    """_parse_config returns None for malformed JSON strings."""
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+
+    assert Command._parse_config("not-valid-json{") is None
+    assert Command._parse_config("") is None
+    assert Command._parse_config(None) is None
+    assert Command._parse_config(42) is None
+    assert Command._parse_config({"key": "val"}) == {"key": "val"}
+    assert Command._parse_config('{"key": "val"}') == {"key": "val"}
+
+
+@pytest.mark.django_db
+def test_rotate_encrypted_fields_skips_missing_field(settings, caplog):
+    """Fields listed in encrypted_fields but missing from the model are skipped."""
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+    from aap_gateway_api.models import ServiceCluster
+
+    cmd = Command()
+    cmd.old_key = settings.SECRET_KEY
+    cmd.new_key = "test-field-not-exist-key"
+    cmd._skipped_count = 0
+
+    with patch(
+        "aap_gateway_api.management.commands.rotate_secret_key._iter_models_with_encrypted_fields",
+        return_value=[(ServiceCluster, ["nonexistent_field_xyz"])],
+    ):
+        total = cmd._rotate_encrypted_fields(dry_run=False)
+
+    assert total == 0
+    assert "nonexistent_field_xyz" in caplog.text
+
+
+@pytest.mark.django_db(transaction=True)
+def test_flush_preference_cache_failure_is_graceful(settings, caplog):
+    """_flush_preference_cache logs a warning instead of crashing when the cache is unavailable."""
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+
+    cmd = Command()
+
+    with patch("aap_gateway_api.preferences.gateway_preference_registry") as mock_registry:
+        mock_registry.manager.side_effect = RuntimeError("cache unavailable")
+        cmd._flush_preference_cache(dry_run=False)
+
+    assert "Could not clear preference cache" in caplog.text
+
+
 # ── Encryption helper unit tests ─────────────────────────────────────────
 
 
