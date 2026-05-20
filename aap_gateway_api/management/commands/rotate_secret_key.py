@@ -23,7 +23,6 @@ Usage::
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import os
 from typing import Iterator
@@ -141,7 +140,6 @@ class Command(BaseCommand):
     def _rotate_authenticator_configs(self, dry_run: bool) -> int:
         total = 0
         select_sql = self._build_authenticator_select_sql()
-        update_sql = self._build_authenticator_update_sql()
 
         with connection.cursor() as cur:
             cur.execute(select_sql)
@@ -172,8 +170,7 @@ class Command(BaseCommand):
                         changed = True
                         total += 1
                     if changed and not dry_run:
-                        with connection.cursor() as ucur:
-                            ucur.execute(update_sql, [json.dumps(config), pk])
+                        Authenticator.objects.filter(pk=pk).update(configuration=config)
         return total
 
     @staticmethod
@@ -189,20 +186,6 @@ class Command(BaseCommand):
             type=qn(Authenticator._meta.get_field('type').column),
             config=qn(Authenticator._meta.get_field('configuration').column),
             table=qn(Authenticator._meta.db_table),
-        )
-
-    @staticmethod
-    def _build_authenticator_update_sql() -> str:
-        """Build UPDATE for authenticator config re-encryption.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        return "UPDATE {table} SET {config} = %s WHERE {pk} = %s".format(
-            table=qn(Authenticator._meta.db_table),
-            config=qn(Authenticator._meta.get_field('configuration').column),
-            pk=qn(Authenticator._meta.pk.column),
         )
 
     # ── Preference rows (encrypted=True) ─────────────────────────────────
