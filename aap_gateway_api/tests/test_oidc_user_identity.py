@@ -1,6 +1,6 @@
 """Tests for OIDC User Identity PoC (openid and roles scopes)."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
@@ -483,6 +483,55 @@ class TestValidatorUserinfoClaims:
         assert claims['aap_organizations'] == []
         assert claims['aap_teams'] == []
         assert claims['aap_system_role'] == 'normal_user'
+
+    def test_db_error_in_role_claims_still_sets_system_role(self, admin_user):
+        """If _build_role_claims raises, aap_system_role is still set."""
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = admin_user
+        request.scopes = ['openid', 'roles']
+
+        with patch.object(GatewayOIDCValidator, '_build_role_claims', side_effect=RuntimeError('db gone')):
+            claims = validator.get_userinfo_claims(request)
+
+        assert claims['aap_organizations'] == []
+        assert claims['aap_teams'] == []
+        assert claims['aap_system_role'] == 'system_administrator'
+
+    def test_orphaned_org_role_assignments(self, user_factory, organization_factory):
+        """RoleUserAssignments pointing to deleted orgs are skipped with a warning."""
+        user = user_factory('orphan_org_user')
+        org = organization_factory('Soon Deleted Org')
+        RoleDefinition.objects.managed.org_member.give_permission(user, org)
+
+        org.delete()
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        assert all(o.get('name') != 'Soon Deleted Org' for o in claims['aap_organizations'])
+
+    def test_orphaned_team_role_assignments(self, user_factory, organization_factory, team_factory):
+        """RoleUserAssignments pointing to deleted teams are skipped with a warning."""
+        user = user_factory('orphan_team_user')
+        org = organization_factory('Org For Orphan Team')
+        team = team_factory('Soon Deleted Team', org)
+        RoleDefinition.objects.managed.team_member.give_permission(user, team)
+
+        team.delete()
+
+        validator = GatewayOIDCValidator()
+        request = MagicMock()
+        request.user = user
+        request.scopes = ['openid', 'roles']
+
+        claims = validator.get_userinfo_claims(request)
+
+        assert all(t.get('name') != 'Soon Deleted Team' for t in claims['aap_teams'])
 
 
 class TestValidatorDiscoveryClaims:
