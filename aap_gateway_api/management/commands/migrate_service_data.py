@@ -103,6 +103,18 @@ class Command(BaseCommand):
             default=True,
         )
 
+    def _warn_ignored_flags(self, options: dict) -> None:
+        if options.get("api_slug"):
+            self.stderr.write(
+                self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
+            )
+
+        if "merge_teams" in options:
+            self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
+
+        if "merge_organizations" in options:
+            self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
+
     def handle(self, *args, **options) -> None:
         """
         Main entry point for the migrate_service_data command.
@@ -120,17 +132,7 @@ class Command(BaseCommand):
         Raises:
             CommandError: If service doesn't exist, user doesn't exist, or migration fails
         """
-        # Show warnings for ignored flags
-        if options.get("api_slug"):
-            self.stderr.write(
-                self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
-            )
-
-        if "merge_teams" in options:
-            self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
-
-        if "merge_organizations" in options:
-            self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
+        self._warn_ignored_flags(options)
 
         # Force merge options to True as per requirements
         merge_teams = True

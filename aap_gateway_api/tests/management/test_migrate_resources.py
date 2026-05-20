@@ -176,6 +176,21 @@ def test_migrate_with_ignored_flags(
     assert original_org_teams == [conflicting_team.name]
 
 
+def test_warn_ignored_flags_only_when_present(capsys):
+    """Test that _warn_ignored_flags only emits warnings for flags actually present in options."""
+    cmd = MigrateCommand()
+
+    cmd._warn_ignored_flags({"api_slug": "test-slug", "merge_teams": True, "merge_organizations": True})
+    captured = capsys.readouterr()
+    assert "Warning: --api-slug flag is ignored" in captured.err
+    assert "Warning: --merge-teams flag is ignored" in captured.err
+    assert "Warning: --merge-organizations flag is ignored" in captured.err
+
+    cmd._warn_ignored_flags({})
+    captured = capsys.readouterr()
+    assert "Warning:" not in captured.err
+
+
 @pytest.mark.django_db(transaction=True)
 def test_migrate_forced_merge_behavior(
     migration_service,
