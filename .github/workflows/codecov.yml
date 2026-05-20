@@ -75,6 +75,8 @@ jobs:
         uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
         with:
           url: ${{ vars.CODECOV_URL }}
+          slug: ${{ github.repository }}
+          disable_search: true
           files: ${{ steps.coverage.outputs.file_list }}
           flags: unit-tests
           fail_ci_if_error: true
