@@ -23,6 +23,7 @@ Usage::
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import os
 from typing import Iterator
@@ -140,37 +141,41 @@ class Command(BaseCommand):
     def _rotate_authenticator_configs(self, dry_run: bool) -> int:
         total = 0
         select_sql = self._build_authenticator_select_sql()
+        update_sql = self._build_authenticator_update_sql()
 
         with connection.cursor() as cur:
             cur.execute(select_sql)
-            while True:
-                rows = cur.fetchmany(_FETCH_BATCH_SIZE)
-                if not rows:
-                    break
-                for pk, auth_type, config in rows:
-                    if not config or not isinstance(config, dict):
-                        continue
-                    try:
-                        plugin = get_authenticator_plugin(auth_type)
-                    except ImportError:
-                        logger.warning("Cannot load plugin %r for Authenticator pk=%s; skipping", auth_type, pk)
-                        continue
-                    encrypted_fields = getattr(plugin, 'configuration_encrypted_fields', [])
-                    changed = False
-                    for field in encrypted_fields:
-                        val = config.get(field)
-                        if not val or not isinstance(val, str) or ENCRYPTED_STRING not in val:
-                            continue
-                        try:
-                            clear = decrypt_with_key(val, self.old_key)
-                        except Exception:
-                            logger.warning("Cannot decrypt Authenticator pk=%s field %r with the current SECRET_KEY; skipping", pk, field)
-                            continue
-                        config[field] = encrypt_with_key(clear, self.new_key)
-                        changed = True
-                        total += 1
-                    if changed and not dry_run:
-                        Authenticator.objects.filter(pk=pk).update(configuration=config)
+            rows = cur.fetchall()
+
+        for pk, auth_type, config in rows:
+            if not config:
+                continue
+            if isinstance(config, str):
+                config = json.loads(config)
+            if not isinstance(config, dict):
+                continue
+            try:
+                plugin = get_authenticator_plugin(auth_type)
+            except ImportError:
+                logger.warning("Cannot load plugin %r for Authenticator pk=%s; skipping", auth_type, pk)
+                continue
+            encrypted_fields = getattr(plugin, 'configuration_encrypted_fields', [])
+            changed = False
+            for field in encrypted_fields:
+                val = config.get(field)
+                if not val or not isinstance(val, str) or ENCRYPTED_STRING not in val:
+                    continue
+                try:
+                    clear = decrypt_with_key(val, self.old_key)
+                except Exception:
+                    logger.warning("Cannot decrypt Authenticator pk=%s field %r with the current SECRET_KEY; skipping", pk, field)
+                    continue
+                config[field] = encrypt_with_key(clear, self.new_key)
+                changed = True
+                total += 1
+            if changed and not dry_run:
+                with connection.cursor() as ucur:
+                    ucur.execute(update_sql, [json.dumps(config), pk])
         return total
 
     @staticmethod
@@ -186,6 +191,23 @@ class Command(BaseCommand):
             type=qn(Authenticator._meta.get_field('type').column),
             config=qn(Authenticator._meta.get_field('configuration').column),
             table=qn(Authenticator._meta.db_table),
+        )
+
+    @staticmethod
+    def _build_authenticator_update_sql() -> str:
+        """Build UPDATE for authenticator config re-encryption.
+
+        The ``%s::jsonb`` cast ensures the text parameter is correctly
+        stored in the jsonb column regardless of the database adapter.
+
+        Safe from SQL injection: all identifiers originate from Django
+        model metadata and are quoted via the database backend.
+        """
+        qn = connection.ops.quote_name
+        return "UPDATE {table} SET {config} = %s::jsonb WHERE {pk} = %s".format(
+            table=qn(Authenticator._meta.db_table),
+            config=qn(Authenticator._meta.get_field('configuration').column),
+            pk=qn(Authenticator._meta.pk.column),
         )
 
     # ── Preference rows (encrypted=True) ─────────────────────────────────
