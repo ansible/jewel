@@ -55,7 +55,7 @@ def test_organizations_are_updated(
     admin_api_client,
     patched_resource_client,
     patched_all_services_resource_client,
-    ensure_jwt_keys,
+    ensure_jwt_keys,  # Required for side effect: restores JWT keys after DB flush from transaction=True
 ):
     org_name = "My test org"
     url = get_relative_url("organization-list")
@@ -88,7 +88,7 @@ def test_users_are_updated(
     admin_api_client,
     patched_resource_client,
     patched_all_services_resource_client,
-    ensure_jwt_keys,
+    ensure_jwt_keys,  # Required for side effect: restores JWT keys after DB flush from transaction=True
 ):
     username = "my_username"
 
@@ -122,7 +122,7 @@ def test_teams_are_updated(
     admin_api_client,
     patched_resource_client,
     patched_all_services_resource_client,
-    ensure_jwt_keys,
+    ensure_jwt_keys,  # Required for side effect: restores JWT keys after DB flush from transaction=True
 ):
     url = get_relative_url("organization-list")
     response = admin_api_client.post(url, data={"name": "my_org_name"})
