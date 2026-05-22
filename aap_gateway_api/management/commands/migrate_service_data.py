@@ -1232,6 +1232,48 @@ class Command(BaseCommand):
             actor_msg = f"team: {role_assignment.team.name}"
         return f"{actor_msg}, object_id: {role_assignment.object_id}, role_definition_name: {role_assignment.role_definition.name}"
 
+    # Sentinel value for _resolve_content_object to signal "skip this assignment"
+    _SKIP = object()
+
+    def _resolve_role_definition(self, role_definition_name: str) -> Optional[RoleDefinition]:
+        """Look up a RoleDefinition by name. Returns the object or None if not found."""
+        try:
+            return RoleDefinition.objects.get(name=role_definition_name)
+        except RoleDefinition.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
+            return None
+
+    def _resolve_gateway_actor(self, assignment_actor: AssignmentActorType, service_actor_ansible_id: str) -> Optional[Any]:
+        """Look up the gateway actor (user or team) by ansible_id. Returns the content object or None if not found."""
+        try:
+            return Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
+        except Resource.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment")
+            return None
+
+    def _resolve_content_object(self, assignment: Dict[str, Any]) -> Any:
+        """Resolve the content object for a role assignment.
+
+        Returns the resolved content object (which may be None for global assignments),
+        or ``Command._SKIP`` to signal that this assignment should be skipped.
+        """
+        service_content_object_ansible_id = assignment.get('object_ansible_id')
+        service_content_object_id = assignment.get('object_id')
+        content_type = assignment.get('content_type', '')
+
+        try:
+            if service_content_object_ansible_id:
+                return Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
+            elif service_content_object_id:
+                service, model = content_type.split('.')
+                ct = DABContentType.objects.get(service=service, model=model)
+                return RemoteObject(ct, service_content_object_id)
+            else:
+                return None
+        except Resource.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment")
+            return Command._SKIP
+
     @staticmethod
     def _get_role_definitions_to_exclude(service_type: str) -> List[str]:
         # Since the goal is to honor controller's assignments platform roles, we do not want to consider
@@ -1300,50 +1342,26 @@ class Command(BaseCommand):
         for assignment in assignments:
             self.stdout.write(f"Processing assignment in service {service_slug}: {self._format_fetched_assignment_for_logging(assignment_actor, assignment)}")
 
-            # Lookup the role definition, actor, and object
             role_definition_name = assignment.get('role_definition')
             service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
-            service_content_object_ansible_id = assignment.get('object_ansible_id')
-            service_content_object_id = assignment.get('object_id')
-            content_type = assignment.get('content_type', '')
 
             try:
-                try:
-                    gateway_role_definition = RoleDefinition.objects.get(name=role_definition_name)
-                except RoleDefinition.DoesNotExist:
-                    self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
+                gateway_role_definition = self._resolve_role_definition(role_definition_name)
+                if gateway_role_definition is None:
                     continue
-                try:
-                    gateway_actor = Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
-                except Resource.DoesNotExist:
-                    self.stderr.write(
-                        f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment"
-                    )
+
+                gateway_actor = self._resolve_gateway_actor(assignment_actor, service_actor_ansible_id)
+                if gateway_actor is None:
                     continue
-                try:
-                    if service_content_object_ansible_id:
-                        # The assignment references an object with an ansible_id. The object is a resource that exists in gateway
-                        gateway_content_object = Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
-                    elif service_content_object_id:
-                        # The assignment references an object but no ansible_id. The object is remote, not a resource that exists in gateway
-                        # We can grant permission with a RemoteObject, but we need DABContentType, which is uniqued by service, model.
-                        # The 'content_type' field of the assignment encodes this in a string, e.g. 'awx.jobtemplate'
-                        service, model = content_type.split('.')
-                        ct = DABContentType.objects.get(service=service, model=model)
-                        gateway_content_object = RemoteObject(ct, service_content_object_id)
-                    else:
-                        # The assignment references no specific object. That's valid and means this role assignment is global (e.g. not on a team or org)
-                        gateway_content_object = None
-                except Resource.DoesNotExist:
-                    self.stderr.write(
-                        f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment"
-                    )
+
+                gateway_content_object = self._resolve_content_object(assignment)
+                if gateway_content_object is Command._SKIP:
                     continue
             except Exception as e:
                 self.stderr.write(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}")
                 continue
 
-            # Finally, create the assignment by using the give_permission method from gateway's role definition
+            # Create the assignment by using the give_permission method from gateway's role definition
             if gateway_content_object:
                 role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
             else:
