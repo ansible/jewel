@@ -459,15 +459,24 @@ ServiceHierarchy = namedtuple("ServiceHierarchy", ["service_cluster", "service_n
 #   - service_node_<service_type>
 #   - additional_route_<service_type>
 #   - service_api_route_<service_type>
+_service_index_paths = {
+    DefaultServiceType.GATEWAY.value: "",
+    DefaultServiceType.CONTROLLER.value: "/v2/service-index/",
+    DefaultServiceType.HUB.value: "/service-index/",
+    DefaultServiceType.EDA.value: "/v1/service-index/",
+}
+
 for name in [x.value for x in DefaultServiceType]:
 
     def _service_type(name=name):
-        st, _ = ServiceType.objects.get_or_create(name=name)
+        defaults = {"service_index_path": _service_index_paths.get(name)}
+        st, _ = ServiceType.objects.get_or_create(name=name, defaults=defaults)
         yield st
         # Don't delete these
 
     def _service_cluster(name=name):
-        st, _ = ServiceType.objects.get_or_create(name=name)
+        defaults = {"service_index_path": _service_index_paths.get(name)}
+        st, _ = ServiceType.objects.get_or_create(name=name, defaults=defaults)
         cluster = ServiceCluster.objects.create(name=name, service_type=st)
         yield cluster
         cluster.delete()
