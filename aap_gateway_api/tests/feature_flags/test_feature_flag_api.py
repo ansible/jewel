@@ -373,6 +373,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
     'feature_flag',
     [
         ('FEATURE_INDIRECT_NODE_COUNTING_ENABLED'),
+        ('FEATURE_GATEWAY_SIDECAR_CACHE_ENABLED'),
     ],
 )
 def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enabled, feature_flag):
@@ -421,6 +422,31 @@ def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enab
 
     final_verification = admin_api_client.get(url)
     assert final_verification.data['state'] == initial_state, "Flag should return to initial state per test plan FF001"
+
+
+@pytest.mark.django_db
+def test_feature_flag_sidecar_cache_properties(admin_api_client):
+    """
+    AAP-65885: Verify FEATURE_GATEWAY_SIDECAR_CACHE_ENABLED flag properties.
+
+    Acceptance criteria:
+    - Flag exists and is registered
+    - support_level is TECHNOLOGY_PREVIEW
+    - Default value is False
+    - visibility is True (visible in Gateway UI)
+    - toggle_type is run-time
+    """
+    flag_name = "FEATURE_GATEWAY_SIDECAR_CACHE_ENABLED"
+    flag = AAPFlag.objects.get(name=flag_name)
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': flag.pk})
+    response = admin_api_client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['name'] == flag_name
+    assert response.data['support_level'] == 'TECHNOLOGY_PREVIEW'
+    assert response.data['state'] is False
+    assert response.data['visibility'] is True
+    assert response.data['toggle_type'] == 'run-time'
+    assert 'gateway' in response.data['labels']
 
 
 @pytest.mark.parametrize(
