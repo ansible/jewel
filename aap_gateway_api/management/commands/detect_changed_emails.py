@@ -324,7 +324,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  High-risk (changed email + dual auth):        {len(high_risk)}")
         self.stdout.write("")
 
-        if any([non_super, suspicious, high_risk]):
+        if any((non_super, suspicious, high_risk)):
             self.stdout.write("  *** POTENTIAL ISSUES DETECTED - REVIEW FLAGGED ITEMS ABOVE ***")
         else:
             self.stdout.write("  No obvious indicators of email hijacking detected.")
