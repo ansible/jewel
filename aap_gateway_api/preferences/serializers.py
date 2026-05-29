@@ -29,7 +29,7 @@ class JSONSerializer(BaseSerializer):
             except Exception as e:
                 raise cls.exception(f"Unable to convert value {value} from JSON: {e}")
 
-        if type(ret) is str:
+        if isinstance(ret, str):
             ret = JSONString(ret)
             return ret
         return ret
@@ -46,7 +46,7 @@ class CSRFSerializer(JSONSerializer):
     @classmethod
     def to_python(cls, value, **kwargs):
         ret = super().to_python(value, **kwargs)
-        if type(ret) is not list:
+        if not isinstance(ret, list):
             logger.error(f"Got a non-list value type {type(ret)} from {ret}, defaulting to []")
             ret = []
 

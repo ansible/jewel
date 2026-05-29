@@ -148,7 +148,14 @@ class AllServicesClient(GWResourceAPIClient):
         from aap_gateway_api.models import ServiceAPIRoute
 
         responses = {}
-        svc_qs = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
+        # Exclude gateway (not a downstream service) and services without a
+        # service-index endpoint (e.g. metrics) to avoid AttributeError in
+        # get_url_for_service when service_index_path is None or empty.
+        svc_qs = (
+            ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
+            .exclude(service_cluster__service_type__service_index_path__isnull=True)
+            .exclude(service_cluster__service_type__service_index_path='')
+        )
         if self.service_filter:
             svc_qs = svc_qs.filter(**self.service_filter)
 
