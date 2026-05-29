@@ -1,0 +1,17 @@
+# Stub workflow that fires on pull_request_review events.
+# The PR Labels workflow chains off this via workflow_run so it gets
+# a write-capable GITHUB_TOKEN (pull_request_review tokens are
+# read-only for cross-fork PRs).
+name: PR Review Trigger
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: 'echo "Review submitted on PR #${PR_NUMBER}"'
