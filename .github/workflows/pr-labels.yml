@@ -18,7 +18,7 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         id: labeler
         env:
           USERNAME_MAPPING: ${{ secrets.USERNAME_MAPPING }}
@@ -54,7 +54,11 @@ jobs:
                   ({ data: pulls } = await github.rest.pulls.list({
                     owner, repo, state: 'open', per_page: 100,
                   }));
-                  pulls = pulls.filter(p => p.head.ref === headBranch);
+                  const headRepoFullName = headRepo?.full_name;
+                  pulls = pulls.filter(p =>
+                    p.head.ref === headBranch &&
+                    (!headRepoFullName || p.head.repo?.full_name === headRepoFullName)
+                  );
                 }
                 if (pulls.length === 0) {
                   core.info('No open PR found for this workflow run');
@@ -151,11 +155,21 @@ jobs:
 
             // --- Auto-assign author ---
             if (context.payload.action === 'opened' && !pr.assignees.length) {
-              await github.rest.issues.addAssignees({
-                owner, repo, issue_number: prNumber,
-                assignees: [pr.user.login],
-              });
-              core.info(`Assigned ${pr.user.login} to PR`);
+              try {
+                const { status } = await github.request(
+                  'GET /repos/{owner}/{repo}/assignees/{assignee}',
+                  { owner, repo, assignee: pr.user.login }
+                );
+                if (status === 204) {
+                  await github.rest.issues.addAssignees({
+                    owner, repo, issue_number: prNumber,
+                    assignees: [pr.user.login],
+                  });
+                  core.info(`Assigned ${pr.user.login} to PR`);
+                }
+              } catch (e) {
+                core.warning(`Could not auto-assign ${pr.user.login}: ${e.message}`);
+              }
             }
 
             // --- WIP ---
@@ -229,8 +243,8 @@ jobs:
                 cr => cr.name !== 'label'
               );
 
-              const allCompleted = ciChecks.length === 0
-                || ciChecks.every(cr => cr.status === 'completed');
+              const allCompleted = ciChecks.length > 0
+                && ciChecks.every(cr => cr.status === 'completed');
 
               if (allCompleted) {
                 const anyFailed = ciChecks.some(cr =>
@@ -250,6 +264,8 @@ jobs:
                     await addLabel('Ready-for-review');
                   }
                 }
+              } else if (ciChecks.length === 0) {
+                core.info('No CI check runs found — skipping CI labels');
               } else {
                 core.info('CI checks still running — skipping CI labels');
               }
