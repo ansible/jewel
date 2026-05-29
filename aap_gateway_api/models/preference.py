@@ -27,7 +27,7 @@ class Preference(models.BasePreferenceModel, AuditableModel):
         instance = super().from_db(db, field_names, values)
         # We don't want to check the instance.preference.encrypted here because we could have a Fallback
         # A fall back happens when there is a value in DB but not a corresponding register
-        if type(instance.value) is str:
+        if isinstance(instance.value, str):
             was_encrypted = ansible_encryption.is_encrypted_string(instance.value)[0]
             instance.value = ansible_encryption.decrypt_string(instance.value)
             if was_encrypted:

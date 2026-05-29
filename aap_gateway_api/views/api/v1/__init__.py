@@ -73,8 +73,8 @@ class V1RootView(AnsibleBaseView):
         enumerator = EndpointEnumerator()
         endpoints = []
 
-        # we're using 'junk' because '_' is already used as an alias for gettext_lazy
-        for endpoint, junk, junk in enumerator.get_api_endpoints():
+        # we're using '_unused' because '_' is already used as an alias for gettext_lazy
+        for endpoint, _unused, _unused in enumerator.get_api_endpoints():
             if not endpoint.startswith(GW_V1_ROOT_URL):
                 continue
 

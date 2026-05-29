@@ -87,6 +87,39 @@ def test_secret_field_retains_original_value_when_passed_encrypted_marker(admin_
     assert preference_2.value == 'two'
 
 
+@pytest.mark.parametrize(
+    "preference_type, bad_return_value, expected_error",
+    [
+        ("int", "not_an_int", "Must be an integer"),
+        ("string", 999, "Must be a string"),
+    ],
+)
+def test_serialize_validate_rejects_wrong_type_from_to_python(register_preference, preference_type, bad_return_value, expected_error):
+    """_serialize_and_validate_preference_value raises when to_python returns a wrong type."""
+    from unittest.mock import patch
+
+    from aap_gateway_api.preferences import gateway_preference_registry
+
+    default = 0 if preference_type == "int" else "default"
+    register_preference(
+        section="general",
+        preference_name="type_check_pref",
+        default=default,
+        encrypted=False,
+        preference_type=preference_type,
+    )
+
+    serializer = SettingSectionSerializer(category_slug="general")
+    registered_pref = gateway_preference_registry.get("type_check_pref", "general")
+
+    with patch.object(registered_pref.serializer, 'to_python', return_value=bad_return_value):
+        with patch.object(registered_pref, 'validate'):
+            is_valid, parsed_value, err_msg = serializer._serialize_and_validate_preference_value(registered_pref, "bogus")
+
+    assert not is_valid
+    assert expected_error in err_msg
+
+
 def test_json_strings_are_not_double_deserialized(admin_api_client, register_preference):
     """
     Ensure that JSON preferences that are strings have their html form values rendered without being wrapped with json.dumps

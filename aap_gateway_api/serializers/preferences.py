@@ -98,10 +98,10 @@ class SettingSectionSerializer(serializers.Serializer):
 
             # Then, catch the scenarios where the above missed
             if issubclass(registered_preference.__class__, types.IntegerPreference):
-                if type(converted_value) is not int:
+                if not isinstance(converted_value, int):
                     raise SerializationError("Must be an integer")
             if issubclass(registered_preference.__class__, types.StringPreference):
-                if type(converted_value) is not str:
+                if not isinstance(converted_value, str):
                     raise SerializationError("Must be a string")
             # if succeeds
             return True, converted_value, None

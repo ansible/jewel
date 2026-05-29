@@ -19,7 +19,7 @@ class Command(BaseCommand):
         except FileNotFoundError:
             raise CommandError(f"{options['config']} does not exist.")
 
-        if type(config) is not dict:
+        if not isinstance(config, dict):
             raise CommandError(f"{options['config']} is not valid YAML.")
 
         self.stdout.write(f'Creating listener on port {config["proxy"]["api_port"]}')
