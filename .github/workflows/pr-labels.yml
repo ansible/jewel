@@ -1,0 +1,331 @@
+# Assisted-by: Claude Code / Opus 4.6 (Anthropic)
+name: PR Labels
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, ready_for_review, converted_to_draft, edited, reopened, closed]
+  workflow_run:
+    workflows: ["Linting", "Unit Tests", "Sanity", "PR Review Trigger"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        id: labeler
+        env:
+          USERNAME_MAPPING: ${{ secrets.USERNAME_MAPPING }}
+        with:
+          script: |
+            const LABELS = {
+              'Ready-for-review': { color: '0e8a16', description: 'PR is ready for review' },
+              'fix-ci': { color: 'd93f0b', description: 'CI is failing — fix before review' },
+              'blocked': { color: 'b60205', description: 'PR is blocked' },
+              'WIP': { color: 'fbca04', description: 'Work in progress' },
+              'Review-provided': { color: '1d76db', description: 'Review has been submitted' },
+              'Community': { color: '5319e7', description: 'Community contribution' },
+              'Ready-to-merge': { color: '0e8a16', description: 'PR is approved and CI is passing' },
+            };
+
+            const { owner, repo } = context.repo;
+
+            // --- Determine PR number ---
+            let prNumber;
+
+            if (context.eventName === 'workflow_run') {
+              const sourceEvent = context.payload.workflow_run.event;
+              if (!['pull_request', 'pull_request_review'].includes(sourceEvent)) {
+                core.info(`Ignoring workflow_run from ${sourceEvent}`);
+                return;
+              }
+
+              const prs = context.payload.workflow_run.pull_requests;
+              if (prs && prs.length > 0) {
+                prNumber = prs[0].number;
+              } else {
+                const headBranch = context.payload.workflow_run.head_branch;
+                const headRepo = context.payload.workflow_run.head_repository;
+                let { data: pulls } = await github.rest.pulls.list({
+                  owner, repo, state: 'open',
+                  head: `${headRepo.owner.login}:${headBranch}`,
+                });
+                if (pulls.length === 0) {
+                  ({ data: pulls } = await github.rest.pulls.list({
+                    owner, repo, state: 'open', per_page: 100,
+                  }));
+                  const headRepoFullName = headRepo?.full_name;
+                  pulls = pulls.filter(p =>
+                    p.head.ref === headBranch &&
+                    (!headRepoFullName || p.head.repo?.full_name === headRepoFullName)
+                  );
+                }
+                if (pulls.length === 0) {
+                  core.info('No open PR found for this workflow run');
+                  return;
+                }
+                prNumber = pulls[0].number;
+              }
+            } else {
+              prNumber = context.payload.pull_request.number;
+            }
+
+            // --- Fetch fresh PR data ---
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            });
+
+            // --- Merged / closed: remove all managed labels ---
+            if (pr.state !== 'open') {
+              const currentLabels = new Set(pr.labels.map(l => l.name.toLowerCase()));
+              for (const name of Object.keys(LABELS)) {
+                if (currentLabels.has(name.toLowerCase())) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner, repo, issue_number: prNumber, name,
+                    });
+                    core.info(`Removed label: ${name}`);
+                  } catch (e) {
+                    if (e.status !== 404) throw e;
+                  }
+                }
+              }
+              core.info('PR closed/merged — removed all managed labels');
+              return;
+            }
+
+            // --- Ensure labels exist ---
+            for (const [name, config] of Object.entries(LABELS)) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (e) {
+                if (e.status === 404) {
+                  try {
+                    await github.rest.issues.createLabel({
+                      owner, repo, name,
+                      color: config.color,
+                      description: config.description,
+                    });
+                    core.info(`Created label: ${name}`);
+                  } catch (createErr) {
+                    if (createErr.status !== 422) throw createErr;
+                    core.info(`Label ${name} already created by another run`);
+                  }
+                }
+              }
+            }
+
+            // --- Helpers ---
+            const currentLabels = new Set(pr.labels.map(l => l.name.toLowerCase()));
+
+            function hasLabel(name) {
+              return currentLabels.has(name.toLowerCase());
+            }
+
+            async function addLabel(name) {
+              if (!hasLabel(name)) {
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: prNumber, labels: [name],
+                });
+                currentLabels.add(name.toLowerCase());
+                core.info(`Added label: ${name}`);
+              }
+            }
+
+            async function removeLabel(name) {
+              if (hasLabel(name)) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner, repo, issue_number: prNumber, name,
+                  });
+                  currentLabels.delete(name.toLowerCase());
+                  core.info(`Removed label: ${name}`);
+                } catch (e) {
+                  if (e.status !== 404) throw e;
+                }
+              }
+            }
+
+            // --- Parse username mapping from secret (if available) ---
+            let usernameMapping = {};
+            const mappingRaw = process.env.USERNAME_MAPPING;
+            if (mappingRaw) {
+              try {
+                usernameMapping = JSON.parse(mappingRaw);
+                core.info(`Username mapping loaded (${Object.keys(usernameMapping).length} entries)`);
+              } catch (e) {
+                core.warning(`Failed to parse USERNAME_MAPPING secret: ${e.message}`);
+              }
+            }
+
+            // --- Auto-assign author ---
+            if (context.payload.action === 'opened' && !pr.assignees.length) {
+              try {
+                const { status } = await github.request(
+                  'GET /repos/{owner}/{repo}/assignees/{assignee}',
+                  { owner, repo, assignee: pr.user.login }
+                );
+                if (status === 204) {
+                  await github.rest.issues.addAssignees({
+                    owner, repo, issue_number: prNumber,
+                    assignees: [pr.user.login],
+                  });
+                  core.info(`Assigned ${pr.user.login} to PR`);
+                }
+              } catch (e) {
+                core.warning(`Could not auto-assign ${pr.user.login}: ${e.message}`);
+              }
+            }
+
+            // --- WIP ---
+            const isWip = pr.draft || /\b(WIP|DRAFT)\b/i.test(pr.title);
+            if (isWip) {
+              await addLabel('WIP');
+              await removeLabel('Ready-for-review');
+            } else {
+              await removeLabel('WIP');
+            }
+
+            // --- Community ---
+            const internalAssociations = new Set(['MEMBER', 'COLLABORATOR', 'OWNER']);
+            let isInternal = internalAssociations.has(pr.author_association);
+
+            if (!isInternal && Object.keys(usernameMapping).length > 0) {
+              const normalizedMapping = Object.fromEntries(
+                Object.entries(usernameMapping).map(([k, v]) => [k.toLowerCase(), v])
+              );
+              if (normalizedMapping[pr.user.login.toLowerCase()]) {
+                isInternal = true;
+                core.info(`${pr.user.login} found in USERNAME_MAPPING secret`);
+              }
+            }
+
+            if (!isInternal) {
+              await addLabel('Community');
+            } else {
+              await removeLabel('Community');
+            }
+
+            // --- Reviews (latest state per reviewer) ---
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner, repo, pull_number: prNumber,
+            });
+            const latestByReviewer = new Map();
+            for (const r of reviews) {
+              if (['APPROVED', 'CHANGES_REQUESTED'].includes(r.state) && r.user.login !== pr.user.login) {
+                latestByReviewer.set(r.user.login, r.state);
+              }
+            }
+            const reviewStates = [...latestByReviewer.values()];
+            const hasReviews = reviewStates.length > 0;
+            const hasApproval = reviewStates.includes('APPROVED');
+            const hasChangesRequested = reviewStates.includes('CHANGES_REQUESTED');
+
+            if (hasReviews) {
+              await addLabel('Review-provided');
+              await removeLabel('Ready-for-review');
+            } else {
+              await removeLabel('Review-provided');
+            }
+
+            // --- CI status ---
+            let ciPassed = false;
+            const isSynchronize = context.eventName === 'pull_request_target'
+              && context.payload.action === 'synchronize';
+
+            if (isSynchronize) {
+              await removeLabel('fix-ci');
+              await removeLabel('blocked');
+              await removeLabel('Ready-for-review');
+              await removeLabel('Ready-to-merge');
+              core.info('Cleared stale CI labels after new push');
+            } else {
+              const { data: checkRuns } = await github.rest.checks.listForRef({
+                owner, repo, ref: pr.head.sha, per_page: 100,
+              });
+
+              const ciChecks = checkRuns.check_runs.filter(
+                cr => cr.name !== 'label'
+              );
+
+              const allCompleted = ciChecks.length > 0
+                && ciChecks.every(cr => cr.status === 'completed');
+
+              if (allCompleted) {
+                const anyFailed = ciChecks.some(cr =>
+                  cr.conclusion === 'failure' || cr.conclusion === 'timed_out'
+                  || cr.conclusion === 'cancelled' || cr.conclusion === 'action_required'
+                );
+
+                if (anyFailed) {
+                  await addLabel('fix-ci');
+                  await addLabel('blocked');
+                  await removeLabel('Ready-for-review');
+                } else {
+                  ciPassed = true;
+                  await removeLabel('fix-ci');
+                  await removeLabel('blocked');
+
+                  if (!isWip && !hasReviews) {
+                    await addLabel('Ready-for-review');
+                  }
+                }
+              } else if (ciChecks.length === 0) {
+                core.info('No CI check runs found — skipping CI labels');
+              } else {
+                core.info('CI checks still running — skipping CI labels');
+              }
+            }
+
+            // --- Ready to merge ---
+            const alreadyReadyToMerge = hasLabel('Ready-to-merge');
+            if (hasApproval && !hasChangesRequested && ciPassed && !isWip) {
+              await addLabel('Ready-to-merge');
+              await removeLabel('Ready-for-review');
+
+              if (!alreadyReadyToMerge) {
+                const normalizedLogin = pr.user.login.toLowerCase();
+                const normalizedMappingForSlack = Object.fromEntries(
+                  Object.entries(usernameMapping).map(([k, v]) => [k.toLowerCase(), v])
+                );
+                const authorSlackId = normalizedMappingForSlack[normalizedLogin];
+                const mention = authorSlackId ? `<@${authorSlackId}>` : pr.user.login;
+
+                core.setOutput('notify', 'true');
+                core.setOutput('slack_mention', mention);
+                core.setOutput('pr_url', pr.html_url);
+                const safeTitle = pr.title.replace(/[^\x20-\x7E]/g, '').slice(0, 200);
+                core.setOutput('pr_title', safeTitle);
+              }
+            } else {
+              await removeLabel('Ready-to-merge');
+            }
+
+      - name: Notify Slack
+        if: steps.labeler.outputs.notify == 'true'
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+          SLACK_MENTION: ${{ steps.labeler.outputs.slack_mention }}
+          PR_URL: ${{ steps.labeler.outputs.pr_url }}
+          PR_TITLE: ${{ steps.labeler.outputs.pr_title }}
+        run: |
+          if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL" ]; then
+            echo "Slack secrets not configured — skipping notification"
+            exit 0
+          fi
+          SAFE_TITLE=$(echo "$PR_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          MESSAGE="${SLACK_MENTION} your PR is ready to merge: <${PR_URL}|${SAFE_TITLE}>"
+          PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL" --arg text "$MESSAGE" \
+            '{channel: $channel, text: $text, unfurl_links: false}')
+          curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
