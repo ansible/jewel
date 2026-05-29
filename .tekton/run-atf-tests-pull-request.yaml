@@ -53,6 +53,8 @@ spec:
       value: "{{pull_request_number}}"
     - name: aap-dev-component-source-name
       value: "gateway"
+    - name: pytest-number-of-parallel-processes
+      value: "6"
 
   workspaces:
     - name: workspace
