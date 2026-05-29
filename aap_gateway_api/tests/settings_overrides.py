@@ -39,7 +39,7 @@ CACHES = {
         "LOCATION": "redis://localhost:6379",
         "OPTIONS": {
             "connection_class": FakeConnection,
-            "protocol": 2,
+            "protocol": 2,  # RESP2 — fakeredis 2.24.1 doesn't support the HELLO command used by RESP3
         },
     }
 }
