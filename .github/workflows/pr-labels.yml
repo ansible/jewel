@@ -100,12 +100,17 @@ jobs:
                 await github.rest.issues.getLabel({ owner, repo, name });
               } catch (e) {
                 if (e.status === 404) {
-                  await github.rest.issues.createLabel({
-                    owner, repo, name,
-                    color: config.color,
-                    description: config.description,
-                  });
-                  core.info(`Created label: ${name}`);
+                  try {
+                    await github.rest.issues.createLabel({
+                      owner, repo, name,
+                      color: config.color,
+                      description: config.description,
+                    });
+                    core.info(`Created label: ${name}`);
+                  } catch (createErr) {
+                    if (createErr.status !== 422) throw createErr;
+                    core.info(`Label ${name} already created by another run`);
+                  }
                 }
               }
             }
@@ -207,7 +212,7 @@ jobs:
             });
             const latestByReviewer = new Map();
             for (const r of reviews) {
-              if (['APPROVED', 'CHANGES_REQUESTED'].includes(r.state)) {
+              if (['APPROVED', 'CHANGES_REQUESTED'].includes(r.state) && r.user.login !== pr.user.login) {
                 latestByReviewer.set(r.user.login, r.state);
               }
             }
@@ -236,7 +241,7 @@ jobs:
               core.info('Cleared stale CI labels after new push');
             } else {
               const { data: checkRuns } = await github.rest.checks.listForRef({
-                owner, repo, ref: pr.head.sha,
+                owner, repo, ref: pr.head.sha, per_page: 100,
               });
 
               const ciChecks = checkRuns.check_runs.filter(
@@ -249,6 +254,7 @@ jobs:
               if (allCompleted) {
                 const anyFailed = ciChecks.some(cr =>
                   cr.conclusion === 'failure' || cr.conclusion === 'timed_out'
+                  || cr.conclusion === 'cancelled' || cr.conclusion === 'action_required'
                 );
 
                 if (anyFailed) {
@@ -288,7 +294,8 @@ jobs:
                 core.setOutput('notify', 'true');
                 core.setOutput('slack_mention', mention);
                 core.setOutput('pr_url', pr.html_url);
-                core.setOutput('pr_title', pr.title);
+                const safeTitle = pr.title.replace(/[^\x20-\x7E]/g, '').slice(0, 200);
+                core.setOutput('pr_title', safeTitle);
               }
             } else {
               await removeLabel('Ready-to-merge');
