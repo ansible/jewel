@@ -39,6 +39,7 @@ CACHES = {
         "LOCATION": "redis://localhost:6379",
         "OPTIONS": {
             "connection_class": FakeConnection,
+            "protocol": 2,
         },
     }
 }
