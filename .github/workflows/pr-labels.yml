@@ -40,6 +40,12 @@ jobs:
             let prNumber;
 
             if (context.eventName === 'workflow_run') {
+              const sourceEvent = context.payload.workflow_run.event;
+              if (!['pull_request', 'pull_request_review'].includes(sourceEvent)) {
+                core.info(`Ignoring workflow_run from ${sourceEvent}`);
+                return;
+              }
+
               const prs = context.payload.workflow_run.pull_requests;
               if (prs && prs.length > 0) {
                 prNumber = prs[0].number;
