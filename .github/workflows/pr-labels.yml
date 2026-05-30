@@ -5,7 +5,7 @@ on:
   pull_request_target:
     types: [opened, synchronize, ready_for_review, converted_to_draft, edited, reopened, closed]
   workflow_run:
-    workflows: ["Linting", "Unit Tests", "Sanity", "PR Review Trigger"]
+    workflows: ["Linting", "Unit Tests", "Sanity", "PR Review Trigger", "Codecov", "SonarCloud"]
     types: [completed]
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
 
             if (context.eventName === 'workflow_run') {
               const sourceEvent = context.payload.workflow_run.event;
-              if (!['pull_request', 'pull_request_review'].includes(sourceEvent)) {
+              if (!['pull_request', 'pull_request_review', 'workflow_run'].includes(sourceEvent)) {
                 core.info(`Ignoring workflow_run from ${sourceEvent}`);
                 return;
               }
