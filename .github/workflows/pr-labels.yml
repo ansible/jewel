@@ -43,6 +43,7 @@ jobs:
               'Review-provided': { color: '1d76db', description: 'Review has been submitted' },
               'Community': { color: '5319e7', description: 'Community contribution' },
               'Ready-to-merge': { color: '0e8a16', description: 'PR is approved and CI is passing' },
+              'Debuggernaut': { color: 'e6007a', description: 'PR created by the CI/CD bot' },
             };
 
             const { owner, repo } = context.repo;
@@ -239,6 +240,14 @@ jobs:
               await addLabel('Community');
             } else {
               await removeLabel('Community');
+            }
+
+            // --- Debuggernaut (CI/CD bot PRs) ---
+            const botLogin = 'aap-platform-services-cicd-bot-sa';
+            if (pr.user.login.toLowerCase() === botLogin.toLowerCase()) {
+              await addLabel('Debuggernaut');
+            } else {
+              await removeLabel('Debuggernaut');
             }
 
             // --- Reviews (latest state per reviewer) ---
