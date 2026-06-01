@@ -317,3 +317,5 @@ chmod +x run_tox_batch.sh
 2. **Stress test:** Use batch runner to reproduce intermittent failures
 3. **Check fixtures:** Ensure proper dependencies and cleanup
 4. **Verify isolation:** Each worker should be completely independent
+
+<!-- test: label workflow validation -->
