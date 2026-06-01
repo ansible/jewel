@@ -195,9 +195,36 @@ class TestLoadCustomEnvvars:
         # the GRPC override does not trigger since the pre-set int value is above minimum
         assert dynaconf_settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH == above_min
 
+    def test_sidecar_cache_replaces_primary_when_legacy_disabled(self, dynaconf_settings):
+        """When GATEWAY_ENABLE_LEGACY_CACHE is False (default), primary should use sidecar config."""
+        with patch.dict(environ, {"GATEWAY_ENABLE_LEGACY_CACHE": "false"}, clear=False):
+            load_custom_envvars(dynaconf_settings)
+
+        assert dynaconf_settings.CACHES["primary"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=0"
+        assert dynaconf_settings.CACHES["primary"]["OPTIONS"]["CLIENT_CLASS"] == "django_redis.client.DefaultClient"
+
+    def test_primary_cache_unchanged_when_legacy_enabled(self, dynaconf_settings):
+        """When GATEWAY_ENABLE_LEGACY_CACHE is True, primary retains TCP/TLS config."""
+        original_location = dynaconf_settings.CACHES["primary"]["LOCATION"]
+        with patch.dict(environ, {"GATEWAY_ENABLE_LEGACY_CACHE": "true"}, clear=False):
+            load_custom_envvars(dynaconf_settings)
+
+        assert dynaconf_settings.CACHES["primary"]["LOCATION"] == original_location
+        assert dynaconf_settings.CACHES["primary"]["OPTIONS"]["CLIENT_CLASS"] == "ansible_base.lib.redis.RedisClient"
+
+    def test_sidecar_cache_is_default_when_env_unset(self, dynaconf_settings):
+        """When GATEWAY_ENABLE_LEGACY_CACHE env var is not set, default (False) activates sidecar."""
+        env_to_clear = ["GATEWAY_ENABLE_LEGACY_CACHE"]
+        with patch.dict(environ, {}, clear=False):
+            for var in env_to_clear:
+                environ.pop(var, None)
+            load_custom_envvars(dynaconf_settings)
+
+        assert dynaconf_settings.CACHES["primary"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=0"
+
     def test_mapping_table_completeness(self):
         """Verify the mapping table has the expected number of entries."""
-        assert len(_CUSTOM_ENVVAR_MAPPINGS) == 27
+        assert len(_CUSTOM_ENVVAR_MAPPINGS) == 28
 
     def test_mapping_table_entry_structure(self):
         """Verify all mapping entries have valid structure (2 or 3 elements)."""
