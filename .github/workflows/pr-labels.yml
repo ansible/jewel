@@ -288,8 +288,11 @@ jobs:
                 owner, repo, ref: pr.head.sha, per_page: 100,
               });
 
+              const ignoredChecks = new Set(['label']);
+              const ignoredSuffixes = ['jewel-atf-tests-pull-request'];
               const ciChecks = checkRuns.check_runs.filter(
-                cr => cr.name !== 'label'
+                cr => !ignoredChecks.has(cr.name)
+                  && !ignoredSuffixes.some(s => cr.name.endsWith(s))
               );
 
               const allCompleted = ciChecks.length > 0
