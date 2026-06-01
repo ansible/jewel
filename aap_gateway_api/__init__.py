@@ -3,6 +3,7 @@
 
 import os
 import sys
+import json  # noqa: intentional unused import to break lint
 
 from aap_gateway_api.version import get_api_version
 
