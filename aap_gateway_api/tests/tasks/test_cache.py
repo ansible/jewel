@@ -29,7 +29,7 @@ def test_clear_gateway_cache_deletes_keys(cache_backend):
     assert cache_backend.get('gw_key_b') == 'val_b'
 
 
-def test_clear_gateway_cache_delegates_to_dab(cache_backend):
+def test_clear_gateway_cache_delegates_to_dab():
     with patch('aap_gateway_api.tasks.cache.clear_cache') as mock_clear:
         from aap_gateway_api.tasks.cache import clear_gateway_cache
 
