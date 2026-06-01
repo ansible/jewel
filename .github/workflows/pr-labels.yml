@@ -4,6 +4,9 @@ name: PR Labels
 on:
   pull_request_target:
     types: [opened, synchronize, ready_for_review, converted_to_draft, edited, reopened, closed]
+  # check_suite fires on the base repo for all PRs, including cross-fork PRs
+  # where workflow_run doesn't trigger. Filter to non-GitHub-Actions suites to
+  # avoid duplicating runs already handled by workflow_run.
   check_suite:
     types: [completed]
   workflow_run:
@@ -18,6 +21,12 @@ permissions:
 
 jobs:
   label:
+    if: >-
+      github.event_name != 'check_suite'
+      || github.event.check_suite.app.slug != 'github-actions'
+    concurrency:
+      group: pr-labels-${{ github.event.check_suite.head_sha || github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.run_id }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
@@ -42,16 +51,23 @@ jobs:
             let prNumber;
 
             if (context.eventName === 'check_suite') {
-              const headSha = context.payload.check_suite.head_sha;
-              const pulls = await github.paginate(github.rest.pulls.list, {
-                owner, repo, state: 'open', per_page: 100,
-              });
-              const matched = pulls.filter(p => p.head.sha === headSha);
-              if (matched.length === 0) {
-                core.info('No open PR found for this check suite');
-                return;
+              // check_suite.pull_requests is populated for same-repo PRs (fast path);
+              // for fork PRs it's empty, so fall back to paginating all open PRs.
+              const csPulls = context.payload.check_suite.pull_requests || [];
+              if (csPulls.length > 0) {
+                prNumber = csPulls[0].number;
+              } else {
+                const headSha = context.payload.check_suite.head_sha;
+                const pulls = await github.paginate(github.rest.pulls.list, {
+                  owner, repo, state: 'open', per_page: 100,
+                });
+                const matched = pulls.filter(p => p.head.sha === headSha);
+                if (matched.length === 0) {
+                  core.info('No open PR found for this check suite');
+                  return;
+                }
+                prNumber = matched[0].number;
               }
-              prNumber = matched[0].number;
             } else if (context.eventName === 'workflow_run') {
               const sourceEvent = context.payload.workflow_run.event;
               if (!['pull_request', 'pull_request_review', 'workflow_run'].includes(sourceEvent)) {
