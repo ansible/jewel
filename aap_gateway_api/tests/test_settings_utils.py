@@ -108,6 +108,7 @@ class TestLoadCustomEnvvars:
             "REDIS_URL": "redis://redis.example.com:6379/0",
             "CACHE_KEY_PREFIX": "test_prefix",
             "REDIS_MODE": "sentinel",
+            "GATEWAY_ENABLE_LEGACY_CACHE": "true",
         }
         with patch.dict(environ, env_overrides, clear=False):
             load_custom_envvars(dynaconf_settings)
@@ -130,6 +131,7 @@ class TestLoadCustomEnvvars:
         env_overrides = {
             "REDIS_TLS": "true",
             "PING_PAGE_CHECK_IGNORE_CERT": "false",
+            "GATEWAY_ENABLE_LEGACY_CACHE": "true",
         }
         with patch.dict(environ, env_overrides, clear=False):
             load_custom_envvars(dynaconf_settings)
