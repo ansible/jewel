@@ -4,6 +4,8 @@ name: PR Labels
 on:
   pull_request_target:
     types: [opened, synchronize, ready_for_review, converted_to_draft, edited, reopened, closed]
+  check_suite:
+    types: [completed]
   workflow_run:
     workflows: ["Linting", "Unit Tests", "Sanity", "PR Review Trigger", "Codecov", "SonarCloud"]
     types: [completed]
@@ -39,7 +41,18 @@ jobs:
             // --- Determine PR number ---
             let prNumber;
 
-            if (context.eventName === 'workflow_run') {
+            if (context.eventName === 'check_suite') {
+              const headSha = context.payload.check_suite.head_sha;
+              const { data: pulls } = await github.rest.pulls.list({
+                owner, repo, state: 'open', per_page: 100,
+              });
+              const matched = pulls.filter(p => p.head.sha === headSha);
+              if (matched.length === 0) {
+                core.info('No open PR found for this check suite');
+                return;
+              }
+              prNumber = matched[0].number;
+            } else if (context.eventName === 'workflow_run') {
               const sourceEvent = context.payload.workflow_run.event;
               if (!['pull_request', 'pull_request_review', 'workflow_run'].includes(sourceEvent)) {
                 core.info(`Ignoring workflow_run from ${sourceEvent}`);
