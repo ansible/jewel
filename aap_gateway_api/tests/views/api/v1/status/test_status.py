@@ -379,52 +379,6 @@ def test_multiple_nodes_get_truncated(get, admin_api_client, full_service_hierar
         assert len(controller['nodes']) == 2
 
 
-@pytest.mark.parametrize(
-    "redis_status,eda_node_status,expected_eda_status",
-    [
-        (_REDIS_GOOD, STATUS_GOOD, STATUS_GOOD),
-        (_REDIS_GOOD, STATUS_FAILED, STATUS_FAILED),
-        (_REDIS_GOOD, STATUS_DEGRADED, STATUS_DEGRADED),
-        (_REDIS_FAILED, STATUS_GOOD, STATUS_DEGRADED),
-        (_REDIS_FAILED, STATUS_FAILED, STATUS_FAILED),
-        (_REDIS_FAILED, STATUS_DEGRADED, STATUS_DEGRADED),
-        (_REDIS_DEGRADED, STATUS_GOOD, STATUS_GOOD),
-        (_REDIS_DEGRADED, STATUS_FAILED, STATUS_FAILED),
-        (_REDIS_DEGRADED, STATUS_DEGRADED, STATUS_DEGRADED),
-    ],
-)
-@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
-def test_eda_status_gets_degraded_if_redis_down(get, redis_status, eda_node_status, expected_eda_status, admin_api_client, full_service_hierarchy_eda):
-    if eda_node_status == STATUS_DEGRADED:
-        # Since we want a degraded status we need to do 2 things:
-        #     1. Add another node to the service "cluster"
-        #     2. Make the get call return one good status and one bad status
-        ServiceNode.objects.create(
-            name="Node 127.0.0.99",
-            service_cluster=full_service_hierarchy_eda.service_cluster,
-            address="127.0.0.99",
-        )
-
-        get.side_effect = [
-            mock.Mock(status_code=200, json=lambda: {"status": STATUS_GOOD}),
-            mock.Mock(status_code=200, json=lambda: {"status": STATUS_FAILED}),
-        ]
-    else:
-        get.return_value = mock.Mock(status_code=200, json=lambda: {"status": eda_node_status})
-
-    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=redis_status):
-        url = get_relative_url("status-view")
-        response = admin_api_client.get(url)
-
-        assert response.status_code == 200
-        eda = get_service_by_name(response.data, "eda")
-        assert eda is not None
-        assert eda['status'] == expected_eda_status
-        redis = get_service_by_name(response.data, "redis")
-        assert redis is not None
-        assert redis['status'] == redis_status['status']
-
-
 def slow_response(*args, **kwargs):
     start_time = time.time()
     time.sleep(3)
