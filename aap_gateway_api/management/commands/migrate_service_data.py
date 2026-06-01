@@ -1075,6 +1075,7 @@ class Command(BaseCommand):
         for service_type in service_id_to_type.values():
             all_users[service_type] = []
 
+        skipped_orphaned = 0
         for resource in partially_migrated_resources:
             user_instance = resource.content_object
             username = user_instance.username
@@ -1084,7 +1085,8 @@ class Command(BaseCommand):
             if service_type:
                 all_users[service_type].append((username, user_instance))
             else:
-                raise RuntimeError(f"Unknown service_id {resource.service_id} for user {username}")
+                self.stderr.write(f"  Warning: Skipping orphaned resource for user '{username}' with unregistered service_id {resource.service_id}")
+                skipped_orphaned += 1
 
         for service_type, users in all_users.items():
             self.stdout.write(f"  Found {len(users)} partially migrated users from {service_type}")
@@ -1108,9 +1110,16 @@ class Command(BaseCommand):
             total_merged += merged_count
 
         self.stdout.write(f"Completed merging {total_merged} partially migrated users")
+        if skipped_orphaned:
+            self.stderr.write(f"  Warning: Skipped {skipped_orphaned} orphaned resource(s) with unregistered service_ids")
 
-        if total_merged != total_partially_migrated_users:
-            raise RuntimeError(f"Failed to merge all partially migrated users. Merged {total_merged} out of {total_partially_migrated_users} users.")
+        expected_merged = total_partially_migrated_users - skipped_orphaned
+        if total_merged != expected_merged:
+            raise RuntimeError(
+                f"Failed to merge all partially migrated users. "
+                f"Merged {total_merged} out of {expected_merged} expected users "
+                f"({skipped_orphaned} orphaned resources were skipped)."
+            )
 
     def _correlate_users_across_services(self, all_users: Dict[str, List[Tuple[str, AbstractUser]]]) -> Dict[str, List[Tuple[str, AbstractUser, str]]]:
         """
