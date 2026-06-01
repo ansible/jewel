@@ -43,6 +43,7 @@ jobs:
               'Review-provided': { color: '1d76db', description: 'Review has been submitted' },
               'Community': { color: '5319e7', description: 'Community contribution' },
               'Ready-to-merge': { color: '0e8a16', description: 'PR is approved and CI is passing' },
+              'Debuggernaut': { color: '00008b', description: 'PR created by the CI/CD bot' },
             };
 
             const { owner, repo } = context.repo;
@@ -241,6 +242,14 @@ jobs:
               await removeLabel('Community');
             }
 
+            // --- Debuggernaut (CI/CD bot PRs) ---
+            const botLogin = 'aap-platform-services-cicd-bot-sa';
+            if (pr.user.login.toLowerCase() === botLogin.toLowerCase()) {
+              await addLabel('Debuggernaut');
+            } else {
+              await removeLabel('Debuggernaut');
+            }
+
             // --- Reviews (latest state per reviewer) ---
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner, repo, pull_number: prNumber,
@@ -279,8 +288,11 @@ jobs:
                 owner, repo, ref: pr.head.sha, per_page: 100,
               });
 
+              const ignoredChecks = new Set(['label']);
+              const ignoredSuffixes = ['jewel-atf-tests-pull-request'];
               const ciChecks = checkRuns.check_runs.filter(
-                cr => cr.name !== 'label'
+                cr => !ignoredChecks.has(cr.name)
+                  && !ignoredSuffixes.some(s => cr.name.endsWith(s))
               );
 
               const allCompleted = ciChecks.length > 0
