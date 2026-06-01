@@ -162,12 +162,6 @@ def process_statuses(response: Dict) -> Dict:
             logger.error(f"Got an unknown status for service {service_name}: {service['status']}")
             bad_services = bad_services + 1
 
-    # Special check, if the service is EDA and redis is "down" EDA needs to be DEGRADED
-    eda = next((s for s in response['services'] if s['service_name'] == 'eda'), None)
-    redis = next((s for s in response['services'] if s['service_name'] == 'redis'), None)
-    if eda and redis and eda['status'] != STATUS_FAILED and redis['status'] == STATUS_FAILED:
-        eda['status'] = STATUS_DEGRADED
-
     # Determine the overall status for AAP based on service statuses
     if bad_services > 0:
         response['status'] = STATUS_FAILED
