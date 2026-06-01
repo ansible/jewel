@@ -212,13 +212,10 @@ class TestLoadCustomEnvvars:
         assert dynaconf_settings.CACHES["primary"]["LOCATION"] == original_location
         assert dynaconf_settings.CACHES["primary"]["OPTIONS"]["CLIENT_CLASS"] == "ansible_base.lib.redis.RedisClient"
 
-    def test_sidecar_cache_is_default_when_env_unset(self, dynaconf_settings):
+    def test_sidecar_cache_is_default_when_env_unset(self, dynaconf_settings, monkeypatch):
         """When GATEWAY_ENABLE_LEGACY_CACHE env var is not set, default (False) activates sidecar."""
-        env_to_clear = ["GATEWAY_ENABLE_LEGACY_CACHE"]
-        with patch.dict(environ, {}, clear=False):
-            for var in env_to_clear:
-                environ.pop(var, None)
-            load_custom_envvars(dynaconf_settings)
+        monkeypatch.delenv("GATEWAY_ENABLE_LEGACY_CACHE", raising=False)
+        load_custom_envvars(dynaconf_settings)
 
         assert dynaconf_settings.CACHES["primary"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=0"
 

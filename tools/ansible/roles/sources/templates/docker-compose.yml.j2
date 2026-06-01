@@ -103,6 +103,11 @@ services:
     command:
       - /usr/local/etc/redis/redis-sidecar.conf
     user: "${UID:-1000}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-s", "/var/run/redis/redis.sock", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     volumes:
       - $PWD/tools/generated/redis_cluster/redis-sidecar.conf:/usr/local/etc/redis/redis-sidecar.conf:z
       - redis_sidecar_sock{{ container_id }}:/var/run/redis:z

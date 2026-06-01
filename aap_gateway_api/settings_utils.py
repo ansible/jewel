@@ -72,6 +72,7 @@ def load_custom_envvars(settings):
     if not settings.get("GATEWAY_ENABLE_LEGACY_CACHE", False):
         sidecar_config = settings.get("CACHES", {}).get("sidecar")
         if sidecar_config:
+            logger.info("Sidecar cache override: replacing primary cache with sidecar config")
             settings.set(
                 "CACHES__primary",
                 sidecar_config,
