@@ -99,9 +99,8 @@ services:
     container_name: aap_gw_redis_sidecar_{{ container_id }}
     hostname: redis_sidecar{{ container_id }}
     image: {{ redis_container_image }}:{{ redis_container_version }}
-    entrypoint: ["redis-server"]
-    command:
-      - /usr/local/etc/redis/redis-sidecar.conf
+    entrypoint: ["sh", "-c", "chmod 777 /var/run/redis && exec redis-server /usr/local/etc/redis/redis-sidecar.conf"]
+    user: "0"
     healthcheck:
       test: ["CMD", "redis-cli", "-s", "/var/run/redis/redis.sock", "ping"]
       interval: 5s
