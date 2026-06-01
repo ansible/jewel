@@ -43,7 +43,7 @@ jobs:
 
             if (context.eventName === 'check_suite') {
               const headSha = context.payload.check_suite.head_sha;
-              const { data: pulls } = await github.rest.pulls.list({
+              const pulls = await github.paginate(github.rest.pulls.list, {
                 owner, repo, state: 'open', per_page: 100,
               });
               const matched = pulls.filter(p => p.head.sha === headSha);
