@@ -30,8 +30,6 @@ class Organization(UsersMembersMixin, AbstractOrganization, AuditableModel):
     )
 
     def get_summary_fields(self):
-        # TODO: We should probably come up with a more codified and standard
-        # way to return this kind of info from models.
         response = super().get_summary_fields()
         response["related_field_counts"] = {}
         response["related_field_counts"]["teams"] = self.teams.count()
