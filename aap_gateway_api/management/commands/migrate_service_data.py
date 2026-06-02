@@ -320,8 +320,6 @@ class Command(BaseCommand):
         Returns:
             Tuple of (success: bool, error_message: Optional[str])
         """
-        # TODO: switch user out for _system. Need to get more fine grained permissions in resources
-        # api merged first.
         self.client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
         self.stdout.write("Starting migration")
@@ -1141,7 +1139,6 @@ class Command(BaseCommand):
         user_groups = {}  # base_username -> [(service_type, user_object, original_username)]
 
         # Known service prefixes that may be added during 2.5 migration
-        # TODO: maybe fetch this from the services themselves
         service_prefixes = ['galaxy_', 'eda_']
 
         for service_type in self.SERVICE_TYPE_ORDER:
