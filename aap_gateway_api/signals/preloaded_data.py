@@ -59,11 +59,8 @@ def create_preload_data(**kwargs) -> None:
                 if name.startswith('set'):
                     action = 'Set'
                 logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
-        except Exception as e:
-            if verbosity in [0, 1]:
-                logger.error(f"Failed to {name.replace('_', ' ')} {e}")
-            elif verbosity > 1:
-                logger.exception(f"Failed to {name.replace('_', ' ')}")
+        except Exception:
+            logger.exception(f"Failed to {name.replace('_', ' ')}")
 
 
 def set_jwt_key_pair() -> bool:

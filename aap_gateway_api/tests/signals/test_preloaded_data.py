@@ -57,7 +57,8 @@ class TestCreatePreloadedData:
     @pytest.mark.parametrize(
         "verbosity,log_level",
         [
-            (0, 'error'),
+            (0, 'exception'),
+            (1, 'exception'),
             (2, 'exception'),
         ],
     )
