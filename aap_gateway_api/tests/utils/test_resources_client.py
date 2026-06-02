@@ -11,7 +11,7 @@ def _mock_pref_value(section, name):
 
 
 class TestMakeServiceRequestLogging:
-    """Test that _make_service_request uses logger.exception for Timeout errors."""
+    """Test that _make_service_request uses logger.error for Timeout errors."""
 
     @pytest.fixture
     def client(self):
@@ -41,8 +41,8 @@ class TestMakeServiceRequestLogging:
         service.service_cluster.service_type.service_index_path = '/v2/'
         return service
 
-    def test_make_service_request_timeout_uses_logger_exception(self, client, mock_service):
-        """Verify that _make_service_request calls logger.exception (not logger.error) on Timeout."""
+    def test_make_service_request_timeout_uses_logger_error(self, client, mock_service):
+        """Verify that _make_service_request calls logger.error (not logger.exception) on Timeout."""
         with (
             mock.patch('aap_gateway_api.utils.resources_client.requests.request', side_effect=Timeout("connection timed out")),
             mock.patch('aap_gateway_api.utils.resources_client.logger') as mock_logger,
@@ -50,10 +50,10 @@ class TestMakeServiceRequestLogging:
             client.wait_for_response = False
             client._make_service_request(mock_service, 'GET', '/test/', jwt='fake-jwt')
 
-            mock_logger.exception.assert_called_once()
-            call_args = mock_logger.exception.call_args[0][0]
+            mock_logger.error.assert_called_once()
+            call_args = mock_logger.error.call_args[0][0]
             assert 'Resource client request timeout' in call_args
-            mock_logger.error.assert_not_called()
+            mock_logger.exception.assert_not_called()
 
     def test_make_service_request_timeout_raises_when_waiting(self, client, mock_service):
         """Verify that _make_service_request raises Timeout when wait_for_response is True."""
@@ -64,10 +64,10 @@ class TestMakeServiceRequestLogging:
 
 
 class TestMakeRequestTimeoutLogging:
-    """Test that _make_request uses logger.exception for Timeout errors in the futures loop."""
+    """Test that _make_request uses logger.error for Timeout errors in the futures loop."""
 
-    def test_future_timeout_uses_logger_exception(self):
-        """Verify that the _make_request future handler calls logger.exception on Timeout."""
+    def test_future_timeout_uses_logger_error(self):
+        """Verify that the _make_request future handler calls logger.error on Timeout."""
         with (
             mock.patch(
                 'aap_gateway_api.utils.resources_client.get_preference_value',
@@ -97,8 +97,8 @@ class TestMakeRequestTimeoutLogging:
         ):
             responses = client._make_request('GET', '/test/')
 
-            mock_logger.exception.assert_called_once()
-            call_args = mock_logger.exception.call_args[0][0]
+            mock_logger.error.assert_called_once()
+            call_args = mock_logger.error.call_args[0][0]
             assert 'Resource client request timeout for service 42' in call_args
-            mock_logger.error.assert_not_called()
+            mock_logger.exception.assert_not_called()
             assert responses[42] is None

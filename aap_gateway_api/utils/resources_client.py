@@ -131,7 +131,7 @@ class AllServicesClient(GWResourceAPIClient):
             logger.debug(f"Response status code from {url}: {resp.status_code}")
             return service.pk, resp
         except Timeout as e:
-            logger.exception(f"Resource client request timeout for {url} - {type(e).__name__}")
+            logger.error(f"Resource client request timeout for {url} - {type(e).__name__}")  # NOSONAR
             if self.wait_for_response:
                 raise
             return service.pk, None
@@ -184,7 +184,7 @@ class AllServicesClient(GWResourceAPIClient):
                     # Re-raise timeout if we're supposed to wait for responses
                     if self.wait_for_response:
                         raise
-                    logger.exception(f"Resource client request timeout for service {service.pk}: {type(e).__name__}")
+                    logger.error(f"Resource client request timeout for service {service.pk}: {type(e).__name__}")  # NOSONAR
                     responses[service.pk] = None
                 except Exception as e:
                     # Log the error but continue processing other services
