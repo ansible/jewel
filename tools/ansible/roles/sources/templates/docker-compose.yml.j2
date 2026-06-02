@@ -36,7 +36,6 @@ services:
       - REDIS_HOSTS={{ ",".join(redis_hosts) }}
       - REDIS_TLS={{ redis_uses_tls }}
       - CACHE_KEY_PREFIX={{ cache_key_prefix }}
-      - GATEWAY_ENABLE_LEGACY_CACHE=${GATEWAY_ENABLE_LEGACY_CACHE:-False}
       # TODO: What is this used for and how do we handle multiple proxies?
       - ENVOY_HOSTNAME=proxy1
       - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
@@ -90,11 +89,7 @@ services:
       nofile:
         soft: 4096
         hard: 4096
-  {% endfor %}
 
-{# Sidecar Redis — one per gateway, Unix socket only, no TLS/ACL #}
-{% for i in range(gateway_node_count|int) %}
-{% set container_id = loop.index %}
   redis_sidecar{{ container_id }}:
     container_name: aap_gw_redis_sidecar_{{ container_id }}
     hostname: redis_sidecar{{ container_id }}
@@ -113,7 +108,7 @@ services:
       dbnet:
         aliases:
           - redis_sidecar{{ container_id }}
-{% endfor %}
+  {% endfor %}
 
 {% for i in range(redis_node_count|int) %}
 {% set container_id = loop.index %}

@@ -37,7 +37,6 @@ _CUSTOM_ENVVAR_MAPPINGS = (
     ("REDIS_CERT_FILE", "CACHES__primary__OPTIONS__CLIENT_CLASS_KWARGS__ssl_certfile"),
     ("REDIS_CA_CERT_FILE", "CACHES__primary__OPTIONS__CLIENT_CLASS_KWARGS__ssl_ca_certs"),
     ("FALLBACK_CACHE_FILE", "CACHES__fallback__LOCATION"),
-    ("GATEWAY_ENABLE_LEGACY_CACHE", "GATEWAY_ENABLE_LEGACY_CACHE", to_python_boolean),
     ("CSRF_TRUSTED_ORIGINS", "CSRF_TRUSTED_ORIGINS"),
     ("LOGOUT_ALLOWED_HOSTS", "LOGOUT_ALLOWED_HOSTS", lambda v: v.split(",")),
     ("PING_PAGE_CHECK_TIMEOUT", "PING_PAGE_CHECK_TIMEOUT"),
@@ -68,16 +67,6 @@ def load_custom_envvars(settings):
         data["GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH"] = settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE
 
     settings.update(data, loader_identifier="settings:load_custom_envvars", merge=True)
-
-    if not settings.get("GATEWAY_ENABLE_LEGACY_CACHE", False):
-        sidecar_config = settings.get("CACHES", {}).get("sidecar")
-        if sidecar_config:
-            logger.info("Sidecar cache override: replacing primary cache with sidecar config")
-            settings.set(
-                "CACHES__primary",
-                sidecar_config,
-                loader_identifier="settings:sidecar_cache_override",
-            )
 
 
 def set_secret_key(settings):

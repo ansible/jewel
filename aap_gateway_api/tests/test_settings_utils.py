@@ -108,7 +108,6 @@ class TestLoadCustomEnvvars:
             "REDIS_URL": "redis://redis.example.com:6379/0",
             "CACHE_KEY_PREFIX": "test_prefix",
             "REDIS_MODE": "sentinel",
-            "GATEWAY_ENABLE_LEGACY_CACHE": "true",
         }
         with patch.dict(environ, env_overrides, clear=False):
             load_custom_envvars(dynaconf_settings)
@@ -131,7 +130,6 @@ class TestLoadCustomEnvvars:
         env_overrides = {
             "REDIS_TLS": "true",
             "PING_PAGE_CHECK_IGNORE_CERT": "false",
-            "GATEWAY_ENABLE_LEGACY_CACHE": "true",
         }
         with patch.dict(environ, env_overrides, clear=False):
             load_custom_envvars(dynaconf_settings)
@@ -197,33 +195,18 @@ class TestLoadCustomEnvvars:
         # the GRPC override does not trigger since the pre-set int value is above minimum
         assert dynaconf_settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH == above_min
 
-    def test_sidecar_cache_replaces_primary_when_legacy_disabled(self, dynaconf_settings):
-        """When GATEWAY_ENABLE_LEGACY_CACHE is False (default), primary should use sidecar config."""
-        with patch.dict(environ, {"GATEWAY_ENABLE_LEGACY_CACHE": "false"}, clear=False):
-            load_custom_envvars(dynaconf_settings)
+    def test_sidecar_cache_is_default(self, dynaconf_settings):
+        """The sidecar Redis (Unix socket) should be the default cache backend."""
+        assert dynaconf_settings.CACHES["default"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=4"
+        assert dynaconf_settings.CACHES["default"]["OPTIONS"]["CLIENT_CLASS"] == "django_redis.client.DefaultClient"
 
-        assert dynaconf_settings.CACHES["primary"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=0"
-        assert dynaconf_settings.CACHES["primary"]["OPTIONS"]["CLIENT_CLASS"] == "django_redis.client.DefaultClient"
-
-    def test_primary_cache_unchanged_when_legacy_enabled(self, dynaconf_settings):
-        """When GATEWAY_ENABLE_LEGACY_CACHE is True, primary retains TCP/TLS config."""
-        original_location = dynaconf_settings.CACHES["primary"]["LOCATION"]
-        with patch.dict(environ, {"GATEWAY_ENABLE_LEGACY_CACHE": "true"}, clear=False):
-            load_custom_envvars(dynaconf_settings)
-
-        assert dynaconf_settings.CACHES["primary"]["LOCATION"] == original_location
-        assert dynaconf_settings.CACHES["primary"]["OPTIONS"]["CLIENT_CLASS"] == "ansible_base.lib.redis.RedisClient"
-
-    def test_sidecar_cache_is_default_when_env_unset(self, dynaconf_settings, monkeypatch):
-        """When GATEWAY_ENABLE_LEGACY_CACHE env var is not set, default (False) activates sidecar."""
-        monkeypatch.delenv("GATEWAY_ENABLE_LEGACY_CACHE", raising=False)
-        load_custom_envvars(dynaconf_settings)
-
-        assert dynaconf_settings.CACHES["primary"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=0"
+    def test_legacy_cache_entry_exists(self, dynaconf_settings):
+        """The legacy DABCacheWithFallback entry should exist under the 'legacy' key."""
+        assert dynaconf_settings.CACHES["legacy"]["BACKEND"] == "ansible_base.lib.cache.fallback_cache.DABCacheWithFallback"
 
     def test_mapping_table_completeness(self):
         """Verify the mapping table has the expected number of entries."""
-        assert len(_CUSTOM_ENVVAR_MAPPINGS) == 28
+        assert len(_CUSTOM_ENVVAR_MAPPINGS) == 27
 
     def test_mapping_table_entry_structure(self):
         """Verify all mapping entries have valid structure (2 or 3 elements)."""
