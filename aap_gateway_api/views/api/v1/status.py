@@ -50,7 +50,7 @@ def _check_redis_unix_socket(url: str, timeout: int) -> Dict:
     try:
         parsed = redis_lib.connection.parse_url(url)
         r = redis_lib.Redis(
-            unix_socket_path=parsed.get('unix_socket_path', '/var/run/redis/redis.sock'),
+            unix_socket_path=parsed.get('path', '/var/run/redis/redis.sock'),
             db=parsed.get('db', 0),
             socket_timeout=timeout,
             protocol=2,
