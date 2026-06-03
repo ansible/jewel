@@ -57,7 +57,7 @@ def _check_redis_unix_socket(url: str, timeout: int) -> Dict:
         r.ping()
         return {'mode': 'standalone', 'status': STATUS_GOOD}
     except Exception as e:
-        logger.error(f"Failed checking sidecar Redis health: {e}")
+        logger.exception("Failed checking sidecar Redis health")
         return {'mode': 'standalone', 'status': STATUS_FAILED, 'exception': str(e)}
 
 
