@@ -208,5 +208,4 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     def get_cluster_by_type(service_type: Union[ServiceType, str]):
         if isinstance(service_type, ServiceType):
             return ServiceCluster.objects.filter(service_type=service_type).first()
-        else:
-            return ServiceCluster.objects.filter(service_type__name=service_type).first()
+        return ServiceCluster.objects.filter(service_type__name=service_type).first()

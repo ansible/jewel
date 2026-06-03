@@ -49,17 +49,17 @@ class LoggedLoginView(views.LoginView):
         if request.user.is_authenticated:
             logger.info(f"User {self.request.user.username} logged in from {get_remote_host(request)}")
             return ret
-        else:
-            if 'username' in self.request.POST:
-                username = self.request.POST.get('username')
-                # Maybe we want to scale this in the future to support additional characters
-                if not re.match('^[A-Za-z0-9@._-]+$', username):
-                    from base64 import b64encode
 
-                    username = f"(base64) {b64encode(username.encode('UTF-8'))}"
-                logger.warning(f"Login failed for user {username} from {get_remote_host(request)}")
-            ret.status_code = 401
-            return ret
+        if 'username' in self.request.POST:
+            username = self.request.POST.get('username')
+            # Maybe we want to scale this in the future to support additional characters
+            if not re.match('^[A-Za-z0-9@._-]+$', username):
+                from base64 import b64encode
+
+                username = f"(base64) {b64encode(username.encode('UTF-8'))}"
+            logger.warning(f"Login failed for user {username} from {get_remote_host(request)}")
+        ret.status_code = 401
+        return ret
 
 
 class LoggedLogoutView(views.LogoutView):
