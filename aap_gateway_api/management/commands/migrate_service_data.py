@@ -956,6 +956,7 @@ class Command(BaseCommand):
         """
         client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
 
+        # No service_id filter since after migration all resources have Gateway's service_id
         filters = {
             "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
         }
