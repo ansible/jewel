@@ -12,6 +12,18 @@ from aap_gateway_api.utils.preferences import get_preference_value, update_prefe
 from aap_gateway_api.views.api.v1.preference import SettingSectionViewSet
 
 
+def test_format_err_message_unknown_detail():
+    """
+    Test that format_err_message returns a generic error for an unrecognized err_detail.
+    """
+    from aap_gateway_api.views.api.v1.preference import format_err_message
+
+    result = format_err_message("proxy", "my_pref", "some_unknown_detail")
+    assert "unknown error" in str(result).lower()
+    assert "my_pref" in str(result)
+    assert "proxy" in str(result)
+
+
 def test_min_max_int_range_options(admin_api_client, register_preference):
     url = get_relative_url('setting-section-list', kwargs={'category_slug': 'min_max_test'})
 

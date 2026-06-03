@@ -31,7 +31,7 @@ logger = logging.getLogger("aap.gateway.utils.preferences")
 
 
 class TooManyPreferencesException(Exception):
-    pass
+    """Raised when multiple preferences match a single setting name lookup."""
 
 
 def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
@@ -71,8 +71,7 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
         setting_val = getattr(settings, name, None)
         if setting_val is not None:
             return setting_val
-        else:
-            raise ValueError(_("A settings_bound preference can not have a None value"))
+        raise ValueError(_("A settings_bound preference can not have a None value"))
 
     preference_name = get_preference_key(section, name)
     value = gateway_preference_registry.manager().get(preference_name)

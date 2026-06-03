@@ -32,11 +32,10 @@ def format_err_message(category_slug, preference_name, err_detail):
 
     if err_detail in err_messages:
         return err_messages[err_detail] % {"preference_name": preference_name, "category_slug": category_slug}
-    else:
-        return _("An unknown error occurred with preference '%(preference_name)s' in category '%(category_slug)s'.") % {
-            "preference_name": preference_name,
-            "category_slug": category_slug,
-        }
+    return _("An unknown error occurred with preference '%(preference_name)s' in category '%(category_slug)s'.") % {
+        "preference_name": preference_name,
+        "category_slug": category_slug,
+    }
 
 
 class SettingSectionView(AnsibleBaseView):

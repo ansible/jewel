@@ -34,8 +34,6 @@ PASSWORD_DISABLED = 'Password Disabled'  # signal unusable passwords
 class _AssociatedAuthenticatorsField(serializers.JSONField):
     """JSONField with OpenAPI schema annotation for associated_authenticators."""
 
-    pass
-
 
 @extend_schema_serializer(
     deprecate_fields=["authenticators", "authenticator_uid"],
