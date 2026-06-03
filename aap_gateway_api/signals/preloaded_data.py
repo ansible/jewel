@@ -12,6 +12,35 @@ from aap_gateway_api.models import ServiceType
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
 
+def _is_rollback(plan, verbosity):
+    """Return True if any migration in the plan is being rolled back."""
+    for migration, rolled_back in plan:
+        if rolled_back:
+            if verbosity > 0:
+                logger.debug(f"We are rolling back migration {migration}, no need to create objects")
+            return True
+    return False
+
+
+def _run_preload_function(function, verbosity):
+    """Execute a single preload function with logging and error handling."""
+    name = function.__name__
+    try:
+        if verbosity > 1:
+            logger.info(f"Running {name}")
+        created = function()
+        if verbosity > 0 and created:
+            action = 'Created'
+            if name.startswith('set'):
+                action = 'Set'
+            logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
+    except Exception as e:
+        if verbosity in [0, 1]:
+            logger.error(f"Failed to {name.replace('_', ' ')} {e}")
+        elif verbosity > 1:
+            logger.exception(f"Failed to {name.replace('_', ' ')}")
+
+
 def create_preload_data(**kwargs) -> None:
     """
     Run functions in a given order to create pre-loaded data
@@ -39,31 +68,14 @@ def create_preload_data(**kwargs) -> None:
         # If we are are being called via a flush instead of a migrate then we can just return
         return
 
-    for migration, rolled_back in kwargs['plan']:
-        if rolled_back:
-            if verbosity > 0:
-                logger.debug(f"We are rolling back migration {migration}, no need to create objects")
-            return
+    if _is_rollback(kwargs['plan'], verbosity):
+        return
 
     if verbosity > 0:
         logger.info("Building preloaded data")
 
     for function in function_order:
-        name = function.__name__
-        try:
-            if verbosity > 1:
-                logger.info(f"Running {name}")
-            created = function()
-            if verbosity > 0 and created:
-                action = 'Created'
-                if name.startswith('set'):
-                    action = 'Set'
-                logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
-        except Exception as e:
-            if verbosity in [0, 1]:
-                logger.error(f"Failed to {name.replace('_', ' ')} {e}")
-            elif verbosity > 1:
-                logger.exception(f"Failed to {name.replace('_', ' ')}")
+        _run_preload_function(function, verbosity)
 
 
 def set_jwt_key_pair() -> bool:
