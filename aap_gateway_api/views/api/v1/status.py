@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict, Iterator, List, Literal
 
+import redis as redis_lib
 import requests
 from ansible_base.lib.cache.fallback_cache import PRIMARY_CACHE
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
@@ -45,8 +46,6 @@ def check_redis(timeout: int = 4) -> Dict:
 
 
 def _check_redis_unix_socket(url: str, timeout: int) -> Dict:
-    import redis as redis_lib
-
     try:
         parsed = redis_lib.connection.parse_url(url)
         r = redis_lib.Redis(
