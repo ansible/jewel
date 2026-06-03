@@ -34,10 +34,32 @@ def check_redis(timeout: int = 4) -> Dict:
         redis_settings = getattr(settings, 'CACHES', {}).get('default')
 
     url = redis_settings['LOCATION']
+
+    if url.startswith('unix://'):
+        return _check_redis_unix_socket(url, timeout)
+
     kwargs = redis_settings['OPTIONS'].get('CLIENT_CLASS_KWARGS', {})
     status = get_redis_status(url=url, timeout=timeout, **kwargs)
 
     return status
+
+
+def _check_redis_unix_socket(url: str, timeout: int) -> Dict:
+    import redis as redis_lib
+
+    try:
+        parsed = redis_lib.connection.parse_url(url)
+        r = redis_lib.Redis(
+            unix_socket_path=parsed.get('unix_socket_path', '/var/run/redis/redis.sock'),
+            db=parsed.get('db', 0),
+            socket_timeout=timeout,
+            protocol=2,
+        )
+        r.ping()
+        return {'mode': 'standalone', 'status': STATUS_GOOD}
+    except Exception as e:
+        logger.error(f"Failed checking sidecar Redis health: {e}")
+        return {'mode': 'standalone', 'status': STATUS_FAILED, 'exception': str(e)}
 
 
 def check_console(timeout: int = 4) -> Dict:
