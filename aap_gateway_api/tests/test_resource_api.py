@@ -659,3 +659,97 @@ class TestGetOrCreateProcessorSerializerValidation:
         assert result.username == "brand_new_user"
         assert result.email == "newuser@example.com"
         assert result.first_name == "Brand"
+
+
+@pytest.mark.django_db
+class TestGetOrCreateProcessorHelpers:
+    """Tests for the extracted helper methods on GetOrCreateProcessor
+    (_has_field_changes and _save_new) to verify the cognitive-complexity
+    refactoring preserves behaviour."""
+
+    @pytest.fixture
+    def target_user(self):
+        return User.objects.create_user(
+            username="helper_user",
+            email="helper@example.com",
+            password="password123",
+            first_name="Original",
+            last_name="Name",
+        )
+
+    def test_has_field_changes_detects_difference(self, target_user):
+        """_has_field_changes returns True when a field value differs."""
+        processor = GetOrCreateProcessor(target_user)
+        assert processor._has_field_changes({"first_name": "Changed"}) is True
+
+    def test_has_field_changes_no_difference(self, target_user):
+        """_has_field_changes returns False when all values match."""
+        processor = GetOrCreateProcessor(target_user)
+        assert processor._has_field_changes({"first_name": "Original", "last_name": "Name"}) is False
+
+    def test_has_field_changes_empty_data(self, target_user):
+        """_has_field_changes returns False for empty validated_data."""
+        processor = GetOrCreateProcessor(target_user)
+        assert processor._has_field_changes({}) is False
+
+    def test_has_field_changes_missing_attribute(self, target_user):
+        """_has_field_changes returns True when the instance lacks the attribute."""
+        processor = GetOrCreateProcessor(target_user)
+        assert processor._has_field_changes({"nonexistent_attr": "value"}) is True
+
+    def test_save_new_delegates_correctly_for_existing(self, target_user):
+        """_save_new finds the existing user and updates it."""
+        processor = GetOrCreateProcessor(User(username="helper_user"))
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=None,
+        ):
+            changed, result = processor._save_new(
+                {
+                    "username": "helper_user",
+                    "first_name": "Via_save_new",
+                },
+            )
+
+        result.refresh_from_db()
+        assert result.pk == target_user.pk
+        assert result.first_name == "Via_save_new"
+        assert changed is True
+
+    def test_save_new_creates_new_object(self):
+        """_save_new creates a new user when none exists."""
+        processor = GetOrCreateProcessor(User(username="totally_new"))
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=None,
+        ):
+            changed, result = processor._save_new(
+                {
+                    "username": "totally_new",
+                    "email": "new@example.com",
+                },
+            )
+
+        result.refresh_from_db()
+        assert result.username == "totally_new"
+        assert changed is True
+
+    def test_save_new_no_changes_on_existing(self, target_user):
+        """_save_new returns changed=False when existing record matches."""
+        processor = GetOrCreateProcessor(User(username="helper_user"))
+
+        with patch(
+            "aap_gateway_api.resource_api.get_current_user",
+            return_value=None,
+        ):
+            changed, result = processor._save_new(
+                {
+                    "username": "helper_user",
+                    "first_name": "Original",
+                },
+            )
+
+        assert result.pk == target_user.pk
+        assert changed is False
