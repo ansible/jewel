@@ -4,12 +4,13 @@ from unittest.mock import Mock, patch
 import pytest
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, RemoteObject, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from django.db import IntegrityError
 
+from aap_gateway_api.management.commands.migrate_service_data import AssignmentActorType
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
@@ -1877,3 +1878,155 @@ def test_sync_hub_eda_superuser_no_change_needed(capsys):
     captured = capsys.readouterr()
     assert "promoted to" not in captured.out
     assert "demoted from" not in captured.out
+
+
+# =============================================================================
+# Tests for _resolve_role_definition helper
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_resolve_role_definition_found(admin_user):
+    """Test _resolve_role_definition returns the RoleDefinition when it exists."""
+    rd = RoleDefinition.objects.create(name="Test Role Def", content_type=None)
+
+    cmd = MigrateCommand()
+    result = cmd._resolve_role_definition("Test Role Def")
+
+    assert result == rd
+
+
+@pytest.mark.django_db
+def test_resolve_role_definition_not_found(capsys):
+    """Test _resolve_role_definition returns None and warns when not found."""
+    cmd = MigrateCommand()
+    result = cmd._resolve_role_definition("Nonexistent Role")
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert "Warning: Unable to find role definition Nonexistent Role, skipping assignment" in captured.err
+
+
+# =============================================================================
+# Tests for _resolve_gateway_actor helper
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_resolve_gateway_actor_found(admin_user):
+    """Test _resolve_gateway_actor returns the content object when found."""
+    cmd = MigrateCommand()
+    # admin_user should have a Resource with an ansible_id
+    actor = cmd._resolve_gateway_actor(
+        AssignmentActorType.USER,
+        admin_user.resource.ansible_id,
+    )
+    assert actor == admin_user
+
+
+@pytest.mark.django_db
+def test_resolve_gateway_actor_not_found(capsys):
+    """Test _resolve_gateway_actor returns None and warns when not found."""
+    cmd = MigrateCommand()
+    fake_id = str(uuid.uuid4())
+    result = cmd._resolve_gateway_actor(AssignmentActorType.USER, fake_id)
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert f"Unable to find gateway user with ansible_id {fake_id}" in captured.err
+
+
+# =============================================================================
+# Tests for _resolve_content_object helper
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_global_assignment():
+    """Test _resolve_content_object returns None for global assignments (no object)."""
+    cmd = MigrateCommand()
+    assignment = {"object_ansible_id": None, "object_id": None, "content_type": ""}
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_with_ansible_id(admin_user):
+    """Test _resolve_content_object resolves by ansible_id when present."""
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": admin_user.resource.ansible_id,
+        "object_id": None,
+        "content_type": "",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result == admin_user
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_remote_object():
+    """Test _resolve_content_object resolves RemoteObject by object_id + content_type."""
+    ct = DABContentType.objects.create(service="controller", model="job_template")
+
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": None,
+        "object_id": "12345",
+        "content_type": "controller.job_template",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert isinstance(result, RemoteObject)
+    assert result.object_id == "12345"
+    assert result.content_type == ct
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_skip_on_not_found(capsys):
+    """Test _resolve_content_object returns _SKIP when Resource is not found."""
+    cmd = MigrateCommand()
+    fake_id = str(uuid.uuid4())
+    assignment = {
+        "object_ansible_id": fake_id,
+        "object_id": None,
+        "content_type": "shared.team",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is MigrateCommand._SKIP
+    captured = capsys.readouterr()
+    assert f"Unable to find object of type shared.team with ansible_id {fake_id}" in captured.err
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_skip_on_malformed_content_type(capsys):
+    """Test _resolve_content_object returns _SKIP on malformed content_type."""
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": None,
+        "object_id": "12345",
+        "content_type": "bad-format",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is MigrateCommand._SKIP
+    captured = capsys.readouterr()
+    assert "Malformed content_type 'bad-format'" in captured.err
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_skip_on_missing_content_type(capsys):
+    """Test _resolve_content_object returns _SKIP when DABContentType doesn't exist."""
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": None,
+        "object_id": "12345",
+        "content_type": "nonexistent.model",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is MigrateCommand._SKIP
+    captured = capsys.readouterr()
+    assert "Unable to find content type 'nonexistent.model'" in captured.err
