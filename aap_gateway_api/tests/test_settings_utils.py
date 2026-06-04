@@ -197,8 +197,8 @@ class TestLoadCustomEnvvars:
 
     def test_sidecar_cache_is_default(self, dynaconf_settings):
         """The sidecar Redis (Unix socket) should be the default cache backend."""
+        assert dynaconf_settings.CACHES["default"]["BACKEND"] == "ansible_base.lib.cache.redis_cache.DABRedisCache"
         assert dynaconf_settings.CACHES["default"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=4"
-        assert dynaconf_settings.CACHES["default"]["OPTIONS"]["CLIENT_CLASS"] == "django_redis.client.DefaultClient"
 
     def test_legacy_cache_entry_exists(self, dynaconf_settings):
         """The legacy DABCacheWithFallback entry should exist under the 'legacy' key."""
