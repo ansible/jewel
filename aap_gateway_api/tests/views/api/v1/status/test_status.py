@@ -496,12 +496,9 @@ class TestCheckRedisUnixSocket:
 
     SIDECAR_CACHES = {
         "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
+            "BACKEND": "ansible_base.lib.cache.redis_cache.DABRedisCache",
             "LOCATION": "unix:///var/run/redis/redis.sock?db=4",
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "CONNECTION_POOL_KWARGS": {"protocol": 2},
-            },
+            "KEY_PREFIX": "gateway",
         },
     }
 
