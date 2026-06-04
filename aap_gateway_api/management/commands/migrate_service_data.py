@@ -940,6 +940,47 @@ class Command(BaseCommand):
         for service_api in hub_eda_apis:
             self._demote_extra_superusers(service_api, gateway_superusers, user)
 
+    def _collect_controller_superusers(self, controller_api: ServiceAPIRoute, user: AbstractUser) -> set:
+        """
+        Collect superuser usernames from Controller via paginated API calls.
+
+        Iterates through all shared user resources registered in the Controller service
+        and returns the set of usernames that have superuser status.
+
+        Args:
+            controller_api: ServiceAPIRoute for the Controller service
+            user: User to perform API calls as
+
+        Returns:
+            Set of usernames who are superusers in Controller
+        """
+        client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
+
+        # No service_id filter since after migration all resources have Gateway's service_id
+        filters = {
+            "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
+        }
+
+        controller_superusers = set()
+        page = 1
+
+        while True:
+            data = client.list_resources(filters={**filters, "page": page}).json()
+
+            for user_item in data["results"]:
+                user_detail = client.get_resource(user_item["ansible_id"]).json()
+                username = user_detail["resource_data"]["username"]
+                resource_data = user_detail["resource_data"]
+
+                if resource_data.get("is_superuser", False):
+                    controller_superusers.add(username)
+
+            if not data.get("next"):
+                break
+            page += 1
+
+        return controller_superusers
+
     def _ensure_controller_gateway_superusers(self, controller_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
         """
         Ensure that Controller and Gateway superusers are consistent by promoting users as needed.
@@ -957,32 +998,7 @@ class Command(BaseCommand):
             CommandError: If users are superusers in Controller but don't exist in Gateway
                          (indicating migration failure)
         """
-        client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
-
-        # Get all users from the shared resource registry (no service_id filter since
-        # after migration all resources have Gateway's service_id)
-        filters = {
-            "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
-        }
-
-        controller_superusers = set()
-        page = 1
-
-        while True:
-            data = client.list_resources(filters={**filters, "page": page}).json()
-
-            for user_item in data["results"]:
-                user_detail = client.get_resource(user_item["ansible_id"]).json()
-                username = user_detail["resource_data"]["username"]
-                resource_data = user_detail["resource_data"]
-
-                # Check if user is actually a superuser
-                if resource_data.get("is_superuser", False):
-                    controller_superusers.add(username)
-
-            if not data.get("next"):
-                break
-            page += 1
+        controller_superusers = self._collect_controller_superusers(controller_api, user)
 
         self.stdout.write(f"Controller superusers: {sorted(controller_superusers)}")
 
@@ -1006,7 +1022,7 @@ class Command(BaseCommand):
                 self.stderr.write(f"Error: Users {sorted(missing_users)} are superusers in Controller but don't exist in Gateway")
                 raise CommandError(f"Migration failure detected: Users {sorted(missing_users)} should have been migrated but are missing from Gateway")
 
-        if not controller_only:
+        else:
             self.stdout.write("✓ Controller and Gateway superusers are consistent")
 
     def _demote_extra_superusers(self, service_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:

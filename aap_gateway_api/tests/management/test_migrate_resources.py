@@ -1678,6 +1678,118 @@ def test_ensure_controller_gateway_superusers_scenarios(
 
 
 # =============================================================================
+# Tests for _collect_controller_superusers helper function
+# =============================================================================
+
+
+@pytest.fixture
+def mock_controller_client(service_api_route_controller):
+    """Mock GWResourceAPIClient for _collect_controller_superusers tests.
+
+    Yields (mock_client, run) where run(page_data, resource_data, user) calls
+    _collect_controller_superusers with the mock wired up.
+    page_data: dict mapping page number -> {"results": [...], "next": ...}
+    resource_data: dict mapping ansible_id -> detail response dict
+    """
+    mock_client = Mock()
+
+    def run(page_data, resource_data, admin_user):
+        def mock_list_resources(filters=None):
+            page = filters["page"]
+            mock_response = Mock()
+            mock_response.json.return_value = page_data[page]
+            return mock_response
+
+        mock_client.list_resources.side_effect = mock_list_resources
+
+        def mock_get_resource(ansible_id):
+            mock_response = Mock()
+            mock_response.json.return_value = resource_data[ansible_id]
+            return mock_response
+
+        mock_client.get_resource.side_effect = mock_get_resource
+
+        cmd = MigrateCommand()
+        with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient', return_value=mock_client):
+            return cmd._collect_controller_superusers(service_api_route_controller, admin_user)
+
+    yield mock_client, run
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_single_page(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers returns superuser usernames from a single page of results."""
+    mock_client, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [{"ansible_id": "id-1"}, {"ansible_id": "id-2"}, {"ansible_id": "id-3"}], "next": None},
+    }
+    resource_data = {
+        "id-1": {"resource_data": {"username": "super_admin", "is_superuser": True}},
+        "id-2": {"resource_data": {"username": "regular_user", "is_superuser": False}},
+        "id-3": {"resource_data": {"username": "another_super", "is_superuser": True}},
+    }
+
+    result = run(page_data, resource_data, admin_user)
+
+    assert result == {"super_admin", "another_super"}
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_pagination(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers handles paginated API responses correctly."""
+    mock_client, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [{"ansible_id": "id-1"}], "next": "http://example.com/page=2"},
+        2: {"results": [{"ansible_id": "id-2"}], "next": None},
+    }
+    resource_data = {
+        "id-1": {"resource_data": {"username": "super1", "is_superuser": True}},
+        "id-2": {"resource_data": {"username": "super2", "is_superuser": True}},
+    }
+
+    result = run(page_data, resource_data, admin_user)
+
+    assert result == {"super1", "super2"}
+    mock_client.list_resources.assert_any_call(filters={"content_type__resource_type__name": "shared.user", "page": 1})
+    mock_client.list_resources.assert_any_call(filters={"content_type__resource_type__name": "shared.user", "page": 2})
+    assert mock_client.list_resources.call_count == 2
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_no_superusers(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers returns empty set when no superusers exist."""
+    _, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [{"ansible_id": "id-1"}, {"ansible_id": "id-2"}], "next": None},
+    }
+    resource_data = {
+        "id-1": {"resource_data": {"username": "user1", "is_superuser": False}},
+        "id-2": {"resource_data": {"username": "user2", "is_superuser": False}},
+    }
+
+    result = run(page_data, resource_data, admin_user)
+
+    assert result == set()
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_empty_results(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers handles empty results."""
+    _, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [], "next": None},
+    }
+
+    result = run(page_data, {}, admin_user)
+
+    assert result == set()
+
+
+# =============================================================================
 # Tests for _get_gateway_user helper function
 # =============================================================================
 
