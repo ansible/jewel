@@ -1263,15 +1263,26 @@ class Command(BaseCommand):
 
         try:
             if service_content_object_ansible_id:
+                # Object is a gateway resource identified by ansible_id
                 return Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
             elif service_content_object_id:
+                # Object is remote (not a gateway resource); use RemoteObject with DABContentType
                 service, model = content_type.split('.')
                 ct = DABContentType.objects.get(service=service, model=model)
                 return RemoteObject(ct, service_content_object_id)
             else:
+                # No object reference means a global role assignment
                 return None
         except Resource.DoesNotExist:
             self.stderr.write(f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment")
+            return Command._SKIP
+        except ValueError:
+            self.stderr.write(f"Warning: Malformed content_type '{content_type}', expected 'service.model' format, skipping assignment")
+            return Command._SKIP
+        except DABContentType.DoesNotExist:
+            self.stderr.write(
+                f"Warning: Unable to find content type '{content_type}' for remote object with id {service_content_object_id}, skipping assignment"
+            )
             return Command._SKIP
 
     @staticmethod
