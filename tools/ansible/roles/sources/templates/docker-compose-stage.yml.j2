@@ -19,6 +19,7 @@ services:
 {% set container_id = loop.index %}
       - redis{{ container_id }}
 {% endfor %}
+      - redis_sidecar{{ container_id }}
     expose:
       - "{{ exposed_port }}"
     environment:
@@ -74,10 +75,30 @@ services:
       - $PWD/tools/generated/redis_cluster/redis.key:/etc/ansible-automation-platform/gateway/redis.key:z
       - $PWD/tools/generated/redis_cluster/ca.cert:/etc/ansible-automation-platform/gateway/redis_ca.cert:z
       - $PWD/tools/configs/dev_secret_key:/etc/ansible-automation-platform/gateway/SECRET_KEY:z
+      - redis_sidecar_sock{{ container_id }}:/var/run/redis:z
     ulimits:
       nofile:
         soft: 4096
         hard: 4096
+
+  redis_sidecar{{ container_id }}:
+    container_name: aap_gw_redis_sidecar_{{ container_id }}
+    hostname: redis_sidecar{{ container_id }}
+    image: {{ redis_container_image }}:{{ redis_container_version }}
+    entrypoint: ["sh", "-c", "chmod 777 /var/run/redis && exec redis-server /usr/local/etc/redis/redis-sidecar.conf"]
+    user: "0"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-s", "/var/run/redis/redis.sock", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - $PWD/tools/generated/redis_cluster/redis-sidecar.conf:/usr/local/etc/redis/redis-sidecar.conf:z
+      - redis_sidecar_sock{{ container_id }}:/var/run/redis:z
+    networks:
+      dbnet:
+        aliases:
+          - redis_sidecar{{ container_id }}
   {% endfor %}
 
 {% for i in range(redis_node_count|int) %}
@@ -367,6 +388,11 @@ networks:
 volumes:
   aap_gw_db:
     name: aap_gw_db
+{% for i in range(gateway_node_count|int) %}
+{% set container_id = loop.index %}
+  redis_sidecar_sock{{ container_id }}:
+    name: redis_sidecar_sock{{ container_id }}
+{% endfor %}
 {% if enabled_containers['ldap'] | bool %}
   aap_gw_openldap_data:
     name: aap_gw_ldap_1

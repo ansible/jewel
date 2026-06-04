@@ -195,6 +195,15 @@ class TestLoadCustomEnvvars:
         # the GRPC override does not trigger since the pre-set int value is above minimum
         assert dynaconf_settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH == above_min
 
+    def test_sidecar_cache_is_default(self, dynaconf_settings):
+        """The sidecar Redis (Unix socket) should be the default cache backend."""
+        assert dynaconf_settings.CACHES["default"]["BACKEND"] == "ansible_base.lib.cache.redis_cache.DABRedisCache"
+        assert dynaconf_settings.CACHES["default"]["LOCATION"] == "unix:///var/run/redis/redis.sock?db=4"
+
+    def test_legacy_cache_entry_exists(self, dynaconf_settings):
+        """The legacy DABCacheWithFallback entry should exist under the 'legacy' key."""
+        assert dynaconf_settings.CACHES["legacy"]["BACKEND"] == "ansible_base.lib.cache.fallback_cache.DABCacheWithFallback"
+
     def test_mapping_table_completeness(self):
         """Verify the mapping table has the expected number of entries."""
         assert len(_CUSTOM_ENVVAR_MAPPINGS) == 27

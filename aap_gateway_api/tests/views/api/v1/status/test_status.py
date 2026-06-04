@@ -491,5 +491,85 @@ def test_null_ping_url(get, admin_api_client):
     get.assert_called_once_with('https://pingless.com:443', verify=mock.ANY, timeout=mock.ANY)
 
 
+class TestCheckRedisUnixSocket:
+    """Tests for the Unix socket health check path in check_redis()."""
+
+    SIDECAR_CACHES = {
+        "default": {
+            "BACKEND": "ansible_base.lib.cache.redis_cache.DABRedisCache",
+            "LOCATION": "unix:///var/run/redis/redis.sock?db=4",
+            "KEY_PREFIX": "gateway",
+        },
+    }
+
+    LEGACY_CACHES = {
+        "default": {
+            "BACKEND": "ansible_base.lib.cache.fallback_cache.DABCacheWithFallback",
+        },
+        "primary": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": "rediss://gateway1:redis_password@redis:6380",
+            "OPTIONS": {
+                "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
+                "CLIENT_CLASS_KWARGS": {"mode": "standalone"},
+            },
+        },
+    }
+
+    @override_settings(CACHES=SIDECAR_CACHES)
+    @mock.patch("aap_gateway_api.views.api.v1.status._check_redis_unix_socket")
+    def test_check_redis_routes_to_unix_socket_for_sidecar(self, mock_unix_check):
+        from aap_gateway_api.views.api.v1.status import check_redis
+
+        mock_unix_check.return_value = {'mode': 'standalone', 'status': STATUS_GOOD}
+        result = check_redis()
+        mock_unix_check.assert_called_once_with("unix:///var/run/redis/redis.sock?db=4", 4)
+        assert result['status'] == STATUS_GOOD
+
+    @override_settings(CACHES=LEGACY_CACHES)
+    @mock.patch("aap_gateway_api.views.api.v1.status.get_redis_status")
+    def test_check_redis_routes_to_get_redis_status_for_legacy(self, mock_get_status):
+        from aap_gateway_api.views.api.v1.status import check_redis
+
+        mock_get_status.return_value = {'mode': 'standalone', 'status': STATUS_GOOD}
+        result = check_redis()
+        mock_get_status.assert_called_once()
+        assert result['status'] == STATUS_GOOD
+
+    @mock.patch("aap_gateway_api.views.api.v1.status.redis_lib")
+    def test_unix_socket_health_check_success(self, mock_redis_lib):
+        from aap_gateway_api.views.api.v1.status import _check_redis_unix_socket
+
+        mock_redis_lib.connection.parse_url.return_value = {'path': '/var/run/redis/redis.sock', 'db': 4}
+        mock_client = mock.Mock()
+        mock_redis_lib.Redis.return_value = mock_client
+
+        result = _check_redis_unix_socket("unix:///var/run/redis/redis.sock?db=4", 4)
+
+        assert result == {'mode': 'standalone', 'status': STATUS_GOOD}
+        mock_redis_lib.Redis.assert_called_once_with(
+            unix_socket_path='/var/run/redis/redis.sock',
+            db=4,
+            socket_timeout=4,
+            protocol=2,
+        )
+        mock_client.ping.assert_called_once()
+
+    @mock.patch("aap_gateway_api.views.api.v1.status.redis_lib")
+    def test_unix_socket_health_check_failure(self, mock_redis_lib):
+        from aap_gateway_api.views.api.v1.status import _check_redis_unix_socket
+
+        mock_redis_lib.connection.parse_url.return_value = {'path': '/var/run/redis/redis.sock', 'db': 4}
+        mock_client = mock.Mock()
+        mock_client.ping.side_effect = ConnectionError("Socket not found")
+        mock_redis_lib.Redis.return_value = mock_client
+
+        result = _check_redis_unix_socket("unix:///var/run/redis/redis.sock?db=4", 4)
+
+        assert result['mode'] == 'standalone'
+        assert result['status'] == STATUS_FAILED
+        assert 'Socket not found' in result['exception']
+
+
 def get_service_by_name(data: List, name: str):
     return next((s for s in data["services"] if s["service_name"] == name), None)
