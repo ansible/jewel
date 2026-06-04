@@ -1877,3 +1877,78 @@ def test_sync_hub_eda_superuser_no_change_needed(capsys):
     captured = capsys.readouterr()
     assert "promoted to" not in captured.out
     assert "demoted from" not in captured.out
+
+
+# =============================================================================
+# Tests for orphaned resource handling in _merge_partially_migrated_users (AAP-72439)
+# =============================================================================
+
+
+@pytest.mark.django_db(transaction=True)
+def test_merge_partially_migrated_users_skips_orphaned_resources(admin_user, capsys, service_api_route_controller, patched_resource_client):
+    """Test that _merge_partially_migrated_users skips resources with unregistered service_ids
+    instead of raising RuntimeError.
+
+    This is a regression test for AAP-72439 where orphaned resources with service_ids
+    belonging to deregistered services caused a hard crash.
+    """
+    # Create a user whose resource will have an orphaned (unregistered) service_id
+    orphaned_user = User.objects.create(username="orphaned_user")
+
+    # Set the resource's service_id to a UUID that doesn't match any registered service
+    orphaned_service_id = uuid.uuid4()
+    orphaned_user.resource.service_id = orphaned_service_id
+    orphaned_user.resource.save(update_fields=["service_id"])
+
+    # Verify setup: the resource should now be considered "partially migrated"
+    # because its service_id differs from gateway's service_id
+    gateway_service_id = service_id()
+    assert str(orphaned_user.resource.service_id) != gateway_service_id
+
+    # Create the command and call _merge_partially_migrated_users
+    # It should NOT raise RuntimeError for the orphaned resource
+    cmd = MigrateCommand()
+    cmd._merge_partially_migrated_users(
+        service_apis=[service_api_route_controller],
+        user=admin_user,
+    )
+
+    # Verify the warning was logged for the orphaned resource
+    captured = capsys.readouterr()
+    assert "Warning: Skipping orphaned resource for user 'orphaned_user'" in captured.err
+    assert str(orphaned_service_id) in captured.err
+    assert "Warning: Skipped 1 orphaned resource(s) with unregistered service_ids" in captured.err
+
+
+@pytest.mark.django_db(transaction=True)
+def test_merge_partially_migrated_users_count_validation_with_orphaned_resources(admin_user, capsys, service_api_route_controller, patched_resource_client):
+    """Test that the count validation after merging correctly accounts for skipped orphaned resources.
+
+    When orphaned resources are skipped, the expected merge count should be reduced
+    accordingly so the validation does not raise a spurious RuntimeError.
+    """
+    # Create two users with orphaned service_ids
+    orphaned_service_id = uuid.uuid4()
+
+    orphan1 = User.objects.create(username="orphan_count_1")
+    orphan1.resource.service_id = orphaned_service_id
+    orphan1.resource.save(update_fields=["service_id"])
+
+    orphan2 = User.objects.create(username="orphan_count_2")
+    orphan2.resource.service_id = orphaned_service_id
+    orphan2.resource.save(update_fields=["service_id"])
+
+    # Call _merge_partially_migrated_users -- should complete without RuntimeError
+    # even though total_merged (0) != total_partially_migrated_users (2)
+    # because the skipped_orphaned count (2) adjusts the expected total
+    cmd = MigrateCommand()
+    cmd._merge_partially_migrated_users(
+        service_apis=[service_api_route_controller],
+        user=admin_user,
+    )
+
+    # Verify warnings were logged for both orphaned resources
+    captured = capsys.readouterr()
+    assert "Warning: Skipping orphaned resource for user 'orphan_count_1'" in captured.err
+    assert "Warning: Skipping orphaned resource for user 'orphan_count_2'" in captured.err
+    assert "Warning: Skipped 2 orphaned resource(s) with unregistered service_ids" in captured.err
