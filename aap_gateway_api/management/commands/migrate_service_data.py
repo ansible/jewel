@@ -367,19 +367,18 @@ class Command(BaseCommand):
         service_api.service_cluster.service_id = self.upstream_service_id
         service_api.service_cluster.save()
 
-        if self._is_service_already_synced():
-            self.stdout.write(f"Service {service_slug} is already synchronized — no unmigrated resources found. Skipping migration.")
-            return True, None
-
-        self.stdout.write(
-            f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
-        )
-
-        # Delete the legacy authenticators after migration, along with their associated authenticatorusers
+        # No-op if legacy authenticators were already deleted on a previous run
         self.delete_legacy_authenticators()
 
-        for r_type in self.resource_types_to_migrate.keys():
-            self.migrate_resource(r_type)
+        if self._is_service_already_synced():
+            self.stdout.write(f"Service {service_slug} is already synchronized — skipping resource migration.")
+        else:
+            self.stdout.write(
+                f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
+            )
+
+            for r_type in self.resource_types_to_migrate.keys():
+                self.migrate_resource(r_type)
 
         self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
         self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)

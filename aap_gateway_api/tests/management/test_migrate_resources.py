@@ -18,6 +18,14 @@ from aap_gateway_api.tests.service_test_app.launch import launch_service
 SEP_CHAR = "_"
 
 
+@pytest.fixture(autouse=True)
+def reset_migration_flag():
+    """Ensure the MigrateServiceDataHasRan flag is False before each test."""
+    from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+
+    MigrateServiceDataHasRan.mark_migration_not_completed()
+
+
 # Friendly reminder to all who come after me, this test file uses test fixtures defined
 # in module: aap_gateway_api/tests/service_test_app/fixtures/migration_tests.py
 # It might not be obvious because the test fixtures are not imported, the name of the
@@ -619,6 +627,8 @@ def test_migration_skips_when_already_synced(admin_user, capsys, service_api_rou
                 "service_type": "controller",
             }
             mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+            mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
             return mock_client
 
         mock_client_class.side_effect = mock_client_factory
@@ -627,8 +637,10 @@ def test_migration_skips_when_already_synced(admin_user, capsys, service_api_rou
 
         captured = capsys.readouterr()
         assert "already synchronized" in captured.out
-        assert "Skipping migration" in captured.out
-        assert "Migrating" not in captured.out
+        assert "skipping resource migration" in captured.out
+        # Resource migration is skipped but role assignments still run
+        assert "Migrating data for" not in captured.out
+        assert "role assignments" in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -648,8 +660,6 @@ def test_migration_proceeds_when_not_synced(admin_user, capsys, service_api_rout
                 "service_id": str(uuid.uuid4()),
                 "service_type": "controller",
             }
-            # First call returns count > 0 (for sync check on first resource type),
-            # subsequent calls return count 0 (for the migrate_resource loop exit)
             mock_client.list_resources.return_value.json.return_value = {"count": 1, "results": []}
             mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
             mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
@@ -657,15 +667,11 @@ def test_migration_proceeds_when_not_synced(admin_user, capsys, service_api_rout
 
         mock_client_class.side_effect = mock_client_factory
 
-        # Migration will attempt to proceed (and may hit errors on the mock data,
-        # but the point is it should NOT short-circuit)
-        try:
-            call_command("migrate_service_data", username=admin_user.username)
-        except Exception:
-            pass
+        call_command("migrate_service_data", username=admin_user.username)
 
         captured = capsys.readouterr()
         assert "already synchronized" not in captured.out
+        assert "Migrating data for" in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1106,8 +1112,8 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
             "service_type": "controller",
         }
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
         mock_client_class.return_value = mock_client
 
         # Run migration
