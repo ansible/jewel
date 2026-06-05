@@ -426,6 +426,117 @@ class TestUserSerializer:
             ]
         }
 
+    def test_validate_single_authenticator_entry_valid(self):
+        """Test _validate_single_authenticator_entry returns no errors for valid input."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        allowed_keys = {'uid', 'email'}
+        validate_email = EmailValidator()
+        errors = serializer._validate_single_authenticator_entry('1', {'uid': 'testuser', 'email': 'test@example.com'}, allowed_keys, validate_email)
+        assert errors == []
+
+    def test_validate_single_authenticator_entry_not_dict(self):
+        """Test _validate_single_authenticator_entry rejects non-dict details."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        allowed_keys = {'uid', 'email'}
+        validate_email = EmailValidator()
+        errors = serializer._validate_single_authenticator_entry('1', 'not_a_dict', allowed_keys, validate_email)
+        assert len(errors) == 1
+        assert "must be a dictionary" in str(errors[0])
+
+    def test_validate_single_authenticator_entry_unknown_keys(self):
+        """Test _validate_single_authenticator_entry detects unknown keys."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        allowed_keys = {'uid', 'email'}
+        validate_email = EmailValidator()
+        errors = serializer._validate_single_authenticator_entry('1', {'uid': 'testuser', 'bad_key': 'value'}, allowed_keys, validate_email)
+        assert len(errors) == 1
+        assert "Unknown key(s)" in str(errors[0])
+
+    def test_validate_single_authenticator_entry_missing_uid(self):
+        """Test _validate_single_authenticator_entry requires uid."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        allowed_keys = {'uid', 'email'}
+        validate_email = EmailValidator()
+        errors = serializer._validate_single_authenticator_entry('1', {'email': 'test@example.com'}, allowed_keys, validate_email)
+        assert len(errors) == 1
+        assert "non-empty 'uid' string" in str(errors[0])
+
+    def test_validate_single_authenticator_entry_empty_uid(self):
+        """Test _validate_single_authenticator_entry rejects empty uid."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        allowed_keys = {'uid', 'email'}
+        validate_email = EmailValidator()
+        errors = serializer._validate_single_authenticator_entry('1', {'uid': ''}, allowed_keys, validate_email)
+        assert len(errors) == 1
+        assert "non-empty 'uid' string" in str(errors[0])
+
+    def test_validate_single_authenticator_entry_multiple_errors(self):
+        """Test _validate_single_authenticator_entry collects multiple errors."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        allowed_keys = {'uid', 'email'}
+        validate_email = EmailValidator()
+        errors = serializer._validate_single_authenticator_entry('1', {'bad_key': 'val'}, allowed_keys, validate_email)
+        assert len(errors) == 2  # unknown key + missing uid
+
+    def test_validate_email_value_valid_email(self):
+        """Test _validate_email_value returns None for valid email."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        validate_email = EmailValidator()
+        result = serializer._validate_email_value({'uid': 'user', 'email': 'user@example.com'}, '1', validate_email)
+        assert result is None
+
+    def test_validate_email_value_no_email_key(self):
+        """Test _validate_email_value returns None when email key is absent."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        validate_email = EmailValidator()
+        result = serializer._validate_email_value({'uid': 'user'}, '1', validate_email)
+        assert result is None
+
+    def test_validate_email_value_null_email(self):
+        """Test _validate_email_value returns None when email is None."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        validate_email = EmailValidator()
+        result = serializer._validate_email_value({'uid': 'user', 'email': None}, '1', validate_email)
+        assert result is None
+
+    def test_validate_email_value_non_string_email(self):
+        """Test _validate_email_value rejects non-string email."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        validate_email = EmailValidator()
+        result = serializer._validate_email_value({'uid': 'user', 'email': 12345}, '1', validate_email)
+        assert result is not None
+        assert "must be a string or null" in str(result)
+
+    def test_validate_email_value_invalid_email(self):
+        """Test _validate_email_value rejects invalid email format."""
+        from django.core.validators import EmailValidator
+
+        serializer = UserSerializer()
+        validate_email = EmailValidator()
+        result = serializer._validate_email_value({'uid': 'user', 'email': 'not-an-email'}, '1', validate_email)
+        assert result is not None
+        assert "not a valid email address" in str(result)
+
     def test_associated_authenticator_does_not_block_full_api_request_if_unchanged(self, admin_api_client, user_api_client, user, local_authenticator):
         url = get_relative_url('user-detail', kwargs={'pk': user.id})
         # Create a user with an associated authenticator
