@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
+from ansible_base.lib.utils.settings import get_setting
 from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.resource_registry.constants import (
@@ -16,6 +17,7 @@ from ansible_base.resource_registry.constants import (
 )
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
+from ansible_base.rest_pagination.default_paginator import DEFAULT_MAX_PAGE_SIZE
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
@@ -58,6 +60,9 @@ class Command(BaseCommand):
     Important: Users are never fully migrated - only the admin user is merged,
     while other users are partially migrated to preserve authentication state.
     """
+
+    RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
+    BIG_PAGE_FILTERS = {"page_size": str(get_setting('RESOURCE_LIST_MAX_PAGE_SIZE', DEFAULT_MAX_PAGE_SIZE))}
 
     # Service processing order - Controller first to establish priority for user merging
     SERVICE_TYPE_ORDER = [
@@ -271,7 +276,7 @@ class Command(BaseCommand):
             service_slug = service_api.api_slug
             try:
                 client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
-                big_page_filter = {"page_size": "200"}
+                big_page_filter = self.BIG_PAGE_FILTERS
 
                 # Load types into system
                 response = client.list_role_types(filters=big_page_filter)
@@ -686,6 +691,9 @@ class Command(BaseCommand):
         """
         Retrieves and filters resources for a given resource type.
         """
+        # Use default page_size here; resource_data triggers per-item content_object
+        # serialization that cannot be prefetched, so larger pages risk timeouts.
+        filters = {**filters, **self.RESOURCE_DATA_FILTERS}
         data = self.client.list_resources(filters=filters).json()
         self.stdout.write(f"Items remaining: {data['count']}")
         results = data['results']
@@ -726,16 +734,13 @@ class Command(BaseCommand):
         resource_ansible_id = upstream_resource_item["ansible_id"]
         resource_type = resource_context["type"]
 
-        # Currently, we're making a GET request to the upstream service for every single resource
-        # This implementation is non-optimal. However, we can leave this as is for now
-        # since there is an ongoing initiative to rework the migration process
+        if "resource_data" not in upstream_resource_item:
+            raise RuntimeError(
+                f"Resource {resource_ansible_id} is missing 'resource_data'. Ensure all services are running a version of DAB that supports extra_fields."
+            )
 
-        # Fetch the complete resource data from the upstream service (Controller/Hub/EDA)
-        # This contains the full API response structure with metadata, ansible_id, service_id, resource_data, additional_data, etc.
-        upstream_resource = self.client.get_resource(resource_ansible_id).json()
+        upstream_resource = upstream_resource_item
 
-        # Extract and validate the core resource data from the upstream response
-        # This is the clean, validated resource data ready for Gateway use
         validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
         # Sync superuser flags for user resources
@@ -985,12 +990,12 @@ class Command(BaseCommand):
         page = 1
 
         while True:
-            data = client.list_resources(filters={**filters, "page": page}).json()
+            # No page_size override; resource_data serialization is expensive per item
+            data = client.list_resources(filters={**filters, **self.RESOURCE_DATA_FILTERS, "page": page}).json()
 
             for user_item in data["results"]:
-                user_detail = client.get_resource(user_item["ansible_id"]).json()
-                username = user_detail["resource_data"]["username"]
-                resource_data = user_detail["resource_data"]
+                resource_data = user_item["resource_data"]
+                username = resource_data["username"]
 
                 if resource_data.get("is_superuser", False):
                     controller_superusers.add(username)
@@ -1058,16 +1063,16 @@ class Command(BaseCommand):
         demoted_users = []
         page = 1
         while True:
-            data = client.list_resources(filters={**filters, "page": page}).json()
+            # No page_size override; resource_data serialization is expensive per item
+            data = client.list_resources(filters={**filters, **self.RESOURCE_DATA_FILTERS, "page": page}).json()
 
             for user_item in data["results"]:
-                user_detail = client.get_resource(user_item["ansible_id"]).json()
-                username = user_detail["resource_data"]["username"]
-                is_superuser = user_detail["resource_data"].get("is_superuser", False)
+                resource_data = user_item["resource_data"]
+                username = resource_data["username"]
+                is_superuser = resource_data.get("is_superuser", False)
 
-                # If user is superuser in service but not in Gateway, demote them
                 if is_superuser and username not in gateway_superusers:
-                    updated_resource_data = user_detail["resource_data"].copy()
+                    updated_resource_data = resource_data.copy()
                     updated_resource_data["is_superuser"] = False
 
                     update_payload = {"resource_data": updated_resource_data}
@@ -1343,7 +1348,7 @@ class Command(BaseCommand):
         total_count = None  # we will check this on each page to see if anything changed
         while True:
             logger.info(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}")
-            filters: Dict[str, int | str] = {'page': page}
+            filters: Dict[str, int | str] = {'page': page, **self.BIG_PAGE_FILTERS}
             if role_definitions_to_exclude:
                 filters['not__role_definition__name__in'] = ','.join(role_definitions_to_exclude)
             if assignment_actor == AssignmentActorType.USER:
