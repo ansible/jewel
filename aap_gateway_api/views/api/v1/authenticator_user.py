@@ -74,10 +74,11 @@ class AuthenticatorUserViewSet(GatewayReadOnlyModelViewSet):
 
         new_user.save()
 
-        try:
-            new_authenticator_user = AuthenticatorUser.objects.get(user=new_user, provider=new_authenticator)
-        except AuthenticatorUser.DoesNotExist:
-            new_authenticator_user = AuthenticatorUser.objects.create(user=new_user, uid=original_uid, provider=new_authenticator)
+        new_authenticator_user, _created = AuthenticatorUser.objects.get_or_create(
+            user=new_user,
+            provider=new_authenticator,
+            defaults={'uid': original_uid},
+        )
 
         if new_uid := serializer.validated_data.get('new_uid'):
             new_authenticator_user.uid = new_uid
