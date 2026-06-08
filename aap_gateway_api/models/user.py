@@ -71,6 +71,7 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
         'dab_oauth2_provider_oauth2idtoken',  # OAuth2 ID tokens - accessed through OAuth2 endpoints
         'dab_oauth2_provider_oauth2refreshtoken',  # OAuth2 refresh tokens - accessed through OAuth2 endpoints
         'oauth2_provider_grant',  # OAuth2 grants - accessed through OAuth2 endpoints
+        'session_memberships',  # internal session tracking, not exposed via API
     ]
     activity_stream_excluded_field_names = ['last_login', 'last_login_from']
 

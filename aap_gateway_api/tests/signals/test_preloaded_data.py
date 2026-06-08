@@ -58,6 +58,7 @@ class TestCreatePreloadedData:
         "verbosity,log_level",
         [
             (0, 'error'),
+            (1, 'error'),
             (2, 'exception'),
         ],
     )

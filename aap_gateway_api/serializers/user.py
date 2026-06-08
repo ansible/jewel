@@ -34,8 +34,6 @@ PASSWORD_DISABLED = 'Password Disabled'  # signal unusable passwords
 class _AssociatedAuthenticatorsField(serializers.JSONField):
     """JSONField with OpenAPI schema annotation for associated_authenticators."""
 
-    pass
-
 
 @extend_schema_serializer(
     deprecate_fields=["authenticators", "authenticator_uid"],
@@ -380,41 +378,52 @@ class UserSerializer(CommonUserSerializer):
         """Validate the format of each authenticator's details dictionary."""
         errors = []
         validate_email = EmailValidator()
-        # Define the set of valid keys for each authenticator's details.
         allowed_keys = {'uid', 'email'}
 
         for auth_id, details in value.items():
-            if not isinstance(details, dict):
-                errors.append(_("The value for key '{auth_id}' must be a dictionary.").format(auth_id=auth_id))
-                continue  # Move to next item if format is wrong
-
-            unknown_keys = set(details.keys()) - allowed_keys
-            if unknown_keys:
-                # Format the unknown keys for a clear error message.
-                keys_str = ", ".join(sorted(unknown_keys))
-                errors.append(
-                    _("Unknown key(s) for authenticator '{auth_id}': {keys_str}. Only 'uid' and 'email' are allowed.").format(
-                        auth_id=auth_id, keys_str=keys_str
-                    )
-                )
-
-            # Check for mandatory 'uid'
-            if not isinstance(details.get('uid'), str) or not details.get('uid'):
-                errors.append(_("Each authenticator must have a non-empty 'uid' string. Error at key '{auth_id}'.").format(auth_id=auth_id))
-
-            # Check optional 'email'
-            if 'email' in details and details['email'] is not None:
-                email = details['email']
-                if not isinstance(email, str):
-                    errors.append(_("The 'email' for authenticator '{auth_id}' must be a string or null.").format(auth_id=auth_id))
-                else:
-                    try:
-                        validate_email(email)
-                    except DjangoValidationError:
-                        errors.append(_("The email '{email}' for authenticator '{auth_id}' is not a valid email address.").format(email=email, auth_id=auth_id))
+            errors.extend(self._validate_single_authenticator_entry(auth_id, details, allowed_keys, validate_email))
 
         if errors:
             raise serializers.ValidationError(errors)
+
+    def _validate_single_authenticator_entry(self, auth_id, details, allowed_keys, validate_email):
+        """Validate a single authenticator's details dictionary and return a list of errors."""
+        errors = []
+        if not isinstance(details, dict):
+            errors.append(_("The value for key '{auth_id}' must be a dictionary.").format(auth_id=auth_id))
+            return errors
+
+        unknown_keys = set(details.keys()) - allowed_keys
+        if unknown_keys:
+            keys_str = ", ".join(sorted(unknown_keys))
+            errors.append(
+                _("Unknown key(s) for authenticator '{auth_id}': {keys_str}. Only 'uid' and 'email' are allowed.").format(auth_id=auth_id, keys_str=keys_str)
+            )
+
+        if not isinstance(details.get('uid'), str) or not details.get('uid'):
+            errors.append(_("Each authenticator must have a non-empty 'uid' string. Error at key '{auth_id}'.").format(auth_id=auth_id))
+
+        email_error = self._validate_email_value(details, auth_id, validate_email)
+        if email_error:
+            errors.append(email_error)
+
+        return errors
+
+    def _validate_email_value(self, details, auth_id, validate_email):
+        """Validate the optional email field and return an error string or None."""
+        if 'email' not in details or details['email'] is None:
+            return None
+
+        email = details['email']
+        if not isinstance(email, str):
+            return _("The 'email' for authenticator '{auth_id}' must be a string or null.").format(auth_id=auth_id)
+
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return _("The email '{email}' for authenticator '{auth_id}' is not a valid email address.").format(email=email, auth_id=auth_id)
+
+        return None
 
     def _validate_email_change(self, data):
         """Prevent unauthorized changes to email.

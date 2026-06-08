@@ -1,3 +1,4 @@
+from importlib.metadata import PackageNotFoundError
 from io import StringIO
 from unittest import mock
 
@@ -45,7 +46,7 @@ class TestGetApiVersion:
 
     def test_falls_back_to_generate_version_on_exception(self):
         with (
-            mock.patch("importlib.metadata.version", side_effect=Exception),
+            mock.patch("importlib.metadata.version", side_effect=PackageNotFoundError),
             mock.patch("aap_gateway_api.version.generate_version", return_value="1.2.3") as mock_gen,
         ):
             assert get_api_version() == "1.2.3"
@@ -54,7 +55,7 @@ class TestGetApiVersion:
     def test_returns_version_file_content_when_package_unavailable(self):
         expected_version = "1.0.0"
         with (
-            mock.patch("importlib.metadata.version", side_effect=Exception),
+            mock.patch("importlib.metadata.version", side_effect=PackageNotFoundError),
             mock.patch("os.path.exists", return_value=True),
             mock.patch("builtins.open", return_value=StringIO(expected_version)),
         ):
@@ -62,7 +63,7 @@ class TestGetApiVersion:
 
     def test_returns_unknown_as_last_resort(self):
         with (
-            mock.patch("importlib.metadata.version", side_effect=Exception),
+            mock.patch("importlib.metadata.version", side_effect=PackageNotFoundError),
             mock.patch("os.path.exists", return_value=False),
             mock.patch.dict("sys.modules", {"setuptools_scm": None}),
         ):

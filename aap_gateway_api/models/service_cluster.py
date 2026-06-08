@@ -172,23 +172,21 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     def delete_inactive_keys(self):
         self.service_keys.filter(is_active=False).delete()
 
-    def get_login_path(self, url_prefix: str) -> Optional[str]:
+    def _get_auth_path(self, url_prefix: str, path_attr: str) -> Optional[str]:
         url_prefix = url_prefix.rstrip('/')
+        path = getattr(self.service_type, path_attr)
         if self.service_type.name in [DefaultServiceType.CONTROLLER, DefaultServiceType.EDA]:
-            return f"{url_prefix}{self.service_type.login_path}"
+            return f"{url_prefix}{path}"
         elif self.service_type.name in [DefaultServiceType.HUB]:
-            return f"{self.service_type.login_path}"
+            return f"{path}"
         else:
             return None
 
+    def get_login_path(self, url_prefix: str) -> Optional[str]:
+        return self._get_auth_path(url_prefix, 'login_path')
+
     def get_logout_path(self, url_prefix: str) -> Optional[str]:
-        url_prefix = url_prefix.rstrip('/')
-        if self.service_type.name in [DefaultServiceType.CONTROLLER, DefaultServiceType.EDA]:
-            return f"{url_prefix}{self.service_type.logout_path}"
-        elif self.service_type.name in [DefaultServiceType.HUB]:
-            return f"{self.service_type.logout_path}"
-        else:
-            return None
+        return self._get_auth_path(url_prefix, 'logout_path')
 
     def get_effective_health_check_timeout_seconds(self):
         # _max_route_timeout may be pre-populated as a queryset annotation by
@@ -210,5 +208,4 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     def get_cluster_by_type(service_type: Union[ServiceType, str]):
         if isinstance(service_type, ServiceType):
             return ServiceCluster.objects.filter(service_type=service_type).first()
-        else:
-            return ServiceCluster.objects.filter(service_type__name=service_type).first()
+        return ServiceCluster.objects.filter(service_type__name=service_type).first()

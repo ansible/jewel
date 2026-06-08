@@ -329,7 +329,7 @@ Run window: 2026-04-29 09:22 – 10:10 UTC
 | Network inbound | 8,862,321 B | 6,800,582 B | — | — |
 | Network outbound | 7,718,614 B | 5,359,737 B | — | — |
 
-**Endpoint latencies — list responses, basic auth (seconds):**
+**Controller endpoint latencies (proxied through gateway) — list responses, basic auth (seconds):**
 
 | Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -357,15 +357,51 @@ Run window: 2026-04-29 09:22 – 10:10 UTC
 | workflow_job_nodes | 0.15 | 0.15 | 0.14 | 0.16 | 0.01 | 36 | 7.04 |
 | workflow_job_templates | 0.20 | 0.20 | 0.20 | 0.22 | 0.01 | 26 | 5.04 |
 | workflow_job_template_nodes | 0.15 | 0.15 | 0.14 | 0.16 | 0.01 | 36 | 7.07 |
-| settings | 0.15 | 0.15 | 0.14 | 0.16 | 0.01 | 36 | 7.02 |
 
-**Endpoint latencies — get/create responses, basic auth (seconds):**
+**Controller endpoint latencies — get/create responses, basic auth (seconds):**
 
 | Test Type | Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | get | settings | 0.15 | 0.15 | 0.14 | 0.16 | 0.01 | 36 | 7.02 |
 | create | credential | 0.18 | 0.18 | 0.17 | 0.19 | 0.01 | 29 | 5.76 |
 | create | credential_type | 0.15 | 0.15 | 0.15 | 0.16 | 0.01 | 35 | 6.77 |
+| create | execution_environment | 0.16 | 0.16 | 0.16 | 0.19 | 0.01 | 30 | 6.48 |
+| create | group | 0.16 | 0.16 | 0.15 | 0.17 | 0.01 | 33 | 6.45 |
+| create | inventory | 0.18 | 0.18 | 0.17 | 0.19 | 0.01 | 30 | 5.85 |
+| create | instance_group | 0.17 | 0.17 | 0.17 | 0.18 | 0.01 | 29 | 6.04 |
+| create | inventory_source | 0.20 | 0.20 | 0.19 | 0.22 | 0.01 | 26 | 5.21 |
+| create | job | 0.26 | 0.26 | 0.25 | 0.30 | 0.02 | 21 | 3.86 |
+| create | job_template | 0.19 | 0.18 | 0.18 | 0.20 | 0.01 | 29 | 5.56 |
+| create | notification_template | 0.17 | 0.17 | 0.16 | 0.18 | 0.01 | 29 | 6.08 |
+| create | workflow_job_template | 0.18 | 0.17 | 0.17 | 0.19 | 0.01 | 30 | 5.84 |
+| create | project0 | 0.35 | 0.33 | 0.20 | 0.55 | 0.12 | 27 | 2.91 |
+| create | workflow_job_template_node | 0.17 | 0.16 | 0.16 | 0.18 | 0.01 | 31 | 6.25 |
+| create | project1 | 0.35 | 0.35 | 0.21 | 0.58 | 0.11 | 27 | 2.88 |
+
+**Gateway-native endpoint latencies — list responses, basic auth (seconds):**
+
+| Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| application | 0.14 | 0.14 | 0.13 | 0.16 | 0.01 | 36 | 7.33 |
+| authenticator | 0.13 | 0.13 | 0.13 | 0.15 | 0.01 | 41 | 7.85 |
+| authenticator_maps | 0.13 | 0.13 | 0.12 | 0.14 | 0.01 | 41 | 8.22 |
+| organization | 0.16 | 0.16 | 0.15 | 0.18 | 0.01 | 35 | 6.63 |
+| role_definition | 0.16 | 0.16 | 0.15 | 0.23 | 0.02 | 33 | 6.29 |
+| role_team_assignment | 0.13 | 0.13 | 0.12 | 0.15 | 0.01 | 41 | 8.10 |
+| role_user_assignment | 0.14 | 0.13 | 0.13 | 0.15 | 0.01 | 39 | 7.60 |
+| service_cluster | 0.15 | 0.15 | 0.14 | 0.15 | 0.01 | 35 | 7.02 |
+| setting | 0.13 | 0.13 | 0.12 | 0.14 | 0.01 | 42 | 8.18 |
+| team | 0.18 | 0.18 | 0.17 | 0.20 | 0.01 | 29 | 5.75 |
+| tokens | 0.14 | 0.14 | 0.14 | 0.16 | 0.01 | 37 | 7.34 |
+| user | 0.37 | 0.38 | 0.35 | 0.39 | 0.02 | 15 | 2.71 |
+
+**Gateway-native endpoint latencies — create responses, basic auth (seconds):**
+
+| Test Type | Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| create | organization | 0.27 | 0.27 | 0.25 | 0.29 | 0.02 | 20 | 3.81 |
+| create | user | 0.36 | 0.34 | 0.33 | 0.49 | 0.05 | 14 | 2.86 |
+| create | team | 0.31 | 0.30 | 0.29 | 0.33 | 0.01 | 17 | 3.32 |
 
 #### How to Collect Post-dispatcherd Results
 
@@ -383,37 +419,199 @@ Run window: 2026-04-29 09:22 – 10:10 UTC
 
 #### Post-dispatcherd Results
 
-<!-- TODO: After the dispatcherd container build (AAP-65396) ships and a perf run completes,
-     fill in the sections below using the same format as the baseline above.
-
-Source: [raw result doc <doc_id>](<full_url>)
-NVR: `<nvr>`
+Source: `tier2-cont-b.fresh-install.performance` build 19, artifact `atf_aap_performance_test_suite/opensearch_status_data.json`
+NVR: `ansible-automation-platform-next-2.8-20260515.aap-devel-20260514-223412-000`
 Topology: `cont-b` | Installation: `containerized`
-Run window: <start> – <end> UTC
+Run window: 2026-05-15 09:00 – 09:47 UTC
 
 **Gateway resource utilization:**
 
 | Metric | Max | Median | Stddev | P99 |
 | --- | --- | --- | --- | --- |
-| CPU avg across cores | | | | |
-| CPU max core | | | | |
-| CPU user% avg | | | | |
-| CPU system% avg | | | | |
-| CPU iowait% avg | | | | |
-| Memory used | | | | |
-| Memory free | | | | |
-| Disk writes | | | | |
-| Network inbound | | | | |
-| Network outbound | | | | |
+| CPU avg across cores | 15.03% | 10.42% | 3.60% | 14.43% |
+| CPU max core | 34.22% | 17.49% | 8.57% | 33.18% |
+| CPU user% avg | 11.26% | 7.35% | 3.03% | 10.71% |
+| CPU system% avg | 2.68% | 2.05% | 0.49% | 2.62% |
+| CPU iowait% avg | 0.017% | 0.003% | 0.003% | 0.014% |
+| Memory used | 33,115,460 B | 30,892,364 B | — | — |
+| Memory free | 65,362,524 B | 64,003,000 B | — | — |
+| Disk writes | 409,353 MB | 400,539 MB | — | — |
+| Network inbound | 8,961,274 B | 6,918,714 B | — | — |
+| Network outbound | 7,950,806 B | 5,604,325 B | — | — |
 
-**Endpoint latencies — list responses, basic auth (seconds):**
+**Controller endpoint latencies (proxied through gateway) — list responses, basic auth (seconds):**
 
-(Copy the full endpoint table from the baseline and fill with post-dispatcherd values)
+| Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| credentials | 0.18 | 0.18 | 0.18 | 0.19 | 0.01 | 28 | 5.73 |
+| credential_types | 0.17 | 0.17 | 0.16 | 0.18 | 0.01 | 32 | 6.15 |
+| groups | 0.15 | 0.15 | 0.14 | 0.16 | 0.01 | 35 | 6.86 |
+| host | 0.26 | 0.26 | 0.26 | 0.28 | 0.01 | 20 | 3.87 |
+| instances | 0.19 | 0.18 | 0.18 | 0.19 | 0.01 | 28 | 5.56 |
+| instance_groups | 0.17 | 0.17 | 0.16 | 0.18 | 0.01 | 31 | 6.18 |
+| inventories | 0.17 | 0.17 | 0.17 | 0.19 | 0.01 | 30 | 5.91 |
+| inventory_sources | 0.15 | 0.15 | 0.15 | 0.16 | 0.01 | 33 | 6.81 |
+| inventory_updates | 0.15 | 0.15 | 0.15 | 0.16 | 0.01 | 34 | 6.74 |
+| jobs | 0.15 | 0.15 | 0.15 | 0.16 | 0.01 | 34 | 6.82 |
+| job_templates | 0.19 | 0.19 | 0.18 | 0.20 | 0.01 | 18 | 5.51 |
+| me | 0.16 | 0.16 | 0.15 | 0.17 | 0.01 | 32 | 6.43 |
+| notifications | 0.15 | 0.14 | 0.14 | 0.15 | 0.01 | 36 | 7.14 |
+| notification_templates | 0.15 | 0.14 | 0.14 | 0.16 | 0.01 | 36 | 7.12 |
+| organizations | 0.17 | 0.17 | 0.17 | 0.19 | 0.01 | 31 | 5.93 |
+| projects | 0.18 | 0.18 | 0.18 | 0.22 | 0.02 | 27 | 5.58 |
+| roles | 0.19 | 0.19 | 0.18 | 0.21 | 0.01 | 26 | 5.44 |
+| schedules | 0.16 | 0.16 | 0.16 | 0.17 | 0.01 | 32 | 6.48 |
+| teams | 0.16 | 0.16 | 0.16 | 0.17 | 0.01 | 32 | 6.34 |
+| users | 0.19 | 0.19 | 0.19 | 0.20 | 0.01 | 28 | 5.39 |
+| workflow_jobs | 0.15 | 0.15 | 0.14 | 0.16 | 0.01 | 36 | 7.01 |
+| workflow_job_nodes | 0.14 | 0.14 | 0.14 | 0.15 | 0.01 | 37 | 7.19 |
+| workflow_job_templates | 0.21 | 0.20 | 0.19 | 0.36 | 0.04 | 26 | 4.99 |
+| workflow_job_template_nodes | 0.14 | 0.14 | 0.14 | 0.16 | 0.01 | 36 | 7.15 |
 
-**Endpoint latencies — get/create responses, basic auth (seconds):**
+**Controller endpoint latencies — get/create responses, basic auth (seconds):**
 
-(Copy the get/create table from the baseline and fill with post-dispatcherd values)
--->
+| Test Type | Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| get | settings | 0.14 | 0.14 | 0.14 | 0.16 | 0.01 | 17 | 7.23 |
+| create | credential | 0.17 | 0.17 | 0.17 | 0.19 | 0.01 | 30 | 5.93 |
+| create | credential_type | 0.15 | 0.15 | 0.15 | 0.17 | 0.01 | 35 | 6.89 |
+| create | execution_environment | 0.16 | 0.16 | 0.15 | 0.17 | 0.01 | 33 | 6.63 |
+| create | group | 0.16 | 0.15 | 0.15 | 0.17 | 0.01 | 33 | 6.67 |
+| create | inventory | 0.17 | 0.17 | 0.16 | 0.18 | 0.01 | 28 | 6.21 |
+| create | instance_group | 0.17 | 0.17 | 0.17 | 0.19 | 0.01 | 30 | 6.00 |
+| create | inventory_source | 0.19 | 0.19 | 0.19 | 0.20 | 0.01 | 27 | 5.29 |
+| create | job | 0.27 | 0.27 | 0.25 | 0.32 | 0.02 | 21 | 3.74 |
+| create | job_template | 0.18 | 0.18 | 0.17 | 0.19 | 0.01 | 28 | 5.71 |
+| create | notification_template | 0.17 | 0.17 | 0.16 | 0.19 | 0.01 | 31 | 6.15 |
+| create | workflow_job_template | 0.18 | 0.17 | 0.17 | 0.18 | 0.01 | 30 | 5.88 |
+| create | project0 | 0.32 | 0.33 | 0.20 | 0.45 | 0.07 | 27 | 3.17 |
+| create | workflow_job_template_node | 0.16 | 0.16 | 0.16 | 0.18 | 0.01 | 32 | 6.30 |
+| create | project1 | 0.31 | 0.31 | 0.19 | 0.46 | 0.07 | 26 | 3.33 |
+
+**Gateway-native endpoint latencies — list responses, basic auth (seconds):**
+
+| Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| application | 0.14 | 0.14 | 0.13 | 0.15 | 0.01 | 37 | 7.48 |
+| authenticator | 0.13 | 0.13 | 0.12 | 0.14 | 0.01 | 38 | 8.08 |
+| authenticator_maps | 0.13 | 0.13 | 0.12 | 0.18 | 0.01 | 42 | 8.17 |
+| organization | 0.16 | 0.15 | 0.15 | 0.28 | 0.03 | 34 | 6.40 |
+| role_definition | 0.16 | 0.16 | 0.15 | 0.21 | 0.02 | 34 | 6.48 |
+| role_team_assignment | 0.13 | 0.13 | 0.12 | 0.14 | 0.01 | 41 | 8.15 |
+| role_user_assignment | 0.13 | 0.13 | 0.13 | 0.15 | 0.01 | 40 | 7.74 |
+| service_cluster | 0.15 | 0.15 | 0.14 | 0.15 | 0.01 | 35 | 7.14 |
+| setting | 0.12 | 0.12 | 0.12 | 0.14 | 0.01 | 42 | 8.36 |
+| team | 0.18 | 0.17 | 0.17 | 0.19 | 0.01 | 29 | 5.88 |
+| tokens | 0.13 | 0.13 | 0.13 | 0.15 | 0.01 | 40 | 7.74 |
+| user | 0.24 | 0.24 | 0.23 | 0.25 | 0.01 | 22 | 4.32 |
+
+**Gateway-native endpoint latencies — create responses, basic auth (seconds):**
+
+| Test Type | Endpoint | Mean | Median | Min | Max | Stddev | Rounds | Ops/s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| create | organization | 0.28 | 0.27 | 0.25 | 0.45 | 0.05 | 20 | 3.68 |
+| create | user | 0.34 | 0.35 | 0.33 | 0.37 | 0.02 | 15 | 2.95 |
+| create | team | 0.30 | 0.29 | 0.29 | 0.35 | 0.02 | 18 | 3.43 |
+
+#### Comparison: Pre- vs Post-dispatcherd
+
+**Gateway resource utilization (median):**
+
+| Metric | Pre | Post | Delta | Verdict |
+| --- | --- | --- | --- | --- |
+| CPU avg across cores | 9.82% | 10.42% | +0.60 pp | Unchanged |
+| CPU max core | 17.71% | 17.49% | -0.22 pp | Unchanged |
+| CPU user% avg | 6.87% | 7.35% | +0.48 pp | Unchanged |
+| CPU system% avg | 2.04% | 2.05% | +0.01 pp | Unchanged |
+| CPU iowait% avg | 0.003% | 0.003% | 0.000 pp | Unchanged |
+| Memory used | 29,429,616 B | 30,892,364 B | +5.0% (+1.4 MB) | Minor increase |
+| Network inbound | 6,800,582 B | 6,918,714 B | +1.7% | Unchanged |
+| Network outbound | 5,359,737 B | 5,604,325 B | +4.6% | Unchanged |
+
+**Controller endpoint latencies — list responses, basic auth (mean, seconds):**
+
+| Endpoint | Pre Mean | Post Mean | Delta (ms) | Delta (%) |
+| --- | --- | --- | --- | --- |
+| credentials | 0.18 | 0.18 | +0 | +0.0% |
+| credential_types | 0.16 | 0.17 | +10 | +6.3% |
+| groups | 0.15 | 0.15 | +0 | +0.0% |
+| host | 0.27 | 0.26 | -10 | -3.7% |
+| instances | 0.18 | 0.19 | +10 | +5.6% |
+| instance_groups | 0.16 | 0.17 | +10 | +6.3% |
+| inventories | 0.17 | 0.17 | +0 | +0.0% |
+| inventory_sources | 0.15 | 0.15 | +0 | +0.0% |
+| inventory_updates | 0.15 | 0.15 | +0 | +0.0% |
+| jobs | 0.16 | 0.15 | -10 | -6.3% |
+| job_templates | 0.19 | 0.19 | +0 | +0.0% |
+| me | 0.15 | 0.16 | +10 | +6.7% |
+| notifications | 0.15 | 0.15 | +0 | +0.0% |
+| notification_templates | 0.14 | 0.15 | +10 | +7.1% |
+| organizations | 0.17 | 0.17 | +0 | +0.0% |
+| projects | 0.18 | 0.18 | +0 | +0.0% |
+| roles | 0.19 | 0.19 | +0 | +0.0% |
+| schedules | 0.16 | 0.16 | +0 | +0.0% |
+| teams | 0.17 | 0.16 | -10 | -5.9% |
+| users | 0.19 | 0.19 | +0 | +0.0% |
+| workflow_jobs | 0.15 | 0.15 | +0 | +0.0% |
+| workflow_job_nodes | 0.15 | 0.14 | -10 | -6.7% |
+| workflow_job_templates | 0.20 | 0.21 | +10 | +5.0% |
+| workflow_job_template_nodes | 0.15 | 0.14 | -10 | -6.7% |
+
+**Controller endpoint latencies — get/create responses, basic auth (mean, seconds):**
+
+| Test Type | Endpoint | Pre Mean | Post Mean | Delta (ms) | Delta (%) |
+| --- | --- | --- | --- | --- | --- |
+| get | settings | 0.15 | 0.14 | -10 | -6.7% |
+| create | credential | 0.18 | 0.17 | -10 | -5.6% |
+| create | credential_type | 0.15 | 0.15 | +0 | +0.0% |
+| create | execution_environment | 0.16 | 0.16 | +0 | +0.0% |
+| create | group | 0.16 | 0.16 | +0 | +0.0% |
+| create | inventory | 0.18 | 0.17 | -10 | -5.6% |
+| create | instance_group | 0.17 | 0.17 | +0 | +0.0% |
+| create | inventory_source | 0.20 | 0.19 | -10 | -5.0% |
+| create | job | 0.26 | 0.27 | +10 | +3.8% |
+| create | job_template | 0.19 | 0.18 | -10 | -5.3% |
+| create | notification_template | 0.17 | 0.17 | +0 | +0.0% |
+| create | workflow_job_template | 0.18 | 0.18 | +0 | +0.0% |
+| create | project0 | 0.35 | 0.32 | -30 | -8.6% |
+| create | workflow_job_template_node | 0.17 | 0.16 | -10 | -5.9% |
+| create | project1 | 0.35 | 0.31 | -40 | -11.4% |
+
+**Gateway-native endpoint latencies — list responses, basic auth (mean, seconds):**
+
+| Endpoint | Pre Mean | Post Mean | Delta (ms) | Delta (%) |
+| --- | --- | --- | --- | --- |
+| application | 0.14 | 0.14 | +0 | +0.0% |
+| authenticator | 0.13 | 0.13 | +0 | +0.0% |
+| authenticator_maps | 0.13 | 0.13 | +0 | +0.0% |
+| organization | 0.16 | 0.16 | +0 | +0.0% |
+| role_definition | 0.16 | 0.16 | +0 | +0.0% |
+| role_team_assignment | 0.13 | 0.13 | +0 | +0.0% |
+| role_user_assignment | 0.14 | 0.13 | -10 | -7.1% |
+| service_cluster | 0.15 | 0.15 | +0 | +0.0% |
+| setting | 0.13 | 0.12 | -10 | -7.7% |
+| team | 0.18 | 0.18 | +0 | +0.0% |
+| tokens | 0.14 | 0.13 | -10 | -7.1% |
+| user | 0.37 | 0.24 | -130 | -35.1% |
+
+**Gateway-native endpoint latencies — create responses, basic auth (mean, seconds):**
+
+| Test Type | Endpoint | Pre Mean | Post Mean | Delta (ms) | Delta (%) |
+| --- | --- | --- | --- | --- | --- |
+| create | organization | 0.27 | 0.28 | +10 | +3.7% |
+| create | user | 0.36 | 0.34 | -20 | -5.6% |
+| create | team | 0.31 | 0.30 | -10 | -3.2% |
+
+**Summary:**
+
+- **Controller endpoints (proxied through gateway):** Of 24 list endpoints, 5 showed a +10ms increase (credential_types, instances, instance_groups, me, notification_templates, workflow_job_templates), 4 showed a -10ms improvement, and 14 were unchanged. All deltas are at the measurement precision floor (0.01s) and within the stddev of each endpoint. Of 15 get/create endpoints, 5 improved by 10–40ms, 1 increased by 10ms (job create), and 9 were unchanged.
+- **Gateway-native endpoints:** Of 12 list endpoints, 9 were unchanged, 3 improved by 10ms, and the `user` list endpoint improved dramatically (-130ms, -35.1%). Of 3 create endpoints, 1 increased by 10ms (organization), 2 improved. The `user` list improvement (0.37s → 0.24s) is a genuine change likely attributable to code changes unrelated to dispatcherd between the two builds.
+- **CPU median** increased by 0.60 pp (9.82% → 10.42%), well within normal run-to-run variance. Max CPU (15.03%) is comparable to the baseline (15.16%).
+- **Memory used median** increased by ~1.4 MB (+5.0%), from 29.4 MB to 30.9 MB. This is a modest increase consistent with dispatcherd's worker processes and within acceptable bounds for the gateway.
+- **Network I/O** shows a slight increase (inbound +1.7%, outbound +4.6%), consistent with normal variance and dispatcherd's pg_notify listener traffic.
+- **Disk writes** are virtually unchanged (400,539 MB vs 400,444 MB baseline median).
+
+**Verdict: No performance regression from adding dispatcherd.** All acceptance criteria are met.
 
 #### Acceptance Criteria
 

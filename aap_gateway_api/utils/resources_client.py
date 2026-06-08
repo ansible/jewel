@@ -131,7 +131,7 @@ class AllServicesClient(GWResourceAPIClient):
             logger.debug(f"Response status code from {url}: {resp.status_code}")
             return service.pk, resp
         except Timeout as e:
-            logger.error(f"Resource client request timeout for {url} - {type(e).__name__}")
+            logger.error(f"Resource client request timeout for {url} - {type(e).__name__}")  # NOSONAR
             if self.wait_for_response:
                 raise
             return service.pk, None
@@ -148,7 +148,14 @@ class AllServicesClient(GWResourceAPIClient):
         from aap_gateway_api.models import ServiceAPIRoute
 
         responses = {}
-        svc_qs = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
+        # Exclude gateway (not a downstream service) and services without a
+        # service-index endpoint (e.g. metrics) to avoid AttributeError in
+        # get_url_for_service when service_index_path is None or empty.
+        svc_qs = (
+            ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
+            .exclude(service_cluster__service_type__service_index_path__isnull=True)
+            .exclude(service_cluster__service_type__service_index_path='')
+        )
         if self.service_filter:
             svc_qs = svc_qs.filter(**self.service_filter)
 
@@ -177,7 +184,7 @@ class AllServicesClient(GWResourceAPIClient):
                     # Re-raise timeout if we're supposed to wait for responses
                     if self.wait_for_response:
                         raise
-                    logger.error(f"Resource client request timeout for service {service.pk}: {type(e).__name__}")
+                    logger.error(f"Resource client request timeout for service {service.pk}: {type(e).__name__}")  # NOSONAR
                     responses[service.pk] = None
                 except Exception as e:
                     # Log the error but continue processing other services

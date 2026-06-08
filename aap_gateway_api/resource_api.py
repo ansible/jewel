@@ -4,6 +4,13 @@ from typing import Optional
 
 from ansible_base.feature_flags.models import AAPFlag
 from ansible_base.rbac.models import DABPermission, RoleDefinition
+from ansible_base.resource_registry.constants import (
+    SHARED_AAP_FLAG_RESOURCE_TYPE,
+    SHARED_ORGANIZATION_RESOURCE_TYPE,
+    SHARED_ROLE_DEFINITION_RESOURCE_TYPE,
+    SHARED_TEAM_RESOURCE_TYPE,
+    SHARED_USER_RESOURCE_TYPE,
+)
 from ansible_base.resource_registry.registry import ParentResource, ResourceConfig, ServiceAPIConfig, SharedResource
 from ansible_base.resource_registry.shared_types import FeatureFlagType, OrganizationType, RoleDefinitionType, TeamType, UserType
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor
@@ -121,6 +128,32 @@ class GetOrCreateProcessor(ResourceTypeProcessor):
                 )
                 del validated_data[field_name]
 
+    def _has_field_changes(self, validated_data):
+        """Check if any field in validated_data differs from the instance."""
+        return any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
+
+    def _save_new(self, validated_data):
+        """Handle save for is_new=True (POST): find-or-create."""
+        lookup_fields = get_model_lookup_keys(self.instance.__class__)
+
+        validated_data = copy.deepcopy(validated_data)
+        lookup_kwargs = {k: validated_data.pop(k) for k in lookup_fields if k in validated_data}
+
+        existing = self.instance.__class__.objects.filter(**lookup_kwargs).first()
+        if existing:
+            self.instance = existing
+            self._validate_via_gateway_serializer(validated_data)
+            changed = self._has_field_changes(validated_data)
+            for k, val in validated_data.items():
+                setattr(self.instance, k, val)
+            if changed:
+                self.instance.save()
+            return (changed, self.instance)
+
+        self.instance, created = self.instance.__class__.objects.update_or_create(**lookup_kwargs, defaults=validated_data)
+        changed = created or self._has_field_changes(validated_data)
+        return (changed, self.instance)
+
     def save(self, validated_data, is_new=False):
         """
         Save the resource instance using the provided
@@ -136,25 +169,7 @@ class GetOrCreateProcessor(ResourceTypeProcessor):
         the Gateway serializer then sets the fields directly.
         """
         if is_new:
-            lookup_fields = get_model_lookup_keys(self.instance.__class__)
-
-            validated_data = copy.deepcopy(validated_data)
-            lookup_kwargs = {k: validated_data.pop(k) for k in lookup_fields if k in validated_data}
-
-            existing = self.instance.__class__.objects.filter(**lookup_kwargs).first()
-            if existing:
-                self.instance = existing
-                self._validate_via_gateway_serializer(validated_data)
-                changed = any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
-                for k, val in validated_data.items():
-                    setattr(self.instance, k, val)
-                if changed:
-                    self.instance.save()
-                return (changed, self.instance)
-            else:
-                self.instance, created = self.instance.__class__.objects.update_or_create(**lookup_kwargs, defaults=validated_data)
-                changed = created or any(not hasattr(self.instance, k) or getattr(self.instance, k) != val for k, val in validated_data.items())
-                return (changed, self.instance)
+            return self._save_new(validated_data)
 
         self._validate_via_gateway_serializer(validated_data)
 
@@ -250,11 +265,11 @@ class GatewayRoleDefinitionType(RoleDefinitionType):
 class APIConfig(ServiceAPIConfig):
     service_type = "aap"
     custom_resource_processors = {
-        "shared.organization": GetOrCreateProcessor,
-        "shared.team": GetOrCreateProcessor,
-        "shared.user": GetOrCreateProcessor,
-        "shared.roledefinition": GatewayRoleDefinitionProcessor,
-        "shared.aapflag": GetOrCreateProcessor,
+        SHARED_ORGANIZATION_RESOURCE_TYPE: GetOrCreateProcessor,
+        SHARED_TEAM_RESOURCE_TYPE: GetOrCreateProcessor,
+        SHARED_USER_RESOURCE_TYPE: GetOrCreateProcessor,
+        SHARED_ROLE_DEFINITION_RESOURCE_TYPE: GatewayRoleDefinitionProcessor,
+        SHARED_AAP_FLAG_RESOURCE_TYPE: GetOrCreateProcessor,
     }
 
 

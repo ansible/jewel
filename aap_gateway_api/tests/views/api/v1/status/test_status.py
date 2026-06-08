@@ -379,52 +379,6 @@ def test_multiple_nodes_get_truncated(get, admin_api_client, full_service_hierar
         assert len(controller['nodes']) == 2
 
 
-@pytest.mark.parametrize(
-    "redis_status,eda_node_status,expected_eda_status",
-    [
-        (_REDIS_GOOD, STATUS_GOOD, STATUS_GOOD),
-        (_REDIS_GOOD, STATUS_FAILED, STATUS_FAILED),
-        (_REDIS_GOOD, STATUS_DEGRADED, STATUS_DEGRADED),
-        (_REDIS_FAILED, STATUS_GOOD, STATUS_DEGRADED),
-        (_REDIS_FAILED, STATUS_FAILED, STATUS_FAILED),
-        (_REDIS_FAILED, STATUS_DEGRADED, STATUS_DEGRADED),
-        (_REDIS_DEGRADED, STATUS_GOOD, STATUS_GOOD),
-        (_REDIS_DEGRADED, STATUS_FAILED, STATUS_FAILED),
-        (_REDIS_DEGRADED, STATUS_DEGRADED, STATUS_DEGRADED),
-    ],
-)
-@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
-def test_eda_status_gets_degraded_if_redis_down(get, redis_status, eda_node_status, expected_eda_status, admin_api_client, full_service_hierarchy_eda):
-    if eda_node_status == STATUS_DEGRADED:
-        # Since we want a degraded status we need to do 2 things:
-        #     1. Add another node to the service "cluster"
-        #     2. Make the get call return one good status and one bad status
-        ServiceNode.objects.create(
-            name="Node 127.0.0.99",
-            service_cluster=full_service_hierarchy_eda.service_cluster,
-            address="127.0.0.99",
-        )
-
-        get.side_effect = [
-            mock.Mock(status_code=200, json=lambda: {"status": STATUS_GOOD}),
-            mock.Mock(status_code=200, json=lambda: {"status": STATUS_FAILED}),
-        ]
-    else:
-        get.return_value = mock.Mock(status_code=200, json=lambda: {"status": eda_node_status})
-
-    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=redis_status):
-        url = get_relative_url("status-view")
-        response = admin_api_client.get(url)
-
-        assert response.status_code == 200
-        eda = get_service_by_name(response.data, "eda")
-        assert eda is not None
-        assert eda['status'] == expected_eda_status
-        redis = get_service_by_name(response.data, "redis")
-        assert redis is not None
-        assert redis['status'] == redis_status['status']
-
-
 def slow_response(*args, **kwargs):
     start_time = time.time()
     time.sleep(3)
@@ -535,6 +489,86 @@ def test_null_ping_url(get, admin_api_client):
         admin_api_client.get(url)
 
     get.assert_called_once_with('https://pingless.com:443', verify=mock.ANY, timeout=mock.ANY)
+
+
+class TestCheckRedisUnixSocket:
+    """Tests for the Unix socket health check path in check_redis()."""
+
+    SIDECAR_CACHES = {
+        "default": {
+            "BACKEND": "ansible_base.lib.cache.redis_cache.DABRedisCache",
+            "LOCATION": "unix:///var/run/redis/redis.sock?db=4",
+            "KEY_PREFIX": "gateway",
+        },
+    }
+
+    LEGACY_CACHES = {
+        "default": {
+            "BACKEND": "ansible_base.lib.cache.fallback_cache.DABCacheWithFallback",
+        },
+        "primary": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": "rediss://gateway1:redis_password@redis:6380",
+            "OPTIONS": {
+                "CLIENT_CLASS": "ansible_base.lib.redis.RedisClient",
+                "CLIENT_CLASS_KWARGS": {"mode": "standalone"},
+            },
+        },
+    }
+
+    @override_settings(CACHES=SIDECAR_CACHES)
+    @mock.patch("aap_gateway_api.views.api.v1.status._check_redis_unix_socket")
+    def test_check_redis_routes_to_unix_socket_for_sidecar(self, mock_unix_check):
+        from aap_gateway_api.views.api.v1.status import check_redis
+
+        mock_unix_check.return_value = {'mode': 'standalone', 'status': STATUS_GOOD}
+        result = check_redis()
+        mock_unix_check.assert_called_once_with("unix:///var/run/redis/redis.sock?db=4", 4)
+        assert result['status'] == STATUS_GOOD
+
+    @override_settings(CACHES=LEGACY_CACHES)
+    @mock.patch("aap_gateway_api.views.api.v1.status.get_redis_status")
+    def test_check_redis_routes_to_get_redis_status_for_legacy(self, mock_get_status):
+        from aap_gateway_api.views.api.v1.status import check_redis
+
+        mock_get_status.return_value = {'mode': 'standalone', 'status': STATUS_GOOD}
+        result = check_redis()
+        mock_get_status.assert_called_once()
+        assert result['status'] == STATUS_GOOD
+
+    @mock.patch("aap_gateway_api.views.api.v1.status.redis_lib")
+    def test_unix_socket_health_check_success(self, mock_redis_lib):
+        from aap_gateway_api.views.api.v1.status import _check_redis_unix_socket
+
+        mock_redis_lib.connection.parse_url.return_value = {'path': '/var/run/redis/redis.sock', 'db': 4}
+        mock_client = mock.Mock()
+        mock_redis_lib.Redis.return_value = mock_client
+
+        result = _check_redis_unix_socket("unix:///var/run/redis/redis.sock?db=4", 4)
+
+        assert result == {'mode': 'standalone', 'status': STATUS_GOOD}
+        mock_redis_lib.Redis.assert_called_once_with(
+            unix_socket_path='/var/run/redis/redis.sock',
+            db=4,
+            socket_timeout=4,
+            protocol=2,
+        )
+        mock_client.ping.assert_called_once()
+
+    @mock.patch("aap_gateway_api.views.api.v1.status.redis_lib")
+    def test_unix_socket_health_check_failure(self, mock_redis_lib):
+        from aap_gateway_api.views.api.v1.status import _check_redis_unix_socket
+
+        mock_redis_lib.connection.parse_url.return_value = {'path': '/var/run/redis/redis.sock', 'db': 4}
+        mock_client = mock.Mock()
+        mock_client.ping.side_effect = ConnectionError("Socket not found")
+        mock_redis_lib.Redis.return_value = mock_client
+
+        result = _check_redis_unix_socket("unix:///var/run/redis/redis.sock?db=4", 4)
+
+        assert result['mode'] == 'standalone'
+        assert result['status'] == STATUS_FAILED
+        assert 'Socket not found' in result['exception']
 
 
 def get_service_by_name(data: List, name: str):

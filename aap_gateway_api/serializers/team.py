@@ -1,4 +1,3 @@
-# from rest_framework import serializers
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from ansible_base.rbac.api.related import RelatedAccessMixin
 

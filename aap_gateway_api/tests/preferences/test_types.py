@@ -132,6 +132,21 @@ def test_csrf_invalid_value_in_settings(register_preference, expected_log):
             )
 
 
+@pytest.mark.parametrize("non_list_json", ['42', '"hello"', '{"key": "value"}'])
+def test_csrf_serializer_non_list_value_defaults_to_empty(expected_log, non_list_json):
+    """CSRFSerializer.to_python defaults to [] when the stored JSON value is not a list."""
+    from aap_gateway_api.preferences.serializers import CSRFSerializer
+
+    with override_settings(CSRF_TRUSTED_ORIGINS=[]):
+        with expected_log(
+            'aap_gateway_api.preferences.serializers.logger',
+            'error',
+            "Got a non-list value type",
+        ):
+            result = CSRFSerializer.to_python(non_list_json)
+    assert result == []
+
+
 @pytest.mark.parametrize(
     "value, expected_error",
     [

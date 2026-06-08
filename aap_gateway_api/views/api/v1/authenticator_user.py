@@ -44,7 +44,6 @@ class AuthenticatorUserViewSet(GatewayReadOnlyModelViewSet):
         if not serializer.validated_data['keep_memberships']:
             # Remove the user's existing memberships and let the authenticator map for the
             # new authenticator manage it instead.
-            # TODO: Is this doing too much?
             instance.user.role_assignments.all().delete()
 
         plugin = get_authenticator_class(instance.provider.type)(database_instance=instance.provider)

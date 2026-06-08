@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict, Iterator, List, Literal
 
+import redis as redis_lib
 import requests
 from ansible_base.lib.cache.fallback_cache import PRIMARY_CACHE
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
@@ -34,10 +35,33 @@ def check_redis(timeout: int = 4) -> Dict:
         redis_settings = getattr(settings, 'CACHES', {}).get('default')
 
     url = redis_settings['LOCATION']
+
+    if url.startswith('unix://'):
+        return _check_redis_unix_socket(url, timeout)
+
     kwargs = redis_settings['OPTIONS'].get('CLIENT_CLASS_KWARGS', {})
     status = get_redis_status(url=url, timeout=timeout, **kwargs)
 
     return status
+
+
+def _check_redis_unix_socket(url: str, timeout: int) -> Dict:
+    try:
+        parsed = redis_lib.connection.parse_url(url)
+        r = redis_lib.Redis(
+            unix_socket_path=parsed.get('path', '/var/run/redis/redis.sock'),
+            db=parsed.get('db', 0),
+            socket_timeout=timeout,
+            protocol=2,
+        )
+        try:
+            r.ping()
+            return {'mode': 'standalone', 'status': STATUS_GOOD}
+        finally:
+            r.close()
+    except Exception as e:
+        logger.exception("Failed checking sidecar Redis health")
+        return {'mode': 'standalone', 'status': STATUS_FAILED, 'exception': str(e)}
 
 
 def check_console(timeout: int = 4) -> Dict:
@@ -161,12 +185,6 @@ def process_statuses(response: Dict) -> Dict:
         else:
             logger.error(f"Got an unknown status for service {service_name}: {service['status']}")
             bad_services = bad_services + 1
-
-    # Special check, if the service is EDA and redis is "down" EDA needs to be DEGRADED
-    eda = next((s for s in response['services'] if s['service_name'] == 'eda'), None)
-    redis = next((s for s in response['services'] if s['service_name'] == 'redis'), None)
-    if eda and redis and eda['status'] != STATUS_FAILED and redis['status'] == STATUS_FAILED:
-        eda['status'] = STATUS_DEGRADED
 
     # Determine the overall status for AAP based on service statuses
     if bad_services > 0:

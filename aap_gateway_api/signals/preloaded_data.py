@@ -61,7 +61,7 @@ def create_preload_data(**kwargs) -> None:
                 logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
         except Exception as e:
             if verbosity in [0, 1]:
-                logger.error(f"Failed to {name.replace('_', ' ')} {e}")
+                logger.error(f"Failed to {name.replace('_', ' ')} {e}")  # NOSONAR
             elif verbosity > 1:
                 logger.exception(f"Failed to {name.replace('_', ' ')}")
 

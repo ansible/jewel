@@ -14,9 +14,9 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     dnf install -y \
     git \
     gcc \
-    ${PYTHON}-devel \
-    ${PYTHON} \
-    ${PYTHON}-pip \
+    "${PYTHON}-devel" \
+    "${PYTHON}" \
+    "${PYTHON}-pip" \
     libpq \
     libpq-devel \
     libtool-ltdl-devel \
@@ -29,8 +29,8 @@ RUN for dir in \
       /opt/aap_gateway; \
     do mkdir -p "$dir" && chgrp -R 0 "$dir" && chmod -R g=u "$dir" ; done
 
-RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
-RUN echo "/opt/aap_gateway/aap_gateway" > /opt/aap_gateway/venv/lib/${PYTHON}/site-packages/project.pth
+RUN "/usr/bin/${PYTHON}" -m venv /opt/aap_gateway/venv
+RUN echo "/opt/aap_gateway/aap_gateway" > "/opt/aap_gateway/venv/lib/${PYTHON}/site-packages/project.pth"
 
 # See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
 RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
@@ -50,8 +50,8 @@ RUN dnf module install -y nginx:1.22/common && \
     less \
     libpq \
     postgresql \
-    ${PYTHON} \
-    ${PYTHON}-pip \
+    "${PYTHON}" \
+    "${PYTHON}-pip" \
     supervisor \
     xmlsec1-openssl
 

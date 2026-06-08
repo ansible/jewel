@@ -50,6 +50,20 @@ def test_login_post_failed_login_weird_username(logger, unauthenticated_api_clie
     assert logged_msg.startswith("Login failed for user (base64) b'VSQzcm4jbWUh' from")
 
 
+@mock.patch("aap_gateway_api.views.api.v1.local_login.logger")
+def test_login_post_failed_login_no_username(logger, unauthenticated_api_client):
+    """
+    Test POSTing to the login view with no username field yields 401 without logging a username.
+    """
+    url = get_relative_url("login")
+    next_url = get_relative_url("user-list")
+    data = {"password": "wrongPassw0rd", "next": next_url}
+    response = unauthenticated_api_client.post(url, data)
+    assert response.status_code == 401
+    assert response.wsgi_request.user.is_anonymous
+    assert logger.warning.call_count == 0
+
+
 def test_login_get_accept_html(unauthenticated_api_client):
     """
     Test GETing the login view.

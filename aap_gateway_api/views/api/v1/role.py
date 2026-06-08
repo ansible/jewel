@@ -165,7 +165,7 @@ class AssignmentSyncMixin(ResourceAllClientMixin):
 
 
 class GatewayRoleUserAssignmentViewSet(AssignmentSyncMixin, RoleUserAssignmentViewSet):
-    pass
+    """ViewSet for managing user role assignments with upstream service synchronization."""
 
 
 class GatewayRoleTeamAssignmentViewSet(AssignmentSyncMixin, RoleTeamAssignmentViewSet):

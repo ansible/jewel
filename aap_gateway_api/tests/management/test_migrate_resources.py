@@ -1,22 +1,30 @@
-import re
 import uuid
 from unittest.mock import Mock, patch
 
 import pytest
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, RemoteObject, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from django.db import IntegrityError
 
+from aap_gateway_api.management.commands.migrate_service_data import AssignmentActorType
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
 
 SEP_CHAR = "_"
-_UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
+
+
+@pytest.fixture(autouse=True)
+def reset_migration_flag():
+    """Ensure the MigrateServiceDataHasRan flag is False before each test."""
+    from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+
+    MigrateServiceDataHasRan.mark_migration_not_completed()
+
 
 # Friendly reminder to all who come after me, this test file uses test fixtures defined
 # in module: aap_gateway_api/tests/service_test_app/fixtures/migration_tests.py
@@ -175,6 +183,21 @@ def test_migrate_with_ignored_flags(
     # Teams should also be merged since merge=True is the default
     original_org_teams = list(conflicting_org.teams.all().values_list("name", flat=True))
     assert original_org_teams == [conflicting_team.name]
+
+
+def test_warn_ignored_flags_only_when_present(capsys):
+    """Test that _warn_ignored_flags only emits warnings for flags actually present in options."""
+    cmd = MigrateCommand()
+
+    cmd._warn_ignored_flags({"api_slug": "test-slug", "merge_teams": True, "merge_organizations": True})
+    captured = capsys.readouterr()
+    assert "Warning: --api-slug flag is ignored" in captured.err
+    assert "Warning: --merge-teams flag is ignored" in captured.err
+    assert "Warning: --merge-organizations flag is ignored" in captured.err
+
+    cmd._warn_ignored_flags({})
+    captured = capsys.readouterr()
+    assert "Warning:" not in captured.err
 
 
 @pytest.mark.django_db(transaction=True)
@@ -587,6 +610,71 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
 
 
 @pytest.mark.django_db(transaction=True)
+def test_migration_skips_when_already_synced(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test that migration short-circuits when all resources are already migrated."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+            mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+            mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "already synchronized" in captured.out
+        assert "skipping resource migration" in captured.out
+        # Resource migration is skipped but role assignments still run
+        assert "Migrating data for" not in captured.out
+        assert "role assignments" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_proceeds_when_not_synced(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test that migration proceeds normally when unmigrated resources exist."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+            mock_client.list_resources.return_value.json.return_value = {"count": 1, "results": []}
+            mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "already synchronized" not in captured.out
+        assert "Migrating data for" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
 def test_no_services_found_error(admin_user):
     """Test error when no DefaultServiceType services are found"""
     # In a clean test environment with no service fixtures, the command should fail
@@ -701,6 +789,11 @@ def test_multi_service_migration(
 def test_single_service_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
     """Test migration with only a single service available"""
 
+    # Use a deterministic slug so random hex can't contain "eda" or "hub"
+    service_api_route_controller.api_slug = "test-controller-slug"
+    service_api_route_controller.gateway_path = "/api/test-controller-slug/"
+    service_api_route_controller.save()
+
     # Mock successful migration for the controller service
     with (
         patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
@@ -735,10 +828,8 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         assert "Failed migrations: 0" in captured.out
         assert "All services migration completed successfully!" in captured.out
 
-        # Sanitize the UUIDs from the output, hub and eda are small enough strings that they could appear in a UUID
-        sanitized_out = _UUID_RE.sub('<uuid>', captured.out)
-        assert "hub" not in sanitized_out  # Hub should not be processed
-        assert "eda" not in sanitized_out  # EDA should not be processed
+        assert "hub" not in captured.out
+        assert "eda" not in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1021,8 +1112,8 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
             "service_type": "controller",
         }
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
         mock_client_class.return_value = mock_client
 
         # Run migration
@@ -1660,6 +1751,118 @@ def test_ensure_controller_gateway_superusers_scenarios(
 
 
 # =============================================================================
+# Tests for _collect_controller_superusers helper function
+# =============================================================================
+
+
+@pytest.fixture
+def mock_controller_client(service_api_route_controller):
+    """Mock GWResourceAPIClient for _collect_controller_superusers tests.
+
+    Yields (mock_client, run) where run(page_data, resource_data, user) calls
+    _collect_controller_superusers with the mock wired up.
+    page_data: dict mapping page number -> {"results": [...], "next": ...}
+    resource_data: dict mapping ansible_id -> detail response dict
+    """
+    mock_client = Mock()
+
+    def run(page_data, resource_data, admin_user):
+        def mock_list_resources(filters=None):
+            page = filters["page"]
+            mock_response = Mock()
+            mock_response.json.return_value = page_data[page]
+            return mock_response
+
+        mock_client.list_resources.side_effect = mock_list_resources
+
+        def mock_get_resource(ansible_id):
+            mock_response = Mock()
+            mock_response.json.return_value = resource_data[ansible_id]
+            return mock_response
+
+        mock_client.get_resource.side_effect = mock_get_resource
+
+        cmd = MigrateCommand()
+        with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient', return_value=mock_client):
+            return cmd._collect_controller_superusers(service_api_route_controller, admin_user)
+
+    yield mock_client, run
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_single_page(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers returns superuser usernames from a single page of results."""
+    mock_client, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [{"ansible_id": "id-1"}, {"ansible_id": "id-2"}, {"ansible_id": "id-3"}], "next": None},
+    }
+    resource_data = {
+        "id-1": {"resource_data": {"username": "super_admin", "is_superuser": True}},
+        "id-2": {"resource_data": {"username": "regular_user", "is_superuser": False}},
+        "id-3": {"resource_data": {"username": "another_super", "is_superuser": True}},
+    }
+
+    result = run(page_data, resource_data, admin_user)
+
+    assert result == {"super_admin", "another_super"}
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_pagination(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers handles paginated API responses correctly."""
+    mock_client, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [{"ansible_id": "id-1"}], "next": "http://example.com/page=2"},
+        2: {"results": [{"ansible_id": "id-2"}], "next": None},
+    }
+    resource_data = {
+        "id-1": {"resource_data": {"username": "super1", "is_superuser": True}},
+        "id-2": {"resource_data": {"username": "super2", "is_superuser": True}},
+    }
+
+    result = run(page_data, resource_data, admin_user)
+
+    assert result == {"super1", "super2"}
+    mock_client.list_resources.assert_any_call(filters={"content_type__resource_type__name": "shared.user", "page": 1})
+    mock_client.list_resources.assert_any_call(filters={"content_type__resource_type__name": "shared.user", "page": 2})
+    assert mock_client.list_resources.call_count == 2
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_no_superusers(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers returns empty set when no superusers exist."""
+    _, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [{"ansible_id": "id-1"}, {"ansible_id": "id-2"}], "next": None},
+    }
+    resource_data = {
+        "id-1": {"resource_data": {"username": "user1", "is_superuser": False}},
+        "id-2": {"resource_data": {"username": "user2", "is_superuser": False}},
+    }
+
+    result = run(page_data, resource_data, admin_user)
+
+    assert result == set()
+
+
+@pytest.mark.django_db
+def test_collect_controller_superusers_empty_results(admin_user, mock_controller_client):
+    """Test _collect_controller_superusers handles empty results."""
+    _, run = mock_controller_client
+
+    page_data = {
+        1: {"results": [], "next": None},
+    }
+
+    result = run(page_data, {}, admin_user)
+
+    assert result == set()
+
+
+# =============================================================================
 # Tests for _get_gateway_user helper function
 # =============================================================================
 
@@ -1860,3 +2063,155 @@ def test_sync_hub_eda_superuser_no_change_needed(capsys):
     captured = capsys.readouterr()
     assert "promoted to" not in captured.out
     assert "demoted from" not in captured.out
+
+
+# =============================================================================
+# Tests for _resolve_role_definition helper
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_resolve_role_definition_found(admin_user):
+    """Test _resolve_role_definition returns the RoleDefinition when it exists."""
+    rd = RoleDefinition.objects.create(name="Test Role Def", content_type=None)
+
+    cmd = MigrateCommand()
+    result = cmd._resolve_role_definition("Test Role Def")
+
+    assert result == rd
+
+
+@pytest.mark.django_db
+def test_resolve_role_definition_not_found(capsys):
+    """Test _resolve_role_definition returns None and warns when not found."""
+    cmd = MigrateCommand()
+    result = cmd._resolve_role_definition("Nonexistent Role")
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert "Warning: Unable to find role definition Nonexistent Role, skipping assignment" in captured.err
+
+
+# =============================================================================
+# Tests for _resolve_gateway_actor helper
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_resolve_gateway_actor_found(admin_user):
+    """Test _resolve_gateway_actor returns the content object when found."""
+    cmd = MigrateCommand()
+    # admin_user should have a Resource with an ansible_id
+    actor = cmd._resolve_gateway_actor(
+        AssignmentActorType.USER,
+        admin_user.resource.ansible_id,
+    )
+    assert actor == admin_user
+
+
+@pytest.mark.django_db
+def test_resolve_gateway_actor_not_found(capsys):
+    """Test _resolve_gateway_actor returns None and warns when not found."""
+    cmd = MigrateCommand()
+    fake_id = str(uuid.uuid4())
+    result = cmd._resolve_gateway_actor(AssignmentActorType.USER, fake_id)
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert f"Unable to find gateway user with ansible_id {fake_id}" in captured.err
+
+
+# =============================================================================
+# Tests for _resolve_content_object helper
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_global_assignment():
+    """Test _resolve_content_object returns None for global assignments (no object)."""
+    cmd = MigrateCommand()
+    assignment = {"object_ansible_id": None, "object_id": None, "content_type": ""}
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_with_ansible_id(admin_user):
+    """Test _resolve_content_object resolves by ansible_id when present."""
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": admin_user.resource.ansible_id,
+        "object_id": None,
+        "content_type": "",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result == admin_user
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_remote_object():
+    """Test _resolve_content_object resolves RemoteObject by object_id + content_type."""
+    ct = DABContentType.objects.create(service="controller", model="job_template")
+
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": None,
+        "object_id": "12345",
+        "content_type": "controller.job_template",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert isinstance(result, RemoteObject)
+    assert result.object_id == "12345"
+    assert result.content_type == ct
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_skip_on_not_found(capsys):
+    """Test _resolve_content_object returns _SKIP when Resource is not found."""
+    cmd = MigrateCommand()
+    fake_id = str(uuid.uuid4())
+    assignment = {
+        "object_ansible_id": fake_id,
+        "object_id": None,
+        "content_type": "shared.team",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is MigrateCommand._SKIP
+    captured = capsys.readouterr()
+    assert f"Unable to find object of type shared.team with ansible_id {fake_id}" in captured.err
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_skip_on_malformed_content_type(capsys):
+    """Test _resolve_content_object returns _SKIP on malformed content_type."""
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": None,
+        "object_id": "12345",
+        "content_type": "bad-format",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is MigrateCommand._SKIP
+    captured = capsys.readouterr()
+    assert "Malformed content_type 'bad-format'" in captured.err
+
+
+@pytest.mark.django_db
+def test_resolve_content_object_skip_on_missing_content_type(capsys):
+    """Test _resolve_content_object returns _SKIP when DABContentType doesn't exist."""
+    cmd = MigrateCommand()
+    assignment = {
+        "object_ansible_id": None,
+        "object_id": "12345",
+        "content_type": "nonexistent.model",
+    }
+    result = cmd._resolve_content_object(assignment)
+
+    assert result is MigrateCommand._SKIP
+    captured = capsys.readouterr()
+    assert "Unable to find content type 'nonexistent.model'" in captured.err

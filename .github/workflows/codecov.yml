@@ -74,6 +74,9 @@ jobs:
       - name: Upload to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
+          url: ${{ vars.CODECOV_URL }}
+          slug: ${{ github.repository }}
+          disable_search: true
           files: ${{ steps.coverage.outputs.file_list }}
           flags: unit-tests
           fail_ci_if_error: true

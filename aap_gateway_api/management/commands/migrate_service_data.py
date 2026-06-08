@@ -7,6 +7,13 @@ from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
 from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
+from ansible_base.resource_registry.constants import (
+    SHARED_AAP_FLAG_RESOURCE_TYPE,
+    SHARED_ORGANIZATION_RESOURCE_TYPE,
+    SHARED_ROLE_DEFINITION_RESOURCE_TYPE,
+    SHARED_TEAM_RESOURCE_TYPE,
+    SHARED_USER_RESOURCE_TYPE,
+)
 from ansible_base.resource_registry.models import Resource, ResourceType, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
@@ -96,6 +103,18 @@ class Command(BaseCommand):
             default=True,
         )
 
+    def _warn_ignored_flags(self, options: dict) -> None:
+        if options.get("api_slug"):
+            self.stderr.write(
+                self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
+            )
+
+        if "merge_teams" in options:
+            self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
+
+        if "merge_organizations" in options:
+            self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
+
     def handle(self, *args, **options) -> None:
         """
         Main entry point for the migrate_service_data command.
@@ -113,17 +132,11 @@ class Command(BaseCommand):
         Raises:
             CommandError: If service doesn't exist, user doesn't exist, or migration fails
         """
-        # Show warnings for ignored flags
-        if options.get("api_slug"):
-            self.stderr.write(
-                self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
-            )
+        self._warn_ignored_flags(options)
 
-        if "merge_teams" in options:
-            self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
-
-        if "merge_organizations" in options:
-            self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
+        if MigrateServiceDataHasRan.has_migration_completed():
+            self.stdout.write("Migration has already completed. Skipping.")
+            return
 
         # Force merge options to True as per requirements
         merge_teams = True
@@ -133,38 +146,38 @@ class Command(BaseCommand):
         # The order here matters. Organizations need to be migrated first.
         self.resource_types_to_migrate = OrderedDict()
 
-        self.resource_types_to_migrate["shared.organization"] = {
+        self.resource_types_to_migrate[SHARED_ORGANIZATION_RESOURCE_TYPE] = {
             "merge": merge_organizations,
-            "type": ResourceType.objects.get(name="shared.organization"),
+            "type": ResourceType.objects.get(name=SHARED_ORGANIZATION_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
             ],
         }
-        self.resource_types_to_migrate["shared.team"] = {
+        self.resource_types_to_migrate[SHARED_TEAM_RESOURCE_TYPE] = {
             "merge": merge_teams,
-            "type": ResourceType.objects.get(name="shared.team"),
+            "type": ResourceType.objects.get(name=SHARED_TEAM_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
                 "organization",
             ],
         }
-        self.resource_types_to_migrate["shared.user"] = {
+        self.resource_types_to_migrate[SHARED_USER_RESOURCE_TYPE] = {
             "merge": True,  # only indicates we merge the admin user
-            "type": ResourceType.objects.get(name="shared.user"),
+            "type": ResourceType.objects.get(name=SHARED_USER_RESOURCE_TYPE),
             "unique_fields": [
                 "username",
             ],
         }
-        self.resource_types_to_migrate["shared.roledefinition"] = {
+        self.resource_types_to_migrate[SHARED_ROLE_DEFINITION_RESOURCE_TYPE] = {
             "merge": True,  # the JWT roles are already shared effectively
-            "type": ResourceType.objects.get(name="shared.roledefinition"),
+            "type": ResourceType.objects.get(name=SHARED_ROLE_DEFINITION_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
             ],
         }
-        self.resource_types_to_migrate["shared.aapflag"] = {
+        self.resource_types_to_migrate[SHARED_AAP_FLAG_RESOURCE_TYPE] = {
             "merge": True,
-            "type": ResourceType.objects.get(name="shared.aapflag"),
+            "type": ResourceType.objects.get(name=SHARED_AAP_FLAG_RESOURCE_TYPE),
             "unique_fields": [
                 "name",
                 "condition",
@@ -189,7 +202,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}")
 
         # For RBAC management, load in types and permissions from all other components
-        self.load_types_and_permissions(service_apis, user)
+        failed_type_services = self.load_types_and_permissions(service_apis, user)
+        if failed_type_services:
+            self.stderr.write(
+                self.style.WARNING(f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services.")
+            )
 
         # Track migration results
         migration_results = {}
@@ -249,36 +266,59 @@ class Command(BaseCommand):
             self.stdout.write("\nAll services migration completed successfully!")
 
     def load_types_and_permissions(self, service_apis, user):
+        failed_services = []
         for service_api in service_apis:
             service_slug = service_api.api_slug
-            client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
-            big_page_filter = {"page_size": "200"}
+            try:
+                client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
+                big_page_filter = {"page_size": "200"}
 
-            # Load types into system
-            response = client.list_role_types(filters=big_page_filter)
+                # Load types into system
+                response = client.list_role_types(filters=big_page_filter)
 
-            if response.status_code != 200:
-                raise RuntimeError(f'Service {service_slug} role types gave {response.status_code} code, data: {response.data}')
+                if response.status_code != 200:
+                    raise RuntimeError(f'Service {service_slug} role types gave {response.status_code} code, data: {response.data}')
 
-            data = response.json()
+                data = response.json()
 
-            if data['next']:
-                raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
+                if data['next']:
+                    raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
 
-            DABContentType.objects.load_remote_objects(data['results'])
+                DABContentType.objects.load_remote_objects(data['results'])
 
-            # Load permissions into system, these reference the types above
-            response = client.list_role_permissions(filters=big_page_filter)
+                # Load permissions into system, these reference the types above
+                response = client.list_role_permissions(filters=big_page_filter)
 
-            if response.status_code != 200:
-                raise RuntimeError(f'Service {service_slug} permissions gave {response.status_code} code, data: {response.data}')
+                if response.status_code != 200:
+                    raise RuntimeError(f'Service {service_slug} permissions gave {response.status_code} code, data: {response.data}')
 
-            data = response.json()
+                data = response.json()
 
-            if data['next']:
-                raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
+                if data['next']:
+                    raise RuntimeError(f'Service {service_slug} has extra pages of types: {data}')
 
-            DABPermission.objects.load_remote_objects(data['results'], update_managed=True)
+                DABPermission.objects.load_remote_objects(data['results'], update_managed=True)
+            except Exception as e:
+                self.stderr.write(
+                    f"Warning: Failed to load types and permissions from {service_slug}: {e}. "
+                    f"Role definitions referencing this service's types will not be available until the next successful migration."
+                )
+                failed_services.append(service_slug)
+                continue
+        return failed_services
+
+    def _is_service_already_synced(self) -> bool:
+        """Check if all resource types for the current service have already been migrated."""
+        for resource_type_name in self.resource_types_to_migrate:
+            filters = {
+                "service_id": self.upstream_service_id,
+                "is_partially_migrated": "false",
+                "content_type__resource_type__name": resource_type_name,
+            }
+            data = self.client.list_resources(filters=filters).json()
+            if data["count"] > 0:
+                return False
+        return True
 
     def _migrate_single_service(
         self,
@@ -297,8 +337,6 @@ class Command(BaseCommand):
         Returns:
             Tuple of (success: bool, error_message: Optional[str])
         """
-        # TODO: switch user out for _system. Need to get more fine grained permissions in resources
-        # api merged first.
         self.client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
         self.stdout.write("Starting migration")
@@ -329,15 +367,18 @@ class Command(BaseCommand):
         service_api.service_cluster.service_id = self.upstream_service_id
         service_api.service_cluster.save()
 
-        self.stdout.write(
-            f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
-        )
-
-        # Delete the legacy authenticators after migration, along with their associated authenticatorusers
+        # No-op if legacy authenticators were already deleted on a previous run
         self.delete_legacy_authenticators()
 
-        for r_type in self.resource_types_to_migrate.keys():
-            self.migrate_resource(r_type)
+        if self._is_service_already_synced():
+            self.stdout.write(f"Service {service_slug} is already synchronized — skipping resource migration.")
+        else:
+            self.stdout.write(
+                f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
+            )
+
+            for r_type in self.resource_types_to_migrate.keys():
+                self.migrate_resource(r_type)
 
         self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
         self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)
@@ -452,7 +493,7 @@ class Command(BaseCommand):
         Used for producing updated resource data for resource that failed validation.
         """
         # if the resource is a user and there is only one validation error for email field, we can remove the field
-        if resource_type_name == "shared.user" and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
+        if resource_type_name == SHARED_USER_RESOURCE_TYPE and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
             self.stderr.write(f"Removing invalid email address '{original_resource_data.data['email']}' for user: {original_resource_data.data['username']}")
             # we want to update the email to empty string
             updated_resource_data = original_resource_data.data
@@ -649,7 +690,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Items remaining: {data['count']}")
         results = data['results']
         # As special case exclude the system user, since Gateway excludes this in its own resources
-        if resource_type_name == 'shared.user':
+        if resource_type_name == SHARED_USER_RESOURCE_TYPE:
             # SYSTEM_USERNAME can theoretically vary by service
             # Currently, the system username is None in controller, and in hub and eda it's the same as gateway's,
             # If Hub and EDA system username is updated to != gateway's, we are migrating it too and we should avoid it
@@ -698,7 +739,7 @@ class Command(BaseCommand):
         validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
         # Sync superuser flags for user resources
-        if resource_context["type_name"] == "shared.user":
+        if resource_context["type_name"] == SHARED_USER_RESOURCE_TYPE:
             upstream_resource = self._sync_user_superuser_flag(upstream_resource, validated_resource_data)
             # Re-validate after potential superuser flag changes
             validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
@@ -919,6 +960,47 @@ class Command(BaseCommand):
         for service_api in hub_eda_apis:
             self._demote_extra_superusers(service_api, gateway_superusers, user)
 
+    def _collect_controller_superusers(self, controller_api: ServiceAPIRoute, user: AbstractUser) -> set:
+        """
+        Collect superuser usernames from Controller via paginated API calls.
+
+        Iterates through all shared user resources registered in the Controller service
+        and returns the set of usernames that have superuser status.
+
+        Args:
+            controller_api: ServiceAPIRoute for the Controller service
+            user: User to perform API calls as
+
+        Returns:
+            Set of usernames who are superusers in Controller
+        """
+        client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
+
+        # No service_id filter since after migration all resources have Gateway's service_id
+        filters = {
+            "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
+        }
+
+        controller_superusers = set()
+        page = 1
+
+        while True:
+            data = client.list_resources(filters={**filters, "page": page}).json()
+
+            for user_item in data["results"]:
+                user_detail = client.get_resource(user_item["ansible_id"]).json()
+                username = user_detail["resource_data"]["username"]
+                resource_data = user_detail["resource_data"]
+
+                if resource_data.get("is_superuser", False):
+                    controller_superusers.add(username)
+
+            if not data.get("next"):
+                break
+            page += 1
+
+        return controller_superusers
+
     def _ensure_controller_gateway_superusers(self, controller_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
         """
         Ensure that Controller and Gateway superusers are consistent by promoting users as needed.
@@ -936,32 +1018,7 @@ class Command(BaseCommand):
             CommandError: If users are superusers in Controller but don't exist in Gateway
                          (indicating migration failure)
         """
-        client = resources_client.GWResourceAPIClient(controller_api, raise_if_bad_request=True, user=user)
-
-        # Get all users from the shared resource registry (no service_id filter since
-        # after migration all resources have Gateway's service_id)
-        filters = {
-            "content_type__resource_type__name": "shared.user",
-        }
-
-        controller_superusers = set()
-        page = 1
-
-        while True:
-            data = client.list_resources(filters={**filters, "page": page}).json()
-
-            for user_item in data["results"]:
-                user_detail = client.get_resource(user_item["ansible_id"]).json()
-                username = user_detail["resource_data"]["username"]
-                resource_data = user_detail["resource_data"]
-
-                # Check if user is actually a superuser
-                if resource_data.get("is_superuser", False):
-                    controller_superusers.add(username)
-
-            if not data.get("next"):
-                break
-            page += 1
+        controller_superusers = self._collect_controller_superusers(controller_api, user)
 
         self.stdout.write(f"Controller superusers: {sorted(controller_superusers)}")
 
@@ -985,7 +1042,7 @@ class Command(BaseCommand):
                 self.stderr.write(f"Error: Users {sorted(missing_users)} are superusers in Controller but don't exist in Gateway")
                 raise CommandError(f"Migration failure detected: Users {sorted(missing_users)} should have been migrated but are missing from Gateway")
 
-        if not controller_only:
+        else:
             self.stdout.write("✓ Controller and Gateway superusers are consistent")
 
     def _demote_extra_superusers(self, service_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
@@ -995,7 +1052,7 @@ class Command(BaseCommand):
 
         filters = {
             "service_id": str(service_id()),
-            "content_type__resource_type__name": "shared.user",
+            "content_type__resource_type__name": SHARED_USER_RESOURCE_TYPE,
         }
 
         demoted_users = []
@@ -1046,7 +1103,9 @@ class Command(BaseCommand):
 
         gateway_service_id = service_id()
         partially_migrated_resources = (
-            Resource.objects.filter(content_type__resource_type__name="shared.user").exclude(service_id=gateway_service_id).select_related('content_type')
+            Resource.objects.filter(content_type__resource_type__name=SHARED_USER_RESOURCE_TYPE)
+            .exclude(service_id=gateway_service_id)
+            .select_related('content_type')
         )
 
         total_partially_migrated_users = len(partially_migrated_resources)
@@ -1116,7 +1175,6 @@ class Command(BaseCommand):
         user_groups = {}  # base_username -> [(service_type, user_object, original_username)]
 
         # Known service prefixes that may be added during 2.5 migration
-        # TODO: maybe fetch this from the services themselves
         service_prefixes = ['galaxy_', 'eda_']
 
         for service_type in self.SERVICE_TYPE_ORDER:
@@ -1210,6 +1268,59 @@ class Command(BaseCommand):
             actor_msg = f"team: {role_assignment.team.name}"
         return f"{actor_msg}, object_id: {role_assignment.object_id}, role_definition_name: {role_assignment.role_definition.name}"
 
+    # Sentinel value for _resolve_content_object to signal "skip this assignment"
+    _SKIP = object()
+
+    def _resolve_role_definition(self, role_definition_name: str) -> Optional[RoleDefinition]:
+        """Look up a RoleDefinition by name. Returns the object or None if not found."""
+        try:
+            return RoleDefinition.objects.get(name=role_definition_name)
+        except RoleDefinition.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
+            return None
+
+    def _resolve_gateway_actor(self, assignment_actor: AssignmentActorType, service_actor_ansible_id: str) -> Optional[Any]:
+        """Look up the gateway actor (user or team) by ansible_id. Returns the content object or None if not found."""
+        try:
+            return Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
+        except Resource.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment")
+            return None
+
+    def _resolve_content_object(self, assignment: Dict[str, Any]) -> Any:
+        """Resolve the content object for a role assignment.
+
+        Returns the resolved content object (which may be None for global assignments),
+        or ``Command._SKIP`` to signal that this assignment should be skipped.
+        """
+        service_content_object_ansible_id = assignment.get('object_ansible_id')
+        service_content_object_id = assignment.get('object_id')
+        content_type = assignment.get('content_type', '')
+
+        try:
+            if service_content_object_ansible_id:
+                # Object is a gateway resource identified by ansible_id
+                return Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
+            elif service_content_object_id:
+                # Object is remote (not a gateway resource); use RemoteObject with DABContentType
+                service, model = content_type.split('.')
+                ct = DABContentType.objects.get(service=service, model=model)
+                return RemoteObject(ct, service_content_object_id)
+            else:
+                # No object reference means a global role assignment
+                return None
+        except Resource.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment")
+            return Command._SKIP
+        except ValueError:
+            self.stderr.write(f"Warning: Malformed content_type '{content_type}', expected 'service.model' format, skipping assignment")
+            return Command._SKIP
+        except DABContentType.DoesNotExist:
+            self.stderr.write(
+                f"Warning: Unable to find content type '{content_type}' for remote object with id {service_content_object_id}, skipping assignment"
+            )
+            return Command._SKIP
+
     @staticmethod
     def _get_role_definitions_to_exclude(service_type: str) -> List[str]:
         # Since the goal is to honor controller's assignments platform roles, we do not want to consider
@@ -1278,50 +1389,26 @@ class Command(BaseCommand):
         for assignment in assignments:
             self.stdout.write(f"Processing assignment in service {service_slug}: {self._format_fetched_assignment_for_logging(assignment_actor, assignment)}")
 
-            # Lookup the role definition, actor, and object
             role_definition_name = assignment.get('role_definition')
             service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
-            service_content_object_ansible_id = assignment.get('object_ansible_id')
-            service_content_object_id = assignment.get('object_id')
-            content_type = assignment.get('content_type', '')
 
             try:
-                try:
-                    gateway_role_definition = RoleDefinition.objects.get(name=role_definition_name)
-                except RoleDefinition.DoesNotExist:
-                    self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
+                gateway_role_definition = self._resolve_role_definition(role_definition_name)
+                if gateway_role_definition is None:
                     continue
-                try:
-                    gateway_actor = Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
-                except Resource.DoesNotExist:
-                    self.stderr.write(
-                        f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment"
-                    )
+
+                gateway_actor = self._resolve_gateway_actor(assignment_actor, service_actor_ansible_id)
+                if gateway_actor is None:
                     continue
-                try:
-                    if service_content_object_ansible_id:
-                        # The assignment references an object with an ansible_id. The object is a resource that exists in gateway
-                        gateway_content_object = Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
-                    elif service_content_object_id:
-                        # The assignment references an object but no ansible_id. The object is remote, not a resource that exists in gateway
-                        # We can grant permission with a RemoteObject, but we need DABContentType, which is uniqued by service, model.
-                        # The 'content_type' field of the assignment encodes this in a string, e.g. 'awx.jobtemplate'
-                        service, model = content_type.split('.')
-                        ct = DABContentType.objects.get(service=service, model=model)
-                        gateway_content_object = RemoteObject(ct, service_content_object_id)
-                    else:
-                        # The assignment references no specific object. That's valid and means this role assignment is global (e.g. not on a team or org)
-                        gateway_content_object = None
-                except Resource.DoesNotExist:
-                    self.stderr.write(
-                        f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment"
-                    )
+
+                gateway_content_object = self._resolve_content_object(assignment)
+                if gateway_content_object is Command._SKIP:
                     continue
             except Exception as e:
                 self.stderr.write(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}")
                 continue
 
-            # Finally, create the assignment by using the give_permission method from gateway's role definition
+            # Create the assignment by using the give_permission method from gateway's role definition
             if gateway_content_object:
                 role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
             else:

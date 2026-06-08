@@ -52,6 +52,7 @@
     mode: '0644'
   loop:
     - redis.conf
+    - redis-sidecar.conf
     - "redis-users.acl"
 
 - name: Zero out volume directories

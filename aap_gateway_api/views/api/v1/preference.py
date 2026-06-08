@@ -32,11 +32,10 @@ def format_err_message(category_slug, preference_name, err_detail):
 
     if err_detail in err_messages:
         return err_messages[err_detail] % {"preference_name": preference_name, "category_slug": category_slug}
-    else:
-        return _("An unknown error occurred with preference '%(preference_name)s' in category '%(category_slug)s'.") % {
-            "preference_name": preference_name,
-            "category_slug": category_slug,
-        }
+    return _("An unknown error occurred with preference '%(preference_name)s' in category '%(category_slug)s'.") % {
+        "preference_name": preference_name,
+        "category_slug": category_slug,
+    }
 
 
 class SettingSectionView(AnsibleBaseView):
@@ -62,14 +61,11 @@ class SettingSectionView(AnsibleBaseView):
 
     @extend_schema(operation_id="settings_getter", extensions={'x-ai-description': "Get Gateway preferences for a category, or 'all' for all categories"})
     def get(self, request, category_slug, format=None):
-        # TODO: Check permissions (should be on the category)
-        # self.check_object_permissions(self.request, obj)
         self.serializer = SettingSectionSerializer(category_slug)
         return Response(self.serializer.to_representation())
 
     @extend_schema(extensions={'x-ai-description': 'Update Gateway preferences within a category'})
     def put(self, request, category_slug, format=None):
-        # TODO: Check permissions on the category
         self.serializer = SettingSectionSerializer(category_slug)
         updated_data = self.serializer.validate_and_save(request.data)
         return Response(updated_data)
