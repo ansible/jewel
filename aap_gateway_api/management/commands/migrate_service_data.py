@@ -134,6 +134,10 @@ class Command(BaseCommand):
         """
         self._warn_ignored_flags(options)
 
+        if MigrateServiceDataHasRan.has_migration_completed():
+            self.stdout.write("Migration has already completed. Skipping.")
+            return
+
         # Force merge options to True as per requirements
         merge_teams = True
         merge_organizations = True
@@ -303,6 +307,19 @@ class Command(BaseCommand):
                 continue
         return failed_services
 
+    def _is_service_already_synced(self) -> bool:
+        """Check if all resource types for the current service have already been migrated."""
+        for resource_type_name in self.resource_types_to_migrate:
+            filters = {
+                "service_id": self.upstream_service_id,
+                "is_partially_migrated": "false",
+                "content_type__resource_type__name": resource_type_name,
+            }
+            data = self.client.list_resources(filters=filters).json()
+            if data["count"] > 0:
+                return False
+        return True
+
     def _migrate_single_service(
         self,
         service_api: ServiceAPIRoute,
@@ -350,15 +367,18 @@ class Command(BaseCommand):
         service_api.service_cluster.service_id = self.upstream_service_id
         service_api.service_cluster.save()
 
-        self.stdout.write(
-            f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
-        )
-
-        # Delete the legacy authenticators after migration, along with their associated authenticatorusers
+        # No-op if legacy authenticators were already deleted on a previous run
         self.delete_legacy_authenticators()
 
-        for r_type in self.resource_types_to_migrate.keys():
-            self.migrate_resource(r_type)
+        if self._is_service_already_synced():
+            self.stdout.write(f"Service {service_slug} is already synchronized — skipping resource migration.")
+        else:
+            self.stdout.write(
+                f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
+            )
+
+            for r_type in self.resource_types_to_migrate.keys():
+                self.migrate_resource(r_type)
 
         self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
         self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)
