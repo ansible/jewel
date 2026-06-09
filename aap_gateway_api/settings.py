@@ -2,7 +2,14 @@ import os
 
 from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_python_file_with_injected_context, load_standard_settings_files
 
-from .settings_utils import _GATEWAY_ETC_DIRECTORY, load_custom_envvars, load_grpc_settings, load_oidc_provider_settings, set_secret_key
+from .settings_utils import (
+    _GATEWAY_ETC_DIRECTORY,
+    load_custom_envvars,
+    load_grpc_settings,
+    load_healthcheck_settings,
+    load_oidc_provider_settings,
+    set_secret_key,
+)
 
 DYNACONF = factory(
     __name__,
@@ -23,6 +30,7 @@ load_standard_settings_files(DYNACONF)  # /etc/ansible-automation-platform/*.yam
 load_custom_envvars(DYNACONF)  # load custom unprefixed envvars
 load_envvars(DYNACONF)  # load envvars prefixed with GATEWAY_
 set_secret_key(DYNACONF)  # set secret key based on secret key file
+load_healthcheck_settings(DYNACONF)  # create healthcheck DB alias from default
 
 load_oidc_provider_settings(DYNACONF)  # conditionally enable Gateway as OIDC Provider
 

@@ -102,6 +102,25 @@ def load_grpc_settings(settings: Dynaconf) -> None:
     load_python_file_with_injected_context(settings_file_path, settings=settings)
 
 
+def load_healthcheck_settings(settings: Dynaconf) -> None:
+    """Create a 'healthcheck' DATABASES alias derived from 'default'.
+
+    Deep-copies the full default DB config via ``to_dict()`` so every key
+    (including any installer-added ones) is preserved, then overlays an
+    aggressive connect_timeout so PingView._check_db() fails fast instead
+    of blocking for ~130 s on unreachable hosts.
+    """
+    default_db = settings.DATABASES.get("default")
+    if not default_db:
+        return
+    healthcheck_db = default_db.to_dict()
+    healthcheck_db.setdefault("OPTIONS", {})["connect_timeout"] = 3
+    healthcheck_db["CONN_MAX_AGE"] = 0
+    healthcheck_db["CONN_HEALTH_CHECKS"] = True
+    healthcheck_db["TEST"] = {"MIRROR": "default"}
+    settings.set("DATABASES__healthcheck", healthcheck_db)
+
+
 def load_oidc_provider_settings(settings: Dynaconf) -> None:
     """Load OIDC provider settings.
 
