@@ -1,3 +1,4 @@
+from envoy.config.trace.v3 import opentelemetry_pb2
 from envoy.extensions.access_loggers.stream.v3 import stream_pb2
 from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2
 from envoy.extensions.filters.http.lua.v3 import lua_pb2
@@ -25,3 +26,4 @@ EXT_AUTHZ_FILTER = _type_url(ext_authz_pb2.ExtAuthz.DESCRIPTOR)
 HTTP_ROUTER = _type_url(router_pb2.Router.DESCRIPTOR)
 HTTP_CONNECTION_MANAGER = _type_url(http_connection_manager_pb2.HttpConnectionManager.DESCRIPTOR)
 STDOUT_ACCESS_LOG = _type_url(stream_pb2.StdoutAccessLog.DESCRIPTOR)
+OPENTELEMETRY_CONFIG = _type_url(opentelemetry_pb2.OpenTelemetryConfig.DESCRIPTOR)

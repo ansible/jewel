@@ -1,0 +1,6 @@
+---
+tempo_image: docker.io/grafana/tempo
+tempo_image_version: latest
+tempo_http_port: 3200
+tempo_config_dir: "{{ sources_dest }}/tempo"
+tempo_config_file: tempo-config.yml

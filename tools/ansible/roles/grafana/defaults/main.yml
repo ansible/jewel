@@ -1,0 +1,5 @@
+---
+grafana_image: docker.io/grafana/grafana
+grafana_image_version: latest
+grafana_http_port: 3000
+grafana_provisioning_dir: "{{ sources_dest }}/grafana/provisioning"

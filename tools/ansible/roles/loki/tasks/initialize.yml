@@ -1,0 +1,10 @@
+---
+- name: Create Loki config directory
+  file:
+    path: "{{ loki_config_dir }}"
+    state: directory
+
+- name: Template Loki config
+  template:
+    src: "{{ loki_config_file }}.j2"
+    dest: "{{ loki_config_dir }}/{{ loki_config_file }}"

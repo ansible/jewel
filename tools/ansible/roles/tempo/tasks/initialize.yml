@@ -1,0 +1,10 @@
+---
+- name: Create Tempo config directory
+  file:
+    path: "{{ tempo_config_dir }}"
+    state: directory
+
+- name: Template Tempo config
+  template:
+    src: "{{ tempo_config_file }}.j2"
+    dest: "{{ tempo_config_dir }}/{{ tempo_config_file }}"

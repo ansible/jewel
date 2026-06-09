@@ -29,6 +29,7 @@ redis_tls_enabled: True
 # ldap_enabled: True
 # tacacs_enabled: True
 # radius_enabled: True
+# otel_enabled: True
 
 ### Gateway preferences that will be set
 gateway_preferences:
