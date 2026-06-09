@@ -1,0 +1,10 @@
+---
+- name: Create OTEL collector config directory
+  file:
+    path: "{{ otel_collector_config_dir }}"
+    state: directory
+
+- name: Template OTEL collector config
+  template:
+    src: "{{ otel_collector_config_file }}.j2"
+    dest: "{{ otel_collector_config_dir }}/{{ otel_collector_config_file }}"

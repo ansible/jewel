@@ -1,0 +1,10 @@
+---
+- name: Create Grafana datasources provisioning directory
+  file:
+    path: "{{ grafana_provisioning_dir }}/datasources"
+    state: directory
+
+- name: Template Grafana datasources
+  template:
+    src: datasources.yml.j2
+    dest: "{{ grafana_provisioning_dir }}/datasources/datasources.yml"

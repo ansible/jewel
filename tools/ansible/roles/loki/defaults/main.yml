@@ -1,0 +1,6 @@
+---
+loki_image: docker.io/grafana/loki
+loki_image_version: latest
+loki_http_port: 3100
+loki_config_dir: "{{ sources_dest }}/loki"
+loki_config_file: loki-config.yml

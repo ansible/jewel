@@ -5,6 +5,7 @@ import sys
 from concurrent import futures
 
 import grpc
+from ansible_base.observability import setup_observability
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from envoy.service.auth.v3 import external_auth_pb2_grpc
@@ -22,6 +23,7 @@ os.environ["GRPC_VERBOSITY"] = getattr(settings, "GRPC_VERBOSITY", "ERROR")
 
 
 def _run_server(bind_address, debug):
+    setup_observability(service_name="gateway-grpc")
     if debug:
         _THREAD_CONCURRENCY = 1
         try:

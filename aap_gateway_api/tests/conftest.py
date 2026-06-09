@@ -4,11 +4,18 @@ import multiprocessing
 import os
 import random
 import re
+import sys
 import uuid
 from collections import namedtuple
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
+
+# Mock ansible_base.observability for tests
+# Production code uses setup_observability() but tests shouldn't initialize real OTEL
+if 'ansible_base.observability' not in sys.modules:
+    sys.modules['ansible_base.observability'] = Mock()
+    sys.modules['ansible_base.observability'].setup_observability = Mock()
 
 # If we pull in individual fixtures and then reuse them in the new fixtures they have linting errors
 #  around redefinition. Instead we will just import * here and noqa this one line instead of multiple places

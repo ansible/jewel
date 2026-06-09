@@ -28,3 +28,4 @@ gateway_preferences:
 # ldap_enabled: True
 # tacacs_enabled: True
 # radius_enabled: True
+# otel_enabled: True

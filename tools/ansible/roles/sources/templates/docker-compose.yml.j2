@@ -41,6 +41,10 @@ services:
       - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
       - DJANGO_DEBUG_TOOL_BAR={{ ddt_enabled }}
       - CONTAINER_NUMBER={{ container_id }}
+{% if enabled_containers['otel_collector'] | bool %}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:{{ otel_collector_grpc_port }}
+      - OTEL_SERVICE_NAME=aap-gateway
+{% endif %}
 {% if container_engine == 'docker' %}
     links:
       - db
@@ -402,6 +406,83 @@ services:
       - dbnet
 {% endif %}
 
+{% if enabled_containers['otel_collector'] | bool %}
+  otel_collector:
+    image: {{ otel_collector_image }}:{{ otel_collector_image_version }}
+    container_name: aap_gw_otel_collector_1
+    hostname: otel-collector
+    command: ["--config=/etc/otel/otel-collector-config.yml"]
+    ports:
+      - "{{ otel_collector_grpc_port }}:{{ otel_collector_grpc_port }}"
+      - "{{ otel_collector_http_port }}:{{ otel_collector_http_port }}"
+      - "{{ otel_collector_prometheus_port }}:{{ otel_collector_prometheus_port }}"
+    volumes:
+      - '$PWD/tools/generated/otel_collector/otel-collector-config.yml:/etc/otel/otel-collector-config.yml:ro,z'
+    networks:
+      - service-mesh
+    depends_on:
+{% if enabled_containers['loki'] | bool %}
+      - loki
+{% endif %}
+{% if enabled_containers['tempo'] | bool %}
+      - tempo
+{% endif %}
+{% endif %}
+
+{% if enabled_containers['loki'] | bool %}
+  loki:
+    image: {{ loki_image }}:{{ loki_image_version }}
+    container_name: aap_gw_loki_1
+    hostname: loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    ports:
+      - "{{ loki_http_port }}:{{ loki_http_port }}"
+    volumes:
+      - '$PWD/tools/generated/loki/loki-config.yml:/etc/loki/loki-config.yml:ro,z'
+      - 'aap_gw_loki:/loki:z'
+    networks:
+      - service-mesh
+{% endif %}
+
+{% if enabled_containers['tempo'] | bool %}
+  tempo:
+    image: {{ tempo_image }}:{{ tempo_image_version }}
+    container_name: aap_gw_tempo_1
+    hostname: tempo
+    command: ["-config.file=/etc/tempo/tempo-config.yml"]
+    ports:
+      - "{{ tempo_http_port }}:{{ tempo_http_port }}"
+    volumes:
+      - '$PWD/tools/generated/tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro,z'
+      - 'aap_gw_tempo:/var/tempo:z'
+    networks:
+      - service-mesh
+{% endif %}
+
+{% if enabled_containers['grafana'] | bool %}
+  grafana:
+    image: {{ grafana_image }}:{{ grafana_image_version }}
+    container_name: aap_gw_grafana_1
+    hostname: grafana
+    ports:
+      - "{{ grafana_http_port }}:{{ grafana_http_port }}"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - '$PWD/tools/generated/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro,z'
+      - 'aap_gw_grafana:/var/lib/grafana:z'
+    networks:
+      - service-mesh
+    depends_on:
+{% if enabled_containers['loki'] | bool %}
+      - loki
+{% endif %}
+{% if enabled_containers['tempo'] | bool %}
+      - tempo
+{% endif %}
+{% endif %}
+
 networks:
   dbnet:
   service-mesh:
@@ -423,4 +504,16 @@ volumes:
   aap_gw_openldap_data:
     name: aap_gw_ldap_1
     driver: local
+{% endif %}
+{% if enabled_containers['loki'] | bool %}
+  aap_gw_loki:
+    name: aap_gw_loki
+{% endif %}
+{% if enabled_containers['tempo'] | bool %}
+  aap_gw_tempo:
+    name: aap_gw_tempo
+{% endif %}
+{% if enabled_containers['grafana'] | bool %}
+  aap_gw_grafana:
+    name: aap_gw_grafana
 {% endif %}

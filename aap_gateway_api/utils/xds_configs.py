@@ -1,6 +1,14 @@
 from django.conf import settings
 
-from aap_gateway_api.common.envoy import DOWNSTREAM_TLS_CONTEXT, EXT_AUTHZ_FILTER, HTTP_CONNECTION_MANAGER, HTTP_ROUTER, LUA_FILTER, STDOUT_ACCESS_LOG
+from aap_gateway_api.common.envoy import (
+    DOWNSTREAM_TLS_CONTEXT,
+    EXT_AUTHZ_FILTER,
+    HTTP_CONNECTION_MANAGER,
+    HTTP_ROUTER,
+    LUA_FILTER,
+    OPENTELEMETRY_CONFIG,
+    STDOUT_ACCESS_LOG,
+)
 
 SDS_SECRET_CONFIG_NAME = "validation_context_sds"
 
@@ -67,6 +75,16 @@ def network_manager_filter(http_filters=[], routes=[]):
                         "routes": routes,
                     }
                 ],
+            },
+            "tracing": {
+                "provider": {
+                    "name": "envoy.tracers.opentelemetry",
+                    "typed_config": {
+                        "@type": OPENTELEMETRY_CONFIG,
+                        "grpc_service": {"envoy_grpc": {"cluster_name": "otel_collector"}},
+                        "service_name": "gateway-envoy",
+                    },
+                }
             },
             "use_remote_address": True,
             "xff_num_trusted_hops": settings.XDS_XFF_NUM_TRUSTED_HOPS,
