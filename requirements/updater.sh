@@ -30,13 +30,14 @@ generate_requirements() {
 }
 
 main() {
+  local command="${1:-}"
   base_dir=$(pwd)
 
   _tmp=$(${PYTHON} -c "import tempfile; print(tempfile.mkdtemp(suffix='.aap-gw-requirements', dir='/tmp'))")
 
   trap _cleanup INT TERM EXIT
 
-  case $1 in
+  case ${command} in
     "run")
       NEEDS_HELP=0
     ;;
@@ -48,9 +49,9 @@ main() {
       NEEDS_HELP=1
     ;;
     *)
-      echo ""
-      echo "ERROR: Parameter $1 not valid"
-      echo ""
+      echo "" >&2
+      echo "ERROR: Parameter ${command} not valid" >&2
+      echo "" >&2
       NEEDS_HELP=1
     ;;
   esac 

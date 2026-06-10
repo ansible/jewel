@@ -1,11 +1,11 @@
 import logging
 
+from ansible_base.rbac.management import create_dab_permissions
+from django.apps import apps as global_apps
 from django.conf import settings
 from django.utils import timezone
-from django.apps import apps as global_apps
 
 from aap_gateway_api.models import DefaultServiceType
-from ansible_base.rbac.management import create_dab_permissions
 
 _default_service_types = [
     {
@@ -39,7 +39,7 @@ _default_service_types = [
 ]
 
 
-def create_system_user(apps, schema_editor):
+def create_system_user(apps, _schema_editor):
     """
     Create the system user using the username in settings.
     The user is self-referential in its created_by and modified_by fields.
@@ -56,11 +56,11 @@ def create_system_user(apps, schema_editor):
         system_user.save()
 
 
-def create_permissions_as_operation(apps, schema_editor):
+def create_permissions_as_operation(apps, _schema_editor):
     create_dab_permissions(global_apps.get_app_config("aap_gateway_api"), apps=apps)
 
 
-def create_default_service_types(apps, schema_editor):
+def create_default_service_types(apps, _schema_editor):
     """
     Create the expected default service types to seed DB.
     """
@@ -75,7 +75,7 @@ def create_default_service_types(apps, schema_editor):
         st.save()
 
 
-def migrate_service_types(apps, schema_editor):
+def migrate_service_types(apps, _schema_editor):
     ServiceCluster = apps.get_model('aap_gateway_api.ServiceCluster')
     ServiceType = apps.get_model('aap_gateway_api.ServiceType')
     for sc in ServiceCluster.objects.all():
@@ -83,7 +83,8 @@ def migrate_service_types(apps, schema_editor):
         sc.service_type = st
         sc.save()
 
-def update_service_ping_url(apps, schema_editor):
+
+def update_service_ping_url(apps, _schema_editor):
     ServiceType = apps.get_model('aap_gateway_api.ServiceType')
     for st_default in _default_service_types:
         # only updating hub for now
@@ -92,16 +93,19 @@ def update_service_ping_url(apps, schema_editor):
                 st.ping_url = st_default["ping_url"]
                 st.save()
 
-def change_outlier_detection_max_ejection_percent_from_33_to_100(apps, schema_editor):
+
+def change_outlier_detection_max_ejection_percent_from_33_to_100(apps, _schema_editor):
     change_outlier_detection_max_ejection_percent(apps, 33, 100)
 
-def change_outlier_detection_max_ejection_percent_from_100_to_33(apps, schema_editor):
+
+def change_outlier_detection_max_ejection_percent_from_100_to_33(apps, _schema_editor):
     change_outlier_detection_max_ejection_percent(apps, 100, 33)
+
 
 def change_outlier_detection_max_ejection_percent(apps, old, new):
     ServiceCluster = apps.get_model('aap_gateway_api.ServiceCluster')
     # The old default for the outlier_detection_max_ejection_percent was 33%.
-    # We want to change any existing 33% to 100% to address the defect associated with running at 33% 
+    # We want to change any existing 33% to 100% to address the defect associated with running at 33%
     for cluster in ServiceCluster.objects.filter(outlier_detection_max_ejection_percent=old).all():
         cluster.outlier_detection_max_ejection_percent = new
         cluster.save()

@@ -1,6 +1,6 @@
 import base64
 import logging
-from typing import Any, Tuple, Union
+from typing import Any
 
 from django.conf import settings
 
@@ -37,7 +37,7 @@ class ServiceAuthHelper:
         return name
 
     @staticmethod
-    def get_auth_header(service_type: str, auth_type: str) -> Union[Tuple[str, str], None]:
+    def get_auth_header(service_type: str, auth_type: str) -> tuple[str, str] | None:
         """
         Creates envoy service auth header(s) based on service type and auth type.
         """

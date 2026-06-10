@@ -163,9 +163,6 @@ class User(AbstractDABUser, CommonModel, AuditableModel):
 
     def logout(self):
         logger.debug(f"Logging out user {self.username} from any active backends")
-        # cookies = Cookie.objects.filter(user=self)
-        # for cookie in cookies:
-        #    cookie.logout()
 
     def summary_fields(self):
         return user_summary_fields(self)

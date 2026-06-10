@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
@@ -205,7 +205,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
         )
 
     @staticmethod
-    def get_cluster_by_type(service_type: Union[ServiceType, str]):
+    def get_cluster_by_type(service_type: ServiceType | str):
         if isinstance(service_type, ServiceType):
             return ServiceCluster.objects.filter(service_type=service_type).first()
         return ServiceCluster.objects.filter(service_type__name=service_type).first()

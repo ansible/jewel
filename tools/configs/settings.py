@@ -4,7 +4,6 @@
 # LOGGING['handlers']['file']['class'] = 'logging.handlers.WatchedFileHandler'
 # LOGGING['handlers']['file']['filename'] = '/var/log/ansible-automation-platform/gateway/gateway.log'
 
-# GRPC_SERVER_PROCESSES = 5
 # GRPC_SERVER_MAX_THREADS_PER_PROCESS = 10
 # GRPC_SERVER_AUTH_SERVICE_TIMEOUT = '30s'
 
