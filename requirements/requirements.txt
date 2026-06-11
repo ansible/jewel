@@ -75,7 +75,7 @@ psycopg==3.2.10
     #   dispatcherd
 pycparser==2.22
     # via cffi
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via -r requirements/requirements.in
 pyyaml==6.0.2
     # via
