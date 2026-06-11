@@ -140,6 +140,7 @@ def _diagnose_key(key_material, public=True):
     else:
         try:
             from jwt.algorithms import RSAAlgorithm
+
             RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(key_material)
         except Exception as pyjwt_exc:
             logger.error("JWT %s key passes cryptography validation but PyJWT rejects it: %s", key_type, pyjwt_exc)
