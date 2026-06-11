@@ -5,12 +5,14 @@ pure diagnostic function that only logs.
 """
 
 import logging
+from unittest import mock
 
+import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
-from aap_gateway_api.utils.jwt_token import _diagnose_key
+from aap_gateway_api.utils.jwt_token import _diagnose_key, create_signed_jwt, decode_signed_jwt
 
 
 def _generate_rsa_keypair():
@@ -146,3 +148,34 @@ class TestDiagnoseKeyBothPass:
         with caplog.at_level(logging.ERROR):
             _diagnose_key(private_pem, public=False)
         assert "passes both cryptography and PyJWT prepare_key validation" in caplog.text
+
+
+class TestCreateSignedJwtInvalidKey:
+    """Verify create_signed_jwt calls _diagnose_key on InvalidKeyError."""
+
+    @mock.patch("aap_gateway_api.utils.jwt_token._diagnose_key")
+    @mock.patch("aap_gateway_api.utils.jwt_token.get_jwt_rsa_key", return_value="bad-key")
+    @mock.patch("aap_gateway_api.utils.jwt_token.jwt.encode", side_effect=pyjwt.exceptions.InvalidKeyError("test"))
+    @mock.patch("aap_gateway_api.utils.jwt_token.get_preference_value", return_value=300)
+    @mock.patch("aap_gateway_api.utils.jwt_token.get_user_claims", return_value={})
+    @mock.patch("aap_gateway_api.utils.jwt_token.get_user_claims_hashable_form", return_value=())
+    @mock.patch("aap_gateway_api.utils.jwt_token.get_claims_hash", return_value="a" * 64)
+    def test_diagnose_called_on_encode_failure(self, _hash, _hashable, _claims, _pref, _encode, _get_key, mock_diagnose):
+        fake_user = mock.MagicMock()
+        fake_user.resource.ansible_id = "test-id"
+        fake_user.resource.service_id = "test-service"
+        with pytest.raises(pyjwt.exceptions.InvalidKeyError):
+            create_signed_jwt(fake_user)
+        mock_diagnose.assert_called_once_with("bad-key", public=False)
+
+
+class TestDecodeSignedJwtInvalidKey:
+    """Verify decode_signed_jwt calls _diagnose_key on InvalidKeyError."""
+
+    @mock.patch("aap_gateway_api.utils.jwt_token._diagnose_key")
+    @mock.patch("aap_gateway_api.utils.jwt_token.get_jwt_rsa_key", return_value="bad-key")
+    @mock.patch("aap_gateway_api.utils.jwt_token.jwt.decode", side_effect=pyjwt.exceptions.InvalidKeyError("test"))
+    def test_diagnose_called_on_decode_failure(self, _decode, _get_key, mock_diagnose):
+        with pytest.raises(pyjwt.exceptions.InvalidKeyError):
+            decode_signed_jwt("fake-token")
+        mock_diagnose.assert_called_once_with("bad-key", public=True)
