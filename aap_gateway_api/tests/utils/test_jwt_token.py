@@ -18,7 +18,7 @@ def _generate_rsa_keypair():
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
     public_pem = (
@@ -36,7 +36,7 @@ def _generate_ec_keypair():
     private_key = ec.generate_private_key(ec.SECP256R1())
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
     public_pem = (
