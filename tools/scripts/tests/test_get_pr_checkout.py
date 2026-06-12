@@ -354,50 +354,60 @@ class TestMainScenarios:
         assert exc_info.value.code == 0
         mock_clone.assert_called_once()
 
+    @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.branch_exists")
-    def test_devel_fails_without_matching_branch(self, mock_branch_exists, monkeypatch):
-        """Test devel fails when no matching branch exists (no fallback)"""
+    def test_devel_fallback_when_branch_not_found(self, mock_branch_exists, mock_clone, monkeypatch):
+        """Test that when no matching branch exists, it falls back to devel"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
         monkeypatch.setenv("GITHUB_BASE_REF", "devel")
         _set_cli_args("ansible/django-ansible-base")
 
-        # Branch doesn't exist
+        # Branch doesn't exist in any variant
         mock_branch_exists.return_value = False
+        mock_clone.return_value = True
 
         with pytest.raises(SystemExit) as exc_info:
             get_pr_checkout.main()
 
-        # Should fail - no fallback for devel
-        assert exc_info.value.code == 1
+        # Should succeed with fallback to devel
+        assert exc_info.value.code == 0
+        mock_clone.assert_called_once()
+        clone_url = mock_clone.call_args[0][0]
+        assert "ansible/django-ansible-base" in clone_url
+        assert mock_clone.call_args[0][1] == "devel"
 
+    @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.branch_exists")
-    def test_stable_fails_without_matching_branch(self, mock_branch_exists, monkeypatch):
-        """Test stable branch fails when no matching branch exists"""
+    def test_feature_branch_fallback_to_devel(self, mock_branch_exists, mock_clone, monkeypatch):
+        """Test that feature branches fall back to devel when not found in dependency repos"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
-        monkeypatch.setenv("GITHUB_BASE_REF", "devel")
+        monkeypatch.setenv("GITHUB_BASE_REF", "feature-sprint-2026-24-migrate_service_data")
         _set_cli_args("ansible/django-ansible-base")
 
-        # Branch doesn't exist
+        # Feature branch doesn't exist in DAB
         mock_branch_exists.return_value = False
+        mock_clone.return_value = True
 
         with pytest.raises(SystemExit) as exc_info:
             get_pr_checkout.main()
 
-        # Should fail
-        assert exc_info.value.code == 1
+        # Should succeed with fallback to devel
+        assert exc_info.value.code == 0
+        mock_clone.assert_called_once()
+        assert mock_clone.call_args[0][1] == "devel"
 
     @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.branch_exists")
     def test_enterprise_fallback(self, mock_branch_exists, mock_clone, monkeypatch):
-        """Test enterprise repo fallback when first variant doesn't have branch"""
+        """Test enterprise repo fallback when first variant doesn't have branch but second does"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
         monkeypatch.setenv("GITHUB_BASE_REF", "devel")
-        _set_cli_args("ansible/django-ansible-base")
+        _set_cli_args("[ansible-tower|ansible]/django-ansible-base")
 
-        # First call (enterprise) returns False, second call (public) returns True
+        # First variant (ansible-tower) returns False, second (ansible) returns True
         mock_branch_exists.side_effect = [False, True]
         mock_clone.return_value = True
 
