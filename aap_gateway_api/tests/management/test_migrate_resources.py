@@ -2303,3 +2303,220 @@ def test_resolve_content_object_skip_on_missing_content_type(capsys):
     assert result is MigrateCommand._SKIP
     captured = capsys.readouterr()
     assert "Unable to find content type 'nonexistent.model'" in captured.err
+
+
+# =============================================================================
+# Tests for _fetch_role_assignments count tolerance (AAP-76813)
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_fetch_role_assignments_tolerates_count_change(capsys):
+    """Test that _fetch_role_assignments logs a warning instead of raising when count changes between pages."""
+    cmd = MigrateCommand()
+    cmd._services_with_count_drift = set()
+    mock_client = Mock()
+    cmd.client = mock_client
+
+    page1_response = Mock()
+    page1_response.json.return_value = {
+        "count": 100,
+        "results": [{"id": 1}],
+        "next": "http://example.com/page=2",
+    }
+    page2_response = Mock()
+    page2_response.json.return_value = {
+        "count": 105,
+        "results": [{"id": 2}],
+        "next": None,
+    }
+    mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
+
+    results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
+
+    assert len(results) == 2
+    assert results == [{"id": 1}, {"id": 2}]
+
+
+@pytest.mark.django_db
+def test_fetch_role_assignments_updates_total_count_on_change():
+    """Test that total_count is updated after a count change so subsequent pages compare against the new value."""
+    cmd = MigrateCommand()
+    cmd._services_with_count_drift = set()
+    mock_client = Mock()
+    cmd.client = mock_client
+
+    page1_response = Mock()
+    page1_response.json.return_value = {"count": 50, "results": [{"id": 1}], "next": "http://example.com/page=2"}
+    page2_response = Mock()
+    page2_response.json.return_value = {"count": 55, "results": [{"id": 2}], "next": "http://example.com/page=3"}
+    page3_response = Mock()
+    page3_response.json.return_value = {"count": 55, "results": [{"id": 3}], "next": None}
+
+    mock_client.list_user_assignments.side_effect = [page1_response, page2_response, page3_response]
+
+    results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
+
+    assert len(results) == 3
+
+
+@pytest.mark.django_db
+def test_fetch_role_assignments_tracks_drift_services():
+    """Test that services with count drift are tracked in _services_with_count_drift."""
+    cmd = MigrateCommand()
+    cmd._services_with_count_drift = set()
+    mock_client = Mock()
+    cmd.client = mock_client
+
+    page1_response = Mock()
+    page1_response.json.return_value = {"count": 10, "results": [{"id": 1}], "next": "http://example.com/page=2"}
+    page2_response = Mock()
+    page2_response.json.return_value = {"count": 11, "results": [{"id": 2}], "next": None}
+
+    mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
+
+    list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
+
+    assert "controller" in cmd._services_with_count_drift
+
+
+@pytest.mark.django_db
+def test_fetch_role_assignments_no_drift_not_tracked():
+    """Test that services without count drift are not added to _services_with_count_drift."""
+    cmd = MigrateCommand()
+    cmd._services_with_count_drift = set()
+    mock_client = Mock()
+    cmd.client = mock_client
+
+    page1_response = Mock()
+    page1_response.json.return_value = {"count": 10, "results": [{"id": 1}], "next": "http://example.com/page=2"}
+    page2_response = Mock()
+    page2_response.json.return_value = {"count": 10, "results": [{"id": 2}], "next": None}
+
+    mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
+
+    list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
+
+    assert "controller" not in cmd._services_with_count_drift
+
+
+# =============================================================================
+# Tests for migrate_role_assignments try/except structure (AAP-76813)
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_migrate_role_assignments_catches_fetch_error(capsys):
+    """Test that errors during generator iteration are caught by the outer try/except."""
+    cmd = MigrateCommand()
+    cmd._services_with_count_drift = set()
+    cmd.stdout = Mock()
+    cmd.stderr = Mock()
+    mock_client = Mock()
+    cmd.client = mock_client
+
+    mock_response = Mock()
+    mock_response.json.side_effect = RuntimeError("connection lost")
+    mock_client.list_user_assignments.return_value = mock_response
+
+    cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
+
+    cmd.stderr.write.assert_any_call("Unable to fetch role user assignments from controller, skipping...")
+
+
+@pytest.mark.django_db
+def test_migrate_role_assignments_catches_give_permission_error(admin_user, capsys):
+    """Test that errors in give_permission are caught separately from fetch errors."""
+    cmd = MigrateCommand()
+    cmd._services_with_count_drift = set()
+    mock_client = Mock()
+    cmd.client = mock_client
+
+    test_user = User.objects.create(username="perm-error-user")
+    rd = RoleDefinition.objects.create(name="Test Permission Role", content_type=None)
+
+    mock_response = Mock()
+    mock_response.json.return_value = {
+        "count": 1,
+        "results": [
+            {
+                "object_ansible_id": None,
+                "object_id": None,
+                "content_type": "",
+                "role_definition": "Test Permission Role",
+                "user_ansible_id": str(test_user.resource.ansible_id),
+            }
+        ],
+        "next": None,
+    }
+    mock_client.list_user_assignments.return_value = mock_response
+
+    with patch.object(rd, 'give_global_permission', side_effect=RuntimeError("permission denied")):
+        with patch.object(MigrateCommand, '_resolve_role_definition', return_value=rd):
+            cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
+
+    captured = capsys.readouterr()
+    assert "Unable to give permission for role user assignment" in captured.err
+    assert "Unable to fetch" not in captured.err
+
+
+@pytest.mark.django_db(transaction=True)
+def test_drift_summary_warning_displayed(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test that services with count drift are reported in the migration summary."""
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        mock_consistency_check.return_value = None
+
+        mock_client = Mock()
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+
+        # Simulate count drift: page 1 has count=2, page 2 has count=3
+        page1 = Mock()
+        page1.json.return_value = {"count": 2, "results": [{"id": 1}], "next": "http://example.com/page=2"}
+        page2 = Mock()
+        page2.json.return_value = {"count": 3, "results": [{"id": 2}], "next": None}
+        mock_client.list_user_assignments.side_effect = [page1, page2]
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        mock_client_class.return_value = mock_client
+
+        call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err
+        assert "count changes during role assignment migration" in captured.err
+        assert "re-run the migration" in captured.err
+
+
+@pytest.mark.django_db(transaction=True)
+def test_no_drift_summary_when_counts_stable(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test that no drift warning is shown when counts are stable."""
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        mock_consistency_check.return_value = None
+
+        mock_client = Mock()
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        mock_client_class.return_value = mock_client
+
+        call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "count changes during role assignment migration" not in captured.err
