@@ -124,12 +124,10 @@ def _diagnose_key(key_material, public=True):
     """Re-validate a rejected key with cryptography to log the exact reason."""
     key_type = "public" if public else "private"
     if not key_material:
-        logger.error("JWT %s key is empty or None. Regenerate the JWT keypair.", key_type)  # NOSONAR (S6667) - diagnostic context, not unhandled exception
+        logger.error("JWT %s key is empty or None. Regenerate the JWT keypair.", key_type)  # NOSONAR
         return
     if not isinstance(key_material, (str, bytes)):
-        logger.error(  # NOSONAR (S6667) - diagnostic context, not unhandled exception
-            "JWT %s key is not a string (got %s). Check the stored preference value.", key_type, type(key_material).__name__
-        )
+        logger.error("JWT %s key is not a string (got %s). Check the stored preference value.", key_type, type(key_material).__name__)  # NOSONAR
         return
     raw = key_material.encode("UTF-8") if isinstance(key_material, str) else key_material
     try:
@@ -138,18 +136,16 @@ def _diagnose_key(key_material, public=True):
         else:
             serialization.load_pem_private_key(raw, password=None)
     except Exception as diag_exc:
-        logger.error("JWT %s key failed cryptography validation: %s", key_type, diag_exc)  # NOSONAR (S6667) - diagnostic analysis, stack trace not useful
+        logger.error("JWT %s key failed cryptography validation: %s", key_type, diag_exc)  # NOSONAR
     else:
         try:
             from jwt.algorithms import RSAAlgorithm
 
             RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(key_material)
         except Exception as pyjwt_exc:
-            logger.error(  # NOSONAR (S6667) - diagnostic analysis, stack trace not useful
-                "JWT %s key passes cryptography validation but PyJWT rejects it: %s", key_type, pyjwt_exc
-            )
+            logger.error("JWT %s key passes cryptography validation but PyJWT rejects it: %s", key_type, pyjwt_exc)  # NOSONAR
         else:
-            logger.error(  # NOSONAR (S6667) - diagnostic analysis, no exception to log
+            logger.error(  # NOSONAR
                 "JWT %s key passes both cryptography and PyJWT prepare_key validation "
                 "but was still rejected during encode/decode. Check for algorithm mismatch.",
                 key_type,
