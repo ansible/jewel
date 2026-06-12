@@ -128,7 +128,12 @@ def test_xds_outlier_detection_split_external_local_origin_errors(split_errors, 
     assert response.status_code == 200
 
     outlier_det = response.data['resources'][0]['outlierDetection']
-    assert outlier_det['splitExternalLocalOriginErrors'] == split_errors
+    if split_errors:
+        assert outlier_det['splitExternalLocalOriginErrors'] is True
+    else:
+        # When False, Envoy's protobuf JSON serialization omits the field
+        # since False is the protobuf default for boolean fields.
+        assert outlier_det.get('splitExternalLocalOriginErrors', False) is False
 
 
 def test_xds_outlier_detection_split_external_local_origin_errors_default(admin_api_client, full_service_hierarchy_controller):
