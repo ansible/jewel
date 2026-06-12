@@ -113,6 +113,34 @@ def test_xds_outlier_detection_params(admin_api_client, full_service_hierarchy_c
     assert outlier_det['maxEjectionPercent'] == 77
 
 
+@pytest.mark.parametrize("split_errors", [True, False])
+def test_xds_outlier_detection_split_external_local_origin_errors(split_errors, admin_api_client, full_service_hierarchy_controller):
+    """Verify that splitExternalLocalOriginErrors is included in the CDS outlier detection config."""
+    url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})
+    response = admin_api_client.patch(
+        url,
+        {"outlier_detection_split_external_local_origin_errors": split_errors},
+    )
+    assert response.status_code == 200
+
+    url = reverse("cds")
+    response = admin_api_client.post(url, data={})
+    assert response.status_code == 200
+
+    outlier_det = response.data['resources'][0]['outlierDetection']
+    assert outlier_det['splitExternalLocalOriginErrors'] == split_errors
+
+
+def test_xds_outlier_detection_split_external_local_origin_errors_default(admin_api_client, full_service_hierarchy_controller):
+    """Verify that splitExternalLocalOriginErrors defaults to true for new clusters."""
+    url = reverse("cds")
+    response = admin_api_client.post(url, data={})
+    assert response.status_code == 200
+
+    outlier_det = response.data['resources'][0]['outlierDetection']
+    assert outlier_det['splitExternalLocalOriginErrors'] is True
+
+
 @pytest.mark.parametrize("health_checks_enabled", [True, False])
 def test_xds_cluster_discover_service_health_checks_enabled(health_checks_enabled, admin_api_client, full_service_hierarchy_controller):
     url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})

@@ -186,6 +186,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 "interval": f"{self.service_cluster.outlier_detection_interval_seconds}s",
                 "base_ejection_time": f"{self.service_cluster.outlier_detection_base_ejection_time_seconds}s",
                 "max_ejection_percent": self.service_cluster.outlier_detection_max_ejection_percent,
+                "split_external_local_origin_errors": self.service_cluster.outlier_detection_split_external_local_origin_errors,
             }
 
         if self.service_cluster.health_checks_enabled:

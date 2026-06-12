@@ -55,6 +55,15 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
         help_text=_("The maximum percent of nodes that can be ejected from the cluster."),
     )
 
+    outlier_detection_split_external_local_origin_errors = models.BooleanField(
+        default=True,
+        help_text=_(
+            "If true, locally-originated errors (e.g. upstream connection resets from WebSocket teardowns) "
+            "are tracked separately from externally-originated 5xx responses. This prevents WebSocket connection "
+            "resets from counting toward the consecutive gateway failure threshold and causing cluster ejections."
+        ),
+    )
+
     health_checks_enabled = models.BooleanField(
         default=True,
         help_text=_("If true, health checks will be used to determine if a node is healthy."),
