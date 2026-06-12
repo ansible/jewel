@@ -2311,7 +2311,7 @@ def test_resolve_content_object_skip_on_missing_content_type(capsys):
 
 
 @pytest.mark.django_db
-def test_fetch_role_assignments_tolerates_count_change(capsys):
+def test_fetch_role_assignments_tolerates_count_change(caplog):
     """Test that _fetch_role_assignments logs a warning instead of raising when count changes between pages."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
@@ -2332,14 +2332,16 @@ def test_fetch_role_assignments_tolerates_count_change(capsys):
     }
     mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
 
-    results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
+    with caplog.at_level("WARNING", logger="aap.gateway.management.commands.migrate_service_data"):
+        results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
 
     assert len(results) == 2
     assert results == [{"id": 1}, {"id": 2}]
+    assert any("assignment count changed from 100 to 105" in msg for msg in caplog.messages)
 
 
 @pytest.mark.django_db
-def test_fetch_role_assignments_updates_total_count_on_change():
+def test_fetch_role_assignments_updates_total_count_on_change(caplog):
     """Test that total_count is updated after a count change so subsequent pages compare against the new value."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
@@ -2355,9 +2357,14 @@ def test_fetch_role_assignments_updates_total_count_on_change():
 
     mock_client.list_user_assignments.side_effect = [page1_response, page2_response, page3_response]
 
-    results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
+    with caplog.at_level("WARNING", logger="aap.gateway.management.commands.migrate_service_data"):
+        results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
 
     assert len(results) == 3
+    # Warning should fire only once (page 2 drift), not again on page 3 (count matches updated total)
+    warning_msgs = [msg for msg in caplog.messages if "assignment count changed" in msg]
+    assert len(warning_msgs) == 1
+    assert "from 50 to 55" in warning_msgs[0]
 
 
 @pytest.mark.django_db
