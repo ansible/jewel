@@ -2428,7 +2428,9 @@ def test_migrate_role_assignments_catches_fetch_error(capsys):
 
     cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
 
-    cmd.stderr.write.assert_any_call("Unable to fetch role user assignments from controller, skipping...")
+    cmd.stderr.write.assert_called()
+    error_msg = str(cmd.stderr.write.call_args_list)
+    assert "Unable to fetch role user assignments from controller, skipping: connection lost" in error_msg
 
 
 @pytest.mark.django_db

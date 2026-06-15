@@ -1435,6 +1435,6 @@ class Command(BaseCommand):
                 except Exception as e:
                     self.stderr.write(f"Error: Unable to give permission for role {assignment_actor.value} assignment, skipping: {str(e)}")
                     continue
-        except Exception:
-            self.stderr.write(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping...")
+        except Exception as e:
+            self.stderr.write(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping: {e}")
             return
