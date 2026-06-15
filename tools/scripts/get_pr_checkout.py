@@ -41,7 +41,6 @@ Repository Specification Format:
     - Tries each org in order until finding one with the target branch
     - All variants share the same repo name (and thus target directory)
     - For devel: falls back to default branch if no match found
-    
 
     Example: ansible/django-ansible-base
     - Tries ansible/django-ansible-base first
@@ -342,7 +341,6 @@ def process_explicit_requirements(pr_body: str, token: Optional[str]) -> list:
 def process_always_clone_repos(always_clone_repos: list, target_branch: str, token: Optional[str], repos_to_clone: list) -> None:
     """Process always-clone repos and add them to repos_to_clone list."""
     print(f"\nProcessing {len(always_clone_repos)} always-clone repo(s):")
-    errors = False
 
     for repo_variants in always_clone_repos:
         primary_repo = repo_variants[0]
@@ -375,14 +373,18 @@ def process_always_clone_repos(always_clone_repos: list, target_branch: str, tok
                 }
             )
         else:
-            print(f"##[error]❌ FATAL: No branch {target_branch} found in {repo_variants}")
-            errors = True
-
-    if errors:
-        print("##[error]")
-        print("##[error]Cannot proceed without knowing the target branch to avoid")
-        print("##[error]cloning incorrect dependency versions.")
-        sys.exit(1)
+            # Fall back to devel if the target branch doesn't exist in any variant
+            fallback_branch = "devel"
+            fallback_repo = primary_repo
+            print(f"  ⚠️  Branch '{target_branch}' not found in any variant, falling back to '{fallback_branch}' from '{fallback_repo}'")
+            repos_to_clone.append(
+                {
+                    'target_dir': target_dir,
+                    'branch': fallback_branch,
+                    'clone_url': build_clone_url(fallback_repo, token),
+                    'repo': fallback_repo,
+                }
+            )
 
 
 def validate_no_duplicate_directories(repos_to_clone: list) -> dict:
