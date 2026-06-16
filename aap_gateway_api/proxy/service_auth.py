@@ -12,10 +12,7 @@ logger = logging.getLogger("aap.gateway.proxy.service_auth")
 
 class ServiceAuthHelper:
     # Mapping for pre-existing prefs/settings with non-standard naming
-    custom_setting_map = {
-        "CONSOLE_USERNAME": "REDHAT_USERNAME",
-        "CONSOLE_PASSWORD": "REDHAT_PASSWORD",
-    }
+    custom_setting_map = {}
 
     @staticmethod
     def _get_pref_or_setting(name: str) -> Any:

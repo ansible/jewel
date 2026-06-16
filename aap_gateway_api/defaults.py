@@ -94,9 +94,6 @@ ANSIBLE_BASE_CACHE_BROADCAST_QUEUE = 'gateway_broadcast'
 DISPATCHERD_MIN_WORKERS = 2
 DISPATCHERD_MAX_WORKERS = 4
 
-# Status endpoint for console.redhat.com
-CRC_STATUS_URL = "https://status.redhat.com/api/v2/summary.json"
-
 # Disallow sending csrf cookies over insecure connections
 CSRF_COOKIE_SECURE = True
 CSRF_TRUSTED_ORIGINS = []

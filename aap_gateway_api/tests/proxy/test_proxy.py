@@ -227,8 +227,6 @@ class TestExternalAuth:
         "service_type,auth_type,expected_headers",
         [
             ("controller", "JWT", ["X-DAB-JW-TOKEN", "x-trusted-proxy"]),
-            ("console", "BASIC", ["Authorization", "x-trusted-proxy"]),
-            ("console", "TOKEN", ["Authorization", "x-trusted-proxy"]),
         ],
     )
     def test_auth_header_selection(self, ext_auth, service_type, auth_type, expected_headers, admin_user):
@@ -249,7 +247,6 @@ class TestExternalAuth:
         [
             ("controller", "BASIC", NameError),
             ("hub", "TOKEN", NameError),
-            ("console", "BOGUS", RuntimeError),
         ],
     )
     def test_auth_header_exceptions(self, ext_auth, service_type, auth_type, expected_exception, admin_user):

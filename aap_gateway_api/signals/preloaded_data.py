@@ -5,9 +5,7 @@ from ansible_base.rbac.management import create_dab_permissions
 from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
 from django.conf import settings
-from flags.state import flag_enabled, get_flags
-
-from aap_gateway_api.models import ServiceType
+from flags.state import get_flags
 
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
@@ -27,7 +25,6 @@ def create_preload_data(**kwargs) -> None:
         set_system_user_password,
         set_system_user_managed_flag,
         toggle_install_time_flags,
-        add_console_service_type,
     ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
@@ -113,14 +110,6 @@ def set_system_user_managed_flag() -> bool:
     system_user.managed = True
     system_user.save()
     return True
-
-
-def add_console_service_type() -> bool:
-    if flag_enabled("FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED"):
-        # Add console.redhat.com service type
-        _obj, created = ServiceType.objects.get_or_create(name="console")
-        return created
-    return False
 
 
 def toggle_install_time_flags() -> None:

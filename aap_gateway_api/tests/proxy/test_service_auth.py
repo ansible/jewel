@@ -13,7 +13,7 @@ def test_get_pref_or_setting():
         assert ServiceAuthHelper._get_pref_or_setting("GET_ME") == "value"
 
     initialize_preferences()
-    assert ServiceAuthHelper._get_pref_or_setting("RED_HAT_CONSOLE_URL") == "https://console.redhat.com"
+    assert ServiceAuthHelper._get_pref_or_setting("INSIGHTS_TRACKING_STATE") is True
 
 
 @pytest.mark.django_db
@@ -24,8 +24,6 @@ def test_get_pref_or_setting_missing():
 @pytest.mark.parametrize(
     "service_type,auth_type,expected_name, expected_value",
     [
-        ("console", "BASIC", "Authorization", "Basic ZHVtbXk6ZHVtbXk="),
-        ("console", "TOKEN", "Authorization", "Bearer dummy"),
         ("fake", "BASIC", "Authorization", "Basic ZHVtbXk6ZHVtbXk="),
     ],
 )
@@ -42,7 +40,6 @@ def test_auth_header(service_type, auth_type, expected_name, expected_value):
     [
         ("fake", "BASIC"),
         ("fake", "TOKEN"),
-        ("console", "fake"),
     ],
 )
 @pytest.mark.django_db
