@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from aap_gateway_api.models import Organization
-from aap_gateway_api.signals.preloaded_data import create_default_organization, create_preload_data, set_system_user_password
+from aap_gateway_api.signals.preloaded_data import create_default_organization, create_preload_data, set_system_user_managed_flag, set_system_user_password
 
 
 class TestCreatePreloadedData:
@@ -30,6 +30,16 @@ class TestCreatePreloadedData:
     def test_default_org_created_by_default(self):
         org = Organization.objects.filter(name='Default')
         assert org
+
+    @pytest.mark.django_db
+    def test_set_system_user_managed_flag(self):
+        from ansible_base.lib.utils.models import get_system_user
+
+        system_user = get_system_user()
+        system_user.managed = False
+        system_user.save()
+        assert set_system_user_managed_flag() is True, "Should set managed=True when unset"
+        assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
 
     @pytest.mark.django_db
     def test_immediate_return_if_no_plan(self):

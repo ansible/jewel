@@ -36,6 +36,16 @@ def test_auth_header(service_type, auth_type, expected_name, expected_value):
     assert val == expected_value
 
 
+def test_normalize_name_custom_mapping():
+    original_map = ServiceAuthHelper.custom_setting_map.copy()
+    try:
+        ServiceAuthHelper.custom_setting_map = {"MAPPED_KEY": "CUSTOM_VALUE"}
+        assert ServiceAuthHelper._normalize_name("mapped_key") == "CUSTOM_VALUE"
+        assert ServiceAuthHelper._normalize_name("unmapped") == "UNMAPPED"
+    finally:
+        ServiceAuthHelper.custom_setting_map = original_map
+
+
 @pytest.mark.parametrize(
     "service_type,auth_type",
     [
@@ -47,3 +57,9 @@ def test_auth_header(service_type, auth_type, expected_name, expected_value):
 def test_auth_header_no_creds(service_type, auth_type):
     with pytest.raises((NameError, RuntimeError)):
         ServiceAuthHelper.get_auth_header(service_type, auth_type)
+
+
+@pytest.mark.django_db
+def test_auth_header_invalid_auth_type():
+    with pytest.raises(RuntimeError, match="Invalid auth_type"):
+        ServiceAuthHelper.get_auth_header("fake", "INVALID")
