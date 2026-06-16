@@ -25,6 +25,7 @@ def test_get_pref_or_setting_missing():
     "service_type,auth_type,expected_name, expected_value",
     [
         ("fake", "BASIC", "Authorization", "Basic ZHVtbXk6ZHVtbXk="),
+        ("fake", "TOKEN", "Authorization", "Bearer dummy"),
     ],
 )
 @pytest.mark.django_db

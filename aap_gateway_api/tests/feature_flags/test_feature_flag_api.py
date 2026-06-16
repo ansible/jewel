@@ -229,8 +229,8 @@ def test_feature_flags_detail_patch_forbidden(admin_api_client, runtime_feature_
     """
     Test that that a 403 is returned if RUNTIME_FEATURE_FLAGS is unset or False
     """
-    created_flag = AAPFlag.objects.filter(value='False').first()
-    assert created_flag is not None, "At least one AAPFlag with value='False' must exist"
+    created_flag = AAPFlag.objects.filter(value='False', toggle_type='run-time').first()
+    assert created_flag is not None, "At least one run-time AAPFlag with value='False' must exist"
     feature_flag = created_flag.name
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
     response = admin_api_client.get(url)
