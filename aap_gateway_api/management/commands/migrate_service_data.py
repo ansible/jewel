@@ -217,6 +217,7 @@ class Command(BaseCommand):
         migration_results = {}
         successful_services = []
         failed_services = []
+        self._services_with_count_drift = set()
 
         # Merge all partially migrated users before proceeding with migration
         self.stdout.write("\n=== Merging partially migrated users ===")
@@ -269,6 +270,16 @@ class Command(BaseCommand):
             self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
 
             self.stdout.write("\nAll services migration completed successfully!")
+
+            if self._services_with_count_drift:
+                drift_list = ', '.join(sorted(self._services_with_count_drift))
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"\nWARNING: The following services had count changes during role assignment migration: {drift_list}\n"
+                        f"This means concurrent modifications occurred while migrating. "
+                        f"Please re-run the migration to ensure all role assignments are migrated."
+                    )
+                )
 
     def load_types_and_permissions(self, service_apis, user):
         failed_services = []
@@ -1361,8 +1372,13 @@ class Command(BaseCommand):
             if total_count is None:
                 total_count = json_response.get('count', 0)
             elif total_count != json_response.get('count', 0):
-                self.stderr.write(f"Error: role {assignment_actor.value} assignment count changed from {total_count} to {json_response.get('count', 0)}")
-                raise RuntimeError(f"role {assignment_actor.value} assignment count changed during migration")
+                new_count = json_response.get('count', 0)
+                logger.warning(
+                    f"Role {assignment_actor.value} assignment count changed from {total_count} to {new_count}"
+                    " during pagination (concurrent modification); continuing but will need re-run"
+                )
+                total_count = new_count
+                self._services_with_count_drift.add(service_slug)
             for assignment in json_response.get('results', []):
                 yield assignment
             if not json_response.get('next'):
@@ -1384,39 +1400,41 @@ class Command(BaseCommand):
         4. Giving permission in gateway to the actor for the object (handling both Resources and RemoteObjects)
         """
 
-        self.stdout.write(f"Migrating {assignment_actor.value} role assignments for  from {service_slug} of type {service_type_name}")
+        self.stdout.write(f"Migrating {assignment_actor.value} role assignments from {service_slug} of type {service_type_name}")
         try:
             assignments = self._fetch_role_assignments(assignment_actor, service_slug, service_type_name)
-        except Exception:
-            self.stderr.write(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping...")
+            for assignment in assignments:
+                log_detail = self._format_fetched_assignment_for_logging(assignment_actor, assignment)
+                self.stdout.write(f"Processing assignment in service {service_slug}: {log_detail}")
+
+                role_definition_name = assignment.get('role_definition')
+                service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
+
+                try:
+                    gateway_role_definition = self._resolve_role_definition(role_definition_name)
+                    if gateway_role_definition is None:
+                        continue
+
+                    gateway_actor = self._resolve_gateway_actor(assignment_actor, service_actor_ansible_id)
+                    if gateway_actor is None:
+                        continue
+
+                    gateway_content_object = self._resolve_content_object(assignment)
+                    if gateway_content_object is Command._SKIP:
+                        continue
+                except Exception as e:
+                    self.stderr.write(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}")
+                    continue
+
+                try:
+                    if gateway_content_object:
+                        role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
+                    else:
+                        role_assignment = gateway_role_definition.give_global_permission(gateway_actor)
+                    self.stdout.write(f"Gave permission: {self._format_migrated_assignment_for_logging(role_assignment)}")  # type: ignore
+                except Exception as e:
+                    self.stderr.write(f"Error: Unable to give permission for role {assignment_actor.value} assignment, skipping: {str(e)}")
+                    continue
+        except Exception as e:
+            self.stderr.write(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping: {e}")
             return
-
-        for assignment in assignments:
-            self.stdout.write(f"Processing assignment in service {service_slug}: {self._format_fetched_assignment_for_logging(assignment_actor, assignment)}")
-
-            role_definition_name = assignment.get('role_definition')
-            service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
-
-            try:
-                gateway_role_definition = self._resolve_role_definition(role_definition_name)
-                if gateway_role_definition is None:
-                    continue
-
-                gateway_actor = self._resolve_gateway_actor(assignment_actor, service_actor_ansible_id)
-                if gateway_actor is None:
-                    continue
-
-                gateway_content_object = self._resolve_content_object(assignment)
-                if gateway_content_object is Command._SKIP:
-                    continue
-            except Exception as e:
-                self.stderr.write(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}")
-                continue
-
-            # Create the assignment by using the give_permission method from gateway's role definition
-            if gateway_content_object:
-                role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
-            else:
-                role_assignment = gateway_role_definition.give_global_permission(gateway_actor)
-            message = "Gave permission"
-            self.stdout.write(f"{message}: {self._format_migrated_assignment_for_logging(role_assignment)}")  # type: ignore
