@@ -1,13 +1,13 @@
 import logging
 from collections import OrderedDict
-from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
 from ansible_base.lib.utils.settings import get_setting
-from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
 from ansible_base.rbac.remote import RemoteObject
+from ansible_base.rbac.role_sync_utils import AssignmentTuple
 from ansible_base.resource_registry.constants import (
     SHARED_AAP_FLAG_RESOURCE_TYPE,
     SHARED_ORGANIZATION_RESOURCE_TYPE,
@@ -25,18 +25,13 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceType
-from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan, MigrateServiceDataLastRolePK
 from aap_gateway_api.models.service_type import DefaultServiceType, get_service_type_name
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
 logger = logging.getLogger('aap.gateway.management.commands.migrate_service_data')
 User = get_user_model()
-
-
-class AssignmentActorType(Enum):
-    TEAM = 'team'
-    USER = 'user'
 
 
 class Command(BaseCommand):
@@ -317,7 +312,6 @@ class Command(BaseCommand):
                 f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services.", logging.WARNING
             )
 
-        self._services_with_count_drift = set()
         self._progress_thresholds = {}
 
         # Merge all partially migrated users before proceeding with migration
@@ -374,16 +368,6 @@ class Command(BaseCommand):
         if successful_services:
             self._log(f"\nSuccessfully migrated services: {', '.join(successful_services)}", logging.INFO)
 
-        # Report drift warning before any exit path so it's always visible
-        if self._services_with_count_drift:
-            drift_list = ', '.join(sorted(self._services_with_count_drift))
-            self._log(
-                f"\nWARNING: The following services had count changes during role assignment migration: {drift_list}\n"
-                f"This means concurrent modifications occurred while migrating. "
-                f"Please re-run the migration to ensure all role assignments are migrated.",
-                logging.WARNING,
-            )
-
         if failed_services:
             self._log("\nFailed to migrate the following services:", logging.WARNING)
             for service_slug, error in failed_services.items():
@@ -393,11 +377,8 @@ class Command(BaseCommand):
         self._ensure_superuser_consistency(service_apis, user)
 
         self._log("\n=== Re-enabling service authentication ===", logging.INFO)
-        if not self._services_with_count_drift:
-            MigrateServiceDataHasRan.mark_migration_completed()
-            self._log("✓ Migration flag updated: Service authentication is now enabled.", logging.INFO)
-        else:
-            self._log("⚠ Migration flag NOT set due to count drift. Re-run to complete migration.", logging.INFO)
+        MigrateServiceDataHasRan.mark_migration_completed()
+        self._log("✓ Migration flag updated: Service authentication is now enabled.", logging.INFO)
         self._log("\nAll services migration completed successfully!", logging.INFO)
 
     def load_types_and_permissions(self, service_apis, user):
@@ -517,8 +498,7 @@ class Command(BaseCommand):
             for r_type in self.resource_types_to_migrate.keys():
                 self.migrate_resource(r_type)
 
-        self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
-        self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)
+        self.migrate_role_assignments(service_slug, service_type_name)
 
         self._log(f"Completed migration for service: {service_slug}", logging.INFO)
         return True, None
@@ -1400,84 +1380,6 @@ class Command(BaseCommand):
         return merged_count
 
     @staticmethod
-    def _format_fetched_assignment_for_logging(assignment_actor: AssignmentActorType, assignment: Dict[str, Any]) -> str:
-        return (
-            f"{assignment_actor.value}_id: {assignment.get(f'{assignment_actor.value}_ansible_id')}, "
-            f"object_type: {assignment.get('content_type')}, "
-            f"object_ansible_id: {assignment.get('object_ansible_id')}, "
-            f"role_definition_name: {assignment.get('role_definition')}"
-        )
-
-    @staticmethod
-    def _format_migrated_assignment_for_logging(role_assignment: RoleUserAssignment | RoleTeamAssignment) -> str:
-        actor_msg = None
-        if isinstance(role_assignment, RoleUserAssignment):
-            actor_msg = f"username: {role_assignment.user.username}"
-        elif isinstance(role_assignment, RoleTeamAssignment):
-            actor_msg = f"team: {role_assignment.team.name}"
-        return f"{actor_msg}, object_id: {role_assignment.object_id}, role_definition_name: {role_assignment.role_definition.name}"
-
-    # Sentinel value for _resolve_content_object to signal "skip this assignment"
-    _SKIP = object()
-
-    def _resolve_role_definition(self, role_definition_name: str) -> Optional[RoleDefinition]:
-        """Look up a RoleDefinition by name. Returns the object or None if not found."""
-        try:
-            return RoleDefinition.objects.get(name=role_definition_name)
-        except RoleDefinition.DoesNotExist:
-            self._log(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment", logging.WARNING)
-            return None
-
-    def _resolve_gateway_actor(self, assignment_actor: AssignmentActorType, service_actor_ansible_id: str) -> Optional[Any]:
-        """Look up the gateway actor (user or team) by ansible_id. Returns the content object or None if not found."""
-        try:
-            return Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
-        except Resource.DoesNotExist:
-            self._log(
-                f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment",
-                logging.WARNING,
-            )
-            return None
-
-    def _resolve_content_object(self, assignment: Dict[str, Any]) -> Any:
-        """Resolve the content object for a role assignment.
-
-        Returns the resolved content object (which may be None for global assignments),
-        or ``Command._SKIP`` to signal that this assignment should be skipped.
-        """
-        service_content_object_ansible_id = assignment.get('object_ansible_id')
-        service_content_object_id = assignment.get('object_id')
-        content_type = assignment.get('content_type', '')
-
-        try:
-            if service_content_object_ansible_id:
-                # Object is a gateway resource identified by ansible_id
-                return Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
-            elif service_content_object_id:
-                # Object is remote (not a gateway resource); use RemoteObject with DABContentType
-                service, model = content_type.split('.')
-                ct = DABContentType.objects.get(service=service, model=model)
-                return RemoteObject(ct, service_content_object_id)
-            else:
-                # No object reference means a global role assignment
-                return None
-        except Resource.DoesNotExist:
-            self._log(
-                f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment",
-                logging.WARNING,
-            )
-            return Command._SKIP
-        except ValueError:
-            self._log(f"Warning: Malformed content_type '{content_type}', expected 'service.model' format, skipping assignment", logging.WARNING)
-            return Command._SKIP
-        except DABContentType.DoesNotExist:
-            self._log(
-                f"Warning: Unable to find content type '{content_type}' for remote object with id {service_content_object_id}, skipping assignment",
-                logging.WARNING,
-            )
-            return Command._SKIP
-
-    @staticmethod
     def _get_role_definitions_to_exclude(service_type: str) -> List[str]:
         # Since the goal is to honor controller's assignments platform roles, we do not want to consider
         # roles like 'Organization Admin' or 'Team Admin' from other services, just controller
@@ -1490,99 +1392,184 @@ class Command(BaseCommand):
         }
         return sorted(ROLE_EXCLUSION_SETS.get(service_type, DEFAULT_EXCLUSION_SET))
 
-    def _fetch_role_assignments(self, assignment_actor: AssignmentActorType, service_slug: str, service_type_name: str) -> Iterator[Dict[str, Any]]:
+    # Number of times to retry a page fetch on HTTP error before giving up.
+    # Handles transient network issues; exhausted retries raise to fail the
+    # service so the installer/reconcile loop retries the whole command.
+    HTTP_RETRY_LIMIT = 3
+
+    def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: 'MigrateServiceDataLastRolePK') -> int:
+        """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
+
+        Queries with ``order_by=id&id__gt=<cursor.last_pk>`` so only
+        assignments newer than the cursor are fetched.  On a reinstall
+        where the cursor is already past the last PK, the first page
+        returns zero results and the method completes immediately.
+
+        The cursor is advanced after each fully-processed page, providing
+        crash safety — at most one page of work is lost on a crash or kill.
+
+        Raises ``RuntimeError`` if HTTP retries are exhausted on any page,
+        causing the service to be marked as failed (non-zero exit).
         """
-        Fetch all role_assignments for team or user from the service with pagination
-        """
-        role_definitions_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
         page = 1
-        total_count = None  # we will check this on each page to see if anything changed
+        created = 0
+        retries_remaining = self.HTTP_RETRY_LIMIT
+
         while True:
-            self._log(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}", logging.INFO)
-            filters: Dict[str, int | str] = {'page': page, **self.BIG_PAGE_FILTERS}
-            if role_definitions_to_exclude:
-                filters['not__role_definition__name__in'] = ','.join(role_definitions_to_exclude)
-            if assignment_actor == AssignmentActorType.USER:
-                method = self.client.list_user_assignments
-            elif assignment_actor == AssignmentActorType.TEAM:
-                method = self.client.list_team_assignments
-            else:
-                raise RuntimeError(f"Invalid actor type {assignment_actor} to fetch")
-            json_response = method(filters=filters).json()
-            if total_count is None:
-                total_count = json_response.get('count', 0)
-                self._current_assignment_total = total_count
-            elif total_count != json_response.get('count', 0):
-                new_count = json_response.get('count', 0)
-                self._log(
-                    f"Role {assignment_actor.value} assignment count changed from {total_count} to {new_count}"
-                    " during pagination (concurrent modification); continuing but will need re-run",
-                    logging.WARNING,
+            filters: Dict[str, Any] = {'page': page, 'order_by': 'id', **self.BIG_PAGE_FILTERS}
+            if roles_to_exclude:
+                filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+            if cursor.last_pk > 0:
+                filters['id__gt'] = str(cursor.last_pk)
+
+            response = list_fn(filters=filters)
+            if response.status_code != 200:
+                retries_remaining -= 1
+                logger.warning(f"HTTP {response.status_code} fetching {assignment_type} assignments page {page} ({retries_remaining} retries left)")
+                if retries_remaining > 0:
+                    continue
+                raise RuntimeError(
+                    f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code} after {self.HTTP_RETRY_LIMIT} attempts"
                 )
-                total_count = new_count
-                self._services_with_count_drift.add(service_slug)
-            for assignment in json_response.get('results', []):
-                yield assignment
-            if not json_response.get('next'):
+
+            # Reset retries on a successful page fetch
+            retries_remaining = self.HTTP_RETRY_LIMIT
+
+            data = response.json()
+            results = data.get('results') or []
+            if not results:
+                break
+
+            created += self._create_page_assignments(results, assignment_type)
+
+            # Advance cursor after each fully-processed page so progress
+            # is saved even if the process is killed before the next page.
+            last_pk_on_page = self._extract_last_pk(results)
+            if last_pk_on_page is not None:
+                cursor.advance(last_pk_on_page)
+
+            if not data.get('next'):
                 break
             page += 1
 
-    def migrate_role_assignments(self, assignment_actor: AssignmentActorType, service_slug: str, service_type_name: str) -> None:
+        return created
+
+    def _create_page_assignments(self, results: List[Dict[str, Any]], assignment_type: str) -> int:
+        """Create assignments from one page of API results.
+
+        Returns the number of assignments successfully created.
+        give_permission is idempotent (uses get_or_create internally),
+        so duplicates from cursor overlap are harmless.
         """
-        Migrates the role_user_assignments from an individual service to platform-level role assignments
+        created = 0
+        for item in results:
+            t = self._build_assignment_tuple(item, assignment_type)
+            if t is not None and self._create_assignment_from_tuple(t):
+                created += 1
+        return created
 
-        This method must run after Organizations/Teams/Users have been migrated. It migrates the role assignments,
-        so the subjects and objects of those assignments must exist.
+    @staticmethod
+    def _extract_last_pk(results: List[Dict[str, Any]]) -> Optional[int]:
+        """Return the id of the last item in a page of results, or None."""
+        for item in reversed(results):
+            pk = item.get('id')
+            if pk is not None:
+                return pk
+        return None
 
-        It performs this migration by:
+    @staticmethod
+    def _build_assignment_tuple(assignment: Dict[str, Any], assignment_type: str) -> Optional[AssignmentTuple]:
+        """Build an AssignmentTuple from a remote API response item.
 
-        1. Querying the service's role assignments API specific to the actor type (team or user)
-        2. Looking up the local (aap-gateway) actor referenced in each assignment
-        3. Looking up the local (aap-gateway) role definition corresponding to the service definition
-        4. Giving permission in gateway to the actor for the object (handling both Resources and RemoteObjects)
+        Key resolution matches get_local_assignments():
+        org/team content types use object_ansible_id, everything else uses
+        the raw object_id, and global assignments use None.
         """
+        actor_key = f'{assignment_type}_ansible_id'
+        actor_ansible_id = assignment.get(actor_key)
+        role_name = assignment.get('role_definition')
+        if not actor_ansible_id or not role_name:
+            return None
 
-        progress_label = f"{service_slug} {assignment_actor.value} role assignments"
-        # Initialized here, updated by _fetch_role_assignments on the first page response
-        self._current_assignment_total = 0
-        self._log(f"Migrating {assignment_actor.value} role assignments from {service_slug} of type {service_type_name}", logging.INFO)
+        content_type_str = assignment.get('content_type', '')
+        model = content_type_str.split('.')[-1] if content_type_str else ''
+
+        if model in ('organization', 'team'):
+            ansible_id_or_pk = assignment.get('object_ansible_id')
+        else:
+            obj_id = assignment.get('object_id')
+            ansible_id_or_pk = str(obj_id) if obj_id is not None else None
+
+        return AssignmentTuple(
+            actor_ansible_id=actor_ansible_id,
+            ansible_id_or_pk=ansible_id_or_pk,
+            role_definition_name=role_name,
+            assignment_type=assignment_type,
+        )
+
+    def _create_assignment_from_tuple(self, assignment_tuple: AssignmentTuple) -> bool:
+        """Create a local role assignment from an AssignmentTuple.
+
+        Handles global assignments, org/team objects (via Resource), and
+        service-specific remote objects (via RemoteObject).  Each resolution
+        step has its own error handling so operators get specific messages.
+        """
         try:
-            assignments = self._fetch_role_assignments(assignment_actor, service_slug, service_type_name)
-            processed = 0
-            for assignment in assignments:
-                processed += 1
-                self._log_progress(progress_label, processed, self._current_assignment_total)
-                log_detail = self._format_fetched_assignment_for_logging(assignment_actor, assignment)
-                self._log(f"Processing assignment in service {service_slug}: {log_detail}", logging.INFO)
+            role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
+        except RoleDefinition.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find role definition {assignment_tuple.role_definition_name}, skipping assignment")
+            return False
 
-                role_definition_name = assignment.get('role_definition')
-                service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
+        try:
+            actor = Resource.objects.get(ansible_id=assignment_tuple.actor_ansible_id).content_object
+        except Resource.DoesNotExist:
+            self.stderr.write(
+                f"Warning: Unable to find {assignment_tuple.assignment_type} with ansible_id {assignment_tuple.actor_ansible_id}, skipping assignment"
+            )
+            return False
 
-                try:
-                    gateway_role_definition = self._resolve_role_definition(role_definition_name)
-                    if gateway_role_definition is None:
-                        continue
-
-                    gateway_actor = self._resolve_gateway_actor(assignment_actor, service_actor_ansible_id)
-                    if gateway_actor is None:
-                        continue
-
-                    gateway_content_object = self._resolve_content_object(assignment)
-                    if gateway_content_object is Command._SKIP:
-                        continue
-                except Exception as e:
-                    self._log(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}", logging.WARNING)
-                    continue
-
-                try:
-                    if gateway_content_object:
-                        role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
-                    else:
-                        role_assignment = gateway_role_definition.give_global_permission(gateway_actor)
-                    self._log(f"Gave permission: {self._format_migrated_assignment_for_logging(role_assignment)}", logging.INFO)  # type: ignore
-                except Exception as e:
-                    self._log(f"Error: Unable to give permission for role {assignment_actor.value} assignment, skipping: {str(e)}", logging.WARNING)
-                    continue
+        try:
+            if assignment_tuple.ansible_id_or_pk is None:
+                role_definition.give_global_permission(actor)
+            elif role_definition.content_type and role_definition.content_type.model in ('organization', 'team'):
+                obj_resource = Resource.objects.get(ansible_id=assignment_tuple.ansible_id_or_pk)
+                role_definition.give_permission(actor, obj_resource.content_object)
+            else:
+                remote_obj = RemoteObject(role_definition.content_type, assignment_tuple.ansible_id_or_pk)
+                role_definition.give_permission(actor, remote_obj)
+            return True
+        except Resource.DoesNotExist:
+            self.stderr.write(f"Warning: Unable to find object with ansible_id {assignment_tuple.ansible_id_or_pk}, skipping assignment")
+            return False
         except Exception as e:
-            self._log(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping: {e}", logging.WARNING)
-            return
+            self.stderr.write(f"Warning: Unable to give permission for {assignment_tuple.assignment_type} assignment, skipping: {e}")
+            return False
+
+    def migrate_role_assignments(self, service_slug: str, service_type_name: str) -> None:
+        """Migrate role assignments from a service using a PK-based cursor.
+
+        For each assignment type (user, team), fetches only assignments with
+        PKs higher than the stored cursor using ``id__gt=<last_pk>&order_by=id``.
+        On a reinstall where the cursor is already past the last PK, the API
+        returns zero results and migration completes immediately.
+
+        The cursor is persisted per page, so a crash or kill loses at most
+        one page of work.  HTTP errors are retried up to HTTP_RETRY_LIMIT
+        times per page; exhausted retries raise RuntimeError to fail the
+        service (non-zero exit for the installer to retry).
+
+        give_permission is idempotent (uses get_or_create), so replaying
+        a partial page after a crash is safe.
+        """
+        self.stdout.write(f"Migrating role assignments from {service_slug} (type {service_type_name})")
+        roles_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
+
+        total_created = 0
+        for assignment_type in ('user', 'team'):
+            list_fn = self.client.list_user_assignments if assignment_type == 'user' else self.client.list_team_assignments
+            cursor = MigrateServiceDataLastRolePK.get_last_pk(service_slug, assignment_type)
+            created = self._paginate_and_create(list_fn, assignment_type, roles_to_exclude, cursor)
+            total_created += created
+            self.stdout.write(f"  {assignment_type}: {created} assignments created")
+
+        self.stdout.write(f"Role assignment migration for {service_slug} completed ({total_created} total created)")
