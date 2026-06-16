@@ -1,12 +1,13 @@
 import logging
 from collections import OrderedDict
-from enum import Enum
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Type
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
 from ansible_base.lib.utils.settings import get_setting
-from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.assignment_utils import AssignmentTuple, get_local_assignments
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.resource_registry.constants import (
     SHARED_AAP_FLAG_RESOURCE_TYPE,
@@ -34,9 +35,10 @@ logger = logging.getLogger('aap.gateway.management.commands.migrate_service_data
 User = get_user_model()
 
 
-class AssignmentActorType(Enum):
-    TEAM = 'team'
-    USER = 'user'
+@dataclass
+class _RemoteFetchResult:
+    assignments: set = field(default_factory=set)
+    count_drifted: bool = False
 
 
 class Command(BaseCommand):
@@ -385,8 +387,7 @@ class Command(BaseCommand):
             for r_type in self.resource_types_to_migrate.keys():
                 self.migrate_resource(r_type)
 
-        self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
-        self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)
+        self.migrate_role_assignments(service_slug, service_type_name)
 
         self.stdout.write(f"Completed migration for service: {service_slug}")
         return True, None
@@ -1256,77 +1257,6 @@ class Command(BaseCommand):
         return merged_count
 
     @staticmethod
-    def _format_fetched_assignment_for_logging(assignment_actor: AssignmentActorType, assignment: Dict[str, Any]) -> str:
-        return (
-            f"{assignment_actor.value}_id: {assignment.get(f'{assignment_actor.value}_ansible_id')}, "
-            f"object_type: {assignment.get('content_type')}, "
-            f"object_ansible_id: {assignment.get('object_ansible_id')}, "
-            f"role_definition_name: {assignment.get('role_definition')}"
-        )
-
-    @staticmethod
-    def _format_migrated_assignment_for_logging(role_assignment: RoleUserAssignment | RoleTeamAssignment) -> str:
-        actor_msg = None
-        if isinstance(role_assignment, RoleUserAssignment):
-            actor_msg = f"username: {role_assignment.user.username}"
-        elif isinstance(role_assignment, RoleTeamAssignment):
-            actor_msg = f"team: {role_assignment.team.name}"
-        return f"{actor_msg}, object_id: {role_assignment.object_id}, role_definition_name: {role_assignment.role_definition.name}"
-
-    # Sentinel value for _resolve_content_object to signal "skip this assignment"
-    _SKIP = object()
-
-    def _resolve_role_definition(self, role_definition_name: str) -> Optional[RoleDefinition]:
-        """Look up a RoleDefinition by name. Returns the object or None if not found."""
-        try:
-            return RoleDefinition.objects.get(name=role_definition_name)
-        except RoleDefinition.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
-            return None
-
-    def _resolve_gateway_actor(self, assignment_actor: AssignmentActorType, service_actor_ansible_id: str) -> Optional[Any]:
-        """Look up the gateway actor (user or team) by ansible_id. Returns the content object or None if not found."""
-        try:
-            return Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
-        except Resource.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment")
-            return None
-
-    def _resolve_content_object(self, assignment: Dict[str, Any]) -> Any:
-        """Resolve the content object for a role assignment.
-
-        Returns the resolved content object (which may be None for global assignments),
-        or ``Command._SKIP`` to signal that this assignment should be skipped.
-        """
-        service_content_object_ansible_id = assignment.get('object_ansible_id')
-        service_content_object_id = assignment.get('object_id')
-        content_type = assignment.get('content_type', '')
-
-        try:
-            if service_content_object_ansible_id:
-                # Object is a gateway resource identified by ansible_id
-                return Resource.objects.get(ansible_id=service_content_object_ansible_id).content_object
-            elif service_content_object_id:
-                # Object is remote (not a gateway resource); use RemoteObject with DABContentType
-                service, model = content_type.split('.')
-                ct = DABContentType.objects.get(service=service, model=model)
-                return RemoteObject(ct, service_content_object_id)
-            else:
-                # No object reference means a global role assignment
-                return None
-        except Resource.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment")
-            return Command._SKIP
-        except ValueError:
-            self.stderr.write(f"Warning: Malformed content_type '{content_type}', expected 'service.model' format, skipping assignment")
-            return Command._SKIP
-        except DABContentType.DoesNotExist:
-            self.stderr.write(
-                f"Warning: Unable to find content type '{content_type}' for remote object with id {service_content_object_id}, skipping assignment"
-            )
-            return Command._SKIP
-
-    @staticmethod
     def _get_role_definitions_to_exclude(service_type: str) -> List[str]:
         # Since the goal is to honor controller's assignments platform roles, we do not want to consider
         # roles like 'Organization Admin' or 'Team Admin' from other services, just controller
@@ -1339,84 +1269,143 @@ class Command(BaseCommand):
         }
         return sorted(ROLE_EXCLUSION_SETS.get(service_type, DEFAULT_EXCLUSION_SET))
 
-    def _fetch_role_assignments(self, assignment_actor: AssignmentActorType, service_slug: str, service_type_name: str) -> Iterator[Dict[str, Any]]:
+    def _fetch_remote_assignment_set(self, service_type_name: str) -> _RemoteFetchResult:
+        """Fetch user and team assignments from the remote service into a set.
+
+        Applies server-side role exclusion, tracks count drift across pages,
+        and builds AssignmentTuples with key resolution matching
+        get_local_assignments() (org/team → ansible_id, others → object_id).
         """
-        Fetch all role_assignments for team or user from the service with pagination
+        roles_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
+        result = _RemoteFetchResult()
+
+        for assignment_type in ('user', 'team'):
+            list_fn = self.client.list_user_assignments if assignment_type == 'user' else self.client.list_team_assignments
+            initial_count = None
+            page = 1
+
+            while True:
+                filters: Dict[str, Any] = {'page': page, **self.BIG_PAGE_FILTERS}
+                if roles_to_exclude:
+                    filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+
+                response = list_fn(filters=filters)
+                if response.status_code != 200:
+                    logger.warning(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code}")
+                    break
+
+                data = response.json()
+                current_count = data.get('count', 0)
+                if initial_count is None:
+                    initial_count = current_count
+                elif initial_count != current_count:
+                    result.count_drifted = True
+                    logger.warning(f"Role {assignment_type} assignment count changed from {initial_count} to {current_count} during pagination")
+
+                for assignment in data.get('results') or []:
+                    t = self._build_assignment_tuple(assignment, assignment_type)
+                    if t is not None:
+                        result.assignments.add(t)
+
+                if not data.get('next'):
+                    break
+                page += 1
+
+        return result
+
+    @staticmethod
+    def _build_assignment_tuple(assignment: Dict[str, Any], assignment_type: str) -> Optional[AssignmentTuple]:
+        """Build an AssignmentTuple from a remote API response item.
+
+        Key resolution matches get_local_assignments():
+        org/team content types use object_ansible_id, everything else uses
+        the raw object_id, and global assignments use None.
         """
-        role_definitions_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
-        page = 1
-        total_count = None  # we will check this on each page to see if anything changed
-        while True:
-            logger.info(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}")
-            filters: Dict[str, int | str] = {'page': page, **self.BIG_PAGE_FILTERS}
-            if role_definitions_to_exclude:
-                filters['not__role_definition__name__in'] = ','.join(role_definitions_to_exclude)
-            if assignment_actor == AssignmentActorType.USER:
-                method = self.client.list_user_assignments
-            elif assignment_actor == AssignmentActorType.TEAM:
-                method = self.client.list_team_assignments
-            else:
-                raise RuntimeError(f"Invalid actor type {assignment_actor} to fetch")
-            json_response = method(filters=filters).json()
-            if total_count is None:
-                total_count = json_response.get('count', 0)
-            elif total_count != json_response.get('count', 0):
-                self.stderr.write(f"Error: role {assignment_actor.value} assignment count changed from {total_count} to {json_response.get('count', 0)}")
-                raise RuntimeError(f"role {assignment_actor.value} assignment count changed during migration")
-            for assignment in json_response.get('results', []):
-                yield assignment
-            if not json_response.get('next'):
-                break
-            page += 1
+        actor_key = f'{assignment_type}_ansible_id'
+        actor_ansible_id = assignment.get(actor_key)
+        role_name = assignment.get('role_definition')
+        if not actor_ansible_id or not role_name:
+            return None
 
-    def migrate_role_assignments(self, assignment_actor: AssignmentActorType, service_slug: str, service_type_name: str) -> None:
+        content_type_str = assignment.get('content_type', '')
+        model = content_type_str.split('.')[-1] if content_type_str else ''
+
+        if model in ('organization', 'team'):
+            ansible_id_or_pk = assignment.get('object_ansible_id')
+        else:
+            obj_id = assignment.get('object_id')
+            ansible_id_or_pk = str(obj_id) if obj_id is not None else None
+
+        return AssignmentTuple(
+            actor_ansible_id=actor_ansible_id,
+            ansible_id_or_pk=ansible_id_or_pk,
+            role_definition_name=role_name,
+            assignment_type=assignment_type,
+        )
+
+    def _create_assignment_from_tuple(self, assignment_tuple: AssignmentTuple) -> bool:
+        """Create a local role assignment from an AssignmentTuple.
+
+        Handles global assignments, org/team objects (via Resource), and
+        service-specific remote objects (via RemoteObject).
         """
-        Migrates the role_user_assignments from an individual service to platform-level role assignments
-
-        This method must run after Organizations/Teams/Users have been migrated. It migrates the role assignments,
-        so the subjects and objects of those assignments must exist.
-
-        It performs this migration by:
-
-        1. Querying the service's role assignments API specific to the actor type (team or user)
-        2. Looking up the local (aap-gateway) actor referenced in each assignment
-        3. Looking up the local (aap-gateway) role definition corresponding to the service definition
-        4. Giving permission in gateway to the actor for the object (handling both Resources and RemoteObjects)
-        """
-
-        self.stdout.write(f"Migrating {assignment_actor.value} role assignments for  from {service_slug} of type {service_type_name}")
         try:
-            assignments = self._fetch_role_assignments(assignment_actor, service_slug, service_type_name)
-        except Exception:
-            self.stderr.write(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping...")
+            role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
+            actor_resource = Resource.objects.get(ansible_id=assignment_tuple.actor_ansible_id)
+            actor = actor_resource.content_object
+
+            if assignment_tuple.ansible_id_or_pk is None:
+                role_definition.give_global_permission(actor)
+            elif role_definition.content_type and role_definition.content_type.model in ('organization', 'team'):
+                obj_resource = Resource.objects.get(ansible_id=assignment_tuple.ansible_id_or_pk)
+                role_definition.give_permission(actor, obj_resource.content_object)
+            else:
+                remote_obj = RemoteObject(role_definition.content_type, assignment_tuple.ansible_id_or_pk)
+                role_definition.give_permission(actor, remote_obj)
+
+            return True
+        except Exception as e:
+            self.stderr.write(f"Warning: Failed to create assignment {assignment_tuple}: {e}")
+            return False
+
+    def migrate_role_assignments(self, service_slug: str, service_type_name: str) -> None:
+        """Migrate role assignments from a service using a set-diff approach.
+
+        Builds local and remote assignment sets, computes the delta, and only
+        creates what is missing.  On a reinstall where data already matches,
+        the delta is empty and no give_permission calls are made.
+
+        If the remote count drifts during pagination a second pass is
+        attempted.  If the second pass also shows drift, a RuntimeError is
+        raised so the caller can mark the service as failed.
+        """
+        self.stdout.write(f"Migrating role assignments from {service_slug} (type {service_type_name}) using set-diff")
+
+        local_set = get_local_assignments()
+        remote_result = self._fetch_remote_assignment_set(service_type_name)
+        to_create = remote_result.assignments - local_set
+
+        self.stdout.write(f"Set-diff: {len(remote_result.assignments)} remote, {len(local_set)} local, {len(to_create)} to create")
+
+        created = sum(1 for t in to_create if self._create_assignment_from_tuple(t))
+        self.stdout.write(f"First pass: {created}/{len(to_create)} assignments created")
+
+        if not remote_result.count_drifted:
+            self.stdout.write(f"Role assignment migration for {service_slug} completed")
             return
 
-        for assignment in assignments:
-            self.stdout.write(f"Processing assignment in service {service_slug}: {self._format_fetched_assignment_for_logging(assignment_actor, assignment)}")
+        self.stdout.write("Count drift detected during first pass, running second pass on delta...")
+        local_set = get_local_assignments()
+        remote_result = self._fetch_remote_assignment_set(service_type_name)
+        to_create = remote_result.assignments - local_set
 
-            role_definition_name = assignment.get('role_definition')
-            service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
+        created = sum(1 for t in to_create if self._create_assignment_from_tuple(t))
+        self.stdout.write(f"Second pass: {created}/{len(to_create)} assignments created")
 
-            try:
-                gateway_role_definition = self._resolve_role_definition(role_definition_name)
-                if gateway_role_definition is None:
-                    continue
+        if remote_result.count_drifted:
+            raise RuntimeError(
+                f"Role assignment counts changed during both migration passes for {service_slug}. "
+                "The system may be under active modification. Re-run the migration when the system is stable."
+            )
 
-                gateway_actor = self._resolve_gateway_actor(assignment_actor, service_actor_ansible_id)
-                if gateway_actor is None:
-                    continue
-
-                gateway_content_object = self._resolve_content_object(assignment)
-                if gateway_content_object is Command._SKIP:
-                    continue
-            except Exception as e:
-                self.stderr.write(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}")
-                continue
-
-            # Create the assignment by using the give_permission method from gateway's role definition
-            if gateway_content_object:
-                role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
-            else:
-                role_assignment = gateway_role_definition.give_global_permission(gateway_actor)
-            message = "Gave permission"
-            self.stdout.write(f"{message}: {self._format_migrated_assignment_for_logging(role_assignment)}")  # type: ignore
+        self.stdout.write(f"Role assignment migration for {service_slug} completed (converged on second pass)")
