@@ -8,7 +8,7 @@ def remove_console_service_type(apps, schema_editor):
     Preference = apps.get_model("aap_gateway_api", "Preference")
     Preference.objects.filter(
         section="analytics",
-        name__in=["RED_HAT_CONSOLE_URL", "REDHAT_USERNAME", "REDHAT_PASSWORD"],
+        name="RED_HAT_CONSOLE_URL",
     ).delete()
 
 

@@ -118,7 +118,7 @@ def test_preference_rotation(settings):
     encrypted_val = encrypt_with_key("my-secret-pref-value", old_key)
     Preference.objects.update_or_create(
         section="analytics",
-        name="SUBSCRIPTIONS_PASSWORD",
+        name="REDHAT_PASSWORD",
         defaults={"raw_value": encrypted_val},
     )
 
@@ -131,7 +131,7 @@ def test_preference_rotation(settings):
     with connection.cursor() as cur:
         cur.execute(
             "SELECT raw_value FROM aap_gateway_api_preference WHERE section = %s AND name = %s",
-            ["analytics", "SUBSCRIPTIONS_PASSWORD"],
+            ["analytics", "REDHAT_PASSWORD"],
         )
         new_cipher = cur.fetchone()[0]
 

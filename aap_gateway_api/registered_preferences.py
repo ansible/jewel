@@ -413,6 +413,28 @@ register(
 
 register(
     section="analytics",
+    preference_name="REDHAT_USERNAME",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("This username is used to send data to Automation Analytics/"),
+    encrypted=False,
+    label=_('Red Hat Hybrid Cloud Console Username'),
+)
+
+register(
+    section="analytics",
+    preference_name="REDHAT_PASSWORD",
+    default="",
+    required=False,
+    preference_type="string",
+    help_text=_("This password is used to send data to Automation Analytics.'"),
+    encrypted=True,
+    label=_('Red Hat Hybrid Cloud Console Password'),
+)
+
+register(
+    section="analytics",
     preference_name="SUBSCRIPTIONS_USERNAME",
     default="",
     required=False,
