@@ -25,8 +25,6 @@ from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 logger = logging.getLogger('aap.gateway.views.api.v1.status')
 ServiceCheck = namedtuple('ServiceCheck', ['service_name', 'service_type', 'node_id', 'url', 'timeout', 'verify', 'response'])
 
-CONSOLE_SERVICE = "console.redhat.com"
-
 
 def check_redis(timeout: int = 4) -> Dict:
     if getattr(settings, 'CACHES', {}).get('default', {}).get('BACKEND', None) == 'ansible_base.lib.cache.fallback_cache.DABCacheWithFallback':
@@ -64,37 +62,12 @@ def _check_redis_unix_socket(url: str, timeout: int) -> Dict:
         return {'mode': 'standalone', 'status': STATUS_FAILED, 'exception': str(e)}
 
 
-def check_console(timeout: int = 4) -> Dict:
-    result = {"name": CONSOLE_SERVICE, "status": STATUS_FAILED}
-    if not hasattr(settings, 'CRC_STATUS_URL') or not settings.CRC_STATUS_URL:
-        logger.error("Console service defined, but CRC_STATUS_URL not set!")
-        result["body"] = "CRC_STATUS_URL not set"
-        return result
-    try:
-        response = requests.get(settings.CRC_STATUS_URL, timeout=timeout)
-        result['response_code'] = response.status_code
-        if response.status_code != 200:
-            result['status'] = STATUS_FAILED
-            result['body'] = response.text
-            return result
-
-        response_json = response.json()
-        console_status = next(status for status in response_json["components"] if status["name"] == CONSOLE_SERVICE)
-        result["status"] = STATUS_GOOD if console_status["status"] == "operational" else console_status["status"]
-    except Exception as e:
-        result['status'] = STATUS_FAILED
-        result['exception'] = f'{e}'
-    return result
-
-
 def check_node(server_data: ServiceCheck) -> ServiceCheck:
     service, service_type, node, url, timeout, verify, _ = server_data
     response: Dict
     if service == 'redis':
         status = check_redis(timeout)
         response = {'status': status["status"], 'url': "", 'response': status}
-    elif service_type == 'console':
-        response = check_console(timeout)
     else:
         node_status = {'url': url}
         try:

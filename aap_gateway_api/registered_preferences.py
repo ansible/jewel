@@ -413,17 +413,6 @@ register(
 
 register(
     section="analytics",
-    preference_name="RED_HAT_CONSOLE_URL",
-    default='https://console.redhat.com',
-    required=False,
-    preference_type="url",
-    help_text=_("This setting is used to to configure the upload URL for data collection for Automation Analytics."),
-    encrypted=False,
-    label=_('Automation Analytics upload URL'),
-)
-
-register(
-    section="analytics",
     preference_name="REDHAT_USERNAME",
     default="",
     required=False,
