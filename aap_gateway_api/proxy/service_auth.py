@@ -11,8 +11,9 @@ logger = logging.getLogger("aap.gateway.proxy.service_auth")
 
 
 class ServiceAuthHelper:
-    # Mapping for pre-existing prefs/settings with non-standard naming
-    custom_setting_map = {}
+    # Extension point: maps non-standard setting names to their actual preference names.
+    # Populated by service types that use different credential naming conventions.
+    custom_setting_map: dict = {}
 
     @staticmethod
     def _get_pref_or_setting(name: str) -> Any:

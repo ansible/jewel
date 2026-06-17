@@ -436,6 +436,7 @@ def test_feature_flags_detail(admin_api_client):
         response = admin_api_client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert response.data['name'] == feature_flag
+        assert 'state' in response.data
 
 
 @pytest.mark.parametrize(
