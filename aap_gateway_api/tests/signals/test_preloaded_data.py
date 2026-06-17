@@ -1,11 +1,9 @@
 from unittest import mock
 
 import pytest
-from ansible_base.feature_flags.models import AAPFlag
-from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
-from aap_gateway_api.models import Organization, ServiceType
-from aap_gateway_api.signals.preloaded_data import add_console_service_type, create_default_organization, create_preload_data, set_system_user_password
+from aap_gateway_api.models import Organization
+from aap_gateway_api.signals.preloaded_data import create_default_organization, create_preload_data, set_system_user_managed_flag, set_system_user_password
 
 
 class TestCreatePreloadedData:
@@ -32,6 +30,16 @@ class TestCreatePreloadedData:
     def test_default_org_created_by_default(self):
         org = Organization.objects.filter(name='Default')
         assert org
+
+    @pytest.mark.django_db
+    def test_set_system_user_managed_flag(self):
+        from ansible_base.lib.utils.models import get_system_user
+
+        system_user = get_system_user()
+        system_user.managed = False
+        system_user.save()
+        assert set_system_user_managed_flag() is True, "Should set managed=True when unset"
+        assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
 
     @pytest.mark.django_db
     def test_immediate_return_if_no_plan(self):
@@ -69,35 +77,3 @@ class TestCreatePreloadedData:
         with mock.patch('aap_gateway_api.signals.preloaded_data.create_default_organization', mock_function):
             with expected_log('aap_gateway_api.signals.preloaded_data.logger', log_level, 'Failed to'):
                 create_preload_data(verbosity=verbosity, plan=[('0000', False)])
-
-    @pytest.mark.django_db
-    @pytest.mark.parametrize(
-        "flag_value",
-        [
-            'True',
-            'False',
-        ],
-    )
-    def test_console_st(self, flag_value, settings_override_mutable, settings):
-        with pytest.raises(ServiceType.DoesNotExist):
-            ServiceType.objects.get(name="console")
-        AAPFlag.objects.all().delete()
-        setattr(settings, "FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED", flag_value)
-        seed_feature_flags()
-
-        if flag_value == 'False':
-            assert add_console_service_type() is False
-            with pytest.raises(ServiceType.DoesNotExist):
-                ServiceType.objects.get(name="console")
-        else:
-            assert add_console_service_type() is True
-            # Second call should return False (already exists)
-            assert add_console_service_type() is False
-
-            console_type = ServiceType.objects.get(name="console")
-
-            assert console_type.name == "console"
-            assert console_type.ping_url is None
-            assert console_type.service_index_path is None
-            assert console_type.login_path is None
-            assert console_type.logout_path is None

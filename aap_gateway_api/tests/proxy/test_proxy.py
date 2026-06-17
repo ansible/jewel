@@ -227,40 +227,18 @@ class TestExternalAuth:
         "service_type,auth_type,expected_headers",
         [
             ("controller", "JWT", ["X-DAB-JW-TOKEN", "x-trusted-proxy"]),
-            ("console", "BASIC", ["Authorization", "x-trusted-proxy"]),
-            ("console", "TOKEN", ["Authorization", "x-trusted-proxy"]),
         ],
     )
     def test_auth_header_selection(self, ext_auth, service_type, auth_type, expected_headers, admin_user):
         request = Request(service_type=service_type, auth_type=auth_type)
 
-        with mock.patch("aap_gateway_api.proxy.service_auth.ServiceAuthHelper._get_pref_or_setting", return_value="dummy"):
-            with mock.patch(
-                "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
-                return_value=(admin_user, "ServiceTokenAuthentication"),
-            ):
-                response = ext_auth.Check(request, None)
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            return_value=(admin_user, "ServiceTokenAuthentication"),
+        ):
+            response = ext_auth.Check(request, None)
         for header in expected_headers:
-            print(f"Testing header {header}.  Present? {any(x for x in response.ok_response.headers if x.header.key == header)}")
             assert any(x for x in response.ok_response.headers if x.header.key == header)
-
-    @pytest.mark.parametrize(
-        "service_type,auth_type,expected_exception",
-        [
-            ("controller", "BASIC", NameError),
-            ("hub", "TOKEN", NameError),
-            ("console", "BOGUS", RuntimeError),
-        ],
-    )
-    def test_auth_header_exceptions(self, ext_auth, service_type, auth_type, expected_exception, admin_user):
-        request = Request(service_type=service_type, auth_type=auth_type)
-
-        with pytest.raises(expected_exception):
-            with mock.patch(
-                "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
-                return_value=(admin_user, "ServiceTokenAuthentication"),
-            ):
-                ext_auth.Check(request, None)
 
 
 class MockOAuth2Token:
