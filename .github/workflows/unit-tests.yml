@@ -160,6 +160,26 @@ jobs:
           name: junit-${{ steps.artifact.outputs.suffix }}
           path: junit-${{ steps.artifact.outputs.suffix }}.xml
 
+  trigger-sonarcloud:
+    name: Trigger SonarCloud analysis
+    runs-on: ubuntu-latest
+    needs: unit-test
+    if: |
+      always() &&
+      (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
+    steps:
+      - name: Trigger SonarCloud workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run sonar-pr.yml \
+            --repo "${{ github.repository }}" \
+            -f run_id="${{ github.run_id }}" \
+            -f event="${{ github.event_name }}" \
+            -f head_branch="${{ github.head_ref || github.ref_name }}" \
+            -f head_sha="${{ github.sha }}" \
+            -f conclusion="${{ needs.unit-test.result }}"
+
   merge-and-upload:
     name: Merge junit and upload results
     runs-on: ubuntu-latest
