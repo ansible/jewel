@@ -2502,6 +2502,7 @@ def test_drift_summary_warning_displayed(admin_user, capsys, service_api_route_c
         assert "WARNING" in captured.err
         assert "count changes during role assignment migration" in captured.err
         assert "re-run the migration" in captured.err
+        assert "Migration flag NOT set" in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -2529,3 +2530,54 @@ def test_no_drift_summary_when_counts_stable(admin_user, capsys, service_api_rou
 
         captured = capsys.readouterr()
         assert "count changes during role assignment migration" not in captured.err
+        assert "Migration flag updated" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_give_permission_failure_does_not_block_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Test that a give_permission failure for one assignment does not prevent the service from completing."""
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
+        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+        mock_jwt.return_value = 'fake-jwt-token'
+        mock_key.return_value = 'fake-key'
+        mock_consistency_check.return_value = None
+
+        test_user = User.objects.create(username='perm-fail-integration-user')
+        rd = RoleDefinition.objects.create(name="Perm Fail Test Role", content_type=None)
+
+        mock_client = Mock()
+        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
+        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "count": 1,
+            "results": [
+                {
+                    "object_ansible_id": None,
+                    "object_id": None,
+                    "content_type": "",
+                    "role_definition": "Perm Fail Test Role",
+                    "user_ansible_id": str(test_user.resource.ansible_id),
+                }
+            ],
+            "next": None,
+        }
+        mock_client.list_user_assignments.return_value = mock_response
+        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        mock_client_class.return_value = mock_client
+
+        with patch.object(rd, 'give_global_permission', side_effect=RuntimeError("DB constraint violation")):
+            with patch.object(MigrateCommand, '_resolve_role_definition', return_value=rd):
+                call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "Unable to give permission" in captured.err
+        assert "Completed migration for service" in captured.out
+        assert "Successful migrations: 1" in captured.out
+        assert "Migration flag updated" in captured.out

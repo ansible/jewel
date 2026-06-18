@@ -268,19 +268,7 @@ class Command(BaseCommand):
         if successful_services:
             self.stdout.write(f"\nSuccessfully migrated services: {', '.join(successful_services)}")
 
-        if failed_services:
-            self.stderr.write("\nFailed to migrate the following services:")
-            for service_slug, error in failed_services.items():
-                self.stderr.write(f"  - {service_slug}: {error}")
-            raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
-
-        self._ensure_superuser_consistency(service_apis, user)
-
-        self.stdout.write("\n=== Re-enabling service authentication ===")
-        MigrateServiceDataHasRan.mark_migration_completed()
-        self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
-        self.stdout.write("\nAll services migration completed successfully!")
-
+        # Report drift warning before any exit path so it's always visible
         if self._services_with_count_drift:
             drift_list = ', '.join(sorted(self._services_with_count_drift))
             self.stderr.write(
@@ -290,6 +278,22 @@ class Command(BaseCommand):
                     f"Please re-run the migration to ensure all role assignments are migrated."
                 )
             )
+
+        if failed_services:
+            self.stderr.write("\nFailed to migrate the following services:")
+            for service_slug, error in failed_services.items():
+                self.stderr.write(f"  - {service_slug}: {error}")
+            raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
+
+        self._ensure_superuser_consistency(service_apis, user)
+
+        self.stdout.write("\n=== Re-enabling service authentication ===")
+        if not self._services_with_count_drift:
+            MigrateServiceDataHasRan.mark_migration_completed()
+            self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
+        else:
+            self.stdout.write("⚠ Migration flag NOT set due to count drift. Re-run to complete migration.")
+        self.stdout.write("\nAll services migration completed successfully!")
 
     def load_types_and_permissions(self, service_apis, user):
         failed_services = []
