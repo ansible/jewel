@@ -213,40 +213,55 @@ class Command(BaseCommand):
                 self.style.WARNING(f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services.")
             )
 
-        # Track migration results
-        migration_results = {}
-        successful_services = []
-        failed_services = []
         self._services_with_count_drift = set()
 
         # Merge all partially migrated users before proceeding with migration
         self.stdout.write("\n=== Merging partially migrated users ===")
         self._merge_partially_migrated_users(service_apis, user)
 
-        # Process each service
+        # Process each service and report results
+        successful_services, failed_services = self._process_all_services(service_apis, user)
+        self._report_migration_summary(service_apis, user, successful_services, failed_services)
+
+    def _process_all_services(self, service_apis: List[ServiceAPIRoute], user: AbstractUser) -> Tuple[List[str], Dict[str, str]]:
+        """
+        Process migration for all services, returning success/failure lists.
+
+        Returns:
+            Tuple of (successful_service_slugs, failed_services_with_errors)
+            where failed_services_with_errors is a dict of {slug: error_message}
+        """
+        successful_services: List[str] = []
+        failed_services: Dict[str, str] = {}
+
         for service_api in service_apis:
             service_slug = service_api.api_slug
             self.stdout.write(f"\n=== Processing service: {service_slug} ===")
 
             try:
-                # Process a single service migration
                 success, error_msg = self._migrate_single_service(service_api, service_slug, user)
                 if success:
                     successful_services.append(service_slug)
-                    migration_results[service_slug] = {"status": "success", "error": None}
                 else:
-                    failed_services.append(service_slug)
-                    migration_results[service_slug] = {"status": "failed", "error": error_msg}
+                    failed_services[service_slug] = error_msg or "Unknown error"
             except Exception as e:
                 error_msg = str(e)
                 self.stderr.write(f"Error migrating service {service_slug}: {error_msg}")
-                failed_services.append(service_slug)
-                migration_results[service_slug] = {"status": "failed", "error": error_msg}
-                continue
+                failed_services[service_slug] = error_msg
 
-        # Provide comprehensive summary
+        return successful_services, failed_services
+
+    def _report_migration_summary(
+        self,
+        service_apis: List[ServiceAPIRoute],
+        user: AbstractUser,
+        successful_services: List[str],
+        failed_services: Dict[str, str],
+    ) -> None:
+        """Report migration results and finalize state."""
+        total = len(successful_services) + len(failed_services)
         self.stdout.write("\n=== Migration Summary ===")
-        self.stdout.write(f"Total services processed: {len(migration_results)}")
+        self.stdout.write(f"Total services processed: {total}")
         self.stdout.write(f"Successful migrations: {len(successful_services)}")
         self.stdout.write(f"Failed migrations: {len(failed_services)}")
 
@@ -255,31 +270,26 @@ class Command(BaseCommand):
 
         if failed_services:
             self.stderr.write("\nFailed to migrate the following services:")
-            for service_slug in failed_services:
-                error = migration_results[service_slug]["error"]
+            for service_slug, error in failed_services.items():
                 self.stderr.write(f"  - {service_slug}: {error}")
-
             raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
-        else:
-            # Validate superuser consistency across all services
-            self._ensure_superuser_consistency(service_apis, user)
 
-            self.stdout.write("\n=== Re-enabling service authentication ===")
-            # Mark migration as completed
-            MigrateServiceDataHasRan.mark_migration_completed()
-            self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
+        self._ensure_superuser_consistency(service_apis, user)
 
-            self.stdout.write("\nAll services migration completed successfully!")
+        self.stdout.write("\n=== Re-enabling service authentication ===")
+        MigrateServiceDataHasRan.mark_migration_completed()
+        self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
+        self.stdout.write("\nAll services migration completed successfully!")
 
-            if self._services_with_count_drift:
-                drift_list = ', '.join(sorted(self._services_with_count_drift))
-                self.stderr.write(
-                    self.style.WARNING(
-                        f"\nWARNING: The following services had count changes during role assignment migration: {drift_list}\n"
-                        f"This means concurrent modifications occurred while migrating. "
-                        f"Please re-run the migration to ensure all role assignments are migrated."
-                    )
+        if self._services_with_count_drift:
+            drift_list = ', '.join(sorted(self._services_with_count_drift))
+            self.stderr.write(
+                self.style.WARNING(
+                    f"\nWARNING: The following services had count changes during role assignment migration: {drift_list}\n"
+                    f"This means concurrent modifications occurred while migrating. "
+                    f"Please re-run the migration to ensure all role assignments are migrated."
                 )
+            )
 
     def load_types_and_permissions(self, service_apis, user):
         failed_services = []
