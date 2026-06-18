@@ -505,6 +505,74 @@ class TestOAuth2ScopeValidation:
         # status.code 7 is PERMISSION_DENIED in gRPC
         assert response.status.code == 7
 
+
+@pytest.mark.django_db
+class TestAuthTypeNone:
+    """Tests for auth_type=NONE (enable_gateway_auth=false) which adds X-Trusted-Proxy without authentication."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def mock_close_old_connections(self):
+        with mock.patch("aap_gateway_api.proxy.control_plane.close_old_connections"):
+            yield
+
+    def test_auth_type_none_adds_trusted_proxy_without_auth(self, ext_auth):
+        """Verify that auth_type=NONE adds X-Trusted-Proxy header without attempting authentication."""
+        # Event stream webhook with UUID - handles its own auth
+        request = Request(method="POST", path="/api/eda/v1/external-event-stream/a1b2c3d4-5678-9012-3456-789012345678/", auth_type="NONE")
+        response = ext_auth.Check(request, None)
+
+        # Should return OK (no authentication attempted)
+        assert response.status.code == 0
+        # Should have X-Trusted-Proxy header
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+        # Should NOT have JWT token header
+        assert "X-DAB-JW-TOKEN" not in header_keys
+
+    def test_auth_type_none_works_for_get_requests(self, ext_auth):
+        """Verify that auth_type=NONE works for GET requests on event streams."""
+        request = Request(method="GET", path="/api/eda/v1/external-event-stream/12345678-1234-5678-1234-567812345678/", auth_type="NONE")
+        response = ext_auth.Check(request, None)
+
+        # Should return OK
+        assert response.status.code == 0
+        # Should have X-Trusted-Proxy header
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+
+    def test_auth_type_none_with_webhook_payload(self, ext_auth):
+        """Verify that auth_type=NONE works for POST requests with webhook payloads."""
+        webhook_payload = '{"source": "github", "event": "push", "data": {"ref": "refs/heads/main"}}'
+        request = Request(
+            method="POST",
+            path="/api/eda/v1/external-event-stream/abcdef12-3456-7890-abcd-ef1234567890/",
+            auth_type="NONE",
+            body=webhook_payload,
+            header_diff={"CONTENT_TYPE": "application/json"}
+        )
+        response = ext_auth.Check(request, None)
+
+        # Should return OK
+        assert response.status.code == 0
+        # Should have X-Trusted-Proxy header
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+
+    def test_auth_type_jwt_still_requires_auth(self, ext_auth, admin_user):
+        """Verify that auth_type=JWT (default) still requires authentication."""
+        request = Request(method="GET", path="/api/eda/v1/activations/", auth_type="JWT")
+
+        # Without authentication, should pass through (returning OK but no JWT token added)
+        response = ext_auth.Check(request, None)
+
+        # Should return OK (unauthenticated users can try, service decides)
+        assert response.status.code == 0
+        # Should have X-Trusted-Proxy header
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+        # Should NOT have JWT token since no valid auth provided
+        assert "X-DAB-JW-TOKEN" not in header_keys
+
     def test_oauth2_scope_check_token_is_none(self, ext_auth, admin_user):
         """Test that scope check handles None token gracefully (defensive check)."""
         request = Request(method="POST", path="/api/controller/v2/organizations/")

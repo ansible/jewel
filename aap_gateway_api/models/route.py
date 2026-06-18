@@ -271,9 +271,18 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             }
 
         if not self.enable_gateway_auth:
+            # Instead of disabling the filter, pass NONE as auth_type
+            # This allows the control plane to add X-Trusted-Proxy header
+            # while skipping authentication (service handles its own auth)
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
                 TYPE_KEY: EXT_AUTH_PER_ROUTE,
-                "disabled": not self.enable_gateway_auth,
+                "check_settings": {
+                    "context_extensions": {
+                        "is_internal_route": "f",
+                        "service_type": self.service_cluster.service_type.name,
+                        "auth_type": "NONE",
+                    },
+                },
             }
         else:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
