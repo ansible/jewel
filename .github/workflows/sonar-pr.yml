@@ -55,11 +55,6 @@ on:
       - Unit Tests
     types:
       - completed
-    # By default, workflow_run only triggers for runs on the default branch.
-    # Use '**' to allow triggering on all branches; the gate job filters
-    # branch eligibility using the SONAR_BRANCHES repository variable.
-    branches:
-      - '**'
 
 jobs:
   gate:
