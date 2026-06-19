@@ -731,7 +731,7 @@ class Command(BaseCommand):
 
         return create_gateway_resource
 
-    def _get_filtered_resources(self, filters: Dict[str, Any], resource_type_name: str) -> List[Dict[str, Any]]:
+    def _get_filtered_resources(self, filters: Dict[str, Any], resource_type_name: str) -> Tuple[List[Dict[str, Any]], int]:
         """
         Retrieve and filter resources from the upstream service.
 
@@ -765,7 +765,7 @@ class Command(BaseCommand):
             # Currently, the system username is None in controller, and in hub and eda it's the same as gateway's,
             # If Hub and EDA system username is updated to != gateway's, we are migrating it too and we should avoid it
             results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
-        return results
+        return results, data['count']
 
     def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any]) -> None:
         """
@@ -908,9 +908,7 @@ class Command(BaseCommand):
             "content_type__resource_type__name": resource_type_name,
         }
 
-        # Get initial total count for progress reporting
-        initial_count_response = self.client.list_resources(filters=api_call_filters).json()
-        resource_total = initial_count_response.get('count', 0)
+        resource_total = None
         resource_processed = 0
         progress_label = f"{self.client.service.api_slug} {resource_type_name} resources"
 
@@ -919,7 +917,9 @@ class Command(BaseCommand):
         # so this doesn't actually use pagination. It just keeps loading the same filter over and over
         # until nothing is left to migrate.
         while True:
-            results = self._get_filtered_resources(api_call_filters, resource_type_name)
+            results, count = self._get_filtered_resources(api_call_filters, resource_type_name)
+            if resource_total is None:
+                resource_total = count + resource_processed
 
             if len(results) == 0:
                 self.stdout.write("No more items remaining to migrate.")
@@ -1461,6 +1461,7 @@ class Command(BaseCommand):
         """
 
         progress_label = f"{service_slug} {assignment_actor.value} role assignments"
+        # Initialized here, updated by _fetch_role_assignments on the first page response
         self._current_assignment_total = 0
         self.stdout.write(f"Migrating {assignment_actor.value} role assignments from {service_slug} of type {service_type_name}")
         try:

@@ -2594,7 +2594,6 @@ def test_give_permission_failure_does_not_block_migration(admin_user, capsys, se
 # =============================================================================
 
 
-@pytest.mark.django_db
 def test_log_progress_emits_at_thresholds(caplog):
     """Test that progress is logged at 5% threshold crossings."""
     cmd = MigrateCommand()
@@ -2610,7 +2609,6 @@ def test_log_progress_emits_at_thresholds(caplog):
     assert "(100%)" in progress_msgs[-1]
 
 
-@pytest.mark.django_db
 def test_log_progress_zero_items(caplog):
     """Test that zero items logs a single message."""
     cmd = MigrateCommand()
@@ -2624,7 +2622,6 @@ def test_log_progress_zero_items(caplog):
     assert "0 items to process" in progress_msgs[0]
 
 
-@pytest.mark.django_db
 def test_log_progress_small_count_skips_intermediate(caplog):
     """Test that small counts skip intermediate thresholds."""
     cmd = MigrateCommand()
@@ -2639,7 +2636,6 @@ def test_log_progress_small_count_skips_intermediate(caplog):
     assert any("(10%)" in msg for msg in progress_msgs)
 
 
-@pytest.mark.django_db
 def test_log_progress_bookends_always_logged(caplog):
     """Test that first and last items always generate log output."""
     cmd = MigrateCommand()
@@ -2656,7 +2652,6 @@ def test_log_progress_bookends_always_logged(caplog):
     assert "(100%)" in progress_msgs[-1]
 
 
-@pytest.mark.django_db
 def test_log_progress_no_duplicate_100(caplog):
     """Test that 100% is not logged twice when last item lands exactly on a threshold."""
     cmd = MigrateCommand()
