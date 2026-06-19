@@ -2315,6 +2315,7 @@ def test_fetch_role_assignments_tolerates_count_change(caplog):
     """Test that _fetch_role_assignments logs a warning instead of raising when count changes between pages."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
+    cmd._progress_thresholds = {}
     mock_client = Mock()
     cmd.client = mock_client
 
@@ -2345,6 +2346,7 @@ def test_fetch_role_assignments_updates_total_count_on_change(caplog):
     """Test that total_count is updated after a count change so subsequent pages compare against the new value."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
+    cmd._progress_thresholds = {}
     mock_client = Mock()
     cmd.client = mock_client
 
@@ -2372,6 +2374,7 @@ def test_fetch_role_assignments_tracks_drift_services():
     """Test that services with count drift are tracked in _services_with_count_drift."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
+    cmd._progress_thresholds = {}
     mock_client = Mock()
     cmd.client = mock_client
 
@@ -2392,6 +2395,7 @@ def test_fetch_role_assignments_no_drift_not_tracked():
     """Test that services without count drift are not added to _services_with_count_drift."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
+    cmd._progress_thresholds = {}
     mock_client = Mock()
     cmd.client = mock_client
 
@@ -2417,6 +2421,7 @@ def test_migrate_role_assignments_catches_fetch_error(capsys):
     """Test that errors during generator iteration are caught by the outer try/except."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
+    cmd._progress_thresholds = {}
     cmd.stdout = Mock()
     cmd.stderr = Mock()
     mock_client = Mock()
@@ -2438,6 +2443,7 @@ def test_migrate_role_assignments_catches_give_permission_error(admin_user, caps
     """Test that errors in give_permission are caught separately from fetch errors."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
+    cmd._progress_thresholds = {}
     mock_client = Mock()
     cmd.client = mock_client
 
@@ -2581,3 +2587,79 @@ def test_give_permission_failure_does_not_block_migration(admin_user, capsys, se
         assert "Completed migration for service" in captured.out
         assert "Successful migrations: 1" in captured.out
         assert "Migration flag updated" in captured.out
+
+
+# =============================================================================
+# Tests for _log_progress (AAP-76816)
+# =============================================================================
+
+
+def test_log_progress_emits_at_thresholds(caplog):
+    """Test that progress is logged at 5% threshold crossings."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    with caplog.at_level("INFO", logger="aap.gateway.management.commands.migrate_service_data"):
+        for i in range(1, 101):
+            cmd._log_progress("test", i, 100)
+
+    progress_msgs = [msg for msg in caplog.messages if "Migration progress [test]" in msg]
+    assert len(progress_msgs) == 21  # 0% + 5% through 100%
+    assert "(0%)" in progress_msgs[0]
+    assert "(100%)" in progress_msgs[-1]
+
+
+def test_log_progress_zero_items(caplog):
+    """Test that zero items logs a single message."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    with caplog.at_level("INFO", logger="aap.gateway.management.commands.migrate_service_data"):
+        cmd._log_progress("empty", 0, 0)
+
+    progress_msgs = [msg for msg in caplog.messages if "Migration progress [empty]" in msg]
+    assert len(progress_msgs) == 1
+    assert "0 items to process" in progress_msgs[0]
+
+
+def test_log_progress_small_count_skips_intermediate(caplog):
+    """Test that small counts skip intermediate thresholds."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    with caplog.at_level("INFO", logger="aap.gateway.management.commands.migrate_service_data"):
+        for i in range(1, 11):
+            cmd._log_progress("small", i, 10)
+
+    progress_msgs = [msg for msg in caplog.messages if "Migration progress [small]" in msg]
+    assert not any("(5%)" in msg for msg in progress_msgs)
+    assert any("(10%)" in msg for msg in progress_msgs)
+
+
+def test_log_progress_bookends_always_logged(caplog):
+    """Test that first and last items always generate log output."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    with caplog.at_level("INFO", logger="aap.gateway.management.commands.migrate_service_data"):
+        cmd._log_progress("bookend", 1, 7)
+        cmd._log_progress("bookend", 7, 7)
+
+    progress_msgs = [msg for msg in caplog.messages if "Migration progress [bookend]" in msg]
+    assert len(progress_msgs) >= 2
+    assert "1/7" in progress_msgs[0]
+    assert "7/7" in progress_msgs[-1]
+    assert "(100%)" in progress_msgs[-1]
+
+
+def test_log_progress_no_duplicate_100(caplog):
+    """Test that 100% is not logged twice when last item lands exactly on a threshold."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    with caplog.at_level("INFO", logger="aap.gateway.management.commands.migrate_service_data"):
+        for i in range(1, 21):
+            cmd._log_progress("exact", i, 20)
+
+    progress_msgs = [msg for msg in caplog.messages if "(100%)" in msg and "exact" in msg]
+    assert len(progress_msgs) == 1
