@@ -64,6 +64,9 @@ class Command(BaseCommand):
     RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
     BIG_PAGE_FILTERS = {"page_size": str(get_setting('RESOURCE_LIST_MAX_PAGE_SIZE', DEFAULT_MAX_PAGE_SIZE))}
 
+    # Progress reporting step size (percentage)
+    PROGRESS_STEP = 5
+
     # Service processing order - Controller first to establish priority for user merging
     SERVICE_TYPE_ORDER = [
         DefaultServiceType.CONTROLLER.value,
@@ -75,6 +78,37 @@ class Command(BaseCommand):
 
     There is no option to control merging of users, because users are never migrated.
     The exception is that the provided --username, which will be merged."""
+
+    def _log_progress(self, label: str, processed: int, total: int) -> None:
+        """
+        Log migration progress when a percentage threshold is crossed.
+
+        Emits a log line at every PROGRESS_STEP% interval. Always logs a starting
+        message on the first item and a 100% message on the last item. If a single
+        item crosses multiple thresholds, only the highest is reported.
+        """
+        if total == 0:
+            logger.info("Migration progress [%s]: 0 items to process", label)
+            return
+
+        percent = (processed / total) * 100
+        threshold = (int(percent) // self.PROGRESS_STEP) * self.PROGRESS_STEP
+        last = self._progress_thresholds.get(label, -1)
+
+        if processed == total:
+            if last < 100:
+                self._progress_thresholds[label] = 100
+                logger.info("Migration progress [%s]: %d/%d (100%%)", label, processed, total)
+            return
+
+        if processed == 1 and last < 0:
+            self._progress_thresholds[label] = threshold
+            logger.info("Migration progress [%s]: %d/%d (%d%%)", label, processed, total, threshold)
+            return
+
+        if threshold > last:
+            self._progress_thresholds[label] = threshold
+            logger.info("Migration progress [%s]: %d/%d (%d%%)", label, processed, total, threshold)
 
     def add_arguments(self, parser) -> None:
         """
@@ -214,6 +248,7 @@ class Command(BaseCommand):
             )
 
         self._services_with_count_drift = set()
+        self._progress_thresholds = {}
 
         # Merge all partially migrated users before proceeding with migration
         self.stdout.write("\n=== Merging partially migrated users ===")
@@ -234,9 +269,10 @@ class Command(BaseCommand):
         successful_services: List[str] = []
         failed_services: Dict[str, str] = {}
 
-        for service_api in service_apis:
+        total_services = len(service_apis)
+        for service_idx, service_api in enumerate(service_apis, 1):
             service_slug = service_api.api_slug
-            self.stdout.write(f"\n=== Processing service: {service_slug} ===")
+            self.stdout.write(f"\n=== Processing service: {service_slug} ({service_idx}/{total_services}) ===")
 
             try:
                 success, error_msg = self._migrate_single_service(service_api, service_slug, user)
@@ -871,6 +907,12 @@ class Command(BaseCommand):
             "content_type__resource_type__name": resource_type_name,
         }
 
+        # Get initial total count for progress reporting
+        initial_count_response = self.client.list_resources(filters=api_call_filters).json()
+        resource_total = initial_count_response.get('count', 0)
+        resource_processed = 0
+        progress_label = f"{resource_type_name} resources"
+
         # Following 'while True' loop is used because we are modifying the list as we go through it.
         # By changing the service ID or setting partially migrated, we are removing items from the filter,
         # so this doesn't actually use pagination. It just keeps loading the same filter over and over
@@ -883,6 +925,8 @@ class Command(BaseCommand):
                 break
 
             for upstream_resource_item in results:
+                resource_processed += 1
+                self._log_progress(progress_label, resource_processed, resource_total)
                 self._process_and_migrate_resource_item(upstream_resource_item, resource_context)
 
     def _get_gateway_user(self, username: str) -> Optional[AbstractUser]:
@@ -1385,6 +1429,7 @@ class Command(BaseCommand):
             json_response = method(filters=filters).json()
             if total_count is None:
                 total_count = json_response.get('count', 0)
+                self._current_assignment_total = total_count
             elif total_count != json_response.get('count', 0):
                 new_count = json_response.get('count', 0)
                 logger.warning(
@@ -1414,10 +1459,15 @@ class Command(BaseCommand):
         4. Giving permission in gateway to the actor for the object (handling both Resources and RemoteObjects)
         """
 
+        progress_label = f"{service_slug} {assignment_actor.value} role assignments"
+        self._current_assignment_total = 0
         self.stdout.write(f"Migrating {assignment_actor.value} role assignments from {service_slug} of type {service_type_name}")
         try:
             assignments = self._fetch_role_assignments(assignment_actor, service_slug, service_type_name)
+            processed = 0
             for assignment in assignments:
+                processed += 1
+                self._log_progress(progress_label, processed, self._current_assignment_total)
                 log_detail = self._format_fetched_assignment_for_logging(assignment_actor, assignment)
                 self.stdout.write(f"Processing assignment in service {service_slug}: {log_detail}")
 
