@@ -95,7 +95,7 @@ class Command(BaseCommand):
         threshold = (int(percent) // self.PROGRESS_STEP) * self.PROGRESS_STEP
         last = self._progress_thresholds.get(label, -1)
 
-        if processed == total:
+        if processed >= total:
             if last < 100:
                 self._progress_thresholds[label] = 100
                 logger.info("Migration progress [%s]: %d/%d (100%%)", label, processed, total)
@@ -106,6 +106,7 @@ class Command(BaseCommand):
             logger.info("Migration progress [%s]: %d/%d (%d%%)", label, processed, total, threshold)
             return
 
+        threshold = min(threshold, 100)
         if threshold > last:
             self._progress_thresholds[label] = threshold
             logger.info("Migration progress [%s]: %d/%d (%d%%)", label, processed, total, threshold)
@@ -911,7 +912,7 @@ class Command(BaseCommand):
         initial_count_response = self.client.list_resources(filters=api_call_filters).json()
         resource_total = initial_count_response.get('count', 0)
         resource_processed = 0
-        progress_label = f"{resource_type_name} resources"
+        progress_label = f"{self.client.service.api_slug} {resource_type_name} resources"
 
         # Following 'while True' loop is used because we are modifying the list as we go through it.
         # By changing the service ID or setting partially migrated, we are removing items from the filter,
