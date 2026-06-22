@@ -14,9 +14,13 @@ class MigrateServiceDataLastRolePK(models.Model):
     at most one page of work is lost on a crash or kill.
     """
 
-    service_slug = models.CharField(max_length=255)
-    assignment_type = models.CharField(max_length=4, choices=[('user', 'User'), ('team', 'Team')])
-    last_pk = models.BigIntegerField(default=0)
+    service_slug = models.CharField(max_length=255, help_text="API slug of the upstream service (e.g. controller, hub, eda)")
+    assignment_type = models.CharField(
+        max_length=4,
+        choices=[('user', 'User'), ('team', 'Team')],
+        help_text="Whether this cursor tracks user or team role assignments",
+    )
+    last_pk = models.BigIntegerField(default=0, help_text="PK of the last successfully processed role assignment from this service")
 
     class Meta:
         unique_together = ('service_slug', 'assignment_type')
