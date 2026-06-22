@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("aap_gateway_api", "0023_remove_console_service_type"),
     ]

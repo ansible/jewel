@@ -1397,6 +1397,31 @@ class Command(BaseCommand):
     # service so the installer/reconcile loop retries the whole command.
     HTTP_RETRY_LIMIT = 3
 
+    def _build_page_filters(self, page: int, roles_to_exclude: List[str], cursor: 'MigrateServiceDataLastRolePK') -> Dict[str, Any]:
+        """Build query filters for one page of cursor-based assignment pagination."""
+        filters: Dict[str, Any] = {'page': page, 'order_by': 'id', **self.BIG_PAGE_FILTERS}
+        if roles_to_exclude:
+            filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+        if cursor.last_pk > 0:
+            filters['id__gt'] = str(cursor.last_pk)
+        return filters
+
+    def _fetch_page_with_retry(self, list_fn, assignment_type: str, filters: Dict[str, Any]) -> Any:
+        """Fetch one page from the assignment API, retrying on HTTP errors.
+
+        Retries up to ``HTTP_RETRY_LIMIT`` times on non-200 responses.
+        Raises ``RuntimeError`` if all retries are exhausted so the
+        service is marked as failed (non-zero exit for installer retry).
+        """
+        page = filters['page']
+        for attempt in range(self.HTTP_RETRY_LIMIT):
+            response = list_fn(filters=filters)
+            if response.status_code == 200:
+                return response
+            retries_left = self.HTTP_RETRY_LIMIT - attempt - 1
+            logger.warning(f"HTTP {response.status_code} fetching {assignment_type} assignments page {page} ({retries_left} retries left)")
+        raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code} after {self.HTTP_RETRY_LIMIT} attempts")
+
     def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: 'MigrateServiceDataLastRolePK') -> int:
         """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
 
@@ -1407,33 +1432,13 @@ class Command(BaseCommand):
 
         The cursor is advanced after each fully-processed page, providing
         crash safety — at most one page of work is lost on a crash or kill.
-
-        Raises ``RuntimeError`` if HTTP retries are exhausted on any page,
-        causing the service to be marked as failed (non-zero exit).
         """
         page = 1
         created = 0
-        retries_remaining = self.HTTP_RETRY_LIMIT
 
         while True:
-            filters: Dict[str, Any] = {'page': page, 'order_by': 'id', **self.BIG_PAGE_FILTERS}
-            if roles_to_exclude:
-                filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
-            if cursor.last_pk > 0:
-                filters['id__gt'] = str(cursor.last_pk)
-
-            response = list_fn(filters=filters)
-            if response.status_code != 200:
-                retries_remaining -= 1
-                logger.warning(f"HTTP {response.status_code} fetching {assignment_type} assignments page {page} ({retries_remaining} retries left)")
-                if retries_remaining > 0:
-                    continue
-                raise RuntimeError(
-                    f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code} after {self.HTTP_RETRY_LIMIT} attempts"
-                )
-
-            # Reset retries on a successful page fetch
-            retries_remaining = self.HTTP_RETRY_LIMIT
+            filters = self._build_page_filters(page, roles_to_exclude, cursor)
+            response = self._fetch_page_with_retry(list_fn, assignment_type, filters)
 
             data = response.json()
             results = data.get('results') or []
