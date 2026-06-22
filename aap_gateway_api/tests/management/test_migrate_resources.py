@@ -1185,6 +1185,52 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
         assert "Deleting legacy authenticator 'Legacy Controller Admin'" in captured.out
 
 
+@pytest.mark.django_db(transaction=True)
+def test_delete_legacy_authenticators_runs_after_migration_completed(admin_user, capsys):
+    """Test that legacy authenticators are cleaned up even when migration has already completed.
+
+    Regression test for AAP-43924: When the installer is re-run, it recreates legacy
+    authenticators. The migrate_service_data command must clean them up even if the
+    migration has already completed and the command exits early.
+    """
+    from ansible_base.authentication.models import Authenticator, AuthenticatorUser
+
+    from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+
+    # Mark migration as already completed (simulating a previous successful run)
+    MigrateServiceDataHasRan.mark_migration_completed()
+
+    # Create a legacy authenticator (simulating what the installer does on re-run)
+    legacy_auth = Authenticator.objects.create(
+        name="Reinstalled Legacy Auth",
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        enabled=True,
+        configuration={},
+    )
+    Authenticator.objects.filter(id=legacy_auth.id).update(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin")
+    legacy_auth.refresh_from_db()
+
+    user = User.objects.create(username="reinstall_user")
+    AuthenticatorUser.objects.create(user=user, provider=legacy_auth, uid="reinstall_user")
+
+    # Verify setup
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin").count() == 1
+    assert AuthenticatorUser.objects.filter(provider=legacy_auth).count() == 1
+
+    # Run migrate_service_data -- migration already completed so it should exit early,
+    # but legacy authenticators must still be cleaned up before the early return.
+    call_command("migrate_service_data", username=admin_user.username)
+
+    # Verify legacy authenticator was deleted despite migration being already completed
+    assert Authenticator.objects.filter(type="aap_gateway_api.authentication.authenticator_plugins.controller_admin").count() == 0
+    assert AuthenticatorUser.objects.filter(provider=legacy_auth).count() == 0
+
+    # Verify the command still reports migration as already completed (skips the rest)
+    captured = capsys.readouterr()
+    assert "Migration has already completed. Skipping." in captured.out
+    assert "Deleting legacy authenticator 'Reinstalled Legacy Auth'" in captured.out
+
+
 @pytest.fixture
 def comprehensive_migration_controller_service(service_api_route_controller):
     """Launch a controller service with comprehensive migration test data."""

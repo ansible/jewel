@@ -174,6 +174,10 @@ class Command(BaseCommand):
         """
         self._warn_ignored_flags(options)
 
+        # Always clean up legacy authenticators, even on re-runs after migration
+        # has completed. The installer may recreate them on each run (AAP-43924).
+        self.delete_legacy_authenticators()
+
         if MigrateServiceDataHasRan.has_migration_completed():
             self.stdout.write("Migration has already completed. Skipping.")
             return
