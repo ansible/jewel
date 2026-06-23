@@ -1550,10 +1550,19 @@ class Command(BaseCommand):
 
             # Advance cursor in DB for crash recovery.  cursor.last_pk
             # is NOT mutated — base_filters stays consistent.
+            # The 'id' field may not be present in the service-index
+            # serializer response (assignment_common_fields in DAB does
+            # not include 'id').  Without it, the cursor cannot advance
+            # and the next run will reprocess all assignments — safe
+            # because give_permission is idempotent, but slower.
             last_pk_on_page = results[-1].get('id')
-            if last_pk_on_page is None:
-                raise RuntimeError(f"API returned {assignment_type} assignment without 'id' field — cannot advance cursor")
-            cursor.advance(last_pk_on_page)
+            if last_pk_on_page is not None:
+                cursor.advance(last_pk_on_page)
+            else:
+                logger.warning(
+                    "API returned %s assignments without 'id' field — cursor cannot advance, next run will reprocess",
+                    assignment_type,
+                )
 
             if not data.get('next'):
                 break
@@ -1707,6 +1716,15 @@ class Command(BaseCommand):
 
         give_permission is idempotent (uses get_or_create), so replaying
         a partial page after a crash is safe.
+
+        NOTE: The PK cursor optimization (resume from last processed
+        assignment, skip already-synced data on reinstall) requires the
+        service-index assignment API to include 'id' in responses. DAB's
+        assignment_common_fields does not currently include 'id', so the
+        cursor cannot advance and every run reprocesses all assignments.
+        The migration is still correct (give_permission is idempotent)
+        but does not benefit from cursor-based resume until DAB adds 'id'
+        to the service-index assignment serializer.
         """
         self.stdout.write(f"Migrating role assignments from {service_slug} (type {service_type_name})")
         roles_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
