@@ -15,7 +15,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from ansible_base.rbac.models import RoleDefinition
-from ansible_base.rbac.role_sync_utils import AssignmentTuple
 
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.management.commands.migrate_service_data import _CursorStore
@@ -135,91 +134,6 @@ class TestCursorStore:
 
 
 # =============================================================================
-# _build_assignment_tuple
-# =============================================================================
-
-
-class TestBuildAssignmentTuple:
-    """Tests for converting API response dicts to AssignmentTuple.
-
-    Key resolution must match get_local_assignments() in DAB:
-    org/team content types use object_ansible_id, everything else uses
-    the raw object_id, and global assignments use None.
-    """
-
-    def test_user_global_assignment(self):
-        """Global user assignment has ansible_id_or_pk=None."""
-        assignment = _make_remote_assignment("user", "user-uuid-1", "Platform Auditor")
-        t = MigrateCommand._build_assignment_tuple(assignment, "user")
-        assert t == AssignmentTuple(
-            actor_ansible_id="user-uuid-1",
-            ansible_id_or_pk=None,
-            role_definition_name="Platform Auditor",
-            assignment_type="user",
-        )
-
-    def test_team_global_assignment(self):
-        """Global team assignment has ansible_id_or_pk=None."""
-        assignment = _make_remote_assignment("team", "team-uuid-1", "Platform Auditor")
-        t = MigrateCommand._build_assignment_tuple(assignment, "team")
-        assert t == AssignmentTuple(
-            actor_ansible_id="team-uuid-1",
-            ansible_id_or_pk=None,
-            role_definition_name="Platform Auditor",
-            assignment_type="team",
-        )
-
-    def test_org_uses_ansible_id(self):
-        """Organization assignments use object_ansible_id (not object_id)."""
-        assignment = _make_remote_assignment(
-            "user",
-            "user-uuid-1",
-            "Organization Admin",
-            content_type="shared.organization",
-            object_ansible_id="org-uuid-1",
-            object_id="42",
-        )
-        t = MigrateCommand._build_assignment_tuple(assignment, "user")
-        assert t.ansible_id_or_pk == "org-uuid-1"
-
-    def test_team_content_type_uses_ansible_id(self):
-        """Team content type assignments use object_ansible_id (not object_id)."""
-        assignment = _make_remote_assignment(
-            "user",
-            "user-uuid-1",
-            "Team Admin",
-            content_type="shared.team",
-            object_ansible_id="team-uuid-1",
-            object_id="99",
-        )
-        t = MigrateCommand._build_assignment_tuple(assignment, "user")
-        assert t.ansible_id_or_pk == "team-uuid-1"
-
-    def test_service_specific_uses_object_id(self):
-        """Service-specific content types (e.g. controller.inventory) use object_id."""
-        assignment = _make_remote_assignment(
-            "user",
-            "user-uuid-1",
-            "Inventory Admin",
-            content_type="controller.inventory",
-            object_ansible_id="inv-uuid-1",
-            object_id="123",
-        )
-        t = MigrateCommand._build_assignment_tuple(assignment, "user")
-        assert t.ansible_id_or_pk == "123"
-
-    def test_missing_actor_returns_none(self):
-        """Missing actor ansible_id returns None (skip this assignment)."""
-        assignment = {"role_definition": "Some Role", "user_ansible_id": None}
-        assert MigrateCommand._build_assignment_tuple(assignment, "user") is None
-
-    def test_missing_role_returns_none(self):
-        """Missing role_definition returns None (skip this assignment)."""
-        assignment = {"user_ansible_id": "user-uuid-1", "role_definition": None}
-        assert MigrateCommand._build_assignment_tuple(assignment, "user") is None
-
-
-# =============================================================================
 # _paginate_and_create — PK cursor pagination
 #
 # These tests verify the cursor-based pagination: each page is fetched with
@@ -252,7 +166,7 @@ class TestPaginateAndCreate:
         cursor = _CursorStore("test-svc", "user")
         list_fn = Mock(return_value=resp)
 
-        with patch.object(cmd, "_create_assignment_from_tuple", return_value=True):
+        with patch.object(cmd, "_create_assignment", return_value=True):
             created = cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert created == 2
@@ -312,7 +226,7 @@ class TestPaginateAndCreate:
         cursor = _CursorStore("test-svc-pages", "user")
         list_fn = Mock(side_effect=[page1, page2])
 
-        with patch.object(cmd, "_create_assignment_from_tuple", return_value=True):
+        with patch.object(cmd, "_create_assignment", return_value=True):
             created = cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert created == 2
@@ -333,7 +247,7 @@ class TestPaginateAndCreate:
         cursor = _CursorStore("test-svc-empty", "user")
         list_fn = Mock(return_value=resp)
 
-        with patch.object(cmd, "_create_assignment_from_tuple") as mock_create:
+        with patch.object(cmd, "_create_assignment") as mock_create:
             created = cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert created == 0
@@ -379,7 +293,7 @@ class TestPaginateAndCreate:
         # page1 succeeds, page2 fails immediately
         list_fn = Mock(side_effect=[page1, error_resp])
 
-        with patch.object(cmd, "_create_assignment_from_tuple", return_value=True):
+        with patch.object(cmd, "_create_assignment", return_value=True):
             with pytest.raises(RuntimeError, match="Failed to fetch"):
                 cmd._paginate_and_create(list_fn, "user", [], cursor)
 
@@ -424,7 +338,7 @@ class TestPaginateAndCreate:
         cursor = _CursorStore("test-svc-snapshot", "user")
         list_fn = Mock(side_effect=[page1, page2])
 
-        with patch.object(cmd, "_create_assignment_from_tuple", return_value=True):
+        with patch.object(cmd, "_create_assignment", return_value=True):
             cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         # Both pages used the initial snapshot (0), so no id__gt on either
@@ -492,29 +406,51 @@ class TestMigrateRoleAssignments:
 
 
 # =============================================================================
-# _create_assignment_from_tuple
+# _create_assignment
 # =============================================================================
 
 
 @pytest.mark.django_db
-class TestCreateAssignmentFromTuple:
-    """Tests for creating local role assignments from AssignmentTuples.
+class TestCreateAssignment:
+    """Tests for _create_assignment: resolving and creating role assignments
+    from raw API response dicts.
 
     Each resolution step (role definition, actor, content object) has its
     own error handling so operators get specific messages identifying what
-    failed and why.
+    failed and why — including actor, role, and object identifiers.
     """
 
-    def test_missing_role_definition_returns_false(self):
-        """Missing role definition returns False with error identifying the role."""
+    def test_missing_actor_returns_false_silently(self):
+        """Missing actor ansible_id returns False without logging — the API
+        response is malformed and there's nothing actionable to report."""
         cmd = MigrateCommand()
         cmd.stderr = Mock()
-        t = AssignmentTuple("user-uuid", "org-uuid", "NonexistentRole", "user")
-        assert cmd._create_assignment_from_tuple(t) is False
-        assert "Unable to find role definition NonexistentRole" in cmd.stderr.write.call_args[0][0]
+        assignment = {"role_definition": "Some Role", "user_ansible_id": None}
+        assert cmd._create_assignment(assignment, "user") is False
+        cmd.stderr.write.assert_not_called()
+
+    def test_missing_role_returns_false_silently(self):
+        """Missing role_definition returns False without logging."""
+        cmd = MigrateCommand()
+        cmd.stderr = Mock()
+        assignment = {"user_ansible_id": "user-uuid-1", "role_definition": None}
+        assert cmd._create_assignment(assignment, "user") is False
+        cmd.stderr.write.assert_not_called()
+
+    def test_missing_role_definition_returns_false(self):
+        """Non-existent role definition returns False with error message
+        that includes both the role name and the actor identifier."""
+        cmd = MigrateCommand()
+        cmd.stderr = Mock()
+        assignment = _make_remote_assignment("user", "user-uuid", "NonexistentRole")
+        assert cmd._create_assignment(assignment, "user") is False
+        msg = cmd.stderr.write.call_args[0][0]
+        assert "Unable to find role definition 'NonexistentRole'" in msg
+        assert "actor user-uuid" in msg
 
     def test_missing_actor_resource_returns_false(self):
-        """Missing actor resource returns False with error identifying the actor."""
+        """Non-existent actor resource returns False with error message
+        that includes both the actor identifier and the role name."""
         cmd = MigrateCommand()
         cmd.stderr = Mock()
         RoleDefinition.objects.get_or_create(
@@ -522,29 +458,26 @@ class TestCreateAssignmentFromTuple:
             defaults={"managed": False},
         )
         fake_id = str(uuid.uuid4())
-        t = AssignmentTuple(fake_id, None, "Test Role Create", "user")
-        assert cmd._create_assignment_from_tuple(t) is False
-        assert f"Unable to find user with ansible_id {fake_id}" in cmd.stderr.write.call_args[0][0]
+        assignment = _make_remote_assignment("user", fake_id, "Test Role Create")
+        assert cmd._create_assignment(assignment, "user") is False
+        msg = cmd.stderr.write.call_args[0][0]
+        assert f"Unable to find user with ansible_id {fake_id}" in msg
+        assert "role 'Test Role Create'" in msg
 
     def test_global_assignment_created(self):
         """Global assignment (no content object) is created via give_global_permission."""
         from aap_gateway_api.models import User
 
         user = User.objects.create(username="global-perm-user")
-        rd, _ = RoleDefinition.objects.get_or_create(name="Test Global Role", defaults={"managed": False})
+        RoleDefinition.objects.get_or_create(name="Test Global Role", defaults={"managed": False})
 
         cmd = MigrateCommand()
         cmd.stderr = Mock()
-        t = AssignmentTuple(
-            actor_ansible_id=str(user.resource.ansible_id),
-            ansible_id_or_pk=None,
-            role_definition_name="Test Global Role",
-            assignment_type="user",
-        )
-        assert cmd._create_assignment_from_tuple(t) is True
+        assignment = _make_remote_assignment("user", str(user.resource.ansible_id), "Test Global Role")
+        assert cmd._create_assignment(assignment, "user") is True
 
-    def test_org_team_assignment_created(self):
-        """Org/team assignment is created by resolving the object via Resource ansible_id."""
+    def test_org_assignment_created(self):
+        """Organization assignment is created by resolving the object via Resource ansible_id."""
         from ansible_base.rbac.models import DABContentType
 
         from aap_gateway_api.models import Organization, User
@@ -552,20 +485,47 @@ class TestCreateAssignmentFromTuple:
         user = User.objects.create(username="org-perm-user")
         org = Organization.objects.create(name="test-perm-org")
         ct = DABContentType.objects.get_for_model(org)
-        rd, _ = RoleDefinition.objects.get_or_create(
+        RoleDefinition.objects.get_or_create(
             name="Test Org Role",
             defaults={"managed": False, "content_type": ct},
         )
 
         cmd = MigrateCommand()
         cmd.stderr = Mock()
-        t = AssignmentTuple(
-            actor_ansible_id=str(user.resource.ansible_id),
-            ansible_id_or_pk=str(org.resource.ansible_id),
-            role_definition_name="Test Org Role",
-            assignment_type="user",
+        assignment = _make_remote_assignment(
+            "user",
+            str(user.resource.ansible_id),
+            "Test Org Role",
+            content_type="shared.organization",
+            object_ansible_id=str(org.resource.ansible_id),
         )
-        assert cmd._create_assignment_from_tuple(t) is True
+        assert cmd._create_assignment(assignment, "user") is True
+
+    def test_team_assignment_created(self):
+        """Team content type assignment is created by resolving via Resource ansible_id."""
+        from ansible_base.rbac.models import DABContentType
+
+        from aap_gateway_api.models import Organization, Team, User
+
+        user = User.objects.create(username="team-perm-user")
+        org = Organization.objects.create(name="test-team-perm-org")
+        team = Team.objects.create(name="test-perm-team", org=org)
+        ct = DABContentType.objects.get_for_model(team)
+        RoleDefinition.objects.get_or_create(
+            name="Test Team Role",
+            defaults={"managed": False, "content_type": ct},
+        )
+
+        cmd = MigrateCommand()
+        cmd.stderr = Mock()
+        assignment = _make_remote_assignment(
+            "user",
+            str(user.resource.ansible_id),
+            "Test Team Role",
+            content_type="shared.team",
+            object_ansible_id=str(team.resource.ansible_id),
+        )
+        assert cmd._create_assignment(assignment, "user") is True
 
     def test_remote_object_assignment_created(self):
         """Service-specific assignment is created by wrapping the PK in a RemoteObject."""
@@ -575,28 +535,28 @@ class TestCreateAssignmentFromTuple:
 
         user = User.objects.create(username="remote-perm-user")
         ct = DABContentType.objects.create(service="controller", model="inventory")
-        rd, _ = RoleDefinition.objects.get_or_create(
+        RoleDefinition.objects.get_or_create(
             name="Test Remote Role",
             defaults={"managed": False, "content_type": ct},
         )
 
         cmd = MigrateCommand()
         cmd.stderr = Mock()
-        t = AssignmentTuple(
-            actor_ansible_id=str(user.resource.ansible_id),
-            ansible_id_or_pk="12345",
-            role_definition_name="Test Remote Role",
-            assignment_type="user",
+        assignment = _make_remote_assignment(
+            "user",
+            str(user.resource.ansible_id),
+            "Test Remote Role",
+            content_type="controller.inventory",
+            object_id="12345",
         )
-        assert cmd._create_assignment_from_tuple(t) is True
+        assert cmd._create_assignment(assignment, "user") is True
 
-    def test_object_not_found_returns_false(self):
+    def test_content_object_not_found_returns_false(self):
         """When the content object's ansible_id doesn't match any Resource, return False
-        with a specific message identifying the missing object.
+        with a message that says 'content object' (not ambiguous 'object').
 
         Uses Organization content type so the code enters the org/team branch
-        (content_type.model in ('organization', 'team')) where Resource lookup
-        by ansible_id is performed and Resource.DoesNotExist is caught.
+        where Resource lookup by ansible_id is performed.
         """
         from ansible_base.rbac.models import DABContentType
 
@@ -605,7 +565,7 @@ class TestCreateAssignmentFromTuple:
         user = User.objects.create(username="obj-notfound-user")
         org = Organization.objects.create(name="obj-notfound-org")
         ct = DABContentType.objects.get_for_model(org)
-        rd, _ = RoleDefinition.objects.get_or_create(
+        RoleDefinition.objects.get_or_create(
             name="Test ObjNotFound Role",
             defaults={"managed": False, "content_type": ct},
         )
@@ -613,18 +573,21 @@ class TestCreateAssignmentFromTuple:
         fake_obj_id = str(uuid.uuid4())
         cmd = MigrateCommand()
         cmd.stderr = Mock()
-        t = AssignmentTuple(
-            actor_ansible_id=str(user.resource.ansible_id),
-            ansible_id_or_pk=fake_obj_id,
-            role_definition_name="Test ObjNotFound Role",
-            assignment_type="user",
+        assignment = _make_remote_assignment(
+            "user",
+            str(user.resource.ansible_id),
+            "Test ObjNotFound Role",
+            content_type="shared.organization",
+            object_ansible_id=fake_obj_id,
         )
-        assert cmd._create_assignment_from_tuple(t) is False
-        assert f"Unable to find object with ansible_id {fake_obj_id}" in cmd.stderr.write.call_args[0][0]
+        assert cmd._create_assignment(assignment, "user") is False
+        msg = cmd.stderr.write.call_args[0][0]
+        assert f"Unable to find content object with ansible_id {fake_obj_id}" in msg
+        assert "role 'Test ObjNotFound Role'" in msg
 
-    def test_give_permission_failure_returns_false_and_continues(self):
-        """A give_permission failure for one assignment should return False (not raise),
-        so the caller can continue processing remaining assignments."""
+    def test_give_permission_failure_includes_all_identifiers(self):
+        """A give_permission failure includes actor, role, and object identifiers
+        in the error message so operators can identify which assignment failed at scale."""
         from aap_gateway_api.models import User
 
         user = User.objects.create(username="fail-perm-user")
@@ -632,20 +595,19 @@ class TestCreateAssignmentFromTuple:
 
         cmd = MigrateCommand()
         cmd.stderr = Mock()
-        t = AssignmentTuple(
-            actor_ansible_id=str(user.resource.ansible_id),
-            ansible_id_or_pk=None,
-            role_definition_name="Test Fail Role",
-            assignment_type="user",
-        )
+        actor_id = str(user.resource.ansible_id)
+        assignment = _make_remote_assignment("user", actor_id, "Test Fail Role")
 
         with patch.object(rd, "give_global_permission", side_effect=RuntimeError("DB constraint")):
             with patch.object(RoleDefinition.objects, "get", return_value=rd):
-                result = cmd._create_assignment_from_tuple(t)
+                result = cmd._create_assignment(assignment, "user")
 
         assert result is False
         cmd.stderr.write.assert_called_once()
-        assert "Unable to give permission for user assignment" in cmd.stderr.write.call_args[0][0]
+        msg = cmd.stderr.write.call_args[0][0]
+        assert "Unable to give permission for user assignment" in msg
+        assert f"actor={actor_id}" in msg
+        assert "role='Test Fail Role'" in msg
 
 
 # =============================================================================

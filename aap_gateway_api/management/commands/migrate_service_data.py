@@ -7,7 +7,6 @@ from ansible_base.authentication.models.authenticator import Authenticator
 from ansible_base.lib.utils.settings import get_setting
 from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
 from ansible_base.rbac.remote import RemoteObject
-from ansible_base.rbac.role_sync_utils import AssignmentTuple
 from ansible_base.resource_registry.constants import (
     SHARED_AAP_FLAG_RESOURCE_TYPE,
     SHARED_ORGANIZATION_RESOURCE_TYPE,
@@ -1550,77 +1549,81 @@ class Command(BaseCommand):
         """
         created = 0
         for item in results:
-            t = self._build_assignment_tuple(item, assignment_type)
-            if t is not None and self._create_assignment_from_tuple(t):
+            if self._create_assignment(item, assignment_type):
                 created += 1
         return created
 
-    @staticmethod
-    def _build_assignment_tuple(assignment: Dict[str, Any], assignment_type: str) -> Optional[AssignmentTuple]:
-        """Build an AssignmentTuple from a remote API response item.
+    def _create_assignment(self, assignment: Dict[str, Any], assignment_type: str) -> bool:
+        """Resolve and create a single role assignment from a raw API response dict.
 
-        Key resolution matches get_local_assignments():
-        org/team content types use object_ansible_id, everything else uses
-        the raw object_id, and global assignments use None.
+        Extracts actor, role, and content object identifiers from the API
+        response, resolves them against the local database, and calls
+        give_permission to create the assignment.
+
+        Each resolution step has its own error handling with specific
+        operator-facing messages that include actor, role, and object
+        identifiers so failures can be debugged at scale.
+
+        Returns True if the assignment was created, False if skipped.
         """
-        actor_key = f'{assignment_type}_ansible_id'
-        actor_ansible_id = assignment.get(actor_key)
+        # --- Extract actor and role from the API response ---
+        actor_ansible_id = assignment.get(f'{assignment_type}_ansible_id')
         role_name = assignment.get('role_definition')
         if not actor_ansible_id or not role_name:
-            return None
+            return False
 
+        # --- Resolve the content object identifier ---
+        # org/team content types use object_ansible_id (looked up via
+        # Resource), everything else uses the raw object_id (wrapped
+        # in RemoteObject), and global assignments use None.
         content_type_str = assignment.get('content_type', '')
         model = content_type_str.split('.')[-1] if content_type_str else ''
 
         if model in ('organization', 'team'):
-            ansible_id_or_pk = assignment.get('object_ansible_id')
+            object_ref = assignment.get('object_ansible_id')
         else:
             obj_id = assignment.get('object_id')
-            ansible_id_or_pk = str(obj_id) if obj_id is not None else None
+            object_ref = str(obj_id) if obj_id is not None else None
 
-        return AssignmentTuple(
-            actor_ansible_id=actor_ansible_id,
-            ansible_id_or_pk=ansible_id_or_pk,
-            role_definition_name=role_name,
-            assignment_type=assignment_type,
-        )
-
-    def _create_assignment_from_tuple(self, assignment_tuple: AssignmentTuple) -> bool:
-        """Create a local role assignment from an AssignmentTuple.
-
-        Handles global assignments, org/team objects (via Resource), and
-        service-specific remote objects (via RemoteObject).  Each resolution
-        step has its own error handling so operators get specific messages.
-        """
+        # --- Look up the RoleDefinition ---
         try:
-            role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
+            role_definition = RoleDefinition.objects.get(name=role_name)
         except RoleDefinition.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find role definition {assignment_tuple.role_definition_name}, skipping assignment")
+            self.stderr.write(f"Warning: Unable to find role definition '{role_name}', skipping {assignment_type} assignment for actor {actor_ansible_id}")
             return False
 
+        # --- Resolve the actor via Resource ---
         try:
-            actor = Resource.objects.get(ansible_id=assignment_tuple.actor_ansible_id).content_object
+            actor = Resource.objects.get(ansible_id=actor_ansible_id).content_object
         except Resource.DoesNotExist:
-            self.stderr.write(
-                f"Warning: Unable to find {assignment_tuple.assignment_type} with ansible_id {assignment_tuple.actor_ansible_id}, skipping assignment"
-            )
+            self.stderr.write(f"Warning: Unable to find {assignment_type} with ansible_id {actor_ansible_id}, skipping assignment for role '{role_name}'")
             return False
 
+        # --- Create the assignment ---
         try:
-            if assignment_tuple.ansible_id_or_pk is None:
+            if object_ref is None:
                 role_definition.give_global_permission(actor)
             elif role_definition.content_type and role_definition.content_type.model in ('organization', 'team'):
-                obj_resource = Resource.objects.get(ansible_id=assignment_tuple.ansible_id_or_pk)
+                obj_resource = Resource.objects.get(ansible_id=object_ref)
                 role_definition.give_permission(actor, obj_resource.content_object)
             else:
-                remote_obj = RemoteObject(role_definition.content_type, assignment_tuple.ansible_id_or_pk)
+                remote_obj = RemoteObject(role_definition.content_type, object_ref)
                 role_definition.give_permission(actor, remote_obj)
             return True
         except Resource.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find object with ansible_id {assignment_tuple.ansible_id_or_pk}, skipping assignment")
+            self.stderr.write(
+                f"Warning: Unable to find content object with "
+                f"ansible_id {object_ref}, "
+                f"skipping {assignment_type} assignment for actor {actor_ansible_id} "
+                f"with role '{role_name}'"
+            )
             return False
         except Exception as e:
-            self.stderr.write(f"Warning: Unable to give permission for {assignment_tuple.assignment_type} assignment, skipping: {e}")
+            self.stderr.write(
+                f"Warning: Unable to give permission for {assignment_type} assignment "
+                f"(actor={actor_ansible_id}, role='{role_name}', object={object_ref}), "
+                f"skipping: {e}"
+            )
             return False
 
     def migrate_role_assignments(self, service_slug: str, service_type_name: str) -> None:
