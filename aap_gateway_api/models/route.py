@@ -67,6 +67,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     is_internal_route = models.BooleanField(
         default=False, help_text=_("If true, the gateway will only allow other Ansible services to access this route. Requires gateway auth to be enabled.")
     )
+    # Indicates that this route serves a container registry (e.g. /v2/, /token/).
+    is_container_registry = models.BooleanField(
+        default=False,
+        help_text=_("If true, this route serves a container registry endpoint and the gateway will enforce Basic credential validation during the auth flow."),
+    )
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every
@@ -118,6 +123,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
     def is_internal_route_string(self):
         return "t" if self.is_internal_route else "f"
+
+    def is_container_registry_string(self):
+        return "t" if self.is_container_registry else "f"
 
     def node_tags_list(self):
         return [tag.strip() for tag in self.node_tags.split(",")] if self.node_tags else []
@@ -282,6 +290,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     # map<string, string> to be sent to auth server per route
                     "context_extensions": {
                         "is_internal_route": self.is_internal_route_string(),
+                        "is_container_registry": self.is_container_registry_string(),
                         "service_type": self.service_cluster.service_type.name,
                         "auth_type": self.service_cluster.auth_type,
                     },

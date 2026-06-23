@@ -77,6 +77,7 @@ class Command(BaseCommand):
                 additional_route_enable_gateway_auth = additional_route.get("enable_gateway_auth", enable_gateway_auth)
                 # the route can specify mtls, but will default to the setting for the service
                 additional_route_enable_mtls = additional_route.get("enable_mtls", enable_mtls)
+                additional_route_is_container_registry = additional_route.get("is_container_registry", False)
 
                 self.stdout.write(f'Creating {gateway_path} route for {service_type}')
 
@@ -92,5 +93,6 @@ class Command(BaseCommand):
                         "service_cluster": service,
                         "enable_gateway_auth": additional_route_enable_gateway_auth,
                         "enable_mtls": additional_route_enable_mtls,
+                        "is_container_registry": additional_route_is_container_registry,
                     },
                 )

@@ -19,6 +19,7 @@ class AdditionalRouteSerializer(BaseRouteSerializer):
             'service_port',
             'is_service_https',
             'is_internal_route',
+            'is_container_registry',
             'service_path',
             'gateway_path',
             'description',
