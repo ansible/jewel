@@ -290,12 +290,12 @@ class TestContainerRegistryAuth:
             path="/v2/",
             service_type="hub",
             is_container_registry="t",
-            header_diff={"AUTHORIZATION": "Basic YWRtaW46cGFzc3dvcmQ="},
+            header_diff={"AUTHORIZATION": "Basic YWRtaW46cGFzc3dvcmQ="},  # admin:password
         )
 
         with mock.patch(
-            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
-            return_value=(admin_user, "ServiceTokenAuthentication"),
+            "aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication.authenticate",
+            return_value=(admin_user, None),
         ):
             response = ext_auth.Check(request, None)
 
