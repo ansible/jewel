@@ -120,8 +120,8 @@ class TestCursorStore:
         assert _CursorStore("controller", "team").last_pk == 20
         assert _CursorStore("hub", "user").last_pk == 30
 
-    def test_graceful_degradation_on_db_error(self):
-        """If the database is unreachable, last_pk defaults to 0 and a warning is logged.
+    def test_graceful_degradation_on_load_error(self):
+        """If the database is unreachable during load, last_pk defaults to 0.
 
         This ensures the command can still run (reprocessing all assignments)
         rather than failing outright on a cursor table issue.
@@ -131,6 +131,24 @@ class TestCursorStore:
             cursor = _CursorStore("controller", "user")
 
         assert cursor.last_pk == 0
+
+    def test_graceful_degradation_on_advance_error(self):
+        """If the database fails during advance(), a warning is logged but
+        no exception is raised.
+
+        The next invocation will reprocess from the old cursor position,
+        which is safe because give_permission is idempotent.
+        """
+        cursor = _CursorStore("controller-adv-err", "user")
+
+        with patch("aap_gateway_api.management.commands.migrate_service_data.connection") as mock_conn:
+            mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
+            # Should not raise — degrades gracefully
+            cursor.advance(42)
+
+        # The advance failed, so a new cursor should still read 0
+        new_cursor = _CursorStore("controller-adv-err", "user")
+        assert new_cursor.last_pk == 0
 
 
 # =============================================================================
@@ -526,6 +544,24 @@ class TestCreateAssignment:
             object_ansible_id=str(team.resource.ansible_id),
         )
         assert cmd._create_assignment(assignment, "user") is True
+
+    def test_team_actor_global_assignment_created(self):
+        """Team actor assignment uses team_ansible_id (not user_ansible_id).
+
+        The assignment_type controls which key is used to extract the
+        actor identifier from the API response dict. This test verifies
+        that the 'team' path works end-to-end with a Team as the actor.
+        """
+        from aap_gateway_api.models import Organization, Team
+
+        org = Organization.objects.create(name="team-actor-org")
+        team = Team.objects.create(name="team-actor-team", org=org)
+        RoleDefinition.objects.get_or_create(name="Test Team Actor Role", defaults={"managed": False})
+
+        cmd = MigrateCommand()
+        cmd.stderr = Mock()
+        assignment = _make_remote_assignment("team", str(team.resource.ansible_id), "Test Team Actor Role")
+        assert cmd._create_assignment(assignment, "team") is True
 
     def test_remote_object_assignment_created(self):
         """Service-specific assignment is created by wrapping the PK in a RemoteObject."""
