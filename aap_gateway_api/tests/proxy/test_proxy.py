@@ -7,6 +7,7 @@ from envoy.service.auth.v3 import external_auth_pb2
 from envoy.type.v3 import http_status_pb2
 from google.rpc import status_pb2
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import SAFE_METHODS
 
 from aap_gateway_api.proxy.control_plane import ExternalAuth, _ExternalAuth, get_drf_request
@@ -67,6 +68,7 @@ class Request:
         body="",
         query="",
         is_internal_route="f",
+        is_container_registry="f",
         service_type="gateway",
         auth_type="JWT",
         scheme="http",
@@ -86,6 +88,7 @@ class Request:
         self.http = self
         self.context_extensions = {
             "is_internal_route": is_internal_route,
+            "is_container_registry": is_container_registry,
             "service_type": service_type,
             "auth_type": auth_type,
         }
@@ -239,6 +242,81 @@ class TestExternalAuth:
             response = ext_auth.Check(request, None)
         for header in expected_headers:
             assert any(x for x in response.ok_response.headers if x.header.key == header)
+
+
+@pytest.mark.django_db
+class TestContainerRegistryAuth:
+    """Tests for container registry authentication in the gRPC control plane.
+
+    Verifies that routes with is_container_registry=True reject invalid
+    credentials instead of silently passing them through as anonymous.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def mock_close_old_connections(self):
+        with mock.patch("aap_gateway_api.proxy.control_plane.close_old_connections"):
+            yield
+
+    def test_invalid_credentials_rejected_for_registry_route(self, ext_auth):
+        """Invalid Basic auth on a container registry route should return 401."""
+        request = Request(
+            path="/token/",
+            service_type="hub",
+            is_container_registry="t",
+            header_diff={"AUTHORIZATION": "Basic aW52YWxpZDppbnZhbGlk"},
+        )
+
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            side_effect=AuthenticationFailed("Invalid credentials"),
+        ):
+            response = ext_auth.Check(request, None)
+
+        assert response.status.code == 16
+        assert response.denied_response.status.code == 401
+        assert "Invalid credentials" in response.status.message
+
+    def test_anonymous_request_passes_through_for_registry_route(self, ext_auth):
+        """Registry route without credentials should pass through for the token handshake."""
+        request = Request(path="/v2/", service_type="hub", is_container_registry="t")
+
+        response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+
+    def test_valid_credentials_succeed_for_registry_route(self, ext_auth, admin_user):
+        """Valid Basic auth on a container registry route should authenticate normally."""
+        request = Request(
+            path="/v2/",
+            service_type="hub",
+            is_container_registry="t",
+            header_diff={"AUTHORIZATION": "Basic YWRtaW46cGFzc3dvcmQ="},
+        )
+
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            return_value=(admin_user, "ServiceTokenAuthentication"),
+        ):
+            response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+
+    def test_invalid_credentials_pass_through_for_non_registry_route(self, ext_auth):
+        """Invalid credentials on a non-registry route should pass through (existing behavior)."""
+        request = Request(
+            path="/api/galaxy/v3/namespaces/",
+            service_type="hub",
+            is_container_registry="f",
+            header_diff={"AUTHORIZATION": "Basic aW52YWxpZDppbnZhbGlk"},
+        )
+
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            side_effect=AuthenticationFailed("Invalid credentials"),
+        ):
+            response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
 
 
 class MockOAuth2Token:
