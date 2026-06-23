@@ -79,37 +79,73 @@ class Command(BaseCommand):
     There is no option to control merging of users, because users are never migrated.
     The exception is that the provided --username, which will be merged."""
 
+    def _configure_logging(self, log_file: Optional[str]) -> None:
+        """
+        Configure the command's logger based on --log-file.
+
+        When a log file path is provided, attaches a StreamHandler at INFO level
+        so progress messages are written with structured formatting. When omitted,
+        replaces all handlers with a NullHandler so logger calls are silently
+        discarded and all output goes through self.stdout only.
+        """
+        logger.handlers.clear()
+        logger.propagate = False
+
+        if log_file:
+            self._log_file_handle = open(log_file, 'w')
+            handler = logging.StreamHandler(self._log_file_handle)
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(name)s %(message)s'))
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+        else:
+            logger.addHandler(logging.NullHandler())
+
+    def _log(self, msg: str, level: int = logging.INFO) -> None:
+        """
+        Write a message to both stdout (returned to the caller) and the logger
+        (written to --log-file when provided).
+        """
+        if level >= logging.WARNING:
+            self.stderr.write(self.style.WARNING(msg))
+        else:
+            self.stdout.write(msg)
+        logger.log(level, msg)
+
     def _log_progress(self, label: str, processed: int, total: int) -> None:
         """
-        Log migration progress when a percentage threshold is crossed.
+        Report migration progress when a percentage threshold is crossed.
 
-        Emits a log line at every PROGRESS_STEP% interval. Always logs a starting
+        Emits a message at every PROGRESS_STEP% interval. Always reports a starting
         message on the first item and a 100% message on the last item. If a single
         item crosses multiple thresholds, only the highest is reported.
+
+        Output goes through _log(), which writes to both stdout and --log-file.
         """
+        msg = None
+
         if total == 0:
-            logger.info("Migration progress [%s]: 0 items to process", label)
-            return
+            msg = f"Migration progress [{label}]: 0 items to process"
+        else:
+            percent = (processed / total) * 100
+            threshold = (int(percent) // self.PROGRESS_STEP) * self.PROGRESS_STEP
+            last = self._progress_thresholds.get(label, -1)
 
-        percent = (processed / total) * 100
-        threshold = (int(percent) // self.PROGRESS_STEP) * self.PROGRESS_STEP
-        last = self._progress_thresholds.get(label, -1)
+            if processed >= total:
+                if last < 100:
+                    self._progress_thresholds[label] = 100
+                    msg = f"Migration progress [{label}]: {processed}/{total} (100%)"
+            elif processed == 1 and last < 0:
+                self._progress_thresholds[label] = threshold
+                msg = f"Migration progress [{label}]: {processed}/{total} ({threshold}%)"
+            else:
+                threshold = min(threshold, 100)
+                if threshold > last:
+                    self._progress_thresholds[label] = threshold
+                    msg = f"Migration progress [{label}]: {processed}/{total} ({threshold}%)"
 
-        if processed >= total:
-            if last < 100:
-                self._progress_thresholds[label] = 100
-                logger.info("Migration progress [%s]: %d/%d (100%%)", label, processed, total)
-            return
-
-        if processed == 1 and last < 0:
-            self._progress_thresholds[label] = threshold
-            logger.info("Migration progress [%s]: %d/%d (%d%%)", label, processed, total, threshold)
-            return
-
-        threshold = min(threshold, 100)
-        if threshold > last:
-            self._progress_thresholds[label] = threshold
-            logger.info("Migration progress [%s]: %d/%d (%d%%)", label, processed, total, threshold)
+        if msg:
+            self._log(msg)
 
     def add_arguments(self, parser) -> None:
         """
@@ -142,6 +178,13 @@ class Command(BaseCommand):
             ),
             default=True,
         )
+        parser.add_argument(
+            "--log-file",
+            type=str,
+            help="Path to write structured log output (e.g. /proc/1/fd/1 for container logs). When omitted, progress is only written to stdout.",
+            required=False,
+            default=None,
+        )
 
     def _warn_ignored_flags(self, options: dict) -> None:
         if options.get("api_slug"):
@@ -173,6 +216,7 @@ class Command(BaseCommand):
             CommandError: If service doesn't exist, user doesn't exist, or migration fails
         """
         self._warn_ignored_flags(options)
+        self._configure_logging(options.get("log_file"))
 
         if MigrateServiceDataHasRan.has_migration_completed():
             self.stdout.write("Migration has already completed. Skipping.")
@@ -713,10 +757,10 @@ class Command(BaseCommand):
             updated_service_resource["service_id"] = existing_resource.service_id
 
             if incoming_data == local_data:
-                logger.info(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.")
+                self._log(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.")
             else:
                 updated_service_resource["resource_data"] = local_data
-                logger.warning(f"Updating already-merged {resource_type.name} with name {upstream_resource['name']}.")
+                self._log(f"Updating already-merged {resource_type.name} with name {upstream_resource['name']}.", logging.WARNING)
 
         # case 2: merge: We only set upstream metadata and ansible_id to be the same as gateway's
         # don't set anything on the gateway
@@ -727,7 +771,7 @@ class Command(BaseCommand):
                 "resource_data": local_data,
             }
         )
-        logger.warning(f"Merging {resource_type.name} with conflicting name {upstream_resource['name']}.")
+        self._log(f"Merging {resource_type.name} with conflicting name {upstream_resource['name']}.", logging.WARNING)
 
         return create_gateway_resource
 
@@ -1417,7 +1461,7 @@ class Command(BaseCommand):
         page = 1
         total_count = None  # we will check this on each page to see if anything changed
         while True:
-            logger.info(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}")
+            self._log(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}")
             filters: Dict[str, int | str] = {'page': page, **self.BIG_PAGE_FILTERS}
             if role_definitions_to_exclude:
                 filters['not__role_definition__name__in'] = ','.join(role_definitions_to_exclude)
@@ -1433,9 +1477,10 @@ class Command(BaseCommand):
                 self._current_assignment_total = total_count
             elif total_count != json_response.get('count', 0):
                 new_count = json_response.get('count', 0)
-                logger.warning(
+                self._log(
                     f"Role {assignment_actor.value} assignment count changed from {total_count} to {new_count}"
-                    " during pagination (concurrent modification); continuing but will need re-run"
+                    " during pagination (concurrent modification); continuing but will need re-run",
+                    logging.WARNING,
                 )
                 total_count = new_count
                 self._services_with_count_drift.add(service_slug)
