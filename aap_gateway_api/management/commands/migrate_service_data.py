@@ -53,6 +53,7 @@ class _CursorStore:
     case is slower, not incorrect.
     """
 
+    # Hardcoded constant — not derived from user input, safe in f-string SQL.
     _TABLE = "migrate_service_data_role_cursor"
 
     def __init__(self, service_slug, assignment_type):
@@ -64,16 +65,21 @@ class _CursorStore:
     def _ensure_table(self):
         """Create the cursor table if it does not already exist."""
         with connection.cursor() as cur:
+            # VARCHAR(16) for assignment_type provides headroom beyond the
+            # current values ('user', 'team') so adding a new type won't
+            # require a schema change.
+            # ON CONFLICT ... DO UPDATE is PostgreSQL-specific; this project
+            # only targets PostgreSQL so that is acceptable.
             cur.execute(
                 f"CREATE TABLE IF NOT EXISTS {self._TABLE} ("
                 "  service_slug VARCHAR(255) NOT NULL,"
-                "  assignment_type VARCHAR(4) NOT NULL,"
+                "  assignment_type VARCHAR(16) NOT NULL,"
                 "  last_pk BIGINT NOT NULL DEFAULT 0,"
                 "  PRIMARY KEY (service_slug, assignment_type)"
                 ")"
             )
 
-    def _load(self):
+    def _load(self) -> int:
         """Read current cursor value from DB, returning 0 on any failure."""
         try:
             self._ensure_table()
@@ -1594,7 +1600,15 @@ class Command(BaseCommand):
 
         # --- Resolve the actor via Resource ---
         try:
-            actor = Resource.objects.get(ansible_id=actor_ansible_id).content_object
+            actor_resource = Resource.objects.get(ansible_id=actor_ansible_id)
+            actor = actor_resource.content_object
+            # content_object is None when the underlying object was deleted
+            # but the Resource row still exists (stale generic FK).
+            if actor is None:
+                self.stderr.write(
+                    f"Warning: Resource {actor_ansible_id} exists but its {assignment_type} object was deleted, skipping assignment for role '{role_name}'"
+                )
+                return False
         except Resource.DoesNotExist:
             self.stderr.write(f"Warning: Unable to find {assignment_type} with ansible_id {actor_ansible_id}, skipping assignment for role '{role_name}'")
             return False
@@ -1605,7 +1619,16 @@ class Command(BaseCommand):
                 role_definition.give_global_permission(actor)
             elif role_definition.content_type and role_definition.content_type.model in ('organization', 'team'):
                 obj_resource = Resource.objects.get(ansible_id=object_ref)
-                role_definition.give_permission(actor, obj_resource.content_object)
+                content_object = obj_resource.content_object
+                if content_object is None:
+                    self.stderr.write(
+                        f"Warning: Resource {object_ref} exists but its "
+                        f"content object was deleted, "
+                        f"skipping {assignment_type} assignment for actor {actor_ansible_id} "
+                        f"with role '{role_name}'"
+                    )
+                    return False
+                role_definition.give_permission(actor, content_object)
             else:
                 remote_obj = RemoteObject(role_definition.content_type, object_ref)
                 role_definition.give_permission(actor, remote_obj)
