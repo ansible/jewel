@@ -124,12 +124,18 @@ class Command(BaseCommand):
         """
         Write a message to both stdout (returned to the caller) and the logger
         (written to --log-file when provided).
+
+        Stdout/stderr receives the message as-is (preserving newlines for
+        terminal formatting). The logger receives each non-empty line as a
+        separate log record so the formatter prefix appears on every line.
         """
         if level >= logging.WARNING:
             self.stderr.write(self.style.WARNING(msg))
         else:
             self.stdout.write(msg)
-        logger.log(level, msg)
+        for line in msg.split('\n'):
+            if line:
+                logger.log(level, line)
 
     def _log_progress(self, label: str, processed: int, total: int) -> None:
         """
