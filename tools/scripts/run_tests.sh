@@ -21,5 +21,5 @@ pytest \
     --cov-report=json \
     --cov-branch \
     --junit-xml=aap-gateway-test-results.xml \
-    ${GATEWAY_TEST_DIRS-aap_gateway_api/tests} \
+    ${GATEWAY_TEST_DIRS:-aap_gateway_api/tests} \
     "$@"
