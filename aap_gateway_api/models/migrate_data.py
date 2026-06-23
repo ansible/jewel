@@ -3,48 +3,6 @@ import time
 from django.db import models
 
 
-class MigrateServiceDataLastRolePK(models.Model):
-    """Stores the last-processed role assignment PK per service and actor type.
-
-    Used by the migrate_service_data command to resume role assignment
-    migration from where it left off.  On each run the command queries the
-    upstream service with ``id__gt=<last_pk>&order_by=id`` so only
-    assignments created since the last run are fetched.  The cursor is
-    advanced after each fully-processed page, providing crash safety —
-    at most one page of work is lost on a crash or kill.
-    """
-
-    service_slug = models.CharField(max_length=255, help_text="API slug of the upstream service (e.g. controller, hub, eda)")
-    assignment_type = models.CharField(
-        max_length=4,
-        choices=[('user', 'User'), ('team', 'Team')],
-        help_text="Whether this cursor tracks user or team role assignments",
-    )
-    last_pk = models.BigIntegerField(default=0, help_text="PK of the last successfully processed role assignment from this service")
-
-    class Meta:
-        unique_together = ('service_slug', 'assignment_type')
-        verbose_name = "Migrate Service Data Role Assignment Cursor"
-        verbose_name_plural = "Migrate Service Data Role Assignment Cursors"
-
-    def __str__(self):
-        return f"{self.service_slug}/{self.assignment_type}: last_pk={self.last_pk}"
-
-    @classmethod
-    def get_last_pk(cls, service_slug, assignment_type):
-        """Get or create the cursor for a service/type pair, defaulting to 0."""
-        obj, _ = cls.objects.get_or_create(
-            service_slug=service_slug,
-            assignment_type=assignment_type,
-        )
-        return obj
-
-    def advance(self, pk):
-        """Move the cursor forward to the given PK."""
-        self.last_pk = pk
-        self.save(update_fields=['last_pk'])
-
-
 class MigrateServiceDataHasRan(models.Model):
     """
     Model to track whether the migrate_service_data command has been successfully executed.

@@ -22,16 +22,105 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
 from django.core.management.base import BaseCommand, CommandError
-from django.db import models, transaction
+from django.db import connection, models, transaction
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceType
-from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan, MigrateServiceDataLastRolePK
+from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 from aap_gateway_api.models.service_type import DefaultServiceType, get_service_type_name
 from aap_gateway_api.utils import resources_client  # this importing helps to cleanly mock
 from aap_gateway_api.utils.user_migration import can_accounts_be_merged, link_account, migrate_account
 
 logger = logging.getLogger('aap.gateway.management.commands.migrate_service_data')
 User = get_user_model()
+
+
+class _CursorStore:
+    """Raw-SQL cursor for PK-based role assignment pagination.
+
+    Stores (service_slug, assignment_type, last_pk) tuples in a
+    self-managed database table, avoiding Django migrations entirely.
+    This makes the cursor self-bootstrapping on any branch and
+    trivial to backport across versions.
+
+    Key invariant: self.last_pk is set once in __init__ and NEVER
+    mutated.  advance() only persists progress to the database.
+    This ensures the HTTP id__gt filter stays immutable across all
+    pages of a single run, preventing items from being skipped when
+    the cursor advances in the database between pages.
+
+    If any database operation fails, the store degrades gracefully
+    to last_pk=0, causing the command to reprocess all assignments.
+    Since give_permission is idempotent, this is safe — the worst
+    case is slower, not incorrect.
+    """
+
+    _TABLE = "migrate_service_data_role_cursor"
+
+    def __init__(self, service_slug, assignment_type):
+        """Load the cursor from DB, setting self.last_pk once (immutably)."""
+        self.service_slug = service_slug
+        self.assignment_type = assignment_type
+        self.last_pk = self._load()
+
+    def _ensure_table(self):
+        """Create the cursor table if it does not already exist."""
+        with connection.cursor() as cur:
+            cur.execute(
+                f"CREATE TABLE IF NOT EXISTS {self._TABLE} ("
+                "  service_slug VARCHAR(255) NOT NULL,"
+                "  assignment_type VARCHAR(4) NOT NULL,"
+                "  last_pk BIGINT NOT NULL DEFAULT 0,"
+                "  PRIMARY KEY (service_slug, assignment_type)"
+                ")"
+            )
+
+    def _load(self):
+        """Read current cursor value from DB, returning 0 on any failure."""
+        try:
+            self._ensure_table()
+            with connection.cursor() as cur:
+                cur.execute(
+                    f"SELECT last_pk FROM {self._TABLE} WHERE service_slug = %s AND assignment_type = %s",
+                    [self.service_slug, self.assignment_type],
+                )
+                row = cur.fetchone()
+                return row[0] if row else 0
+        except Exception:
+            logger.warning(
+                "Failed to load cursor for %s/%s, will reprocess all assignments",
+                self.service_slug,
+                self.assignment_type,
+                exc_info=True,
+            )
+            return 0
+
+    def advance(self, pk):
+        """Persist progress to DB without mutating self.last_pk.
+
+        The in-memory last_pk stays at its initial value so the HTTP
+        id__gt filter remains consistent across all pages of a run.
+        If the upsert fails, a warning is logged but the run continues —
+        the next invocation will reprocess from the old position, which
+        is safe because give_permission is idempotent.
+        """
+        try:
+            with connection.cursor() as cur:
+                cur.execute(
+                    f"INSERT INTO {self._TABLE}"
+                    " (service_slug, assignment_type, last_pk)"
+                    " VALUES (%s, %s, %s)"
+                    " ON CONFLICT (service_slug, assignment_type)"
+                    " DO UPDATE SET last_pk = EXCLUDED.last_pk",
+                    [self.service_slug, self.assignment_type, pk],
+                )
+        except Exception:
+            logger.warning(
+                "Failed to advance cursor for %s/%s to %d; next run will reprocess from the old position",
+                self.service_slug,
+                self.assignment_type,
+                pk,
+                exc_info=True,
+            )
 
 
 class Command(BaseCommand):
@@ -1397,13 +1486,17 @@ class Command(BaseCommand):
     # service so the installer/reconcile loop retries the whole command.
     HTTP_RETRY_LIMIT = 3
 
-    def _build_page_filters(self, page: int, roles_to_exclude: List[str], cursor: 'MigrateServiceDataLastRolePK') -> Dict[str, Any]:
-        """Build query filters for one page of cursor-based assignment pagination."""
+    def _build_page_filters(self, page: int, roles_to_exclude: List[str], snapshot_pk: int) -> Dict[str, Any]:
+        """Build query filters for one page of cursor-based assignment pagination.
+
+        ``snapshot_pk`` is the cursor value captured at the start of the run.
+        It must stay constant across all pages to prevent item skipping.
+        """
         filters: Dict[str, Any] = {'page': page, 'order_by': 'id', **self.BIG_PAGE_FILTERS}
         if roles_to_exclude:
             filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
-        if cursor.last_pk > 0:
-            filters['id__gt'] = str(cursor.last_pk)
+        if snapshot_pk > 0:
+            filters['id__gt'] = str(snapshot_pk)
         return filters
 
     def _fetch_page_with_retry(self, list_fn, assignment_type: str, filters: Dict[str, Any]) -> Any:
@@ -1422,22 +1515,29 @@ class Command(BaseCommand):
             logger.warning(f"HTTP {response.status_code} fetching {assignment_type} assignments page {page} ({retries_left} retries left)")
         raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code} after {self.HTTP_RETRY_LIMIT} attempts")
 
-    def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: 'MigrateServiceDataLastRolePK') -> int:
+    def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: '_CursorStore') -> int:
         """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
 
-        Queries with ``order_by=id&id__gt=<cursor.last_pk>`` so only
-        assignments newer than the cursor are fetched.  On a reinstall
-        where the cursor is already past the last PK, the first page
-        returns zero results and the method completes immediately.
+        Queries with ``order_by=id&id__gt=<snapshot_pk>`` so only
+        assignments newer than the cursor are fetched.  The snapshot_pk
+        is captured once and stays immutable for the entire run, preventing
+        items from being skipped when the DB cursor advances between pages.
 
-        The cursor is advanced after each fully-processed page, providing
-        crash safety — at most one page of work is lost on a crash or kill.
+        On a reinstall where the cursor is already past the last PK,
+        the first page returns zero results and the method returns
+        immediately.
+
+        Crash safety: the cursor is advanced in the database after each
+        fully-processed page, so at most one page of work is lost.
         """
         page = 1
         created = 0
+        # Snapshot is immutable — cursor.last_pk is set once in __init__
+        # and never changes. This value is used for all id__gt filters.
+        snapshot_pk = cursor.last_pk
 
         while True:
-            filters = self._build_page_filters(page, roles_to_exclude, cursor)
+            filters = self._build_page_filters(page, roles_to_exclude, snapshot_pk)
             response = self._fetch_page_with_retry(list_fn, assignment_type, filters)
 
             data = response.json()
@@ -1447,8 +1547,8 @@ class Command(BaseCommand):
 
             created += self._create_page_assignments(results, assignment_type)
 
-            # Advance cursor after each fully-processed page so progress
-            # is saved even if the process is killed before the next page.
+            # Advance cursor in DB for crash recovery, but do NOT mutate
+            # snapshot_pk — the HTTP filter must stay consistent.
             last_pk_on_page = self._extract_last_pk(results)
             if last_pk_on_page is not None:
                 cursor.advance(last_pk_on_page)
@@ -1559,9 +1659,8 @@ class Command(BaseCommand):
         returns zero results and migration completes immediately.
 
         The cursor is persisted per page, so a crash or kill loses at most
-        one page of work.  HTTP errors are retried up to HTTP_RETRY_LIMIT
-        times per page; exhausted retries raise RuntimeError to fail the
-        service (non-zero exit for the installer to retry).
+        one page of work.  HTTP errors raise RuntimeError to fail the
+        service (non-zero exit for the installer to retry the whole command).
 
         give_permission is idempotent (uses get_or_create), so replaying
         a partial page after a crash is safe.
@@ -1572,7 +1671,7 @@ class Command(BaseCommand):
         total_created = 0
         for assignment_type in ('user', 'team'):
             list_fn = self.client.list_user_assignments if assignment_type == 'user' else self.client.list_team_assignments
-            cursor = MigrateServiceDataLastRolePK.get_last_pk(service_slug, assignment_type)
+            cursor = _CursorStore(service_slug, assignment_type)
             created = self._paginate_and_create(list_fn, assignment_type, roles_to_exclude, cursor)
             total_created += created
             self.stdout.write(f"  {assignment_type}: {created} assignments created")
