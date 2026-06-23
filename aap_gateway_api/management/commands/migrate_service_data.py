@@ -1486,6 +1486,26 @@ class Command(BaseCommand):
         }
         return sorted(ROLE_EXCLUSION_SETS.get(service_type, DEFAULT_EXCLUSION_SET))
 
+    @staticmethod
+    def _raise_fetch_error(response, assignment_type: str, page: int) -> None:
+        """Log and raise RuntimeError for a failed assignment page fetch.
+
+        Captures up to 500 characters of the response body so operators
+        can diagnose upstream errors without searching service logs.
+        """
+        body_preview = ""
+        try:
+            body_preview = response.text[:500]
+        except Exception:
+            pass
+        logger.warning(
+            "HTTP %d fetching %s assignments page %d",
+            response.status_code,
+            assignment_type,
+            page,
+        )
+        raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code}\n{body_preview}")
+
     def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: '_CursorStore') -> int:
         """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
 
@@ -1519,13 +1539,7 @@ class Command(BaseCommand):
         while True:
             response = list_fn(filters={**base_filters, 'page': page})
             if response.status_code != 200:
-                logger.warning(
-                    "HTTP %d fetching %s assignments page %d",
-                    response.status_code,
-                    assignment_type,
-                    page,
-                )
-                raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code}")
+                self._raise_fetch_error(response, assignment_type, page)
 
             data = response.json()
             results = data.get('results') or []
@@ -1537,8 +1551,9 @@ class Command(BaseCommand):
             # Advance cursor in DB for crash recovery.  cursor.last_pk
             # is NOT mutated — base_filters stays consistent.
             last_pk_on_page = results[-1].get('id')
-            if last_pk_on_page is not None:
-                cursor.advance(last_pk_on_page)
+            if last_pk_on_page is None:
+                raise RuntimeError(f"API returned {assignment_type} assignment without 'id' field — cannot advance cursor")
+            cursor.advance(last_pk_on_page)
 
             if not data.get('next'):
                 break
@@ -1685,6 +1700,11 @@ class Command(BaseCommand):
         one page of work.  HTTP errors raise RuntimeError to fail the
         service (non-zero exit for the installer to retry the whole command).
 
+        After all pages are processed, a post-run drift check detects
+        assignments created during the run.  If drift is found, RuntimeError
+        is raised so the installer retries and the cursor picks up the
+        new items.
+
         give_permission is idempotent (uses get_or_create), so replaying
         a partial page after a crash is safe.
         """
@@ -1692,6 +1712,7 @@ class Command(BaseCommand):
         roles_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
 
         total_created = 0
+        drift_detected = False
         for assignment_type in ('user', 'team'):
             list_fn = self.client.list_user_assignments if assignment_type == 'user' else self.client.list_team_assignments
             cursor = _CursorStore(service_slug, assignment_type)
@@ -1699,4 +1720,48 @@ class Command(BaseCommand):
             total_created += created
             self.stdout.write(f"  {assignment_type}: {created} assignments created")
 
+            # Post-run drift check: detect assignments created on the
+            # upstream service since the last page was fetched.  This is
+            # one extra API call per type — negligible overhead — but it
+            # restores the installer's ability to detect incomplete state.
+            #
+            # Note: this only captures items created between "last page
+            # fetched" and "this check."  A tiny window remains between
+            # this check and the migration flag being set, but that gap
+            # is milliseconds and practically negligible.
+            if self._check_for_drift(list_fn, assignment_type, service_slug):
+                drift_detected = True
+
         self.stdout.write(f"Role assignment migration for {service_slug} completed ({total_created} total created)")
+
+        if drift_detected:
+            raise RuntimeError(
+                f"Role assignment migration for {service_slug} completed "
+                f"({total_created} created) but concurrent modifications were "
+                f"detected. Re-run to process remaining assignments."
+            )
+
+    def _check_for_drift(self, list_fn, assignment_type: str, service_slug: str) -> bool:
+        """Check if new assignments appeared since the cursor was last advanced.
+
+        Loads a fresh cursor from the DB (reflecting the last advance()
+        call) and asks the API if any items exist beyond it.  Returns
+        True if drift is detected, False otherwise.
+        """
+        db_cursor = _CursorStore(service_slug, assignment_type)
+        if db_cursor.last_pk <= 0:
+            return False
+
+        try:
+            check_resp = list_fn(filters={'order_by': 'id', 'id__gt': str(db_cursor.last_pk), 'page_size': '1'})
+            if check_resp.status_code == 200 and check_resp.json().get('count', 0) > 0:
+                self.stderr.write(f"Warning: new {assignment_type} assignments appeared during migration of {service_slug} (concurrent modification)")
+                return True
+        except Exception:
+            logger.warning(
+                "Drift check failed for %s/%s, assuming no drift",
+                service_slug,
+                assignment_type,
+                exc_info=True,
+            )
+        return False

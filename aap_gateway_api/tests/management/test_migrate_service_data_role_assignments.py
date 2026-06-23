@@ -274,15 +274,17 @@ class TestPaginateAndCreate:
         new_cursor = _CursorStore("test-svc-empty", "user")
         assert new_cursor.last_pk == 50
 
-    def test_http_error_raises_immediately(self):
-        """HTTP error raises RuntimeError immediately — no per-page retry.
+    def test_http_error_raises_immediately_with_body_preview(self):
+        """HTTP error raises RuntimeError immediately with response body preview.
 
         The PK cursor provides crash recovery: the installer re-runs the
         command and the cursor resumes from the last completed page,
-        making per-page retry redundant.
+        making per-page retry redundant.  The response body is included
+        so operators can diagnose upstream errors.
         """
         error_resp = Mock()
         error_resp.status_code = 500
+        error_resp.text = "Internal Server Error: database connection lost"
 
         cmd = self._make_cmd()
         cursor = _CursorStore("test-svc-err", "user")
@@ -305,6 +307,7 @@ class TestPaginateAndCreate:
         )
         error_resp = Mock()
         error_resp.status_code = 500
+        error_resp.text = "Internal Server Error"
 
         cmd = self._make_cmd()
         cursor = _CursorStore("test-svc-mid", "user")
@@ -318,6 +321,27 @@ class TestPaginateAndCreate:
         # DB cursor saved at page 1's last PK — next run resumes from here
         new_cursor = _CursorStore("test-svc-mid", "user")
         assert new_cursor.last_pk == 10
+
+    def test_missing_pk_raises_immediately(self):
+        """If the API returns an assignment without an 'id' field, raise
+        RuntimeError rather than silently leaving the cursor unchanged.
+
+        Without this, the cursor would never advance and every subsequent
+        run would reprocess all assignments — a silent performance regression.
+        """
+        resp = _make_api_response(
+            [
+                {"user_ansible_id": "u1", "role_definition": "Role1"},
+            ]
+        )
+
+        cmd = self._make_cmd()
+        cursor = _CursorStore("test-svc-nopk", "user")
+        list_fn = Mock(return_value=resp)
+
+        with patch.object(cmd, "_create_assignment", return_value=True):
+            with pytest.raises(RuntimeError, match="without 'id' field"):
+                cmd._paginate_and_create(list_fn, "user", [], cursor)
 
     def test_role_exclusion_filter_applied(self):
         """Role exclusion filter is passed to the API when non-empty."""
@@ -392,7 +416,10 @@ class TestMigrateRoleAssignments:
         """Both user and team assignment types are processed with separate cursors."""
         cmd = self._make_cmd()
 
-        with patch.object(cmd, "_paginate_and_create", return_value=3) as mock_paginate:
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=3) as mock_paginate,
+            patch.object(cmd, "_check_for_drift", return_value=False),
+        ):
             cmd.migrate_role_assignments("controller", "controller")
 
         # Called twice: once for user, once for team
@@ -404,7 +431,10 @@ class TestMigrateRoleAssignments:
         """Each service gets its own cursor records in the DB."""
         cmd = self._make_cmd()
 
-        with patch.object(cmd, "_paginate_and_create", return_value=0):
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=0),
+            patch.object(cmd, "_check_for_drift", return_value=False),
+        ):
             cmd.migrate_role_assignments("controller", "controller")
 
         # Verify cursors were created by loading them
@@ -421,6 +451,75 @@ class TestMigrateRoleAssignments:
         with patch.object(cmd, "_paginate_and_create", side_effect=RuntimeError("HTTP 500")):
             with pytest.raises(RuntimeError, match="HTTP 500"):
                 cmd.migrate_role_assignments("controller", "controller")
+
+    def test_drift_detected_raises_runtime_error(self):
+        """When the post-run drift check detects new assignments, RuntimeError
+        is raised so the installer retries and the cursor picks up the new items."""
+        cmd = self._make_cmd()
+
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=5),
+            patch.object(cmd, "_check_for_drift", return_value=True),
+        ):
+            with pytest.raises(RuntimeError, match="concurrent modifications were detected"):
+                cmd.migrate_role_assignments("controller", "controller")
+
+    def test_no_drift_completes_normally(self):
+        """When the post-run drift check finds no new items, the method
+        completes without raising."""
+        cmd = self._make_cmd()
+
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=5),
+            patch.object(cmd, "_check_for_drift", return_value=False),
+        ):
+            cmd.migrate_role_assignments("controller", "controller")
+
+        # Should not raise — verify output was written
+        cmd.stdout.write.assert_any_call("Role assignment migration for controller completed (10 total created)")
+
+    def test_check_for_drift_queries_beyond_cursor(self):
+        """_check_for_drift loads a fresh cursor from DB and asks the API
+        if any items exist beyond it."""
+        cmd = self._make_cmd()
+
+        # Pre-seed cursor to PK=100
+        seed = _CursorStore("drift-check-svc", "user")
+        seed.advance(100)
+
+        # API returns count > 0 — drift detected
+        drift_resp = Mock()
+        drift_resp.status_code = 200
+        drift_resp.json.return_value = {"count": 3}
+        list_fn = Mock(return_value=drift_resp)
+
+        assert cmd._check_for_drift(list_fn, "user", "drift-check-svc") is True
+        call_filters = list_fn.call_args[1]["filters"]
+        assert call_filters["id__gt"] == "100"
+        assert call_filters["page_size"] == "1"
+
+    def test_check_for_drift_returns_false_when_no_new_items(self):
+        """_check_for_drift returns False when the API returns count=0."""
+        cmd = self._make_cmd()
+
+        seed = _CursorStore("drift-empty-svc", "user")
+        seed.advance(50)
+
+        no_drift_resp = Mock()
+        no_drift_resp.status_code = 200
+        no_drift_resp.json.return_value = {"count": 0}
+        list_fn = Mock(return_value=no_drift_resp)
+
+        assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc") is False
+
+    def test_check_for_drift_skips_when_cursor_is_zero(self):
+        """_check_for_drift skips the API call when cursor is at 0
+        (fresh install with no prior progress to check against)."""
+        cmd = self._make_cmd()
+        list_fn = Mock()
+
+        assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc") is False
+        list_fn.assert_not_called()
 
 
 # =============================================================================
