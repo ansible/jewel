@@ -1737,7 +1737,7 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         assert RoleUserAssignment.objects.count() == 0
 
         captured = capsys.readouterr()
-        assert "Unable to find role definition INVALID ROLE DEFINITION" in captured.err
+        assert "Unable to find role definition 'INVALID ROLE DEFINITION'" in captured.err
 
 
 @pytest.mark.django_db()
@@ -1793,7 +1793,7 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         assert RoleUserAssignment.objects.count() == 0
 
         captured = capsys.readouterr()
-        assert f"Unable to find object with ansible_id {invalid_object_ansible_id}" in captured.err
+        assert f"Unable to find content object with ansible_id {invalid_object_ansible_id}" in captured.err
 
 
 # Parameterized tests for _ensure_controller_gateway_superusers method

@@ -527,7 +527,7 @@ class TestCreateAssignment:
 
         user = User.objects.create(username="team-perm-user")
         org = Organization.objects.create(name="test-team-perm-org")
-        team = Team.objects.create(name="test-perm-team", org=org)
+        team = Team.objects.create(name="test-perm-team", organization=org)
         ct = DABContentType.objects.get_for_model(team)
         RoleDefinition.objects.get_or_create(
             name="Test Team Role",
@@ -555,7 +555,7 @@ class TestCreateAssignment:
         from aap_gateway_api.models import Organization, Team
 
         org = Organization.objects.create(name="team-actor-org")
-        team = Team.objects.create(name="team-actor-team", org=org)
+        team = Team.objects.create(name="team-actor-team", organization=org)
         RoleDefinition.objects.get_or_create(name="Test Team Actor Role", defaults={"managed": False})
 
         cmd = MigrateCommand()
