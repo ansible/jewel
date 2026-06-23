@@ -238,7 +238,6 @@ class _ExternalAuth:
         except AuthenticationFailed:
             # Reject immediately for container registry requests with invalid credentials,
             # otherwise the token endpoint silently issues an anonymous token and podman reports login success.
-            # if self.drf_request.META.get('HTTP_AUTHORIZATION') and 
             if self.is_container_registry:
                 return self._return_no_auth_with_reason("Invalid credentials.", http_status_code=401, code=16)
             user = None
