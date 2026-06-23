@@ -85,10 +85,10 @@ def _setup_role_api_mocks(mock_client):
 def _setup_empty_assignment_mocks(mock_client):
     """Setup empty role assignment mocks with proper HTTP response objects.
 
-    The PK cursor migration checks response.status_code before calling
-    .json(), so assignment mocks must be explicit Mock objects with
-    status_code=200.  Empty results signal the cursor that there are
-    no new assignments beyond the current cursor position.
+    The _CursorStore-based pagination checks response.status_code before
+    calling .json(), so assignment mocks must be explicit Mock objects
+    with status_code=200.  Empty results signal the cursor that there
+    are no new assignments beyond the current cursor position.
     """
     empty_user_resp = Mock()
     empty_user_resp.status_code = 200
@@ -1549,8 +1549,9 @@ def test_controller_role_assignment_migration_reinstall_is_noop(
     ):
         assert _user_assignment_exists(assignment[0], assignment[1], assignment[2])
 
-    assignment_count_after_first_run = RoleUserAssignment.objects.count()
-    assert assignment_count_after_first_run > 0
+    user_assignment_count_after_first_run = RoleUserAssignment.objects.count()
+    team_assignment_count_after_first_run = RoleTeamAssignment.objects.count()
+    assert user_assignment_count_after_first_run > 0
 
     # --- Second run: reinstall scenario ---
     # Reset the migration flag so the command doesn't short-circuit with
@@ -1564,7 +1565,8 @@ def test_controller_role_assignment_migration_reinstall_is_noop(
 
     # No new assignments should have been created — the PK cursor is past
     # all existing assignments, so the API returns zero results.
-    assert RoleUserAssignment.objects.count() == assignment_count_after_first_run
+    assert RoleUserAssignment.objects.count() == user_assignment_count_after_first_run
+    assert RoleTeamAssignment.objects.count() == team_assignment_count_after_first_run
 
     # The command output should confirm zero assignments created
     captured = capsys.readouterr()
