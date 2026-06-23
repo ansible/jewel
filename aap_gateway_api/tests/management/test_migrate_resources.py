@@ -2674,6 +2674,22 @@ def test_log_progress_no_duplicate_100(caplog):
 MIGRATE_LOGGER_NAME = "aap.gateway.management.commands.migrate_service_data"
 
 
+@pytest.fixture(autouse=True)
+def _restore_migrate_logger_state():
+    migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+    original_handlers = migrate_logger.handlers[:]
+    original_level = migrate_logger.level
+    original_propagate = migrate_logger.propagate
+    try:
+        yield
+    finally:
+        for handler in migrate_logger.handlers[:]:
+            handler.close()
+        migrate_logger.handlers = original_handlers
+        migrate_logger.setLevel(original_level)
+        migrate_logger.propagate = original_propagate
+
+
 def test_configure_logging_with_log_file(tmp_path):
     """When --log-file is provided, logger gets a StreamHandler at INFO."""
     cmd = MigrateCommand()
@@ -2798,7 +2814,8 @@ def test_log_file_not_written_without_flag(tmp_path, caplog):
     cmd.stdout = StringIO()
     cmd._configure_logging(None)
 
-    cmd._log("null handler test", logging.INFO)
+    with caplog.at_level("INFO", logger=MIGRATE_LOGGER_NAME):
+        cmd._log("null handler test", logging.INFO)
 
     assert "null handler test" in cmd.stdout.getvalue()
     assert "null handler test" not in caplog.messages
