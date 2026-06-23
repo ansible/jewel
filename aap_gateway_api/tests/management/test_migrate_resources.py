@@ -2748,24 +2748,17 @@ def test_configure_logging_respects_lower_level(tmp_path):
     cmd._log_file_handle.close()
 
 
-def test_configure_logging_inherits_formatter(tmp_path):
-    """When the aap logger has a console handler with a formatter, it should be reused."""
-    aap_logger = logging.getLogger("aap")
-    original_handlers = aap_logger.handlers[:]
-    test_formatter = logging.Formatter("TEST %(message)s")
-    test_handler = logging.StreamHandler()
-    test_handler.setFormatter(test_formatter)
-    aap_logger.handlers = [test_handler]
+def test_configure_logging_uses_simple_formatter(tmp_path):
+    """_configure_logging sets a standalone formatter that doesn't depend on custom filters."""
+    cmd = MigrateCommand()
+    cmd._configure_logging(str(tmp_path / "test.log"))
 
-    try:
-        cmd = MigrateCommand()
-        cmd._configure_logging(str(tmp_path / "test.log"))
-
-        migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
-        assert migrate_logger.handlers[0].formatter is test_formatter
-        cmd._log_file_handle.close()
-    finally:
-        aap_logger.handlers = original_handlers
+    migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+    formatter = migrate_logger.handlers[0].formatter
+    assert formatter is not None
+    assert "%(message)s" in formatter._fmt
+    assert "%(levelname)" in formatter._fmt
+    cmd._log_file_handle.close()
 
 
 def test_log_info_writes_to_stdout(caplog):
