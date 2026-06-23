@@ -1614,24 +1614,27 @@ class Command(BaseCommand):
             return False
 
         # --- Create the assignment ---
+        return self._give_assignment_permission(role_definition, actor, object_ref, assignment_type, actor_ansible_id, role_name)
+
+    def _give_assignment_permission(
+        self, role_definition: RoleDefinition, actor, object_ref: Optional[str], assignment_type: str, actor_ansible_id: str, role_name: str
+    ) -> bool:
+        """Resolve the content object and call give_permission.
+
+        Handles three assignment patterns:
+        - Global (object_ref is None): give_global_permission
+        - Org/team (content_type.model in organization/team): resolve
+          via Resource ansible_id
+        - Service-specific: wrap in RemoteObject
+        """
         try:
             if object_ref is None:
                 role_definition.give_global_permission(actor)
-            elif role_definition.content_type and role_definition.content_type.model in ('organization', 'team'):
-                obj_resource = Resource.objects.get(ansible_id=object_ref)
-                content_object = obj_resource.content_object
-                if content_object is None:
-                    self.stderr.write(
-                        f"Warning: Resource {object_ref} exists but its "
-                        f"content object was deleted, "
-                        f"skipping {assignment_type} assignment for actor {actor_ansible_id} "
-                        f"with role '{role_name}'"
-                    )
-                    return False
-                role_definition.give_permission(actor, content_object)
-            else:
-                remote_obj = RemoteObject(role_definition.content_type, object_ref)
-                role_definition.give_permission(actor, remote_obj)
+                return True
+            if role_definition.content_type and role_definition.content_type.model in ('organization', 'team'):
+                return self._give_org_team_permission(role_definition, actor, object_ref, assignment_type, actor_ansible_id, role_name)
+            remote_obj = RemoteObject(role_definition.content_type, object_ref)
+            role_definition.give_permission(actor, remote_obj)
             return True
         except Resource.DoesNotExist:
             self.stderr.write(
@@ -1648,6 +1651,27 @@ class Command(BaseCommand):
                 f"skipping: {e}"
             )
             return False
+
+    def _give_org_team_permission(
+        self, role_definition: RoleDefinition, actor, object_ref: str, assignment_type: str, actor_ansible_id: str, role_name: str
+    ) -> bool:
+        """Resolve an org/team content object via Resource and call give_permission.
+
+        Returns False if the Resource exists but its content_object was
+        deleted (stale generic FK).
+        """
+        obj_resource = Resource.objects.get(ansible_id=object_ref)
+        content_object = obj_resource.content_object
+        if content_object is None:
+            self.stderr.write(
+                f"Warning: Resource {object_ref} exists but its "
+                f"content object was deleted, "
+                f"skipping {assignment_type} assignment for actor {actor_ansible_id} "
+                f"with role '{role_name}'"
+            )
+            return False
+        role_definition.give_permission(actor, content_object)
+        return True
 
     def migrate_role_assignments(self, service_slug: str, service_type_name: str) -> None:
         """Migrate role assignments from a service using a PK-based cursor.
