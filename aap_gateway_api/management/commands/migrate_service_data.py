@@ -238,7 +238,7 @@ class Command(BaseCommand):
         self._configure_logging(options.get("log_file"))
 
         if MigrateServiceDataHasRan.has_migration_completed():
-            self.stdout.write("Migration has already completed. Skipping.")
+            self._log("Migration has already completed. Skipping.", logging.INFO)
             return
 
         # Force merge options to True as per requirements
@@ -302,20 +302,21 @@ class Command(BaseCommand):
         if not service_apis:
             raise CommandError(f"No services found with expected service types: {', '.join(self.SERVICE_TYPE_ORDER)}")
 
-        self.stdout.write(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}")
+        self._log(f"Found {len(service_apis)} services to migrate: {', '.join(api.api_slug for api in service_apis)}", logging.INFO)
 
         # For RBAC management, load in types and permissions from all other components
         failed_type_services = self.load_types_and_permissions(service_apis, user)
         if failed_type_services:
-            self.stderr.write(
-                self.style.WARNING(f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services.")
+            self._log(
+                f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services."
+                , logging.WARNING
             )
 
         self._services_with_count_drift = set()
         self._progress_thresholds = {}
 
         # Merge all partially migrated users before proceeding with migration
-        self.stdout.write("\n=== Merging partially migrated users ===")
+        self._log("\n=== Merging partially migrated users ===", logging.INFO)
         self._merge_partially_migrated_users(service_apis, user)
 
         # Process each service and report results
@@ -336,7 +337,7 @@ class Command(BaseCommand):
         total_services = len(service_apis)
         for service_idx, service_api in enumerate(service_apis, 1):
             service_slug = service_api.api_slug
-            self.stdout.write(f"\n=== Processing service: {service_slug} ({service_idx}/{total_services}) ===")
+            self._log(f"\n=== Processing service: {service_slug} ({service_idx}/{total_services}) ===", logging.INFO)
 
             try:
                 success, error_msg = self._migrate_single_service(service_api, service_slug, user)
@@ -346,7 +347,7 @@ class Command(BaseCommand):
                     failed_services[service_slug] = error_msg or "Unknown error"
             except Exception as e:
                 error_msg = str(e)
-                self.stderr.write(f"Error migrating service {service_slug}: {error_msg}")
+                self._log(f"Error migrating service {service_slug}: {error_msg}", logging.WARNING)
                 failed_services[service_slug] = error_msg
 
         return successful_services, failed_services
@@ -360,40 +361,39 @@ class Command(BaseCommand):
     ) -> None:
         """Report migration results and finalize state."""
         total = len(successful_services) + len(failed_services)
-        self.stdout.write("\n=== Migration Summary ===")
-        self.stdout.write(f"Total services processed: {total}")
-        self.stdout.write(f"Successful migrations: {len(successful_services)}")
-        self.stdout.write(f"Failed migrations: {len(failed_services)}")
+        self._log("\n=== Migration Summary ===", logging.INFO)
+        self._log(f"Total services processed: {total}", logging.INFO)
+        self._log(f"Successful migrations: {len(successful_services)}", logging.INFO)
+        self._log(f"Failed migrations: {len(failed_services)}", logging.INFO)
 
         if successful_services:
-            self.stdout.write(f"\nSuccessfully migrated services: {', '.join(successful_services)}")
+            self._log(f"\nSuccessfully migrated services: {', '.join(successful_services)}", logging.INFO)
 
         # Report drift warning before any exit path so it's always visible
         if self._services_with_count_drift:
             drift_list = ', '.join(sorted(self._services_with_count_drift))
-            self.stderr.write(
-                self.style.WARNING(
-                    f"\nWARNING: The following services had count changes during role assignment migration: {drift_list}\n"
-                    f"This means concurrent modifications occurred while migrating. "
-                    f"Please re-run the migration to ensure all role assignments are migrated."
-                )
+            self._log(
+                f"\nWARNING: The following services had count changes during role assignment migration: {drift_list}\n"
+                f"This means concurrent modifications occurred while migrating. "
+                f"Please re-run the migration to ensure all role assignments are migrated.",
+                logging.WARNING,
             )
 
         if failed_services:
-            self.stderr.write("\nFailed to migrate the following services:")
+            self._log("\nFailed to migrate the following services:", logging.WARNING)
             for service_slug, error in failed_services.items():
-                self.stderr.write(f"  - {service_slug}: {error}")
+                self._log(f"  - {service_slug}: {error}", logging.WARNING)
             raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
 
         self._ensure_superuser_consistency(service_apis, user)
 
-        self.stdout.write("\n=== Re-enabling service authentication ===")
+        self._log("\n=== Re-enabling service authentication ===", logging.INFO)
         if not self._services_with_count_drift:
             MigrateServiceDataHasRan.mark_migration_completed()
-            self.stdout.write("✓ Migration flag updated: Service authentication is now enabled.")
+            self._log("✓ Migration flag updated: Service authentication is now enabled.", logging.INFO)
         else:
-            self.stdout.write("⚠ Migration flag NOT set due to count drift. Re-run to complete migration.")
-        self.stdout.write("\nAll services migration completed successfully!")
+            self._log("⚠ Migration flag NOT set due to count drift. Re-run to complete migration.", logging.INFO)
+        self._log("\nAll services migration completed successfully!", logging.INFO)
 
     def load_types_and_permissions(self, service_apis, user):
         failed_services = []
@@ -429,9 +429,10 @@ class Command(BaseCommand):
 
                 DABPermission.objects.load_remote_objects(data['results'], update_managed=True)
             except Exception as e:
-                self.stderr.write(
+                self._log(
                     f"Warning: Failed to load types and permissions from {service_slug}: {e}. "
-                    f"Role definitions referencing this service's types will not be available until the next successful migration."
+                    f"Role definitions referencing this service's types will not be available until the next successful migration.",
+                    logging.WARNING,
                 )
                 failed_services.append(service_slug)
                 continue
@@ -469,9 +470,9 @@ class Command(BaseCommand):
         """
         self.client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
 
-        self.stdout.write("Starting migration")
+        self._log("Starting migration", logging.INFO)
 
-        self.stdout.write("Getting service metadata")
+        self._log("Getting service metadata", logging.INFO)
         service_metadata = self.client.get_service_metadata().json()
 
         self.upstream_service_id = service_metadata["service_id"]
@@ -482,7 +483,7 @@ class Command(BaseCommand):
         upstream_service_type = ServiceType.objects.filter(name=service_type_name).first()
         if upstream_service_type is None:
             error_msg = f"Migrations are not allowed for services of type {service_metadata['service_type']}"
-            self.stderr.write(f"Skipping service {service_slug}: {error_msg}")
+            self._log(f"Skipping service {service_slug}: {error_msg}", logging.WARNING)
             return False, error_msg
 
         if upstream_service_type.name != service_api.service_cluster.service_type.name:
@@ -491,7 +492,7 @@ class Command(BaseCommand):
                 f"Service is configured as type {service_api.service_cluster.service_type.name}, "
                 f"but the server is reporting type {upstream_service_type.name}"
             )
-            self.stderr.write(f"Skipping service {service_slug}: {error_msg}")
+            self._log(f"Skipping service {service_slug}: {error_msg}", logging.WARNING)
             return False, error_msg
 
         service_api.service_cluster.service_id = self.upstream_service_id
@@ -501,10 +502,11 @@ class Command(BaseCommand):
         self.delete_legacy_authenticators()
 
         if self._is_service_already_synced():
-            self.stdout.write(f"Service {service_slug} is already synchronized — skipping resource migration.")
+            self._log(f"Service {service_slug} is already synchronized — skipping resource migration.", logging.INFO)
         else:
-            self.stdout.write(
-                f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway"
+            self._log(
+                f"Migrating {', '.join(self.resource_types_to_migrate.keys())} from {upstream_service_type}, id: {self.upstream_service_id} into Gateway",
+                logging.INFO,
             )
 
             for r_type in self.resource_types_to_migrate.keys():
@@ -513,7 +515,7 @@ class Command(BaseCommand):
         self.migrate_role_assignments(AssignmentActorType.USER, service_slug, service_type_name)
         self.migrate_role_assignments(AssignmentActorType.TEAM, service_slug, service_type_name)
 
-        self.stdout.write(f"Completed migration for service: {service_slug}")
+        self._log(f"Completed migration for service: {service_slug}", logging.INFO)
         return True, None
 
     def get_new_resource_name(
@@ -583,10 +585,10 @@ class Command(BaseCommand):
             legacy_authenticators = Authenticator.objects.filter(type=authenticator_type).values('pk', 'name')
 
             if not legacy_authenticators.exists():
-                self.stdout.write(f"No legacy authenticators of type '{authenticator_type}' found")
+                self._log(f"No legacy authenticators of type '{authenticator_type}' found", logging.INFO)
                 continue
 
-            self.stdout.write(f"Found {legacy_authenticators.count()} legacy authenticators of type '{authenticator_type}' to clean up")
+            self._log(f"Found {legacy_authenticators.count()} legacy authenticators of type '{authenticator_type}' to clean up", logging.INFO)
 
             for auth_data in legacy_authenticators:
                 auth_pk = auth_data['pk']
@@ -594,11 +596,11 @@ class Command(BaseCommand):
                 user_count = AuthenticatorUser.objects.filter(provider__pk=auth_pk).count()
 
                 if user_count > 0:
-                    self.stdout.write(f"Unlinking {user_count} users from legacy authenticator '{auth_name}'")
+                    self._log(f"Unlinking {user_count} users from legacy authenticator '{auth_name}'", logging.INFO)
                     AuthenticatorUser.objects.filter(provider__pk=auth_pk).delete()
-                self.stdout.write(f"Deleting legacy authenticator '{auth_name}'")
+                self._log(f"Deleting legacy authenticator '{auth_name}'", logging.INFO)
                 Authenticator.objects.filter(pk=auth_pk).delete()
-                self.stdout.write(f"Deleted legacy authenticator '{auth_name}'")
+                self._log(f"Deleted legacy authenticator '{auth_name}'", logging.INFO)
 
     def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
         """
@@ -624,7 +626,10 @@ class Command(BaseCommand):
         """
         # if the resource is a user and there is only one validation error for email field, we can remove the field
         if resource_type_name == SHARED_USER_RESOURCE_TYPE and "email" in original_resource_data.errors and len(original_resource_data.errors.keys()) == 1:
-            self.stderr.write(f"Removing invalid email address '{original_resource_data.data['email']}' for user: {original_resource_data.data['username']}")
+            self._log(
+                f"Removing invalid email address '{original_resource_data.data['email']}' for user: {original_resource_data.data['username']}",
+                logging.WARNING,
+            )
             # we want to update the email to empty string
             updated_resource_data = original_resource_data.data
             updated_resource_data["email"] = ""
@@ -663,8 +668,9 @@ class Command(BaseCommand):
         updated_resource_data = self.update_resource_data(resource_type_name, original_resource_data)
         if updated_resource_data is None:
             # updating didn't produce valid data for the resource, hence this resource is invalid
-            self.stderr.write(
-                f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}' failed validation with errors: {str(original_resource_data.errors)}"
+            self._log(
+                f"Resource with id '{resource_ansible_id}' of type '{resource_type_name}' failed validation with errors: {str(original_resource_data.errors)}",
+                logging.WARNING,
             )
             # Raising exception here to stop migration to draw attention to existence of invalid resources.
             raise RuntimeError("Stopping migration of resources because invalid, non-correctable, resource(s) were encountered.")
@@ -820,7 +826,7 @@ class Command(BaseCommand):
         # serialization that cannot be prefetched, so larger pages risk timeouts.
         filters = {**filters, **self.RESOURCE_DATA_FILTERS}
         data = self.client.list_resources(filters=filters).json()
-        self.stdout.write(f"Items remaining: {data['count']}")
+        self._log(f"Items remaining: {data['count']}", logging.INFO)
         results = data['results']
         # As special case exclude the system user, since Gateway excludes this in its own resources
         if resource_type_name == SHARED_USER_RESOURCE_TYPE:
@@ -947,7 +953,7 @@ class Command(BaseCommand):
         - LocalResourceModel (model class): the model class in gateway that is associated with the resource_type
                                             (i.e: Organization class for resource_type 'shared.organization')
         """
-        self.stdout.write(f"Migrating data for {resource_type_name}")
+        self._log(f"Migrating data for {resource_type_name}", logging.INFO)
 
         resource_type = self.resource_types_to_migrate[resource_type_name]["type"]
 
@@ -985,7 +991,7 @@ class Command(BaseCommand):
                 resource_total = count + resource_processed
 
             if len(results) == 0:
-                self.stdout.write("No more items remaining to migrate.")
+                self._log("No more items remaining to migrate.", logging.INFO)
                 break
 
             for upstream_resource_item in results:
@@ -1007,35 +1013,35 @@ class Command(BaseCommand):
 
         gateway_user = self._get_gateway_user(username)
         if gateway_user is None:
-            self.stdout.write(f"New user '{username}' will be created with superuser status from Controller")
+            self._log(f"New user '{username}' will be created with superuser status from Controller", logging.INFO)
         elif not gateway_user.is_superuser:
             gateway_user.is_superuser = True
             gateway_user.save(update_fields=['is_superuser'])
-            self.stdout.write(f"Promoted Gateway user '{username}' to superuser based on Controller")
+            self._log(f"Promoted Gateway user '{username}' to superuser based on Controller", logging.INFO)
 
         upstream_resource["resource_data"]["is_superuser"] = True
 
     def _sync_hub_eda_superuser(self, upstream_resource: Dict[str, Any], username: str, upstream_is_superuser: bool, service_type: str) -> None:
         """Sync superuser status from Gateway to Hub/EDA (Gateway is source of truth)."""
-        self.stdout.write(f"Checking superuser status for user '{username}'")
-        self.stdout.write(f"Is admin user in {service_type}: {upstream_is_superuser}")
+        self._log(f"Checking superuser status for user '{username}'", logging.INFO)
+        self._log(f"Is admin user in {service_type}: {upstream_is_superuser}", logging.INFO)
 
         gateway_user = self._get_gateway_user(username)
 
         if gateway_user:
             should_be_superuser = gateway_user.is_superuser
-            self.stdout.write(f"Gateway user exists: {gateway_user}")
-            self.stdout.write(f"Gateway user is superuser: {should_be_superuser}")
+            self._log(f"Gateway user exists: {gateway_user}", logging.INFO)
+            self._log(f"Gateway user is superuser: {should_be_superuser}", logging.INFO)
         else:
             should_be_superuser = False
-            self.stdout.write("Gateway user does not exist, will not be superuser")
+            self._log("Gateway user does not exist, will not be superuser", logging.INFO)
 
         upstream_resource["resource_data"]["is_superuser"] = should_be_superuser
 
         if upstream_is_superuser != should_be_superuser:
             action = "promoted to" if should_be_superuser else "demoted from"
             reason = "exists in Gateway as superuser" if should_be_superuser else "does not exist in Gateway as superuser"
-            self.stdout.write(f"User '{username}' {action} superuser in {service_type} ({reason})")
+            self._log(f"User '{username}' {action} superuser in {service_type} ({reason})", logging.INFO)
 
     def _sync_user_superuser_flag(self, upstream_resource: Dict[str, Any], validated_resource_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1074,11 +1080,11 @@ class Command(BaseCommand):
             service_apis: List of service APIs that were processed
             user: User to perform API calls as
         """
-        self.stdout.write("\n=== Validating superuser consistency ===")
+        self._log("\n=== Validating superuser consistency ===", logging.INFO)
 
         # Get all Gateway superusers
         gateway_superusers = set(User.objects.filter(is_superuser=True).values_list('username', flat=True))
-        self.stdout.write(f"Gateway superusers: {sorted(gateway_superusers)}")
+        self._log(f"Gateway superusers: {sorted(gateway_superusers)}", logging.INFO)
 
         controller_api = None
         hub_eda_apis = []
@@ -1158,13 +1164,13 @@ class Command(BaseCommand):
         """
         controller_superusers = self._collect_controller_superusers(controller_api, user)
 
-        self.stdout.write(f"Controller superusers: {sorted(controller_superusers)}")
+        self._log(f"Controller superusers: {sorted(controller_superusers)}", logging.INFO)
 
         # Check for mismatches
         controller_only = controller_superusers - gateway_superusers
 
         if controller_only:
-            self.stdout.write(f"Found {len(controller_only)} users who are superusers in Controller but not Gateway: {sorted(controller_only)}")
+            self._log(f"Found {len(controller_only)} users who are superusers in Controller but not Gateway: {sorted(controller_only)}", logging.INFO)
             # Promote these users to superuser in Gateway
             missing_users = []
             for username in controller_only:
@@ -1174,14 +1180,14 @@ class Command(BaseCommand):
                     continue
                 gateway_user.is_superuser = True
                 gateway_user.save()
-                self.stdout.write(f"Promoted Gateway user '{username}' to superuser to match Controller status")
+                self._log(f"Promoted Gateway user '{username}' to superuser to match Controller status", logging.INFO)
 
             if missing_users:
-                self.stderr.write(f"Error: Users {sorted(missing_users)} are superusers in Controller but don't exist in Gateway")
+                self._log(f"Error: Users {sorted(missing_users)} are superusers in Controller but don't exist in Gateway", logging.WARNING)
                 raise CommandError(f"Migration failure detected: Users {sorted(missing_users)} should have been migrated but are missing from Gateway")
 
         else:
-            self.stdout.write("✓ Controller and Gateway superusers are consistent")
+            self._log("✓ Controller and Gateway superusers are consistent", logging.INFO)
 
     def _demote_extra_superusers(self, service_api: ServiceAPIRoute, gateway_superusers: set, user: AbstractUser) -> None:
         """Demote superusers in Hub/EDA that are not superusers in Gateway."""
@@ -1212,16 +1218,16 @@ class Command(BaseCommand):
                     client.update_resource(user_item["ansible_id"], ResourceRequestBody(**update_payload), partial=True)
 
                     demoted_users.append(username)
-                    self.stdout.write(f"Demoted user '{username}' from superuser in {service_type}")
+                    self._log(f"Demoted user '{username}' from superuser in {service_type}", logging.INFO)
 
             if not data.get("next"):
                 break
             page += 1
 
         if demoted_users:
-            self.stdout.write(f"Demoted {len(demoted_users)} users from superuser in {service_type}: {sorted(demoted_users)}")
+            self._log(f"Demoted {len(demoted_users)} users from superuser in {service_type}: {sorted(demoted_users)}", logging.INFO)
         else:
-            self.stdout.write(f"✓ No extra superusers found in {service_type}")
+            self._log(f"✓ No extra superusers found in {service_type}", logging.INFO)
 
     def _merge_partially_migrated_users(self, service_apis: List[ServiceAPIRoute], user: AbstractUser) -> None:
         """
@@ -1237,7 +1243,7 @@ class Command(BaseCommand):
 
         # Step 1: Get all partially migrated users from Gateway database
         # Partially migrated users have service_id != Gateway's service_id
-        self.stdout.write("Finding all partially migrated users in Gateway...")
+        self._log("Finding all partially migrated users in Gateway...", logging.INFO)
 
         gateway_service_id = service_id()
         partially_migrated_resources = (
@@ -1247,14 +1253,14 @@ class Command(BaseCommand):
         )
 
         total_partially_migrated_users = len(partially_migrated_resources)
-        self.stdout.write(f"  Found {total_partially_migrated_users} partially migrated user resources in Gateway")
+        self._log(f"  Found {total_partially_migrated_users} partially migrated user resources in Gateway", logging.INFO)
 
         if not partially_migrated_resources:
-            self.stdout.write("  No partially migrated users found in Gateway. Skipping.")
+            self._log("  No partially migrated users found in Gateway. Skipping.", logging.INFO)
             return
 
         # Step 2: Group users by their service types based on service_id
-        self.stdout.write("Grouping users by their service types...")
+        self._log("Grouping users by their service types...", logging.INFO)
         service_id_to_type = {service_api.service_cluster.service_id: service_api.service_cluster.service_type.name for service_api in service_apis}
 
         all_users = {}  # service_type -> [(username, user_object)]
@@ -1273,27 +1279,27 @@ class Command(BaseCommand):
                 raise RuntimeError(f"Unknown service_id {resource.service_id} for user {username}")
 
         for service_type, users in all_users.items():
-            self.stdout.write(f"  Found {len(users)} partially migrated users from {service_type}")
+            self._log(f"  Found {len(users)} partially migrated users from {service_type}", logging.INFO)
             for username, _ in users:
-                self.stdout.write(f"    - {username}")
+                self._log(f"    - {username}", logging.INFO)
 
         # Step 3: Correlate users across services by removing service prefixes
-        self.stdout.write("Correlating users across services...")
+        self._log("Correlating users across services...", logging.INFO)
         user_groups = self._correlate_users_across_services(all_users)
 
-        self.stdout.write(f"  Found {len(user_groups)} user groups to merge")
+        self._log(f"  Found {len(user_groups)} user groups to merge", logging.INFO)
         for base_username, user_accounts in user_groups.items():
             account_info = [f"{service_type}:{orig_username}" for service_type, _, orig_username in user_accounts]
-            self.stdout.write(f"    - user_groups[{base_username}]: {', '.join(account_info)}")
+            self._log(f"    - user_groups[{base_username}]: {', '.join(account_info)}", logging.INFO)
 
         # Step 4: Merge users with Controller user as priority
-        self.stdout.write(f"Merging {total_partially_migrated_users} partially migrated users...")
+        self._log(f"Merging {total_partially_migrated_users} partially migrated users...", logging.INFO)
         total_merged = 0
         for base_username, user_accounts in user_groups.items():
             merged_count = self._merge_user_group(base_username, user_accounts)
             total_merged += merged_count
 
-        self.stdout.write(f"Completed merging {total_merged} partially migrated users")
+        self._log(f"Completed merging {total_merged} partially migrated users", logging.INFO)
 
         if total_merged != total_partially_migrated_users:
             raise RuntimeError(f"Failed to merge all partially migrated users. Merged {total_merged} out of {total_partially_migrated_users} users.")
@@ -1351,14 +1357,14 @@ class Command(BaseCommand):
         """
 
         service_list = ", ".join([f"{service_type}: {orig_username}" for service_type, _, orig_username in user_accounts])
-        self.stdout.write(f"> Merging user group for '{base_username}' - {service_list}")
+        self._log(f"> Merging user group for '{base_username}' - {service_list}", logging.INFO)
 
         # Find Controller user to use as main account (source of truth)
         main_user = user_accounts[0]
         other_users = user_accounts[1:]
 
         main_service_type, main_user_obj, main_username = main_user
-        self.stdout.write(f"  Using {main_service_type} user '{main_username}' as main account for '{base_username}'")
+        self._log(f"  Using {main_service_type} user '{main_username}' as main account for '{base_username}'", logging.INFO)
 
         # Validate all users can be merged before starting any merges
         merge_conflicts = []
@@ -1367,23 +1373,23 @@ class Command(BaseCommand):
                 merge_conflicts.append(f"{service_type} user '{merge_orig_username}'")
 
         if merge_conflicts:
-            self.stderr.write(f"  Cannot merge user group for '{base_username}' - conflicts detected:")
+            self._log(f"  Cannot merge user group for '{base_username}' - conflicts detected:", logging.WARNING)
             for conflict in merge_conflicts:
-                self.stderr.write(f"    - {conflict}")
+                self._log(f"    - {conflict}", logging.WARNING)
             return 0
 
         # All users can be merged, proceed with merging
         merged_count = 0
         for service_type, user_to_merge, merge_orig_username in other_users:
-            self.stdout.write(f"  Merging {service_type} user '{merge_orig_username}' into {main_service_type} user '{main_username}'")
+            self._log(f"  Merging {service_type} user '{merge_orig_username}' into {main_service_type} user '{main_username}'", logging.INFO)
             # Perform the merge using the existing link_account function
             link_account(main_account=main_user_obj, to_merge=user_to_merge, preserve_authenticators=False)
             merged_count += 1
-            self.stdout.write(f"  Successfully merged {service_type} user '{merge_orig_username}'")
+            self._log(f"  Successfully merged {service_type} user '{merge_orig_username}'", logging.INFO)
 
-        self.stdout.write(f"  Migrating main user '{main_username}'")
+        self._log(f"  Migrating main user '{main_username}'", logging.INFO)
         migrate_account(main_user_obj)
-        self.stdout.write(f"  Successfully migrated main user '{main_username}'")
+        self._log(f"  Successfully migrated main user '{main_username}'", logging.INFO)
         merged_count += 1
 
         return merged_count
@@ -1414,7 +1420,7 @@ class Command(BaseCommand):
         try:
             return RoleDefinition.objects.get(name=role_definition_name)
         except RoleDefinition.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment")
+            self._log(f"Warning: Unable to find role definition {role_definition_name}, skipping assignment", logging.WARNING)
             return None
 
     def _resolve_gateway_actor(self, assignment_actor: AssignmentActorType, service_actor_ansible_id: str) -> Optional[Any]:
@@ -1422,7 +1428,10 @@ class Command(BaseCommand):
         try:
             return Resource.objects.get(ansible_id=service_actor_ansible_id).content_object
         except Resource.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment")
+            self._log(
+                f"Warning: Unable to find gateway {assignment_actor.value} with ansible_id {service_actor_ansible_id}, skipping assignment",
+                logging.WARNING,
+            )
             return None
 
     def _resolve_content_object(self, assignment: Dict[str, Any]) -> Any:
@@ -1448,14 +1457,18 @@ class Command(BaseCommand):
                 # No object reference means a global role assignment
                 return None
         except Resource.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment")
+            self._log(
+                f"Warning: Unable to find object of type {content_type} with ansible_id {service_content_object_ansible_id}, skipping assignment",
+                logging.WARNING,
+            )
             return Command._SKIP
         except ValueError:
-            self.stderr.write(f"Warning: Malformed content_type '{content_type}', expected 'service.model' format, skipping assignment")
+            self._log(f"Warning: Malformed content_type '{content_type}', expected 'service.model' format, skipping assignment", logging.WARNING)
             return Command._SKIP
         except DABContentType.DoesNotExist:
-            self.stderr.write(
-                f"Warning: Unable to find content type '{content_type}' for remote object with id {service_content_object_id}, skipping assignment"
+            self._log(
+                f"Warning: Unable to find content type '{content_type}' for remote object with id {service_content_object_id}, skipping assignment",
+                logging.WARNING,
             )
             return Command._SKIP
 
@@ -1527,7 +1540,7 @@ class Command(BaseCommand):
         progress_label = f"{service_slug} {assignment_actor.value} role assignments"
         # Initialized here, updated by _fetch_role_assignments on the first page response
         self._current_assignment_total = 0
-        self.stdout.write(f"Migrating {assignment_actor.value} role assignments from {service_slug} of type {service_type_name}")
+        self._log(f"Migrating {assignment_actor.value} role assignments from {service_slug} of type {service_type_name}", logging.INFO)
         try:
             assignments = self._fetch_role_assignments(assignment_actor, service_slug, service_type_name)
             processed = 0
@@ -1535,7 +1548,7 @@ class Command(BaseCommand):
                 processed += 1
                 self._log_progress(progress_label, processed, self._current_assignment_total)
                 log_detail = self._format_fetched_assignment_for_logging(assignment_actor, assignment)
-                self.stdout.write(f"Processing assignment in service {service_slug}: {log_detail}")
+                self._log(f"Processing assignment in service {service_slug}: {log_detail}", logging.INFO)
 
                 role_definition_name = assignment.get('role_definition')
                 service_actor_ansible_id = assignment.get(f'{assignment_actor.value}_ansible_id')
@@ -1553,7 +1566,7 @@ class Command(BaseCommand):
                     if gateway_content_object is Command._SKIP:
                         continue
                 except Exception as e:
-                    self.stderr.write(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}")
+                    self._log(f"Error: Unable to process role {assignment_actor.value} assignment, skipping: {str(e)}", logging.WARNING)
                     continue
 
                 try:
@@ -1561,10 +1574,10 @@ class Command(BaseCommand):
                         role_assignment = gateway_role_definition.give_permission(gateway_actor, gateway_content_object)
                     else:
                         role_assignment = gateway_role_definition.give_global_permission(gateway_actor)
-                    self.stdout.write(f"Gave permission: {self._format_migrated_assignment_for_logging(role_assignment)}")  # type: ignore
+                    self._log(f"Gave permission: {self._format_migrated_assignment_for_logging(role_assignment)}", logging.INFO)  # type: ignore
                 except Exception as e:
-                    self.stderr.write(f"Error: Unable to give permission for role {assignment_actor.value} assignment, skipping: {str(e)}")
+                    self._log(f"Error: Unable to give permission for role {assignment_actor.value} assignment, skipping: {str(e)}", logging.WARNING)
                     continue
         except Exception as e:
-            self.stderr.write(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping: {e}")
+            self._log(f"Unable to fetch role {assignment_actor.value} assignments from {service_slug}, skipping: {e}", logging.WARNING)
             return
