@@ -105,7 +105,7 @@ class Command(BaseCommand):
             if console_handler and console_handler.formatter:
                 handler.setFormatter(console_handler.formatter)
             logger.addHandler(handler)
-            if logger.getEffectiveLevel() > logging.INFO:
+            if logger.level == logging.NOTSET or logger.level > logging.INFO:
                 logger.setLevel(logging.INFO)
         else:
             logger.addHandler(logging.NullHandler())
