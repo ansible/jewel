@@ -314,8 +314,7 @@ class Command(BaseCommand):
         failed_type_services = self.load_types_and_permissions(service_apis, user)
         if failed_type_services:
             self._log(
-                f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services."
-                , logging.WARNING
+                f"Warning: Failed to load types/permissions from: {', '.join(failed_type_services)}. Continuing with available services.", logging.WARNING
             )
 
         self._services_with_count_drift = set()
