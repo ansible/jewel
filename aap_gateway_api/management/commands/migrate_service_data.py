@@ -88,8 +88,14 @@ class Command(BaseCommand):
         replaces all handlers with a NullHandler so logger calls are silently
         discarded and all output goes through self.stdout only.
         """
+        for handler in logger.handlers[:]:
+            handler.close()
         logger.handlers.clear()
         logger.propagate = False
+
+        if hasattr(self, '_log_file_handle') and self._log_file_handle:
+            self._log_file_handle.close()
+            self._log_file_handle = None
 
         if log_file:
             self._log_file_handle = open(log_file, 'w')
@@ -99,11 +105,12 @@ class Command(BaseCommand):
             if console_handler and console_handler.formatter:
                 handler.setFormatter(console_handler.formatter)
             logger.addHandler(handler)
-            logger.setLevel(logging.INFO)
+            if logger.level > logging.INFO:
+                logger.setLevel(logging.INFO)
         else:
             logger.addHandler(logging.NullHandler())
 
-    def _log(self, msg: str, level: int = logging.INFO) -> None:
+    def _log(self, msg: str, level: int) -> None:
         """
         Write a message to both stdout (returned to the caller) and the logger
         (written to --log-file when provided).
@@ -147,7 +154,7 @@ class Command(BaseCommand):
                     msg = f"Migration progress [{label}]: {processed}/{total} ({threshold}%)"
 
         if msg:
-            self._log(msg)
+            self._log(msg, logging.INFO)
 
     def add_arguments(self, parser) -> None:
         """
@@ -759,7 +766,7 @@ class Command(BaseCommand):
             updated_service_resource["service_id"] = existing_resource.service_id
 
             if incoming_data == local_data:
-                self._log(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.")
+                self._log(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.", logging.INFO)
             else:
                 updated_service_resource["resource_data"] = local_data
                 self._log(f"Updating already-merged {resource_type.name} with name {upstream_resource['name']}.", logging.WARNING)
@@ -1463,7 +1470,7 @@ class Command(BaseCommand):
         page = 1
         total_count = None  # we will check this on each page to see if anything changed
         while True:
-            self._log(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}")
+            self._log(f"Fetching page {page} of role {assignment_actor.value} assignments from {service_slug}", logging.INFO)
             filters: Dict[str, int | str] = {'page': page, **self.BIG_PAGE_FILTERS}
             if role_definitions_to_exclude:
                 filters['not__role_definition__name__in'] = ','.join(role_definitions_to_exclude)
