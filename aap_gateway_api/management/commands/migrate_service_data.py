@@ -95,7 +95,9 @@ class Command(BaseCommand):
             self._log_file_handle = open(log_file, 'w')
             handler = logging.StreamHandler(self._log_file_handle)
             handler.setLevel(logging.INFO)
-            handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(name)s %(message)s'))
+            console_handler = logging.getLogger('aap').handlers[0] if logging.getLogger('aap').handlers else None
+            if console_handler and console_handler.formatter:
+                handler.setFormatter(console_handler.formatter)
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
         else:
