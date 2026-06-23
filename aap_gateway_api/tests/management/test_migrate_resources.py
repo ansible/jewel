@@ -1,4 +1,6 @@
+import logging
 import uuid
+from io import StringIO
 from unittest.mock import Mock, patch
 
 import pytest
@@ -2663,3 +2665,140 @@ def test_log_progress_no_duplicate_100(caplog):
 
     progress_msgs = [msg for msg in caplog.messages if "(100%)" in msg and "exact" in msg]
     assert len(progress_msgs) == 1
+
+
+# =============================================================================
+# Tests for _configure_logging and _log (AAP-76816)
+# =============================================================================
+
+MIGRATE_LOGGER_NAME = "aap.gateway.management.commands.migrate_service_data"
+
+
+def test_configure_logging_with_log_file(tmp_path):
+    """When --log-file is provided, logger gets a StreamHandler at INFO."""
+    cmd = MigrateCommand()
+    log_file = tmp_path / "test.log"
+
+    cmd._configure_logging(str(log_file))
+
+    migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+    assert len(migrate_logger.handlers) == 1
+    assert isinstance(migrate_logger.handlers[0], logging.StreamHandler)
+    assert migrate_logger.level <= logging.INFO
+    assert not migrate_logger.propagate
+
+    cmd._log_file_handle.close()
+
+
+def test_configure_logging_without_log_file():
+    """When --log-file is omitted, logger gets a NullHandler."""
+    cmd = MigrateCommand()
+
+    cmd._configure_logging(None)
+
+    migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+    assert len(migrate_logger.handlers) == 1
+    assert isinstance(migrate_logger.handlers[0], logging.NullHandler)
+    assert not migrate_logger.propagate
+
+
+def test_configure_logging_closes_previous_file_handle(tmp_path):
+    """Calling _configure_logging twice closes the previous file handle."""
+    cmd = MigrateCommand()
+    first_log = tmp_path / "first.log"
+    second_log = tmp_path / "second.log"
+
+    cmd._configure_logging(str(first_log))
+    first_handle = cmd._log_file_handle
+    assert not first_handle.closed
+
+    cmd._configure_logging(str(second_log))
+    assert first_handle.closed
+    assert not cmd._log_file_handle.closed
+
+    cmd._log_file_handle.close()
+
+
+def test_configure_logging_respects_lower_level(tmp_path):
+    """If the logger is already at DEBUG, _configure_logging should not raise it to INFO."""
+    migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+    migrate_logger.setLevel(logging.DEBUG)
+
+    cmd = MigrateCommand()
+    cmd._configure_logging(str(tmp_path / "test.log"))
+
+    assert migrate_logger.level == logging.DEBUG
+
+    cmd._log_file_handle.close()
+
+
+def test_configure_logging_inherits_formatter(tmp_path):
+    """When the aap logger has a console handler with a formatter, it should be reused."""
+    aap_logger = logging.getLogger("aap")
+    original_handlers = aap_logger.handlers[:]
+    test_formatter = logging.Formatter("TEST %(message)s")
+    test_handler = logging.StreamHandler()
+    test_handler.setFormatter(test_formatter)
+    aap_logger.handlers = [test_handler]
+
+    try:
+        cmd = MigrateCommand()
+        cmd._configure_logging(str(tmp_path / "test.log"))
+
+        migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+        assert migrate_logger.handlers[0].formatter is test_formatter
+        cmd._log_file_handle.close()
+    finally:
+        aap_logger.handlers = original_handlers
+
+
+def test_log_info_writes_to_stdout(caplog):
+    """_log at INFO writes to stdout and the logger."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+
+    with caplog.at_level("INFO", logger=MIGRATE_LOGGER_NAME):
+        cmd._log("test info message", logging.INFO)
+
+    assert "test info message" in cmd.stdout.getvalue()
+    assert "test info message" in caplog.messages
+
+
+def test_log_warning_writes_to_stderr(caplog):
+    """_log at WARNING writes to stderr and the logger."""
+    cmd = MigrateCommand()
+    cmd.stderr = StringIO()
+
+    with caplog.at_level("WARNING", logger=MIGRATE_LOGGER_NAME):
+        cmd._log("test warning message", logging.WARNING)
+
+    assert "test warning message" in cmd.stderr.getvalue()
+    assert "test warning message" in caplog.messages
+
+
+def test_log_writes_to_log_file(tmp_path):
+    """_log writes structured output to --log-file."""
+    cmd = MigrateCommand()
+    log_file = tmp_path / "test.log"
+
+    cmd._configure_logging(str(log_file))
+    cmd._log("file output test", logging.INFO)
+    cmd._log_file_handle.flush()
+
+    content = log_file.read_text()
+    assert "file output test" in content
+    assert "INFO" in content
+
+    cmd._log_file_handle.close()
+
+
+def test_log_file_not_written_without_flag(tmp_path, caplog):
+    """Without --log-file, logger messages go to NullHandler only."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd._configure_logging(None)
+
+    cmd._log("null handler test", logging.INFO)
+
+    assert "null handler test" in cmd.stdout.getvalue()
+    assert "null handler test" not in caplog.messages
