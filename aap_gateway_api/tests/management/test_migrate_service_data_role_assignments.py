@@ -342,9 +342,13 @@ class TestPaginateAndCreate:
         new_cursor = _CursorStore("test-svc-empty", "user")
         assert new_cursor.last_pk == 50
 
-    def test_http_error_retries_then_raises(self):
-        """HTTP errors are retried up to HTTP_RETRY_LIMIT times, then raise
-        RuntimeError to fail the service (non-zero exit for installer retry)."""
+    def test_http_error_raises_immediately(self):
+        """HTTP error raises RuntimeError immediately — no per-page retry.
+
+        The PK cursor provides crash recovery: the installer re-runs the
+        command and the cursor resumes from the last completed page,
+        making per-page retry redundant.
+        """
         error_resp = Mock()
         error_resp.status_code = 500
 
@@ -352,15 +356,15 @@ class TestPaginateAndCreate:
         cursor = _CursorStore("test-svc-err", "user")
         list_fn = Mock(return_value=error_resp)
 
-        with pytest.raises(RuntimeError, match="Failed to fetch user assignments"):
+        with pytest.raises(RuntimeError, match="Failed to fetch user assignments page 1: HTTP 500"):
             cmd._paginate_and_create(list_fn, "user", [], cursor)
 
-        # Should have been called HTTP_RETRY_LIMIT times
-        assert list_fn.call_count == MigrateCommand.HTTP_RETRY_LIMIT
+        # Called exactly once — no retry
+        assert list_fn.call_count == 1
 
     def test_http_error_mid_pagination_saves_cursor(self):
         """HTTP error on page 2: page 1 assignments created, cursor saved at
-        page 1's last PK. RuntimeError raised after retries exhausted."""
+        page 1's last PK so the next run resumes from there."""
         page1 = _make_api_response(
             [
                 _make_remote_assignment("user", "u1", "Role1", pk=10),
@@ -372,8 +376,8 @@ class TestPaginateAndCreate:
 
         cmd = self._make_cmd()
         cursor = _CursorStore("test-svc-mid", "user")
-        # page1 succeeds, then all retries for page2 fail
-        list_fn = Mock(side_effect=[page1] + [error_resp] * MigrateCommand.HTTP_RETRY_LIMIT)
+        # page1 succeeds, page2 fails immediately
+        list_fn = Mock(side_effect=[page1, error_resp])
 
         with patch.object(cmd, "_create_assignment_from_tuple", return_value=True):
             with pytest.raises(RuntimeError, match="Failed to fetch"):
@@ -382,28 +386,6 @@ class TestPaginateAndCreate:
         # DB cursor saved at page 1's last PK — next run resumes from here
         new_cursor = _CursorStore("test-svc-mid", "user")
         assert new_cursor.last_pk == 10
-
-    def test_transient_error_recovers_on_retry(self):
-        """A single HTTP error followed by success should continue normally."""
-        error_resp = Mock()
-        error_resp.status_code = 500
-        success_resp = _make_api_response(
-            [
-                _make_remote_assignment("user", "u1", "Role1", pk=5),
-            ]
-        )
-
-        cmd = self._make_cmd()
-        cursor = _CursorStore("test-svc-retry", "user")
-        # First call fails, retry succeeds
-        list_fn = Mock(side_effect=[error_resp, success_resp])
-
-        with patch.object(cmd, "_create_assignment_from_tuple", return_value=True):
-            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
-
-        assert created == 1
-        new_cursor = _CursorStore("test-svc-retry", "user")
-        assert new_cursor.last_pk == 5
 
     def test_role_exclusion_filter_applied(self):
         """Role exclusion filter is passed to the API when non-empty."""

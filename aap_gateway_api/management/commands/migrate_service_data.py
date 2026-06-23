@@ -1481,40 +1481,6 @@ class Command(BaseCommand):
         }
         return sorted(ROLE_EXCLUSION_SETS.get(service_type, DEFAULT_EXCLUSION_SET))
 
-    # Number of times to retry a page fetch on HTTP error before giving up.
-    # Handles transient network issues; exhausted retries raise to fail the
-    # service so the installer/reconcile loop retries the whole command.
-    HTTP_RETRY_LIMIT = 3
-
-    def _build_page_filters(self, page: int, roles_to_exclude: List[str], snapshot_pk: int) -> Dict[str, Any]:
-        """Build query filters for one page of cursor-based assignment pagination.
-
-        ``snapshot_pk`` is the cursor value captured at the start of the run.
-        It must stay constant across all pages to prevent item skipping.
-        """
-        filters: Dict[str, Any] = {'page': page, 'order_by': 'id', **self.BIG_PAGE_FILTERS}
-        if roles_to_exclude:
-            filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
-        if snapshot_pk > 0:
-            filters['id__gt'] = str(snapshot_pk)
-        return filters
-
-    def _fetch_page_with_retry(self, list_fn, assignment_type: str, filters: Dict[str, Any]) -> Any:
-        """Fetch one page from the assignment API, retrying on HTTP errors.
-
-        Retries up to ``HTTP_RETRY_LIMIT`` times on non-200 responses.
-        Raises ``RuntimeError`` if all retries are exhausted so the
-        service is marked as failed (non-zero exit for installer retry).
-        """
-        page = filters['page']
-        for attempt in range(self.HTTP_RETRY_LIMIT):
-            response = list_fn(filters=filters)
-            if response.status_code == 200:
-                return response
-            retries_left = self.HTTP_RETRY_LIMIT - attempt - 1
-            logger.warning(f"HTTP {response.status_code} fetching {assignment_type} assignments page {page} ({retries_left} retries left)")
-        raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code} after {self.HTTP_RETRY_LIMIT} attempts")
-
     def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: '_CursorStore') -> int:
         """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
 
@@ -1527,18 +1493,34 @@ class Command(BaseCommand):
         the first page returns zero results and the method returns
         immediately.
 
+        No per-page retry — the PK cursor provides crash recovery.
+        If the command fails on an HTTP error, the installer re-runs
+        it and the cursor resumes from the last completed page.
+
         Crash safety: the cursor is advanced in the database after each
         fully-processed page, so at most one page of work is lost.
         """
         page = 1
         created = 0
-        # Snapshot is immutable — cursor.last_pk is set once in __init__
-        # and never changes. This value is used for all id__gt filters.
-        snapshot_pk = cursor.last_pk
+
+        # Build base filters once — only 'page' changes between iterations.
+        # snapshot_pk is immutable (set once in _CursorStore.__init__).
+        base_filters: Dict[str, Any] = {'order_by': 'id', **self.BIG_PAGE_FILTERS}
+        if roles_to_exclude:
+            base_filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+        if cursor.last_pk > 0:
+            base_filters['id__gt'] = str(cursor.last_pk)
 
         while True:
-            filters = self._build_page_filters(page, roles_to_exclude, snapshot_pk)
-            response = self._fetch_page_with_retry(list_fn, assignment_type, filters)
+            response = list_fn(filters={**base_filters, 'page': page})
+            if response.status_code != 200:
+                logger.warning(
+                    "HTTP %d fetching %s assignments page %d",
+                    response.status_code,
+                    assignment_type,
+                    page,
+                )
+                raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code}")
 
             data = response.json()
             results = data.get('results') or []
@@ -1547,9 +1529,9 @@ class Command(BaseCommand):
 
             created += self._create_page_assignments(results, assignment_type)
 
-            # Advance cursor in DB for crash recovery, but do NOT mutate
-            # snapshot_pk — the HTTP filter must stay consistent.
-            last_pk_on_page = self._extract_last_pk(results)
+            # Advance cursor in DB for crash recovery.  cursor.last_pk
+            # is NOT mutated — base_filters stays consistent.
+            last_pk_on_page = results[-1].get('id')
             if last_pk_on_page is not None:
                 cursor.advance(last_pk_on_page)
 
@@ -1572,15 +1554,6 @@ class Command(BaseCommand):
             if t is not None and self._create_assignment_from_tuple(t):
                 created += 1
         return created
-
-    @staticmethod
-    def _extract_last_pk(results: List[Dict[str, Any]]) -> Optional[int]:
-        """Return the id of the last item in a page of results, or None."""
-        for item in reversed(results):
-            pk = item.get('id')
-            if pk is not None:
-                return pk
-        return None
 
     @staticmethod
     def _build_assignment_tuple(assignment: Dict[str, Any], assignment_type: str) -> Optional[AssignmentTuple]:
