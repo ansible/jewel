@@ -79,6 +79,18 @@ class Command(BaseCommand):
     There is no option to control merging of users, because users are never migrated.
     The exception is that the provided --username, which will be merged."""
 
+    @staticmethod
+    def _copy_console_handler_config(handler: logging.Handler) -> None:
+        """Copy formatter and filters from the 'aap' logger's console handler."""
+        aap_handlers = logging.getLogger('aap').handlers
+        if not aap_handlers:
+            return
+        console_handler = aap_handlers[0]
+        if console_handler.formatter:
+            handler.setFormatter(console_handler.formatter)
+        for f in console_handler.filters:
+            handler.addFilter(f)
+
     def _configure_logging(self, log_file: Optional[str]) -> None:
         """
         Configure the command's logger based on --log-file.
@@ -101,12 +113,7 @@ class Command(BaseCommand):
             self._log_file_handle = open(log_file, 'w')
             handler = logging.StreamHandler(self._log_file_handle)
             handler.setLevel(logging.INFO)
-            console_handler = logging.getLogger('aap').handlers[0] if logging.getLogger('aap').handlers else None
-            if console_handler:
-                if console_handler.formatter:
-                    handler.setFormatter(console_handler.formatter)
-                for f in console_handler.filters:
-                    handler.addFilter(f)
+            self._copy_console_handler_config(handler)
             logger.addHandler(handler)
             if logger.level == logging.NOTSET or logger.level > logging.INFO:
                 logger.setLevel(logging.INFO)
