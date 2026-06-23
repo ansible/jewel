@@ -712,9 +712,9 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
         assert created_clients, "Expected GWResourceAPIClient to be instantiated"
         for mock_instance in created_clients:
             mock_instance.get_resource.assert_not_called()
-            assert any(call.kwargs.get("filters", {}).get("extra_fields") == "resource_data" for call in mock_instance.list_resources.call_args_list), (
-                "Expected list_resources to be called with extra_fields=resource_data"
-            )
+            assert any(
+                call.kwargs.get("filters", {}).get("extra_fields") == "resource_data" for call in mock_instance.list_resources.call_args_list
+            ), "Expected list_resources to be called with extra_fields=resource_data"
 
         captured = capsys.readouterr()
         assert "Migration Summary" in captured.out
@@ -916,9 +916,9 @@ def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api
 
     # The error should indicate a constraint violation or duplicate/unique constraint
     error_message = str(exc_info.value).lower()
-    assert any(keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]), (
-        f"Expected error message to indicate constraint violation, got: {exc_info.value}"
-    )
+    assert any(
+        keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]
+    ), f"Expected error message to indicate constraint violation, got: {exc_info.value}"
 
     # Verify that only the first user has the authenticator with the email
     assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com").count() == 1
@@ -2819,6 +2819,33 @@ def test_log_file_not_written_without_flag(tmp_path, caplog):
 
     assert "null handler test" in cmd.stdout.getvalue()
     assert "null handler test" not in caplog.messages
+
+
+def test_log_splits_newlines_for_logger(caplog):
+    """_log splits messages on newlines so each line gets a formatter prefix."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+
+    with caplog.at_level("INFO", logger=MIGRATE_LOGGER_NAME):
+        cmd._log("\n=== Section Header ===", logging.INFO)
+
+    assert "\n=== Section Header ===" in cmd.stdout.getvalue()
+    assert "=== Section Header ===" in caplog.messages
+    assert "" not in caplog.messages
+
+
+def test_log_splits_multiline_message(caplog):
+    """Multi-line messages produce one log record per non-empty line."""
+    cmd = MigrateCommand()
+    cmd.stderr = StringIO()
+
+    with caplog.at_level("WARNING", logger=MIGRATE_LOGGER_NAME):
+        cmd._log("line one\nline two\n\nline four", logging.WARNING)
+
+    assert "line one" in caplog.messages
+    assert "line two" in caplog.messages
+    assert "line four" in caplog.messages
+    assert len([m for m in caplog.messages if m in ("line one", "line two", "line four")]) == 3
 
 
 def test_copy_console_handler_config_no_aap_handlers(tmp_path):
