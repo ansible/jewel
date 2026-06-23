@@ -2819,3 +2819,87 @@ def test_log_file_not_written_without_flag(tmp_path, caplog):
 
     assert "null handler test" in cmd.stdout.getvalue()
     assert "null handler test" not in caplog.messages
+
+
+def test_copy_console_handler_config_no_aap_handlers(tmp_path):
+    """When the aap logger has no handlers, _copy_console_handler_config is a no-op."""
+    aap_logger = logging.getLogger("aap")
+    original_handlers = aap_logger.handlers[:]
+    aap_logger.handlers = []
+
+    try:
+        cmd = MigrateCommand()
+        cmd._configure_logging(str(tmp_path / "test.log"))
+
+        migrate_logger = logging.getLogger(MIGRATE_LOGGER_NAME)
+        assert migrate_logger.handlers[0].formatter is None
+        assert migrate_logger.handlers[0].filters == []
+        cmd._log_file_handle.close()
+    finally:
+        aap_logger.handlers = original_handlers
+
+
+@pytest.mark.django_db
+def test_reconcile_existing_resource_matching_ansible_id_same_data():
+    """Case 1 with matching data: logs 'Correcting service_id'."""
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    resource_type = ResourceType.objects.get(name="shared.organization")
+    org = Organization.objects.create(name="reconcile-org")
+    resource = Resource.objects.get(content_type=resource_type.content_type, object_id=org.pk)
+    local_data = resource_type.serializer_class(org).data
+
+    resource_context = {
+        "type": resource_type,
+        "unique_fields": ["name"],
+        "LocalResourceModel": Organization,
+    }
+    upstream_resource = {
+        "ansible_id": str(resource.ansible_id),
+        "name": org.name,
+        "resource_data": local_data,
+    }
+    updated_service_resource = {}
+
+    result = cmd._reconcile_existing_resource(upstream_resource, resource_context, local_data, updated_service_resource)
+
+    assert result is False
+    assert "Correcting service_id" in cmd.stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_reconcile_existing_resource_matching_ansible_id_different_data():
+    """Case 1 with different data: logs 'Updating already-merged' and overwrites resource_data."""
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    resource_type = ResourceType.objects.get(name="shared.organization")
+    org = Organization.objects.create(name="reconcile-org-diff")
+    resource = Resource.objects.get(content_type=resource_type.content_type, object_id=org.pk)
+    local_data = resource_type.serializer_class(org).data
+
+    resource_context = {
+        "type": resource_type,
+        "unique_fields": ["name"],
+        "LocalResourceModel": Organization,
+    }
+    upstream_resource = {
+        "ansible_id": str(resource.ansible_id),
+        "name": org.name,
+        "resource_data": {**local_data, "description": "stale upstream copy"},
+    }
+    updated_service_resource = {}
+
+    result = cmd._reconcile_existing_resource(upstream_resource, resource_context, local_data, updated_service_resource)
+
+    assert result is False
+    assert updated_service_resource["resource_data"] == local_data
+    combined_output = cmd.stdout.getvalue() + cmd.stderr.getvalue()
+    assert "Updating already-merged" in combined_output
