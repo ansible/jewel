@@ -712,9 +712,9 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
         assert created_clients, "Expected GWResourceAPIClient to be instantiated"
         for mock_instance in created_clients:
             mock_instance.get_resource.assert_not_called()
-            assert any(
-                call.kwargs.get("filters", {}).get("extra_fields") == "resource_data" for call in mock_instance.list_resources.call_args_list
-            ), "Expected list_resources to be called with extra_fields=resource_data"
+            assert any(call.kwargs.get("filters", {}).get("extra_fields") == "resource_data" for call in mock_instance.list_resources.call_args_list), (
+                "Expected list_resources to be called with extra_fields=resource_data"
+            )
 
         captured = capsys.readouterr()
         assert "Migration Summary" in captured.out
@@ -916,9 +916,9 @@ def test_duplicate_email_on_same_authenticator_should_fail(admin_user, admin_api
 
     # The error should indicate a constraint violation or duplicate/unique constraint
     error_message = str(exc_info.value).lower()
-    assert any(
-        keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]
-    ), f"Expected error message to indicate constraint violation, got: {exc_info.value}"
+    assert any(keyword in error_message for keyword in ["duplicate", "unique", "constraint", "already exists"]), (
+        f"Expected error message to indicate constraint violation, got: {exc_info.value}"
+    )
 
     # Verify that only the first user has the authenticator with the email
     assert AuthenticatorUser.objects.filter(provider=local_authenticator, email="foo@test.com").count() == 1
