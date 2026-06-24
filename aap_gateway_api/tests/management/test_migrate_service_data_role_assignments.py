@@ -523,6 +523,21 @@ class TestMigrateRoleAssignments:
         assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc") is False
         list_fn.assert_not_called()
 
+    def test_check_for_drift_returns_false_on_api_error(self):
+        """If the drift check API call fails, assume no drift and continue.
+
+        The drift check is best-effort — a transient network error should
+        not block the migration from completing.
+        """
+        cmd = self._make_cmd()
+
+        seed = _CursorStore("drift-err-svc", "user")
+        seed.advance(50)
+
+        list_fn = Mock(side_effect=RuntimeError("connection refused"))
+
+        assert cmd._check_for_drift(list_fn, "user", "drift-err-svc") is False
+
 
 # =============================================================================
 # _create_assignment
@@ -745,6 +760,89 @@ class TestCreateAssignment:
         assert "Unable to give permission for user assignment" in msg
         assert f"actor={actor_id}" in msg
         assert "role='Test Fail Role'" in msg
+
+    def test_stale_actor_content_object_returns_false(self):
+        """When the actor's Resource exists but its underlying object was
+        deleted (stale generic FK), return False with a specific warning."""
+        from ansible_base.resource_registry.models import Resource
+
+        from aap_gateway_api.models import User
+
+        user = User.objects.create(username="stale-actor-user")
+        actor_ansible_id = str(user.resource.ansible_id)
+        RoleDefinition.objects.get_or_create(name="Test Stale Actor Role", defaults={"managed": False})
+        cmd = MigrateCommand()
+        cmd.stdout = Mock()
+        cmd.stderr = Mock()
+
+        # Simulate stale FK: Resource exists but content_object returns None
+        with patch.object(Resource.objects, "get") as mock_get:
+            mock_resource = Mock()
+            mock_resource.content_object = None
+            mock_get.return_value = mock_resource
+            result = cmd._create_assignment(
+                {"user_ansible_id": actor_ansible_id, "role_definition": "Test Stale Actor Role", "content_type": "", "object_id": None},
+                "user",
+            )
+
+        assert result is False
+
+    def test_stale_org_content_object_returns_false(self):
+        """When an org/team Resource exists but its content_object was
+        deleted (stale generic FK), return False with a specific warning."""
+        from ansible_base.rbac.models import DABContentType
+
+        from aap_gateway_api.models import Organization, User
+
+        user = User.objects.create(username="stale-obj-user")
+        org = Organization.objects.create(name="stale-obj-org")
+        ct = DABContentType.objects.get_for_model(org)
+        RoleDefinition.objects.get_or_create(name="Test Stale Obj Role", defaults={"managed": False, "content_type": ct})
+
+        cmd = MigrateCommand()
+        cmd.stdout = Mock()
+        cmd.stderr = Mock()
+        obj_ansible_id = str(org.resource.ansible_id)
+
+        # Delete the org so the Resource exists but content_object is None
+        org.delete()
+        result = cmd._create_assignment(
+            {
+                "user_ansible_id": str(user.resource.ansible_id),
+                "role_definition": "Test Stale Obj Role",
+                "content_type": "shared.organization",
+                "object_ansible_id": obj_ansible_id,
+                "object_id": None,
+            },
+            "user",
+        )
+
+        assert result is False
+
+
+# =============================================================================
+# _raise_fetch_error
+# =============================================================================
+
+
+class TestRaiseFetchError:
+    """Tests for HTTP error handling with response body capture."""
+
+    def test_includes_response_body(self):
+        """Response body is included in the RuntimeError message."""
+        resp = Mock(status_code=500)
+        resp.text = "Internal Server Error: connection pool exhausted"
+
+        with pytest.raises(RuntimeError, match="connection pool exhausted"):
+            MigrateCommand._raise_fetch_error(resp, "user", 3)
+
+    def test_handles_missing_response_text(self):
+        """If response.text raises, the error still contains the status code."""
+        resp = Mock(status_code=502)
+        type(resp).text = property(lambda self: (_ for _ in ()).throw(AttributeError("no text")))
+
+        with pytest.raises(RuntimeError, match="HTTP 502"):
+            MigrateCommand._raise_fetch_error(resp, "team", 1)
 
 
 # =============================================================================
