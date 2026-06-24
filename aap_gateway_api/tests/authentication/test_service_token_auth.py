@@ -362,7 +362,6 @@ def test_jwt_claims_path_rejects_non_get():
 @pytest.mark.django_db
 def test_migration_not_complete_blocks_auth(service_cluster_gateway, user):
     """Test that service auth is blocked when migration has not completed."""
-    from aap_gateway_api.authentication.service_token_auth import MigrateDataNotCompleteError, ServiceTokenAuthentication
     from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
 
     key = _set_up_service_key(service_cluster_gateway, service_id())
