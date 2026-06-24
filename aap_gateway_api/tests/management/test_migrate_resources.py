@@ -2952,9 +2952,9 @@ def test_migrate_single_service_skips_unknown_service_type(admin_user, capsys, s
         "service_id": str(uuid.uuid4()),
         "service_type": "nonexistent_type",
     }
-    cmd.client = mock_client
 
-    success, error = cmd._migrate_single_service(service_api_route_controller, admin_user)
+    with patch("aap_gateway_api.management.commands.migrate_service_data.resources_client.GWResourceAPIClient", return_value=mock_client):
+        success, error = cmd._migrate_single_service(service_api_route_controller, service_api_route_controller.api_slug, admin_user)
 
     assert success is False
     captured = capsys.readouterr()
@@ -2976,9 +2976,9 @@ def test_migrate_single_service_skips_mismatched_service_type(admin_user, capsys
         "service_id": str(uuid.uuid4()),
         "service_type": "hub",
     }
-    cmd.client = mock_client
 
-    success, error = cmd._migrate_single_service(service_api_route_controller, admin_user)
+    with patch("aap_gateway_api.management.commands.migrate_service_data.resources_client.GWResourceAPIClient", return_value=mock_client):
+        success, error = cmd._migrate_single_service(service_api_route_controller, service_api_route_controller.api_slug, admin_user)
 
     assert success is False
     captured = capsys.readouterr()
@@ -2997,13 +2997,17 @@ def test_merge_partially_migrated_users_with_users(admin_user, capsys, service_a
     cmd = MigrateCommand()
     cmd._progress_thresholds = {}
 
+    controller_service_id = uuid.uuid4()
+    service_api_route_controller.service_cluster.service_id = controller_service_id
+    service_api_route_controller.service_cluster.save()
+
     user1 = User.objects.create(username="controller_testmerge1")
     resource1 = user1.resource
-    resource1.service_id = service_api_route_controller.service_cluster.service_id
+    resource1.service_id = controller_service_id
     resource1.is_partially_migrated = True
     resource1.save()
 
-    cmd._merge_partially_migrated_users([service_api_route_controller])
+    cmd._merge_partially_migrated_users([service_api_route_controller], admin_user)
 
     captured = capsys.readouterr()
     assert "Grouping users by their service types" in captured.out
@@ -3074,7 +3078,7 @@ def test_merge_user_group_successful(capsys):
 
 @pytest.mark.django_db
 def test_migrate_role_assignments_catches_resolve_error(capsys):
-    """Errors during role/actor/object resolution are caught and logged."""
+    """Unexpected errors during role/actor/object resolution are caught and logged."""
     cmd = MigrateCommand()
     cmd._services_with_count_drift = set()
     cmd._progress_thresholds = {}
@@ -3089,7 +3093,7 @@ def test_migrate_role_assignments_catches_resolve_error(capsys):
                 "object_ansible_id": "does-not-exist",
                 "object_id": 999,
                 "content_type": "shared.organization",
-                "role_definition": "Does Not Exist Role",
+                "role_definition": "Some Role",
                 "user_ansible_id": str(uuid.uuid4()),
             }
         ],
@@ -3097,7 +3101,9 @@ def test_migrate_role_assignments_catches_resolve_error(capsys):
     }
     mock_client.list_user_assignments.return_value = mock_response
 
-    cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
+    with patch.object(cmd, "_resolve_role_definition", side_effect=RuntimeError("db connection lost")):
+        cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
 
     captured = capsys.readouterr()
     assert "Unable to process role user assignment, skipping" in captured.err
+    assert "db connection lost" in captured.err
