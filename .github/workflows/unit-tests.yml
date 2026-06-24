@@ -47,6 +47,8 @@ jobs:
             processes: auto
             test-filter: >-
               aap_gateway_api/tests/views/api/v1/[a-r]*/
+              aap_gateway_api/tests/views/api/v1/test_gateway_v1.py
+              aap_gateway_api/tests/views/api/v1/test_jwt_claims.py
             artifact-suffix: "views-ar"
           - name: "Views S-Z"
             python-version: "3.12"

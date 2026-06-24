@@ -301,6 +301,84 @@ def test_validate_methods(allowed_methods, call_method, expected_result):
         assert token_auth.is_user_authorized(request, None, None, None) == expected_result
 
 
+def test_jwt_claims_path_authorized():
+    """Test that service tokens are authorized for JWT claims endpoints."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+
+    request = mock.Mock()
+    request.path = '/api/gateway/v1/jwt_claims/some-ansible-id'
+    request.method = 'GET'
+
+    user = mock.Mock(spec=[])
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        result = token_auth.is_user_authorized(request, user, None, None)
+
+    assert result is True
+    assert user.resource_api_actions == ['retrieve']
+
+
+def test_jwt_claims_path_preserves_existing_actions():
+    """Test that JWT claims path does not overwrite existing resource_api_actions."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+
+    request = mock.Mock()
+    request.path = '/api/gateway/v1/jwt_claims/some-ansible-id'
+    request.method = 'GET'
+
+    user = mock.Mock()
+    user.resource_api_actions = ['list', 'retrieve', 'create']
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        result = token_auth.is_user_authorized(request, user, None, None)
+
+    assert result is True
+    assert user.resource_api_actions == ['list', 'retrieve', 'create']
+
+
+def test_jwt_claims_path_rejects_non_get():
+    """Test that JWT claims path only allows GET requests."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+
+    request = mock.Mock()
+    request.path = '/api/gateway/v1/jwt_claims/some-ansible-id'
+    request.method = 'POST'
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        result = token_auth.is_user_authorized(request, mock.Mock(spec=[]), None, None)
+
+    assert result is False
+
+
+@pytest.mark.django_db
+def test_migration_not_complete_blocks_auth(service_cluster_gateway, user):
+    """Test that service auth is blocked when migration has not completed."""
+    from aap_gateway_api.authentication.service_token_auth import MigrateDataNotCompleteError, ServiceTokenAuthentication
+    from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+
+    key = _set_up_service_key(service_cluster_gateway, service_id())
+    token = _create_jwt(user, key)
+
+    MigrateServiceDataHasRan.mark_migration_not_completed()
+
+    try:
+        client = _get_client(token)
+        url = get_relative_url("resource-list")
+        resp = client.get(url)
+        assert resp.status_code == 423
+    finally:
+        MigrateServiceDataHasRan.mark_migration_completed()
+
+
 def test_ca_certificate_with_service_token_auth(service_jwt_client, ca_certificate):
     """Test that CA certificate endpoints work with service token authentication."""
     # Test list endpoint
