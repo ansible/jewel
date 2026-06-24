@@ -322,14 +322,14 @@ class TestPaginateAndCreate:
         new_cursor = _CursorStore("test-svc-mid", "user")
         assert new_cursor.last_pk == 10
 
-    def test_missing_pk_logs_warning_and_does_not_advance_cursor(self):
-        """If the API returns assignments without an 'id' field, a warning
-        is logged and the cursor does not advance.
+    def test_missing_pk_raises_runtime_error(self):
+        """If the API returns an assignment without an 'id' field, raise
+        RuntimeError immediately rather than silently leaving the cursor
+        unchanged.
 
-        The service-index serializer (assignment_common_fields in DAB)
-        does not include 'id'. Without it, the cursor stays at 0 and the
-        next run reprocesses all assignments — safe because give_permission
-        is idempotent, but slower. The warning alerts operators to the issue.
+        Without 'id', the cursor cannot advance and every subsequent run
+        would reprocess all assignments. This indicates an incompatible
+        DAB version (requires PR 1032+).
         """
         resp = _make_api_response(
             [
@@ -342,12 +342,8 @@ class TestPaginateAndCreate:
         list_fn = Mock(return_value=resp)
 
         with patch.object(cmd, "_create_assignment", return_value=True):
-            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
-
-        assert created == 1
-        # Cursor did not advance — no 'id' field to advance to
-        new_cursor = _CursorStore("test-svc-nopk", "user")
-        assert new_cursor.last_pk == 0
+            with pytest.raises(RuntimeError, match="without 'id' field"):
+                cmd._paginate_and_create(list_fn, "user", [], cursor)
 
     def test_role_exclusion_filter_applied(self):
         """Role exclusion filter is passed to the API when non-empty."""

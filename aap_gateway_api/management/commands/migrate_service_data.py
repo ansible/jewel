@@ -1550,19 +1550,14 @@ class Command(BaseCommand):
 
             # Advance cursor in DB for crash recovery.  cursor.last_pk
             # is NOT mutated — base_filters stays consistent.
-            # The 'id' field may not be present in the service-index
-            # serializer response (assignment_common_fields in DAB does
-            # not include 'id').  Without it, the cursor cannot advance
-            # and the next run will reprocess all assignments — safe
-            # because give_permission is idempotent, but slower.
             last_pk_on_page = results[-1].get('id')
-            if last_pk_on_page is not None:
-                cursor.advance(last_pk_on_page)
-            else:
-                logger.warning(
-                    "API returned %s assignments without 'id' field — cursor cannot advance, next run will reprocess",
-                    assignment_type,
+            if last_pk_on_page is None:
+                raise RuntimeError(
+                    f"API returned {assignment_type} assignment without 'id' field — "
+                    f"cannot advance cursor. Check that the upstream service "
+                    f"is running a compatible DAB version (requires PR 1032+)."
                 )
+            cursor.advance(last_pk_on_page)
 
             if not data.get('next'):
                 break
@@ -1619,7 +1614,10 @@ class Command(BaseCommand):
         try:
             role_definition = RoleDefinition.objects.get(name=role_name)
         except RoleDefinition.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find role definition '{role_name}', skipping {assignment_type} assignment for actor {actor_ansible_id}")
+            self._log(
+                f"Warning: Unable to find role definition '{role_name}', skipping {assignment_type} assignment for actor {actor_ansible_id}",
+                logging.WARNING,
+            )
             return False
 
         # --- Resolve the actor via Resource ---
@@ -1629,12 +1627,16 @@ class Command(BaseCommand):
             # content_object is None when the underlying object was deleted
             # but the Resource row still exists (stale generic FK).
             if actor is None:
-                self.stderr.write(
-                    f"Warning: Resource {actor_ansible_id} exists but its {assignment_type} object was deleted, skipping assignment for role '{role_name}'"
+                self._log(
+                    f"Warning: Resource {actor_ansible_id} exists but its {assignment_type} object was deleted, skipping assignment for role '{role_name}'",
+                    logging.WARNING,
                 )
                 return False
         except Resource.DoesNotExist:
-            self.stderr.write(f"Warning: Unable to find {assignment_type} with ansible_id {actor_ansible_id}, skipping assignment for role '{role_name}'")
+            self._log(
+                f"Warning: Unable to find {assignment_type} with ansible_id {actor_ansible_id}, skipping assignment for role '{role_name}'",
+                logging.WARNING,
+            )
             return False
 
         # --- Create the assignment ---
@@ -1661,18 +1663,20 @@ class Command(BaseCommand):
             role_definition.give_permission(actor, remote_obj)
             return True
         except Resource.DoesNotExist:
-            self.stderr.write(
+            self._log(
                 f"Warning: Unable to find content object with "
                 f"ansible_id {object_ref}, "
                 f"skipping {assignment_type} assignment for actor {actor_ansible_id} "
-                f"with role '{role_name}'"
+                f"with role '{role_name}'",
+                logging.WARNING,
             )
             return False
         except Exception as e:
-            self.stderr.write(
+            self._log(
                 f"Warning: Unable to give permission for {assignment_type} assignment "
                 f"(actor={actor_ansible_id}, role='{role_name}', object={object_ref}), "
-                f"skipping: {e}"
+                f"skipping: {e}",
+                logging.WARNING,
             )
             return False
 
@@ -1687,11 +1691,12 @@ class Command(BaseCommand):
         obj_resource = Resource.objects.get(ansible_id=object_ref)
         content_object = obj_resource.content_object
         if content_object is None:
-            self.stderr.write(
+            self._log(
                 f"Warning: Resource {object_ref} exists but its "
                 f"content object was deleted, "
                 f"skipping {assignment_type} assignment for actor {actor_ansible_id} "
-                f"with role '{role_name}'"
+                f"with role '{role_name}'",
+                logging.WARNING,
             )
             return False
         role_definition.give_permission(actor, content_object)
@@ -1717,16 +1722,8 @@ class Command(BaseCommand):
         give_permission is idempotent (uses get_or_create), so replaying
         a partial page after a crash is safe.
 
-        NOTE: The PK cursor optimization (resume from last processed
-        assignment, skip already-synced data on reinstall) requires the
-        service-index assignment API to include 'id' in responses. DAB's
-        assignment_common_fields does not currently include 'id', so the
-        cursor cannot advance and every run reprocesses all assignments.
-        The migration is still correct (give_permission is idempotent)
-        but does not benefit from cursor-based resume until DAB adds 'id'
-        to the service-index assignment serializer.
         """
-        self.stdout.write(f"Migrating role assignments from {service_slug} (type {service_type_name})")
+        self._log(f"Migrating role assignments from {service_slug} (type {service_type_name})", logging.INFO)
         roles_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
 
         total_created = 0
@@ -1736,7 +1733,7 @@ class Command(BaseCommand):
             cursor = _CursorStore(service_slug, assignment_type)
             created = self._paginate_and_create(list_fn, assignment_type, roles_to_exclude, cursor)
             total_created += created
-            self.stdout.write(f"  {assignment_type}: {created} assignments created")
+            self._log(f"  {assignment_type}: {created} assignments created", logging.INFO)
 
             # Post-run drift check: detect assignments created on the
             # upstream service since the last page was fetched.  This is
@@ -1750,7 +1747,7 @@ class Command(BaseCommand):
             if self._check_for_drift(list_fn, assignment_type, service_slug):
                 drift_detected = True
 
-        self.stdout.write(f"Role assignment migration for {service_slug} completed ({total_created} total created)")
+        self._log(f"Role assignment migration for {service_slug} completed ({total_created} total created)", logging.INFO)
 
         if drift_detected:
             raise RuntimeError(
@@ -1773,7 +1770,7 @@ class Command(BaseCommand):
         try:
             check_resp = list_fn(filters={'order_by': 'id', 'id__gt': str(db_cursor.last_pk), 'page_size': '1'})
             if check_resp.status_code == 200 and check_resp.json().get('count', 0) > 0:
-                self.stderr.write(f"Warning: new {assignment_type} assignments appeared during migration of {service_slug} (concurrent modification)")
+                self._log(f"Warning: new {assignment_type} assignments appeared during migration of {service_slug} (concurrent modification)", logging.WARNING)
                 return True
         except Exception:
             logger.warning(
