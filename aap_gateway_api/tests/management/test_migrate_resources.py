@@ -1662,18 +1662,20 @@ def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, serv
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         # Generate UUID for a user that could not have been migrated and will not exist
         invalid_user_ansible_id = str(uuid.uuid4())
-        user_resp = Mock()
-        user_resp.status_code = 200
-        user_resp.json.return_value = {
+        # First call returns data for pagination, second call returns
+        # empty for the post-run drift check.
+        data_resp = Mock(status_code=200)
+        data_resp.json.return_value = {
             "count": 1,
             "next": None,
-            "results": [{"object_ansible_id": None, "content_type": "", "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}],
+            "results": [
+                {"id": 1, "object_ansible_id": None, "content_type": "", "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}
+            ],
         }
-        mock_client.list_user_assignments.return_value = user_resp
-        team_resp = Mock()
-        team_resp.status_code = 200
-        team_resp.json.return_value = {"count": 0, "next": None, "results": []}
-        mock_client.list_team_assignments.return_value = team_resp
+        empty_resp = Mock(status_code=200)
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
+        mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1710,13 +1712,15 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         # Create a user so that the ansible_id matches
         test_user = User.objects.create(username='test-user')
-        user_resp = Mock()
-        user_resp.status_code = 200
-        user_resp.json.return_value = {
+        # First call returns data for pagination, second call returns
+        # empty for the post-run drift check.
+        data_resp = Mock(status_code=200)
+        data_resp.json.return_value = {
             "count": 1,
             "next": None,
             "results": [
                 {
+                    "id": 1,
                     "object_ansible_id": None,
                     "content_type": "",
                     "role_definition": "INVALID ROLE DEFINITION",
@@ -1724,11 +1728,10 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
                 }
             ],
         }
-        mock_client.list_user_assignments.return_value = user_resp
-        team_resp = Mock()
-        team_resp.status_code = 200
-        team_resp.json.return_value = {"count": 0, "next": None, "results": []}
-        mock_client.list_team_assignments.return_value = team_resp
+        empty_resp = Mock(status_code=200)
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
+        mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1766,13 +1769,15 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         # Generate UUID for an object that could not have been migrated
         invalid_object_ansible_id = str(uuid.uuid4())
         test_user = User.objects.create(username='test-user')
-        user_resp = Mock()
-        user_resp.status_code = 200
-        user_resp.json.return_value = {
+        # First call returns data for pagination, second call returns
+        # empty for the post-run drift check.
+        data_resp = Mock(status_code=200)
+        data_resp.json.return_value = {
             "count": 1,
             "next": None,
             "results": [
                 {
+                    "id": 1,
                     "object_ansible_id": invalid_object_ansible_id,
                     "content_type": "shared.team",
                     "role_definition": "Team Member",
@@ -1780,11 +1785,10 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
                 }
             ],
         }
-        mock_client.list_user_assignments.return_value = user_resp
-        team_resp = Mock()
-        team_resp.status_code = 200
-        team_resp.json.return_value = {"count": 0, "next": None, "results": []}
-        mock_client.list_team_assignments.return_value = team_resp
+        empty_resp = Mock(status_code=200)
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
+        mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
