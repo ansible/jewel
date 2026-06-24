@@ -13,6 +13,7 @@ from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from django.db import IntegrityError
 
+from aap_gateway_api.management.commands.migrate_service_data import AssignmentActorType
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
