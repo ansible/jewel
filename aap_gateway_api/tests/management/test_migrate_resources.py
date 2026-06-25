@@ -7,13 +7,12 @@ from unittest.mock import Mock, patch
 import pytest
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import DABContentType, RemoteObject, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
 from django.db import IntegrityError
 
-from aap_gateway_api.management.commands.migrate_service_data import AssignmentActorType
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.models import MigratedUserMetadata, Organization, Route, Team, User
 from aap_gateway_api.tests.service_test_app.launch import launch_service
@@ -83,6 +82,25 @@ def _setup_role_api_mocks(mock_client):
     mock_client.list_role_permissions.return_value = mock_permissions_response
 
 
+def _setup_empty_assignment_mocks(mock_client):
+    """Setup empty role assignment mocks with proper HTTP response objects.
+
+    The _CursorStore-based pagination checks response.status_code before
+    calling .json(), so assignment mocks must be explicit Mock objects
+    with status_code=200.  Empty results signal the cursor that there
+    are no new assignments beyond the current cursor position.
+    """
+    empty_user_resp = Mock()
+    empty_user_resp.status_code = 200
+    empty_user_resp.json.return_value = {"count": 0, "results": [], "next": None}
+    mock_client.list_user_assignments.return_value = empty_user_resp
+
+    empty_team_resp = Mock()
+    empty_team_resp.status_code = 200
+    empty_team_resp.json.return_value = {"count": 0, "results": [], "next": None}
+    mock_client.list_team_assignments.return_value = empty_team_resp
+
+
 def _setup_basic_service_client_mocks(mock_client, service_api, admin_user, service_id=None, service_type="controller"):
     """Helper function to setup basic service client mocks with common configuration"""
 
@@ -95,6 +113,9 @@ def _setup_basic_service_client_mocks(mock_client, service_api, admin_user, serv
 
     # Setup role API mocks
     _setup_role_api_mocks(mock_client)
+
+    # Setup empty assignment mocks with proper HTTP response objects
+    _setup_empty_assignment_mocks(mock_client)
 
 
 @pytest.fixture
@@ -585,8 +606,7 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
                 }
                 # Mock successful migration workflow
                 mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-                mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
-                mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+                _setup_empty_assignment_mocks(mock_client)
             else:
                 # Hub fails
                 mock_client.get_service_metadata.side_effect = HTTPError("Mock HTTP error")
@@ -630,8 +650,7 @@ def test_migration_skips_when_already_synced(admin_user, capsys, service_api_rou
                 "service_type": "controller",
             }
             mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-            mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-            mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            _setup_empty_assignment_mocks(mock_client)
             return mock_client
 
         mock_client_class.side_effect = mock_client_factory
@@ -664,8 +683,7 @@ def test_migration_proceeds_when_not_synced(admin_user, capsys, service_api_rout
                 "service_type": "controller",
             }
             mock_client.list_resources.return_value.json.return_value = {"count": 1, "results": []}
-            mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-            mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            _setup_empty_assignment_mocks(mock_client)
             return mock_client
 
         mock_client_class.side_effect = mock_client_factory
@@ -701,8 +719,7 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
             responses = [Mock(json=Mock(return_value={"count": 1, "results": []}))]
             responses += [Mock(json=Mock(return_value={"count": 0, "results": []}))] * 20
             mock_client.list_resources.side_effect = responses
-            mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-            mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+            _setup_empty_assignment_mocks(mock_client)
             created_clients.append(mock_client)
             return mock_client
 
@@ -872,8 +889,7 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
 
         # Mock empty resource lists for clean migration
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        # Assignment mocks already set by _setup_basic_service_client_mocks
         mock_client_class.return_value = mock_client
 
         # Should successfully process the single service
@@ -1171,8 +1187,7 @@ def test_delete_legacy_authenticators_integration_with_migration(admin_user, cap
             "service_type": "controller",
         }
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
+        _setup_empty_assignment_mocks(mock_client)
         mock_client_class.return_value = mock_client
 
         # Run migration
@@ -1499,6 +1514,66 @@ def test_controller_role_assignment_migration(migration_service_controller_roles
 
 
 @pytest.mark.django_db()
+def test_controller_role_assignment_migration_reinstall_is_noop(
+    migration_service_controller_roles, admin_user, admin_api_client, patched_resource_client, capsys
+):
+    """Test that running migrate_service_data a second time with already-synced data
+    completes with zero give_permission calls (set-diff produces an empty delta).
+
+    This is the core performance scenario for AAP-78674: at scale (86K+ role
+    assignments), a reinstall was taking 4+ hours because every assignment was
+    re-fetched and re-processed even though all data already matched. The set-diff
+    approach computes to_create = remote - local; when the sets match, to_create
+    is empty and no work is done.
+
+    The test runs the full migration command end-to-end against a real test
+    service and database:
+      1. First run: fresh install — assignments are created normally
+      2. Reset the migration-complete flag so the command will run again
+      3. Second run: reinstall — all assignments already exist, expect "0 assignments created"
+    """
+    from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+
+    # --- First run: fresh install, assignments are created ---
+    patched_resource_client(service=migration_service_controller_roles, user=admin_user, raise_if_bad_request=True)
+    call_command("migrate_service_data", username=admin_user.username)
+
+    # Verify assignments were created (same checks as test_controller_role_assignment_migration)
+    for assignment in (
+        ('controller-organization-admin', 'Organization Admin', 'controller-admin-organization'),
+        ('controller-organization-member', 'Organization Member', 'controller-member-organization'),
+        ('controller-team-admin', 'Team Admin', 'controller-admin-team'),
+        ('controller-team-member', 'Team Member', 'controller-member-team'),
+        ('controller-platform-auditor', 'Platform Auditor', None),
+        ('controller-dummy-user', 'controller-dummy-role', 'controller-dummy-organization'),
+    ):
+        assert _user_assignment_exists(assignment[0], assignment[1], assignment[2])
+
+    user_assignment_count_after_first_run = RoleUserAssignment.objects.count()
+    team_assignment_count_after_first_run = RoleTeamAssignment.objects.count()
+    assert user_assignment_count_after_first_run > 0
+
+    # --- Second run: reinstall scenario ---
+    # Reset the migration flag so the command doesn't short-circuit with
+    # "Migration has already completed. Skipping."
+    MigrateServiceDataHasRan.mark_migration_not_completed()
+
+    # Clear captured output from the first run
+    capsys.readouterr()
+
+    call_command("migrate_service_data", username=admin_user.username)
+
+    # No new assignments should have been created — the PK cursor is past
+    # all existing assignments, so the API returns zero results.
+    assert RoleUserAssignment.objects.count() == user_assignment_count_after_first_run
+    assert RoleTeamAssignment.objects.count() == team_assignment_count_after_first_run
+
+    # The command output should confirm zero assignments created
+    captured = capsys.readouterr()
+    assert "0 assignments created" in captured.out
+
+
+@pytest.mark.django_db()
 def test_controller_role_assignment_migration_paginated(migration_service_controller_roles_paginated, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in controller are migrated with pagination"""
 
@@ -1587,11 +1662,20 @@ def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, serv
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         # Generate UUID for a user that could not have been migrated and will not exist
         invalid_user_ansible_id = str(uuid.uuid4())
-        mock_client.list_user_assignments.return_value.json.return_value = {
-            "count": 0,
-            "results": [{"object_ansible_id": None, "content_type": None, "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}],
+        # First call returns data for pagination, second call returns
+        # empty for the post-run drift check.
+        data_resp = Mock(status_code=200)
+        data_resp.json.return_value = {
+            "count": 1,
+            "next": None,
+            "results": [
+                {"id": 1, "object_ansible_id": None, "content_type": "", "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}
+            ],
         }
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        empty_resp = Mock(status_code=200)
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
+        mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1600,7 +1684,7 @@ def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, serv
         assert RoleUserAssignment.objects.count() == 0
 
         captured = capsys.readouterr()
-        assert f"Unable to find gateway user with ansible_id {invalid_user_ansible_id}" in captured.err
+        assert f"Unable to find user with ansible_id {invalid_user_ansible_id}" in captured.err
 
 
 @pytest.mark.django_db()
@@ -1628,18 +1712,26 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
         # Create a user so that the ansible_id matches
         test_user = User.objects.create(username='test-user')
-        mock_client.list_user_assignments.return_value.json.return_value = {
-            "count": 0,
+        # First call returns data for pagination, second call returns
+        # empty for the post-run drift check.
+        data_resp = Mock(status_code=200)
+        data_resp.json.return_value = {
+            "count": 1,
+            "next": None,
             "results": [
                 {
+                    "id": 1,
                     "object_ansible_id": None,
-                    "content_type": None,
+                    "content_type": "",
                     "role_definition": "INVALID ROLE DEFINITION",
                     "user_ansible_id": test_user.resource.ansible_id,
                 }
             ],
         }
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        empty_resp = Mock(status_code=200)
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
+        mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1648,7 +1740,7 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         assert RoleUserAssignment.objects.count() == 0
 
         captured = capsys.readouterr()
-        assert "Warning: Unable to find role definition INVALID ROLE DEFINITION, skipping assignment" in captured.err
+        assert "Unable to find role definition 'INVALID ROLE DEFINITION'" in captured.err
 
 
 @pytest.mark.django_db()
@@ -1677,10 +1769,15 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         # Generate UUID for an object that could not have been migrated
         invalid_object_ansible_id = str(uuid.uuid4())
         test_user = User.objects.create(username='test-user')
-        mock_client.list_user_assignments.return_value.json.return_value = {
-            "count": 0,
+        # First call returns data for pagination, second call returns
+        # empty for the post-run drift check.
+        data_resp = Mock(status_code=200)
+        data_resp.json.return_value = {
+            "count": 1,
+            "next": None,
             "results": [
                 {
+                    "id": 1,
                     "object_ansible_id": invalid_object_ansible_id,
                     "content_type": "shared.team",
                     "role_definition": "Team Member",
@@ -1688,7 +1785,10 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
                 }
             ],
         }
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": []}
+        empty_resp = Mock(status_code=200)
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
+        mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
 
         assert RoleUserAssignment.objects.count() == 0
@@ -1697,7 +1797,7 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         assert RoleUserAssignment.objects.count() == 0
 
         captured = capsys.readouterr()
-        assert f"Warning: Unable to find object of type shared.team with ansible_id {invalid_object_ansible_id}, skipping assignment" in captured.err
+        assert f"Unable to find content object with ansible_id {invalid_object_ansible_id}" in captured.err
 
 
 # Parameterized tests for _ensure_controller_gateway_superusers method
@@ -2154,442 +2254,6 @@ def test_sync_hub_eda_superuser_no_change_needed(capsys):
     captured = capsys.readouterr()
     assert "promoted to" not in captured.out
     assert "demoted from" not in captured.out
-
-
-# =============================================================================
-# Tests for _resolve_role_definition helper
-# =============================================================================
-
-
-@pytest.mark.django_db
-def test_resolve_role_definition_found(admin_user):
-    """Test _resolve_role_definition returns the RoleDefinition when it exists."""
-    rd = RoleDefinition.objects.create(name="Test Role Def", content_type=None)
-
-    cmd = MigrateCommand()
-    result = cmd._resolve_role_definition("Test Role Def")
-
-    assert result == rd
-
-
-@pytest.mark.django_db
-def test_resolve_role_definition_not_found(capsys):
-    """Test _resolve_role_definition returns None and warns when not found."""
-    cmd = MigrateCommand()
-    result = cmd._resolve_role_definition("Nonexistent Role")
-
-    assert result is None
-    captured = capsys.readouterr()
-    assert "Warning: Unable to find role definition Nonexistent Role, skipping assignment" in captured.err
-
-
-# =============================================================================
-# Tests for _resolve_gateway_actor helper
-# =============================================================================
-
-
-@pytest.mark.django_db
-def test_resolve_gateway_actor_found(admin_user):
-    """Test _resolve_gateway_actor returns the content object when found."""
-    cmd = MigrateCommand()
-    # admin_user should have a Resource with an ansible_id
-    actor = cmd._resolve_gateway_actor(
-        AssignmentActorType.USER,
-        admin_user.resource.ansible_id,
-    )
-    assert actor == admin_user
-
-
-@pytest.mark.django_db
-def test_resolve_gateway_actor_not_found(capsys):
-    """Test _resolve_gateway_actor returns None and warns when not found."""
-    cmd = MigrateCommand()
-    fake_id = str(uuid.uuid4())
-    result = cmd._resolve_gateway_actor(AssignmentActorType.USER, fake_id)
-
-    assert result is None
-    captured = capsys.readouterr()
-    assert f"Unable to find gateway user with ansible_id {fake_id}" in captured.err
-
-
-# =============================================================================
-# Tests for _resolve_content_object helper
-# =============================================================================
-
-
-@pytest.mark.django_db
-def test_resolve_content_object_global_assignment():
-    """Test _resolve_content_object returns None for global assignments (no object)."""
-    cmd = MigrateCommand()
-    assignment = {"object_ansible_id": None, "object_id": None, "content_type": ""}
-    result = cmd._resolve_content_object(assignment)
-
-    assert result is None
-
-
-@pytest.mark.django_db
-def test_resolve_content_object_with_ansible_id(admin_user):
-    """Test _resolve_content_object resolves by ansible_id when present."""
-    cmd = MigrateCommand()
-    assignment = {
-        "object_ansible_id": admin_user.resource.ansible_id,
-        "object_id": None,
-        "content_type": "",
-    }
-    result = cmd._resolve_content_object(assignment)
-
-    assert result == admin_user
-
-
-@pytest.mark.django_db
-def test_resolve_content_object_remote_object():
-    """Test _resolve_content_object resolves RemoteObject by object_id + content_type."""
-    ct = DABContentType.objects.create(service="controller", model="job_template")
-
-    cmd = MigrateCommand()
-    assignment = {
-        "object_ansible_id": None,
-        "object_id": "12345",
-        "content_type": "controller.job_template",
-    }
-    result = cmd._resolve_content_object(assignment)
-
-    assert isinstance(result, RemoteObject)
-    assert result.object_id == "12345"
-    assert result.content_type == ct
-
-
-@pytest.mark.django_db
-def test_resolve_content_object_skip_on_not_found(capsys):
-    """Test _resolve_content_object returns _SKIP when Resource is not found."""
-    cmd = MigrateCommand()
-    fake_id = str(uuid.uuid4())
-    assignment = {
-        "object_ansible_id": fake_id,
-        "object_id": None,
-        "content_type": "shared.team",
-    }
-    result = cmd._resolve_content_object(assignment)
-
-    assert result is MigrateCommand._SKIP
-    captured = capsys.readouterr()
-    assert f"Unable to find object of type shared.team with ansible_id {fake_id}" in captured.err
-
-
-@pytest.mark.django_db
-def test_resolve_content_object_skip_on_malformed_content_type(capsys):
-    """Test _resolve_content_object returns _SKIP on malformed content_type."""
-    cmd = MigrateCommand()
-    assignment = {
-        "object_ansible_id": None,
-        "object_id": "12345",
-        "content_type": "bad-format",
-    }
-    result = cmd._resolve_content_object(assignment)
-
-    assert result is MigrateCommand._SKIP
-    captured = capsys.readouterr()
-    assert "Malformed content_type 'bad-format'" in captured.err
-
-
-@pytest.mark.django_db
-def test_resolve_content_object_skip_on_missing_content_type(capsys):
-    """Test _resolve_content_object returns _SKIP when DABContentType doesn't exist."""
-    cmd = MigrateCommand()
-    assignment = {
-        "object_ansible_id": None,
-        "object_id": "12345",
-        "content_type": "nonexistent.model",
-    }
-    result = cmd._resolve_content_object(assignment)
-
-    assert result is MigrateCommand._SKIP
-    captured = capsys.readouterr()
-    assert "Unable to find content type 'nonexistent.model'" in captured.err
-
-
-# =============================================================================
-# Tests for _fetch_role_assignments count tolerance (AAP-76813)
-# =============================================================================
-
-
-@pytest.mark.django_db
-def test_fetch_role_assignments_tolerates_count_change(caplog):
-    """Test that _fetch_role_assignments logs a warning instead of raising when count changes between pages."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    page1_response = Mock()
-    page1_response.json.return_value = {
-        "count": 100,
-        "results": [{"id": 1}],
-        "next": "http://example.com/page=2",
-    }
-    page2_response = Mock()
-    page2_response.json.return_value = {
-        "count": 105,
-        "results": [{"id": 2}],
-        "next": None,
-    }
-    mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
-
-    with caplog.at_level("WARNING", logger="aap.gateway.management.commands.migrate_service_data"):
-        results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
-
-    assert len(results) == 2
-    assert results == [{"id": 1}, {"id": 2}]
-    assert any("assignment count changed from 100 to 105" in msg for msg in caplog.messages)
-
-
-@pytest.mark.django_db
-def test_fetch_role_assignments_updates_total_count_on_change(caplog):
-    """Test that total_count is updated after a count change so subsequent pages compare against the new value."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    page1_response = Mock()
-    page1_response.json.return_value = {"count": 50, "results": [{"id": 1}], "next": "http://example.com/page=2"}
-    page2_response = Mock()
-    page2_response.json.return_value = {"count": 55, "results": [{"id": 2}], "next": "http://example.com/page=3"}
-    page3_response = Mock()
-    page3_response.json.return_value = {"count": 55, "results": [{"id": 3}], "next": None}
-
-    mock_client.list_user_assignments.side_effect = [page1_response, page2_response, page3_response]
-
-    with caplog.at_level("WARNING", logger="aap.gateway.management.commands.migrate_service_data"):
-        results = list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
-
-    assert len(results) == 3
-    # Warning should fire only once (page 2 drift), not again on page 3 (count matches updated total)
-    warning_msgs = [msg for msg in caplog.messages if "assignment count changed" in msg]
-    assert len(warning_msgs) == 1
-    assert "from 50 to 55" in warning_msgs[0]
-
-
-@pytest.mark.django_db
-def test_fetch_role_assignments_tracks_drift_services():
-    """Test that services with count drift are tracked in _services_with_count_drift."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    page1_response = Mock()
-    page1_response.json.return_value = {"count": 10, "results": [{"id": 1}], "next": "http://example.com/page=2"}
-    page2_response = Mock()
-    page2_response.json.return_value = {"count": 11, "results": [{"id": 2}], "next": None}
-
-    mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
-
-    list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
-
-    assert "controller" in cmd._services_with_count_drift
-
-
-@pytest.mark.django_db
-def test_fetch_role_assignments_no_drift_not_tracked():
-    """Test that services without count drift are not added to _services_with_count_drift."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    page1_response = Mock()
-    page1_response.json.return_value = {"count": 10, "results": [{"id": 1}], "next": "http://example.com/page=2"}
-    page2_response = Mock()
-    page2_response.json.return_value = {"count": 10, "results": [{"id": 2}], "next": None}
-
-    mock_client.list_user_assignments.side_effect = [page1_response, page2_response]
-
-    list(cmd._fetch_role_assignments(AssignmentActorType.USER, "controller", "controller"))
-
-    assert "controller" not in cmd._services_with_count_drift
-
-
-# =============================================================================
-# Tests for migrate_role_assignments try/except structure (AAP-76813)
-# =============================================================================
-
-
-@pytest.mark.django_db
-def test_migrate_role_assignments_catches_fetch_error(capsys):
-    """Test that errors during generator iteration are caught by the outer try/except."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    cmd.stdout = Mock()
-    cmd.stderr = Mock()
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    mock_response = Mock()
-    mock_response.json.side_effect = RuntimeError("connection lost")
-    mock_client.list_user_assignments.return_value = mock_response
-
-    cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
-
-    cmd.stderr.write.assert_called()
-    error_msg = str(cmd.stderr.write.call_args_list)
-    assert "Unable to fetch role user assignments from controller, skipping: connection lost" in error_msg
-
-
-@pytest.mark.django_db
-def test_migrate_role_assignments_catches_give_permission_error(admin_user, capsys):
-    """Test that errors in give_permission are caught separately from fetch errors."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    test_user = User.objects.create(username="perm-error-user")
-    rd = RoleDefinition.objects.create(name="Test Permission Role", content_type=None)
-
-    mock_response = Mock()
-    mock_response.json.return_value = {
-        "count": 1,
-        "results": [
-            {
-                "object_ansible_id": None,
-                "object_id": None,
-                "content_type": "",
-                "role_definition": "Test Permission Role",
-                "user_ansible_id": str(test_user.resource.ansible_id),
-            }
-        ],
-        "next": None,
-    }
-    mock_client.list_user_assignments.return_value = mock_response
-
-    with patch.object(rd, 'give_global_permission', side_effect=RuntimeError("permission denied")):
-        with patch.object(MigrateCommand, '_resolve_role_definition', return_value=rd):
-            cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
-
-    captured = capsys.readouterr()
-    assert "Unable to give permission for role user assignment" in captured.err
-    assert "Unable to fetch" not in captured.err
-
-
-@pytest.mark.django_db(transaction=True)
-def test_drift_summary_warning_displayed(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
-    """Test that services with count drift are reported in the migration summary."""
-    with (
-        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
-        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
-        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
-        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
-        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
-    ):
-        mock_jwt.return_value = 'fake-jwt-token'
-        mock_key.return_value = 'fake-key'
-        mock_consistency_check.return_value = None
-
-        mock_client = Mock()
-        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
-        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-
-        # Simulate count drift: page 1 has count=2, page 2 has count=3
-        page1 = Mock()
-        page1.json.return_value = {"count": 2, "results": [{"id": 1}], "next": "http://example.com/page=2"}
-        page2 = Mock()
-        page2.json.return_value = {"count": 3, "results": [{"id": 2}], "next": None}
-        mock_client.list_user_assignments.side_effect = [page1, page2]
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-        mock_client_class.return_value = mock_client
-
-        call_command("migrate_service_data", username=admin_user.username)
-
-        captured = capsys.readouterr()
-        assert "WARNING" in captured.err
-        assert "count changes during role assignment migration" in captured.err
-        assert "re-run the migration" in captured.err
-        assert "Migration flag NOT set" in captured.out
-
-
-@pytest.mark.django_db(transaction=True)
-def test_no_drift_summary_when_counts_stable(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
-    """Test that no drift warning is shown when counts are stable."""
-    with (
-        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
-        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
-        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
-        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
-        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
-    ):
-        mock_jwt.return_value = 'fake-jwt-token'
-        mock_key.return_value = 'fake-key'
-        mock_consistency_check.return_value = None
-
-        mock_client = Mock()
-        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
-        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-        mock_client.list_user_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-        mock_client_class.return_value = mock_client
-
-        call_command("migrate_service_data", username=admin_user.username)
-
-        captured = capsys.readouterr()
-        assert "count changes during role assignment migration" not in captured.err
-        assert "Migration flag updated" in captured.out
-
-
-@pytest.mark.django_db(transaction=True)
-def test_give_permission_failure_does_not_block_migration(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
-    """Test that a give_permission failure for one assignment does not prevent the service from completing."""
-    with (
-        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
-        patch('aap_gateway_api.utils.jwt_token.create_signed_jwt') as mock_jwt,
-        patch('aap_gateway_api.utils.jwt_token.get_jwt_rsa_key') as mock_key,
-        patch('aap_gateway_api.management.commands.migrate_service_data.Command._ensure_superuser_consistency') as mock_consistency_check,
-        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
-    ):
-        mock_jwt.return_value = 'fake-jwt-token'
-        mock_key.return_value = 'fake-key'
-        mock_consistency_check.return_value = None
-
-        test_user = User.objects.create(username='perm-fail-integration-user')
-        rd = RoleDefinition.objects.create(name="Perm Fail Test Role", content_type=None)
-
-        mock_client = Mock()
-        _setup_basic_service_client_mocks(mock_client, service_api_route_controller, admin_user)
-        mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
-
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "count": 1,
-            "results": [
-                {
-                    "object_ansible_id": None,
-                    "object_id": None,
-                    "content_type": "",
-                    "role_definition": "Perm Fail Test Role",
-                    "user_ansible_id": str(test_user.resource.ansible_id),
-                }
-            ],
-            "next": None,
-        }
-        mock_client.list_user_assignments.return_value = mock_response
-        mock_client.list_team_assignments.return_value.json.return_value = {"count": 0, "results": [], "next": None}
-        mock_client_class.return_value = mock_client
-
-        with patch.object(rd, 'give_global_permission', side_effect=RuntimeError("DB constraint violation")):
-            with patch.object(MigrateCommand, '_resolve_role_definition', return_value=rd):
-                call_command("migrate_service_data", username=admin_user.username)
-
-        captured = capsys.readouterr()
-        assert "Unable to give permission" in captured.err
-        assert "Completed migration for service" in captured.out
-        assert "Successful migrations: 1" in captured.out
-        assert "Migration flag updated" in captured.out
 
 
 # =============================================================================
@@ -3069,41 +2733,3 @@ def test_merge_user_group_successful(capsys):
     assert "Successfully merged hub user" in captured.out
     assert "Migrating main user" in captured.out
     assert "Successfully migrated main user" in captured.out
-
-
-# =============================================================================
-# Tests for migrate_role_assignments resolve error path (coverage)
-# =============================================================================
-
-
-@pytest.mark.django_db
-def test_migrate_role_assignments_catches_resolve_error(capsys):
-    """Unexpected errors during role/actor/object resolution are caught and logged."""
-    cmd = MigrateCommand()
-    cmd._services_with_count_drift = set()
-    cmd._progress_thresholds = {}
-    mock_client = Mock()
-    cmd.client = mock_client
-
-    mock_response = Mock()
-    mock_response.json.return_value = {
-        "count": 1,
-        "results": [
-            {
-                "object_ansible_id": "does-not-exist",
-                "object_id": 999,
-                "content_type": "shared.organization",
-                "role_definition": "Some Role",
-                "user_ansible_id": str(uuid.uuid4()),
-            }
-        ],
-        "next": None,
-    }
-    mock_client.list_user_assignments.return_value = mock_response
-
-    with patch.object(cmd, "_resolve_role_definition", side_effect=RuntimeError("db connection lost")):
-        cmd.migrate_role_assignments(AssignmentActorType.USER, "controller", "controller")
-
-    captured = capsys.readouterr()
-    assert "Unable to process role user assignment, skipping" in captured.err
-    assert "db connection lost" in captured.err
