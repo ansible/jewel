@@ -20,7 +20,7 @@ PyYAML
 # Not directly imported but pinned per dependabot alerts
 urllib3>=2.7.0   # CVE-2026-44431 / CVE-2026-44432
 argon2-cffi
-dynaconf>=3.2.13,<4.0.0  # CVE-2026-33154
+dynaconf>=3.2.13,<3.3.0  # CVE-2026-33154; pin <3.3.0 per AAP-80580 (breaking internal API change)
 referencing<0.37.0  # consistent with DAB pin from jsonschema-path
 jsonschema<4.26  # 4.26+ requires rpds-py>=0.25, incompatible with hermeto
 rpds-py<0.25  # hermeto does not support rpds-py>=0.25
