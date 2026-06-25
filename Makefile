@@ -234,7 +234,7 @@ ifeq ($(UNAME_S),Linux)
 endif
 
 ## Build the proxy config file
-tools/generated/proxy.yml: $(shell find tools/ansible/roles/proxy-config/templates -type f)
+tools/generated/proxy.yml: container-startup.yml $(shell find tools/ansible/roles/proxy-config/templates -type f)
 	ansible-playbook tools/ansible/generate-proxy-configs.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
 ## Build the requirements.txt file
