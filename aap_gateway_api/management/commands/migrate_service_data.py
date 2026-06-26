@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Type
+from urllib.parse import parse_qs, urlparse
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
@@ -1525,10 +1526,11 @@ class Command(BaseCommand):
         Crash safety: the cursor is advanced in the database after each
         fully-processed page, so at most one page of work is lost.
         """
-        page = 1
+        page_num = 1
         created = 0
+        next_cursor = None
 
-        # Build base filters once — only 'page' changes between iterations.
+        # Build base filters once.
         # snapshot_pk is immutable (set once in _CursorStore.__init__).
         base_filters: Dict[str, Any] = {'order_by': 'id', **self.BIG_PAGE_FILTERS}
         if roles_to_exclude:
@@ -1537,9 +1539,12 @@ class Command(BaseCommand):
             base_filters['id__gt'] = str(cursor.last_pk)
 
         while True:
-            response = list_fn(filters={**base_filters, 'page': page})
+            filters = {**base_filters}
+            if next_cursor:
+                filters['cursor'] = next_cursor
+            response = list_fn(filters=filters)
             if response.status_code != 200:
-                self._raise_fetch_error(response, assignment_type, page)
+                self._raise_fetch_error(response, assignment_type, page_num)
 
             data = response.json()
             results = data.get('results') or []
@@ -1559,9 +1564,13 @@ class Command(BaseCommand):
                 )
             cursor.advance(last_pk_on_page)
 
-            if not data.get('next'):
+            next_url = data.get('next')
+            if not next_url:
                 break
-            page += 1
+            next_cursor = parse_qs(urlparse(next_url).query).get('cursor', [None])[0]
+            if not next_cursor:
+                break
+            page_num += 1
 
         return created
 
@@ -1769,7 +1778,7 @@ class Command(BaseCommand):
 
         try:
             check_resp = list_fn(filters={'order_by': 'id', 'id__gt': str(db_cursor.last_pk), 'page_size': '1'})
-            if check_resp.status_code == 200 and check_resp.json().get('count', 0) > 0:
+            if check_resp.status_code == 200 and len(check_resp.json().get('results', [])) > 0:
                 self._log(f"Warning: new {assignment_type} assignments appeared during migration of {service_slug} (concurrent modification)", logging.WARNING)
                 return True
         except Exception:

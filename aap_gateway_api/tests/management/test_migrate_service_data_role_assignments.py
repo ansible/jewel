@@ -20,19 +20,18 @@ from aap_gateway_api.management.commands.migrate_service_data import Command as 
 from aap_gateway_api.management.commands.migrate_service_data import _CursorStore
 
 
-def _make_api_response(results, count=None, has_next=False):
+def _make_api_response(results, has_next=False):
     """Build a mock API response with proper status_code and JSON body.
 
     The PK cursor pagination checks response.status_code before calling
     .json(), so mocks must be explicit Mock objects with status_code=200.
+    Role assignment endpoints use cursor pagination and do not return a
+    ``count`` field.
     """
-    if count is None:
-        count = len(results)
     resp = Mock()
     resp.status_code = 200
     resp.json.return_value = {
-        "count": count,
-        "next": "http://fake/next" if has_next else None,
+        "next": "http://fake/next?cursor=cD0xMA%3D%3D" if has_next else None,
         "results": results,
     }
     return resp
@@ -489,10 +488,10 @@ class TestMigrateRoleAssignments:
         seed = _CursorStore("drift-check-svc", "user")
         seed.advance(100)
 
-        # API returns count > 0 — drift detected
+        # API returns results — drift detected
         drift_resp = Mock()
         drift_resp.status_code = 200
-        drift_resp.json.return_value = {"count": 3}
+        drift_resp.json.return_value = {"results": [{"id": 101}, {"id": 102}, {"id": 103}], "next": None}
         list_fn = Mock(return_value=drift_resp)
 
         assert cmd._check_for_drift(list_fn, "user", "drift-check-svc") is True
@@ -501,7 +500,7 @@ class TestMigrateRoleAssignments:
         assert call_filters["page_size"] == "1"
 
     def test_check_for_drift_returns_false_when_no_new_items(self):
-        """_check_for_drift returns False when the API returns count=0."""
+        """_check_for_drift returns False when the API returns empty results."""
         cmd = self._make_cmd()
 
         seed = _CursorStore("drift-empty-svc", "user")
@@ -509,7 +508,7 @@ class TestMigrateRoleAssignments:
 
         no_drift_resp = Mock()
         no_drift_resp.status_code = 200
-        no_drift_resp.json.return_value = {"count": 0}
+        no_drift_resp.json.return_value = {"results": [], "next": None}
         list_fn = Mock(return_value=no_drift_resp)
 
         assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc") is False

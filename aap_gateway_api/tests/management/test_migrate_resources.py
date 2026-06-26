@@ -92,12 +92,12 @@ def _setup_empty_assignment_mocks(mock_client):
     """
     empty_user_resp = Mock()
     empty_user_resp.status_code = 200
-    empty_user_resp.json.return_value = {"count": 0, "results": [], "next": None}
+    empty_user_resp.json.return_value = {"results": [], "next": None}
     mock_client.list_user_assignments.return_value = empty_user_resp
 
     empty_team_resp = Mock()
     empty_team_resp.status_code = 200
-    empty_team_resp.json.return_value = {"count": 0, "results": [], "next": None}
+    empty_team_resp.json.return_value = {"results": [], "next": None}
     mock_client.list_team_assignments.return_value = empty_team_resp
 
 
@@ -1666,14 +1666,13 @@ def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, serv
         # empty for the post-run drift check.
         data_resp = Mock(status_code=200)
         data_resp.json.return_value = {
-            "count": 1,
             "next": None,
             "results": [
                 {"id": 1, "object_ansible_id": None, "content_type": "", "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}
             ],
         }
         empty_resp = Mock(status_code=200)
-        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        empty_resp.json.return_value = {"results": [], "next": None}
         mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
         mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
@@ -1716,7 +1715,6 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         # empty for the post-run drift check.
         data_resp = Mock(status_code=200)
         data_resp.json.return_value = {
-            "count": 1,
             "next": None,
             "results": [
                 {
@@ -1729,7 +1727,7 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
             ],
         }
         empty_resp = Mock(status_code=200)
-        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        empty_resp.json.return_value = {"results": [], "next": None}
         mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
         mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
@@ -1773,7 +1771,6 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         # empty for the post-run drift check.
         data_resp = Mock(status_code=200)
         data_resp.json.return_value = {
-            "count": 1,
             "next": None,
             "results": [
                 {
@@ -1786,7 +1783,7 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
             ],
         }
         empty_resp = Mock(status_code=200)
-        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
+        empty_resp.json.return_value = {"results": [], "next": None}
         mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
         mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
