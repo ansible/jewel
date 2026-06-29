@@ -206,7 +206,6 @@ class TestPaginateAndCreate:
 
         call_filters = list_fn.call_args[1]["filters"]
         assert call_filters["id__gt"] == "100"
-        assert call_filters["order_by"] == "id"
 
     def test_cursor_not_in_filters_when_zero(self):
         """When cursor is at 0, id__gt is not added to filters."""
@@ -222,11 +221,7 @@ class TestPaginateAndCreate:
         assert "id__gt" not in call_filters
 
     def test_cursor_advances_per_page(self):
-        """Cursor is advanced in DB after each page, not just at the end.
-
-        This ensures crash safety: if the process is killed between pages,
-        at most one page of work is lost.
-        """
+        """Cursor is advanced in DB after each page."""
         page1 = _make_api_response(
             [
                 _make_remote_assignment("user", "u1", "Role1", pk=10),
@@ -272,6 +267,23 @@ class TestPaginateAndCreate:
         # DB cursor unchanged
         new_cursor = _CursorStore("test-svc-empty", "user")
         assert new_cursor.last_pk == 50
+
+    def test_stops_when_next_has_no_cursor_or_page(self):
+        """When the next URL has neither cursor nor page parameter, pagination stops."""
+        page1 = _make_api_response(
+            [_make_remote_assignment("user", "u1", "Role1", pk=10)],
+        )
+        page1.json.return_value["next"] = "http://example.com/api/v1/role-user-assignments/?page_size=200"
+
+        cmd = self._make_cmd()
+        cursor = _CursorStore("test-svc-no-param", "user")
+        list_fn = Mock(return_value=page1)
+
+        with patch.object(cmd, "_create_assignment", return_value=True):
+            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
+
+        assert created == 1
+        assert list_fn.call_count == 1
 
     def test_http_error_raises_immediately_with_body_preview(self):
         """HTTP error raises RuntimeError immediately with response body preview.

@@ -1508,40 +1508,40 @@ class Command(BaseCommand):
         raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code}\n{body_preview}")
 
     def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: '_CursorStore') -> int:
-        """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
+        """Paginate one assignment endpoint using cursor pagination, creating assignments per page.
 
-        Queries with ``order_by=id&id__gt=<snapshot_pk>`` so only
-        assignments newer than the cursor are fetched.  The snapshot_pk
-        is captured once and stays immutable for the entire run, preventing
-        items from being skipped when the DB cursor advances between pages.
+            Uses cursor-based pagination where results are ordered by ``id``
+            (ascending), so the last result on each page has the highest PK.
+            The cursor is advanced per page so the drift check knows where
+            this run ended and crash recovery can resume from the last
+            completed page.
 
-        On a reinstall where the cursor is already past the last PK,
-        the first page returns zero results and the method returns
-        immediately.
+            On a reinstall where the cursor is already past the last PK,
+            the first page returns zero results and the method returns
+            immediately.
 
-        No per-page retry — the PK cursor provides crash recovery.
-        If the command fails on an HTTP error, the installer re-runs
-        it and the cursor resumes from the last completed page.
+            No per-page retry — the PK cursor provides crash recovery.
+            If the command fails on an HTTP error, the installer re-runs
+            it and the cursor resumes from the last completed page.
 
-        Crash safety: the cursor is advanced in the database after each
-        fully-processed page, so at most one page of work is lost.
+            Crash safety: the cursor is advanced in the database after each
+            fully-processed page, so at most one page of work is lost.
+            Since give_permission is idempotent, replayed assignments are
+            harmless.
         """
         page_num = 1
         created = 0
-        next_cursor = None
+        pagination_token = None
+        last_pk = None
 
         # Build base filters once.
         # snapshot_pk is immutable (set once in _CursorStore.__init__).
-        base_filters: Dict[str, Any] = {'order_by': 'id', **self.BIG_PAGE_FILTERS}
-        if roles_to_exclude:
-            base_filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
-        if cursor.last_pk > 0:
-            base_filters['id__gt'] = str(cursor.last_pk)
+        base_filters: Dict[str, Any] = self._get_base_filters(roles_to_exclude, cursor)
 
         while True:
             filters = {**base_filters}
-            if next_cursor:
-                filters['cursor'] = next_cursor
+            if pagination_token:
+                filters['cursor'] = pagination_token
             response = list_fn(filters=filters)
             if response.status_code != 200:
                 self._raise_fetch_error(response, assignment_type, page_num)
@@ -1555,24 +1555,57 @@ class Command(BaseCommand):
 
             # Advance cursor in DB for crash recovery.  cursor.last_pk
             # is NOT mutated — base_filters stays consistent.
-            last_pk_on_page = results[-1].get('id')
-            if last_pk_on_page is None:
-                raise RuntimeError(
+            last_pk = results[-1].get('id')
+            if last_pk is None:
+                raise RuntimeError( 
                     f"API returned {assignment_type} assignment without 'id' field — "
                     f"cannot advance cursor. Check that the upstream service "
-                    f"is running a compatible DAB version (requires PR 1032+)."
-                )
-            cursor.advance(last_pk_on_page)
-
-            next_url = data.get('next')
-            if not next_url:
-                break
-            next_cursor = parse_qs(urlparse(next_url).query).get('cursor', [None])[0]
-            if not next_cursor:
+                    f"is running a compatible DAB version."
+                    )
+            cursor.advance(last_pk)
+            pagination_token, is_last = self._is_last(data)
+            if is_last:
                 break
             page_num += 1
 
         return created
+
+    def _get_base_filters(self, roles_to_exclude: List[str], cursor: '_CursorStore') -> Dict[str, Any]:
+        """Build base filters for assignment pagination.
+
+        This method is called once per assignment type to construct the
+        base filters used in the pagination loop.  It sets up the
+        'order_by', 'id__gt', and 'not__role_definition__name__in' filters
+        based on the cursor and roles to exclude.
+
+        Args:
+            roles_to_exclude: List of role names to exclude from the results
+            cursor: CursorStore instance tracking the last processed PK
+        """
+
+        # Note: ordering is controlled by ServiceCursorPagination (ordering = 'id')
+        # in DAB, not by a query param.
+        base_filters: Dict[str, Any] = {**self.BIG_PAGE_FILTERS, 'order_by': 'id'}
+        if roles_to_exclude:
+            base_filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+        if cursor.last_pk > 0:
+            base_filters['id__gt'] = str(cursor.last_pk)
+        return base_filters
+
+    def _is_last(self, data: Dict[str, Any]) -> Tuple[str, bool]:
+        """Determine if the current page is the last page of results.
+
+        Returns True if the 'next' field is None or empty, indicating
+        that there are no more pages to fetch.
+        """
+        next_url = data.get('next')
+        if not next_url:
+            return ("", True)
+        parsed_qs = parse_qs(urlparse(next_url).query)
+        pagination_token = parsed_qs.get('cursor', [None])[0]
+        if pagination_token is None:
+            return ("", True)
+        return (pagination_token, False)
 
     def _create_page_assignments(self, results: List[Dict[str, Any]], assignment_type: str) -> int:
         """Create assignments from one page of API results.
