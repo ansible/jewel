@@ -15,7 +15,7 @@ def add_metrics_service_type(apps, schema_editor):
         ping_url="/api/metrics/v1/ping/",
         login_path=None,
         logout_path=None,
-        service_index_path="/api/metrics/v1/service-index/",
+        service_index_path="/v1/service-index/",
     )
     st.created_by = system_user
     st.modified_by = system_user
