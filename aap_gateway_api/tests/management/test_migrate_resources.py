@@ -495,7 +495,6 @@ def test_migrating_user_with_invalid_email(migration_service_invalid_users, admi
 
 @pytest.mark.django_db(transaction=True)
 def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, patched_load_rbac, admin_user):
-
     with patch.object(MigrateCommand, "update_resource_data") as mocked_update_resource_data_method:
         mocked_update_resource_data_method.return_value = None  # None indicates that its data could not be updated
 

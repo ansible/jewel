@@ -1510,24 +1510,24 @@ class Command(BaseCommand):
     def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: '_CursorStore') -> int:
         """Paginate one assignment endpoint using cursor pagination, creating assignments per page.
 
-            Uses cursor-based pagination where results are ordered by ``id``
-            (ascending), so the last result on each page has the highest PK.
-            The cursor is advanced per page so the drift check knows where
-            this run ended and crash recovery can resume from the last
-            completed page.
+        Uses cursor-based pagination where results are ordered by ``id``
+        (ascending), so the last result on each page has the highest PK.
+        The cursor is advanced per page so the drift check knows where
+        this run ended and crash recovery can resume from the last
+        completed page.
 
-            On a reinstall where the cursor is already past the last PK,
-            the first page returns zero results and the method returns
-            immediately.
+        On a reinstall where the cursor is already past the last PK,
+        the first page returns zero results and the method returns
+        immediately.
 
-            No per-page retry — the PK cursor provides crash recovery.
-            If the command fails on an HTTP error, the installer re-runs
-            it and the cursor resumes from the last completed page.
+        No per-page retry — the PK cursor provides crash recovery.
+        If the command fails on an HTTP error, the installer re-runs
+        it and the cursor resumes from the last completed page.
 
-            Crash safety: the cursor is advanced in the database after each
-            fully-processed page, so at most one page of work is lost.
-            Since give_permission is idempotent, replayed assignments are
-            harmless.
+        Crash safety: the cursor is advanced in the database after each
+        fully-processed page, so at most one page of work is lost.
+        Since give_permission is idempotent, replayed assignments are
+        harmless.
         """
         page_num = 1
         created = 0
@@ -1557,11 +1557,11 @@ class Command(BaseCommand):
             # is NOT mutated — base_filters stays consistent.
             last_pk = results[-1].get('id')
             if last_pk is None:
-                raise RuntimeError( 
+                raise RuntimeError(
                     f"API returned {assignment_type} assignment without 'id' field — "
                     f"cannot advance cursor. Check that the upstream service "
                     f"is running a compatible DAB version."
-                    )
+                )
             cursor.advance(last_pk)
             pagination_token, is_last = self._is_last(data)
             if is_last:
