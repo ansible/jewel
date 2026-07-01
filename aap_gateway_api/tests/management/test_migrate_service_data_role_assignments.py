@@ -492,13 +492,12 @@ class TestMigrateRoleAssignments:
         cmd.stdout.write.assert_any_call("Role assignment migration for controller completed (10 total created)")
 
     def test_check_for_drift_queries_beyond_cursor(self):
-        """_check_for_drift loads a fresh cursor from DB and asks the API
-        if any items exist beyond it."""
+        """_check_for_drift uses last_advanced_pk from the cursor to query
+        the API for items beyond the high-water mark."""
         cmd = self._make_cmd()
 
-        # Pre-seed cursor to PK=100
-        seed = _CursorStore("drift-check-svc", "user")
-        seed.advance(100)
+        cursor = _CursorStore("drift-check-svc", "user")
+        cursor.advance(100)
 
         # API returns results — drift detected
         drift_resp = Mock()
@@ -506,7 +505,7 @@ class TestMigrateRoleAssignments:
         drift_resp.json.return_value = {"results": [{"id": 101}, {"id": 102}, {"id": 103}], "next": None}
         list_fn = Mock(return_value=drift_resp)
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-check-svc") is True
+        assert cmd._check_for_drift(list_fn, "user", "drift-check-svc", cursor) is True
         call_filters = list_fn.call_args[1]["filters"]
         assert call_filters["id__gt"] == "100"
         assert call_filters["page_size"] == "1"
@@ -515,23 +514,24 @@ class TestMigrateRoleAssignments:
         """_check_for_drift returns False when the API returns empty results."""
         cmd = self._make_cmd()
 
-        seed = _CursorStore("drift-empty-svc", "user")
-        seed.advance(50)
+        cursor = _CursorStore("drift-empty-svc", "user")
+        cursor.advance(50)
 
         no_drift_resp = Mock()
         no_drift_resp.status_code = 200
         no_drift_resp.json.return_value = {"results": [], "next": None}
         list_fn = Mock(return_value=no_drift_resp)
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc") is False
+        assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc", cursor) is False
 
     def test_check_for_drift_skips_when_cursor_is_zero(self):
-        """_check_for_drift skips the API call when cursor is at 0
+        """_check_for_drift skips the API call when last_advanced_pk is 0
         (fresh install with no prior progress to check against)."""
         cmd = self._make_cmd()
+        cursor = _CursorStore("drift-zero-svc", "user")
         list_fn = Mock()
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc") is False
+        assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc", cursor) is False
         list_fn.assert_not_called()
 
     def test_check_for_drift_returns_false_on_api_error(self):
@@ -542,12 +542,12 @@ class TestMigrateRoleAssignments:
         """
         cmd = self._make_cmd()
 
-        seed = _CursorStore("drift-err-svc", "user")
-        seed.advance(50)
+        cursor = _CursorStore("drift-err-svc", "user")
+        cursor.advance(50)
 
         list_fn = Mock(side_effect=RuntimeError("connection refused"))
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-err-svc") is False
+        assert cmd._check_for_drift(list_fn, "user", "drift-err-svc", cursor) is False
 
 
 # =============================================================================
