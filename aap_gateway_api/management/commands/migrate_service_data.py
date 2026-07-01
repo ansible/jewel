@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Type
+from urllib.parse import parse_qs, urlparse
 
 from ansible_base.authentication.models import AuthenticatorUser
 from ansible_base.authentication.models.authenticator import Authenticator
@@ -42,10 +43,11 @@ class _CursorStore:
     trivial to backport across versions.
 
     Key invariant: self.last_pk is set once in __init__ and NEVER
-    mutated.  advance() only persists progress to the database.
-    This ensures the HTTP id__gt filter stays immutable across all
-    pages of a single run, preventing items from being skipped when
-    the cursor advances in the database between pages.
+    mutated.  advance() only persists progress to the database
+    and updates last_advanced_pk in memory.  This ensures the HTTP
+    id__gt filter stays immutable across all pages of a single run,
+    while last_advanced_pk tracks the actual high-water mark for
+    drift detection without requiring a DB re-read.
 
     If any database operation fails, the store degrades gracefully
     to last_pk=0, causing the command to reprocess all assignments.
@@ -61,6 +63,7 @@ class _CursorStore:
         self.service_slug = service_slug
         self.assignment_type = assignment_type
         self.last_pk = self._load()
+        self.last_advanced_pk = self.last_pk
 
     def _ensure_table(self):
         """Create the cursor table if it does not already exist."""
@@ -104,10 +107,13 @@ class _CursorStore:
 
         The in-memory last_pk stays at its initial value so the HTTP
         id__gt filter remains consistent across all pages of a run.
+        last_advanced_pk is updated unconditionally so drift detection
+        can use the actual high-water mark without a DB re-read.
         If the upsert fails, a warning is logged but the run continues —
         the next invocation will reprocess from the old position, which
         is safe because give_permission is idempotent.
         """
+        self.last_advanced_pk = pk
         try:
             with connection.cursor() as cur:
                 cur.execute(
@@ -1507,39 +1513,39 @@ class Command(BaseCommand):
         raise RuntimeError(f"Failed to fetch {assignment_type} assignments page {page}: HTTP {response.status_code}\n{body_preview}")
 
     def _paginate_and_create(self, list_fn, assignment_type: str, roles_to_exclude: List[str], cursor: '_CursorStore') -> int:
-        """Paginate one assignment endpoint using a PK cursor, creating assignments per page.
+        """Paginate one assignment endpoint, creating assignments per page.
 
-        Queries with ``order_by=id&id__gt=<snapshot_pk>`` so only
-        assignments newer than the cursor are fetched.  The snapshot_pk
-        is captured once and stays immutable for the entire run, preventing
-        items from being skipped when the DB cursor advances between pages.
+        Follows API pagination tokens from the ``next`` URL while tracking
+        progress via a PK watermark (``_CursorStore``) for crash recovery.
+        Results are ordered by ``id`` (ascending) by DAB's
+        ``ServiceCursorPagination``, so the last result on each page has
+        the highest PK.
 
-        On a reinstall where the cursor is already past the last PK,
+        On a reinstall where the watermark is already past the last PK,
         the first page returns zero results and the method returns
         immediately.
 
-        No per-page retry — the PK cursor provides crash recovery.
-        If the command fails on an HTTP error, the installer re-runs
-        it and the cursor resumes from the last completed page.
-
-        Crash safety: the cursor is advanced in the database after each
-        fully-processed page, so at most one page of work is lost.
+        Crash safety: the watermark is advanced in the database after
+        each fully-processed page, so at most one page of work is
+        replayed on re-run. Since give_permission is idempotent,
+        replayed assignments are harmless.
         """
-        page = 1
+        page_num = 1
         created = 0
+        pagination_token = None
+        last_pk = None
 
-        # Build base filters once — only 'page' changes between iterations.
-        # snapshot_pk is immutable (set once in _CursorStore.__init__).
-        base_filters: Dict[str, Any] = {'order_by': 'id', **self.BIG_PAGE_FILTERS}
-        if roles_to_exclude:
-            base_filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
-        if cursor.last_pk > 0:
-            base_filters['id__gt'] = str(cursor.last_pk)
+        # Build base filters once.  cursor.last_pk is immutable (set once
+        # in _CursorStore.__init__), so id__gt stays consistent across pages.
+        base_filters: Dict[str, Any] = self._get_base_filters(roles_to_exclude, cursor)
 
         while True:
-            response = list_fn(filters={**base_filters, 'page': page})
+            filters = {**base_filters}
+            if pagination_token:
+                filters['cursor'] = pagination_token
+            response = list_fn(filters=filters)
             if response.status_code != 200:
-                self._raise_fetch_error(response, assignment_type, page)
+                self._raise_fetch_error(response, assignment_type, page_num)
 
             data = response.json()
             results = data.get('results') or []
@@ -1548,22 +1554,54 @@ class Command(BaseCommand):
 
             created += self._create_page_assignments(results, assignment_type)
 
-            # Advance cursor in DB for crash recovery.  cursor.last_pk
-            # is NOT mutated — base_filters stays consistent.
-            last_pk_on_page = results[-1].get('id')
-            if last_pk_on_page is None:
-                raise RuntimeError(
-                    f"API returned {assignment_type} assignment without 'id' field — "
-                    f"cannot advance cursor. Check that the upstream service "
-                    f"is running a compatible DAB version (requires PR 1032+)."
-                )
-            cursor.advance(last_pk_on_page)
-
-            if not data.get('next'):
+            # Advance watermark in DB for crash recovery.
+            last_pk = results[-1].get('id')
+            if last_pk is None:
+                raise RuntimeError(f"API returned {assignment_type} assignment without 'id' field — cannot advance watermark.")
+            cursor.advance(last_pk)
+            pagination_token, is_last = self._is_last(data)
+            if is_last:
                 break
-            page += 1
+            page_num += 1
 
         return created
+
+    def _get_base_filters(self, roles_to_exclude: List[str], cursor: '_CursorStore') -> Dict[str, Any]:
+        """Build base filters for assignment pagination.
+
+        Called once per assignment type.  Sets up 'id__gt' and
+        'not__role_definition__name__in' filters based on the watermark
+        and roles to exclude.
+
+        Args:
+            roles_to_exclude: List of role names to exclude from the results
+            cursor: CursorStore instance tracking the last processed PK
+        """
+        # NOTE: order_by here is redundant — ServiceCursorPagination in DAB
+        # controls the actual ordering and ignores this query param. We
+        # include it for readability but it has no effect on cursor-paginated
+        # endpoints.
+        base_filters: Dict[str, Any] = {**self.BIG_PAGE_FILTERS, 'order_by': 'id'}
+        if roles_to_exclude:
+            base_filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+        if cursor.last_pk > 0:
+            base_filters['id__gt'] = str(cursor.last_pk)
+        return base_filters
+
+    def _is_last(self, data: Dict[str, Any]) -> Tuple[str, bool]:
+        """Determine if the current page is the last page of results.
+
+        Returns True if the 'next' field is None or empty, indicating
+        that there are no more pages to fetch.
+        """
+        next_url = data.get('next')
+        if not next_url:
+            return ("", True)
+        parsed_qs = parse_qs(urlparse(next_url).query)
+        pagination_token = parsed_qs.get('cursor', [None])[0]
+        if pagination_token is None:
+            return ("", True)
+        return (pagination_token, False)
 
     def _create_page_assignments(self, results: List[Dict[str, Any]], assignment_type: str) -> int:
         """Create assignments from one page of API results.
@@ -1744,7 +1782,7 @@ class Command(BaseCommand):
             # fetched" and "this check."  A tiny window remains between
             # this check and the migration flag being set, but that gap
             # is milliseconds and practically negligible.
-            if self._check_for_drift(list_fn, assignment_type, service_slug):
+            if self._check_for_drift(list_fn, assignment_type, service_slug, cursor):
                 drift_detected = True
 
         self._log(f"Role assignment migration for {service_slug} completed ({total_created} total created)", logging.INFO)
@@ -1756,20 +1794,20 @@ class Command(BaseCommand):
                 f"detected. Re-run to process remaining assignments."
             )
 
-    def _check_for_drift(self, list_fn, assignment_type: str, service_slug: str) -> bool:
-        """Check if new assignments appeared since the cursor was last advanced.
+    def _check_for_drift(self, list_fn, assignment_type: str, service_slug: str, cursor: '_CursorStore') -> bool:
+        """Check if new assignments appeared since the last page was processed.
 
-        Loads a fresh cursor from the DB (reflecting the last advance()
-        call) and asks the API if any items exist beyond it.  Returns
-        True if drift is detected, False otherwise.
+        Uses cursor.last_advanced_pk (the in-memory high-water mark) so
+        this check works even if the DB writes in advance() failed.
+        Returns True if drift is detected, False otherwise.
         """
-        db_cursor = _CursorStore(service_slug, assignment_type)
-        if db_cursor.last_pk <= 0:
+        if cursor.last_advanced_pk <= 0:
             return False
 
         try:
-            check_resp = list_fn(filters={'order_by': 'id', 'id__gt': str(db_cursor.last_pk), 'page_size': '1'})
-            if check_resp.status_code == 200 and check_resp.json().get('count', 0) > 0:
+            # NOTE: order_by is redundant — CursorPagination controls ordering.
+            check_resp = list_fn(filters={'order_by': 'id', 'id__gt': str(cursor.last_advanced_pk), 'page_size': '1'})
+            if check_resp.status_code == 200 and len(check_resp.json().get('results', [])) > 0:
                 self._log(f"Warning: new {assignment_type} assignments appeared during migration of {service_slug} (concurrent modification)", logging.WARNING)
                 return True
         except Exception:
