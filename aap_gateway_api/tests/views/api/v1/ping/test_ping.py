@@ -112,7 +112,7 @@ def test_ping_db_check_flushes_stale_connections(mock_close, mock_conns, request
     call_order = []
     mock_close.side_effect = lambda: call_order.append("close")
     cursor_cm = mock.MagicMock()
-    cursor_cm.__enter__ = mock.Mock(side_effect=lambda: call_order.append("cursor") or mock.Mock())
+    cursor_cm.__enter__ = mock.Mock(side_effect=lambda: (call_order.append("cursor") or mock.Mock()))
     cursor_cm.__exit__ = mock.Mock(return_value=False)
     mock_conns.__getitem__.return_value.cursor.return_value = cursor_cm
 
