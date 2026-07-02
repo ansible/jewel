@@ -25,6 +25,7 @@ def create_preload_data(**kwargs) -> None:
         set_system_user_password,
         set_system_user_managed_flag,
         toggle_install_time_flags,
+        remove_console_service_type,
     ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
@@ -141,3 +142,22 @@ def toggle_install_time_flags() -> None:
             existing_flag.value = state
             existing_flag.full_clean()
             existing_flag.save()
+
+
+def remove_console_service_type() -> bool:
+    """Remove legacy console service type and associated preference.
+
+    The console ServiceType was gated behind FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED
+    and is no longer supported (AAP-74714). This replaces migration
+    0023_remove_console_service_type.py with an idempotent signal-based cleanup
+    to avoid migration dependency chain issues on stable branches.
+    """
+    ServiceType = global_apps.get_model('aap_gateway_api', 'ServiceType')
+    Preference = global_apps.get_model('aap_gateway_api', 'Preference')
+
+    deleted_st, _ = ServiceType.objects.filter(name="console").delete()
+    deleted_pref, _ = Preference.objects.filter(
+        section="analytics",
+        name="RED_HAT_CONSOLE_URL",
+    ).delete()
+    return (deleted_st + deleted_pref) > 0
