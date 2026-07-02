@@ -1,6 +1,11 @@
+import logging
+
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.utils.encryption import ansible_encryption
+from cryptography.fernet import InvalidToken
 from dynamic_preferences import models
+
+logger = logging.getLogger('aap.gateway.models.preference')
 
 
 class Preference(models.BasePreferenceModel, AuditableModel):
@@ -29,7 +34,18 @@ class Preference(models.BasePreferenceModel, AuditableModel):
         # A fall back happens when there is a value in DB but not a corresponding register
         if isinstance(instance.value, str):
             was_encrypted = ansible_encryption.is_encrypted_string(instance.value)[0]
-            instance.value = ansible_encryption.decrypt_string(instance.value)
+            try:
+                instance.value = ansible_encryption.decrypt_string(instance.value)
+            except InvalidToken:
+                logger.critical(
+                    "Failed to decrypt Preference(section=%r, name=%r): the SECRET_KEY may have changed. "
+                    "Run 'gateway-manage rotate_secret_key' to re-encrypt all secrets with the current key. "
+                    # TODO: add KB article URL for recovery steps
+                    "Re-raising to prevent startup with corrupted preferences.",
+                    instance.section,
+                    instance.name,
+                )
+                raise
             if was_encrypted:
                 instance._encrypted_field_names = {'raw_value'}
         return instance
