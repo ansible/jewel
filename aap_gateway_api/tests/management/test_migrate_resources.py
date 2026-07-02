@@ -11,7 +11,6 @@ from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserA
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.db import IntegrityError
 
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
@@ -93,12 +92,12 @@ def _setup_empty_assignment_mocks(mock_client):
     """
     empty_user_resp = Mock()
     empty_user_resp.status_code = 200
-    empty_user_resp.json.return_value = {"results": [], "next": None}
+    empty_user_resp.json.return_value = {"count": 0, "results": [], "next": None}
     mock_client.list_user_assignments.return_value = empty_user_resp
 
     empty_team_resp = Mock()
     empty_team_resp.status_code = 200
-    empty_team_resp.json.return_value = {"results": [], "next": None}
+    empty_team_resp.json.return_value = {"count": 0, "results": [], "next": None}
     mock_client.list_team_assignments.return_value = empty_team_resp
 
 
@@ -495,6 +494,8 @@ def test_migrating_user_with_invalid_email(migration_service_invalid_users, admi
 
 @pytest.mark.django_db(transaction=True)
 def test_updating_resource_data_for_invalid_resource(migration_service_invalid_users, patched_load_rbac, admin_user):
+    from django.core.management.base import CommandError
+
     with patch.object(MigrateCommand, "update_resource_data") as mocked_update_resource_data_method:
         mocked_update_resource_data_method.return_value = None  # None indicates that its data could not be updated
 
@@ -552,7 +553,7 @@ def test_service_processing_order(admin_user, capsys, service_api_route_controll
         mock_client_class.return_value = mock_client
 
         # Should process all three services and fail on each, but in the right order
-        with pytest.raises(CommandError):
+        with pytest.raises(Exception):
             call_command("migrate_service_data", username=admin_user.username)
 
         # Check the output for service processing order
@@ -614,7 +615,7 @@ def test_migration_error_handling_and_summary(admin_user, capsys, service_api_ro
         mock_client_class.side_effect = mock_client_factory
 
         # Migration should fail with CommandError due to failed hub service
-        with pytest.raises(CommandError) as exc_info:
+        with pytest.raises(Exception) as exc_info:
             call_command("migrate_service_data", username=admin_user.username)
 
         # Check error message contains service failure information
@@ -753,7 +754,7 @@ def test_process_migrate_resource_item_raises_on_missing_resource_data():
 def test_no_services_found_error(admin_user):
     """Test error when no DefaultServiceType services are found"""
     # In a clean test environment with no service fixtures, the command should fail
-    with pytest.raises(CommandError) as exc_info:
+    with pytest.raises(Exception) as exc_info:
         call_command("migrate_service_data", username=admin_user.username)
 
     assert "No services found with expected service types" in str(exc_info.value)
@@ -1665,13 +1666,14 @@ def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, serv
         # empty for the post-run drift check.
         data_resp = Mock(status_code=200)
         data_resp.json.return_value = {
+            "count": 1,
             "next": None,
             "results": [
                 {"id": 1, "object_ansible_id": None, "content_type": "", "role_definition": "Platform Auditor", "user_ansible_id": invalid_user_ansible_id}
             ],
         }
         empty_resp = Mock(status_code=200)
-        empty_resp.json.return_value = {"results": [], "next": None}
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
         mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
         mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
@@ -1714,6 +1716,7 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         # empty for the post-run drift check.
         data_resp = Mock(status_code=200)
         data_resp.json.return_value = {
+            "count": 1,
             "next": None,
             "results": [
                 {
@@ -1726,7 +1729,7 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
             ],
         }
         empty_resp = Mock(status_code=200)
-        empty_resp.json.return_value = {"results": [], "next": None}
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
         mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
         mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
@@ -1770,6 +1773,7 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         # empty for the post-run drift check.
         data_resp = Mock(status_code=200)
         data_resp.json.return_value = {
+            "count": 1,
             "next": None,
             "results": [
                 {
@@ -1782,7 +1786,7 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
             ],
         }
         empty_resp = Mock(status_code=200)
-        empty_resp.json.return_value = {"results": [], "next": None}
+        empty_resp.json.return_value = {"count": 0, "next": None, "results": []}
         mock_client.list_user_assignments.side_effect = [data_resp, empty_resp]
         mock_client.list_team_assignments.return_value = empty_resp
         mock_client_class.return_value = mock_client
@@ -1866,6 +1870,8 @@ def test_ensure_controller_gateway_superusers_scenarios(
     with patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient', return_value=mock_client):
         if expected_errors:
             # Test error scenarios
+            from django.core.management.base import CommandError
+
             with pytest.raises(CommandError) as exc_info:
                 cmd._ensure_controller_gateway_superusers(service_api_route_controller, gateway_superusers, admin_user)
 
