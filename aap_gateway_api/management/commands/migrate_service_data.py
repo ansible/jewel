@@ -74,6 +74,7 @@ class Command(
         DefaultServiceType.EDA.value,
         DefaultServiceType.METRICS.value,
     ]
+    ]
 
     help = """Migrate Organizations and teams from existing AAP installations into the gateway.
 
