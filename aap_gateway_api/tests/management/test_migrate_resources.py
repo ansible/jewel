@@ -2617,7 +2617,9 @@ def test_migrate_single_service_skips_unknown_service_type(admin_user, capsys, s
         "service_type": "nonexistent_type",
     }
 
-    with patch("aap_gateway_api.management.commands.migrate_service_data.resources_client.GWResourceAPIClient", return_value=mock_client):
+    with patch(
+        "aap_gateway_api.management.commands._migrate_service_data.service_orchestration.resources_client.GWResourceAPIClient", return_value=mock_client
+    ):
         success, error = cmd._migrate_single_service(service_api_route_controller, service_api_route_controller.api_slug, admin_user)
 
     assert success is False
@@ -2641,7 +2643,9 @@ def test_migrate_single_service_skips_mismatched_service_type(admin_user, capsys
         "service_type": "hub",
     }
 
-    with patch("aap_gateway_api.management.commands.migrate_service_data.resources_client.GWResourceAPIClient", return_value=mock_client):
+    with patch(
+        "aap_gateway_api.management.commands._migrate_service_data.service_orchestration.resources_client.GWResourceAPIClient", return_value=mock_client
+    ):
         success, error = cmd._migrate_single_service(service_api_route_controller, service_api_route_controller.api_slug, admin_user)
 
     assert success is False
@@ -2695,7 +2699,7 @@ def test_merge_user_group_with_conflicts(capsys):
         ("hub", user2, "other_user"),
     ]
 
-    with patch("aap_gateway_api.management.commands.migrate_service_data.can_accounts_be_merged", return_value=False):
+    with patch("aap_gateway_api.management.commands._migrate_service_data.user_merge.can_accounts_be_merged", return_value=False):
         result = cmd._merge_user_group("main_user", user_accounts)
 
     assert result == 0
@@ -2721,9 +2725,9 @@ def test_merge_user_group_successful(capsys):
     ]
 
     with (
-        patch("aap_gateway_api.management.commands.migrate_service_data.can_accounts_be_merged", return_value=True),
-        patch("aap_gateway_api.management.commands.migrate_service_data.link_account"),
-        patch("aap_gateway_api.management.commands.migrate_service_data.migrate_account"),
+        patch("aap_gateway_api.management.commands._migrate_service_data.user_merge.can_accounts_be_merged", return_value=True),
+        patch("aap_gateway_api.management.commands._migrate_service_data.user_merge.link_account"),
+        patch("aap_gateway_api.management.commands._migrate_service_data.user_merge.migrate_account"),
     ):
         result = cmd._merge_user_group("main_user2", user_accounts)
 
