@@ -126,7 +126,7 @@ class TestCursorStore:
         This ensures the command can still run (reprocessing all assignments)
         rather than failing outright on a cursor table issue.
         """
-        with patch("aap_gateway_api.management.commands.migrate_service_data.connection") as mock_conn:
+        with patch("aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection") as mock_conn:
             mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
             cursor = _CursorStore("controller", "user")
 
@@ -141,7 +141,7 @@ class TestCursorStore:
         """
         cursor = _CursorStore("controller-adv-err", "user")
 
-        with patch("aap_gateway_api.management.commands.migrate_service_data.connection") as mock_conn:
+        with patch("aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection") as mock_conn:
             mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
             # Should not raise — degrades gracefully
             cursor.advance(42)
