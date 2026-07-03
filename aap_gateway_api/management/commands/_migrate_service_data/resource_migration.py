@@ -50,18 +50,24 @@ class ResourceMigrationMixin:
             If 'my-org' exists, will return 'service_my-org' or 'service_my-org1'
         """
         original_name = f'{service_slug}_{name}'
-        name = original_name
 
         filter_kwargs = unique_filter_kwargs.copy()
-        filter_kwargs[resource_type_name_field] = name
+        filter_kwargs[f"{resource_type_name_field}__startswith"] = original_name
+        del filter_kwargs[resource_type_name_field]
 
-        counter = 1
-        while local_resource_model.objects.filter(**filter_kwargs).exists():
-            name = original_name + str(counter)
-            filter_kwargs[resource_type_name_field] = name
-            counter += 1
+        highest = (
+            local_resource_model.objects.filter(**filter_kwargs)
+            .values_list(resource_type_name_field, flat=True)
+            .order_by(f"-{resource_type_name_field}")
+            .first()
+        )
 
-        return name
+        if highest is None:
+            return original_name
+
+        suffix = highest[len(original_name) :]
+        counter = (int(suffix) + 1) if suffix.isdigit() else 1
+        return f"{original_name}{counter}"
 
     def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
         """
@@ -374,7 +380,6 @@ class ResourceMigrationMixin:
             "type_serializer": resource_type.serializer_class,
             "type_name_field": resource_type.get_resource_config().name_field,
             "unique_fields": self.resource_types_to_migrate[resource_type_name]["unique_fields"],
-            "merge_option": self.resource_types_to_migrate[resource_type_name]["merge"],
             "LocalResourceModel": resource_type.content_type.model_class(),
         }
 
