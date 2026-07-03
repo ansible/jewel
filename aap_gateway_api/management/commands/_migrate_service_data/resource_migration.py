@@ -333,6 +333,20 @@ class ResourceMigrationMixin:
         """
         Migrate all resources of a specific type from upstream service to Gateway.
 
+        For each resource, the migration does one of three things:
+
+        - If the resource exists in the gateway (merge): Don't change anything in
+          the gateway. Set the ansible_id and service_id on the resource in the service
+          to match the gateway's value.
+        - If the resource doesn't exist in Gateway: Create a new resource in Gateway
+          using the data from the service, including the ansible_id. Set the service_id
+          of the resource in the service to match the gateway's ID.
+        - If ansible_id matches but service_id differs: Correct the service_id and
+          update stale resource_data if needed.
+
+        In all cases, the service_id on the upstream resource is set to the gateway's
+        ID, indicating the resource is now managed externally by the gateway.
+
         This method orchestrates the migration of all resources of a given type by:
         1. Setting up resource type context and configuration
         2. Continuously fetching unmigrated resources from upstream
