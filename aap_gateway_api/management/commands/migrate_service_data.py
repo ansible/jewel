@@ -117,6 +117,12 @@ class Command(
             required=False,
             default=None,
         )
+        parser.add_argument(
+            "--rerun",
+            action="store_true",
+            help="Force migration to run even if it has already completed. Useful for testing and benchmarking.",
+            default=False,
+        )
 
     def _warn_ignored_flags(self, options: dict) -> None:
         if options.get("api_slug"):
@@ -150,7 +156,7 @@ class Command(
         self._warn_ignored_flags(options)
         self._configure_logging(options.get("log_file"))
 
-        if MigrateServiceDataHasRan.has_migration_completed():
+        if MigrateServiceDataHasRan.has_migration_completed() and not options.get("rerun"):
             self._log("Migration has already completed. Skipping.", logging.INFO)
             return
 
