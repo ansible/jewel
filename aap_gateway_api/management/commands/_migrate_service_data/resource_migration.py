@@ -139,41 +139,10 @@ class ResourceMigrationMixin:
 
         return updated_resource_data
 
-    def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any], user_partial_migration: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Prepare payloads for creating Gateway resources and updating upstream resources.
-
-        This method sets up the data structures needed to:
-        1. Create a new resource in the gateway
-        2. Update the corresponding resource in the upstream service
-
-        For partially migrated users, the gateway resource retains the upstream
-        service_id to indicate it's not fully migrated.
-
-        Args:
-            upstream_resource: Complete resource data from upstream service
-            user_partial_migration: True if this is a user being partially migrated
-
-        Returns:
-            Tuple of (resource_creation_kwargs, updated_service_resource)
-            - resource_creation_kwargs: Data for creating Gateway resource
-            - updated_service_resource: Data for updating upstream resource
-        """
-        resource_creation_kwargs = {}
-        updated_service_resource = {}
-
-        resource_creation_kwargs["ansible_id"] = upstream_resource["ansible_id"]
-
-        if user_partial_migration:
-            # We do not update the service_id of a user on the service, only mark is_partially_migrated to True to exclude it from the
-            # while loop in migrate_resource()
-            updated_service_resource["is_partially_migrated"] = True
-            # The resource to be created in Gateway needs to show as unmigrated by having the original service_id
-            resource_creation_kwargs["service_id"] = self.upstream_service_id
-        else:
-            # if current resource is not shared.user or user is not partially migrated, we update the 'service_id' to Gateway's service_id
-            updated_service_resource["service_id"] = str(service_id())
-
+    def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Prepare payloads for creating Gateway resources and updating upstream resources."""
+        resource_creation_kwargs = {"ansible_id": upstream_resource["ansible_id"]}
+        updated_service_resource = {"service_id": str(service_id())}
         return resource_creation_kwargs, updated_service_resource
 
     def _reconcile_existing_resource(
@@ -317,11 +286,7 @@ class ResourceMigrationMixin:
             # Re-validate after potential superuser flag changes
             validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
-        # 'shared.user' type is treated differently
-        # If the user being migrated is not the current user (admin user), we need to check if we should partially migrate the user
-        user_partial_migration = False
-
-        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource, user_partial_migration)
+        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource)
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
         create_gateway_resource = self._reconcile_existing_resource(upstream_resource, resource_context, validated_resource_data, updated_service_resource)
