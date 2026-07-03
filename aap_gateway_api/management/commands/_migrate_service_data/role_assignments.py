@@ -238,7 +238,7 @@ class RoleAssignmentsMixin:
         try:
             for assignment_type in ('user', 'team'):
                 list_fn = self.client.list_user_assignments if assignment_type == 'user' else self.client.list_team_assignments
-                cursor = CursorStore(service_slug, assignment_type)
+                cursor = CursorStore(service_slug, assignment_type, log_fn=self._log)
                 created, object_roles = self._paginate_and_create(list_fn, assignment_type, roles_to_exclude, cursor)
                 total_created += created
                 all_object_roles.update(object_roles)

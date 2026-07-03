@@ -46,10 +46,11 @@ class CursorStore:
         " DO UPDATE SET last_pk = EXCLUDED.last_pk"
     )
 
-    def __init__(self, service_slug, assignment_type):
+    def __init__(self, service_slug, assignment_type, log_fn=None):
         """Load the cursor from DB, setting self.last_pk once (immutably)."""
         self.service_slug = service_slug
         self.assignment_type = assignment_type
+        self._log_fn = log_fn
         self.last_pk = self._load()
 
     def _ensure_table(self):
@@ -66,12 +67,11 @@ class CursorStore:
                 row = cur.fetchone()
                 return row[0] if row else 0
         except Exception:
-            logger.warning(
-                "Failed to load cursor for %s/%s, will reprocess all assignments",
-                self.service_slug,
-                self.assignment_type,
-                exc_info=True,
-            )
+            msg = f"Failed to load cursor for {self.service_slug}/{self.assignment_type}, will reprocess all assignments"
+            if self._log_fn:
+                self._log_fn(msg, logging.WARNING)
+            else:
+                logger.warning(msg, exc_info=True)
             return 0
 
     def advance(self, pk):
@@ -81,16 +81,14 @@ class CursorStore:
         id__gt filter remains consistent across all pages of a run.
         If the upsert fails, a warning is logged but the run continues --
         the next invocation will reprocess from the old position, which
-        is safe because give_permission is idempotent.
+        is safe because bulk_create with ignore_conflicts is idempotent.
         """
         try:
             with connection.cursor() as cur:
                 cur.execute(self._SQL_UPSERT, [self.service_slug, self.assignment_type, pk])
         except Exception:
-            logger.warning(
-                "Failed to advance cursor for %s/%s to %d; next run will reprocess from the old position",
-                self.service_slug,
-                self.assignment_type,
-                pk,
-                exc_info=True,
-            )
+            msg = f"Failed to advance cursor for {self.service_slug}/{self.assignment_type} to {pk}; next run will reprocess from the old position"
+            if self._log_fn:
+                self._log_fn(msg, logging.WARNING)
+            else:
+                logger.warning(msg, exc_info=True)
