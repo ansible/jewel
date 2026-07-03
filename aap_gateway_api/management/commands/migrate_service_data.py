@@ -206,7 +206,7 @@ class Command(
         if user is None:
             raise CommandError(f"Username {username} does not exist")
 
-        # Get all services with DefaultServiceType in exact order: controller, hub, eda
+        # Get all services with DefaultServiceType in exact order: controller, hub, eda and metrics
         service_apis_dict = {
             api.service_cluster.service_type.name: api
             for api in ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=self.SERVICE_TYPE_ORDER)
