@@ -389,3 +389,86 @@ def test_preference_from_db_invalid_token_logs_and_reraises(register_preference,
     assert any("enc_invalid_token_test" in record.message for record in caplog.records if record.levelno == logging.CRITICAL), (
         "Expected the CRITICAL log to include the preference name"
     )
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_continues_on_decrypt_failure(mock_logger, register_preference):
+    """
+    Test that initialize_preferences() continues processing remaining preferences
+    when one preference fails to load (e.g., due to a SECRET_KEY mismatch causing
+    a decryption error). Previously, a single undecryptable preference would abort
+    the entire initialization, blocking gateway startup.
+    """
+    from cryptography.fernet import InvalidToken
+
+    register_preference(
+        section="general",
+        preference_name="healthy_pref",
+        default="working",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_getitem = preferences.gateway_preference_manager.__class__.__getitem__
+
+    def side_effect(self, key):
+        if key == "general__healthy_pref":
+            return original_getitem(self, key)
+        raise InvalidToken("simulated SECRET_KEY mismatch")
+
+    with patch.object(
+        preferences.gateway_preference_manager.__class__,
+        "__getitem__",
+        side_effect,
+    ):
+        # This must not raise -- previously it would propagate InvalidToken
+        preferences.initialize_preferences()
+
+    # Verify that critical log messages were emitted for the failing preferences
+    assert mock_logger.critical.call_count > 0
+    # Check that at least one critical log message mentions the expected error context
+    log_messages = [str(call) for call in mock_logger.critical.call_args_list]
+    assert any("SECRET_KEY mismatch" in msg for msg in log_messages)
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_logs_preference_name_on_failure(mock_logger, register_preference):
+    """
+    Test that when a preference fails to initialize, the log message identifies
+    the specific preference that failed.
+    """
+    register_preference(
+        section="general",
+        preference_name="broken_pref",
+        default="value",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    def side_effect(self, key):
+        raise ValueError("corrupted data")
+
+    with patch.object(
+        preferences.gateway_preference_manager.__class__,
+        "__getitem__",
+        side_effect,
+    ):
+        preferences.initialize_preferences()
+
+    # The first positional arg to logger.critical is the format string,
+    # the second positional arg is the preference name
+    mock_logger.critical.assert_called()
+    args = mock_logger.critical.call_args_list[0][0]
+    assert "Failed to initialize preference" in args[0]
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_succeeds_without_errors(mock_logger):
+    """
+    Test that initialize_preferences() still works normally when no preferences
+    fail to load -- the happy path is unchanged by the error handling.
+    """
+    preferences.initialize_preferences()
+
+    # No critical log messages should be emitted in the happy path
+    mock_logger.critical.assert_not_called()

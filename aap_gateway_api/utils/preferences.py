@@ -206,7 +206,17 @@ def initialize_preferences():
     # The global_preferences object looks like a dict, so the keys will be the preference names
     # Then we ask the global_preferences for the value of the key and it will take the actions above and populate our DB for us
     for preference_name in gateway_preference_manager.keys():
-        gateway_preference_manager[preference_name]
+        try:
+            gateway_preference_manager[preference_name]
+        except Exception:
+            logger.critical(
+                "Failed to initialize preference '%s'. This may indicate a SECRET_KEY mismatch "
+                "or corrupt data. The gateway will continue starting but this preference "
+                "will not be available until the issue is resolved. "
+                "Consider running 'gateway-manage rotate_secret_key' to re-encrypt preferences.",
+                preference_name,
+                exc_info=True,
+            )
 
 
 def get_setting(name: str, encrypted: bool = True) -> Any:
