@@ -20,18 +20,19 @@ from aap_gateway_api.management.commands.migrate_service_data import Command as 
 from aap_gateway_api.management.commands.migrate_service_data import _CursorStore
 
 
-def _make_api_response(results, has_next=False):
+def _make_api_response(results, count=None, has_next=False):
     """Build a mock API response with proper status_code and JSON body.
 
     The PK cursor pagination checks response.status_code before calling
     .json(), so mocks must be explicit Mock objects with status_code=200.
-    Role assignment endpoints use cursor pagination and do not return a
-    ``count`` field.
     """
+    if count is None:
+        count = len(results)
     resp = Mock()
     resp.status_code = 200
     resp.json.return_value = {
-        "next": "http://fake/next?cursor=cD0xMA%3D%3D" if has_next else None,
+        "count": count,
+        "next": "http://fake/next" if has_next else None,
         "results": results,
     }
     return resp
@@ -125,7 +126,7 @@ class TestCursorStore:
         This ensures the command can still run (reprocessing all assignments)
         rather than failing outright on a cursor table issue.
         """
-        with patch("aap_gateway_api.management.commands.migrate_service_data.connection") as mock_conn:
+        with patch("aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection") as mock_conn:
             mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
             cursor = _CursorStore("controller", "user")
 
@@ -140,7 +141,7 @@ class TestCursorStore:
         """
         cursor = _CursorStore("controller-adv-err", "user")
 
-        with patch("aap_gateway_api.management.commands.migrate_service_data.connection") as mock_conn:
+        with patch("aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection") as mock_conn:
             mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
             # Should not raise — degrades gracefully
             cursor.advance(42)
@@ -206,6 +207,7 @@ class TestPaginateAndCreate:
 
         call_filters = list_fn.call_args[1]["filters"]
         assert call_filters["id__gt"] == "100"
+        assert call_filters["order_by"] == "id"
 
     def test_cursor_not_in_filters_when_zero(self):
         """When cursor is at 0, id__gt is not added to filters."""
@@ -221,7 +223,11 @@ class TestPaginateAndCreate:
         assert "id__gt" not in call_filters
 
     def test_cursor_advances_per_page(self):
-        """Cursor is advanced in DB after each page."""
+        """Cursor is advanced in DB after each page, not just at the end.
+
+        This ensures crash safety: if the process is killed between pages,
+        at most one page of work is lost.
+        """
         page1 = _make_api_response(
             [
                 _make_remote_assignment("user", "u1", "Role1", pk=10),
@@ -267,23 +273,6 @@ class TestPaginateAndCreate:
         # DB cursor unchanged
         new_cursor = _CursorStore("test-svc-empty", "user")
         assert new_cursor.last_pk == 50
-
-    def test_stops_when_next_has_no_cursor_or_page(self):
-        """When the next URL has neither cursor nor page parameter, pagination stops."""
-        page1 = _make_api_response(
-            [_make_remote_assignment("user", "u1", "Role1", pk=10)],
-        )
-        page1.json.return_value["next"] = "http://example.com/api/v1/role-user-assignments/?page_size=200"
-
-        cmd = self._make_cmd()
-        cursor = _CursorStore("test-svc-no-param", "user")
-        list_fn = Mock(return_value=page1)
-
-        with patch.object(cmd, "_create_assignment", return_value=True):
-            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
-
-        assert created == 1
-        assert list_fn.call_count == 1
 
     def test_http_error_raises_immediately_with_body_preview(self):
         """HTTP error raises RuntimeError immediately with response body preview.
@@ -492,46 +481,46 @@ class TestMigrateRoleAssignments:
         cmd.stdout.write.assert_any_call("Role assignment migration for controller completed (10 total created)")
 
     def test_check_for_drift_queries_beyond_cursor(self):
-        """_check_for_drift uses last_advanced_pk from the cursor to query
-        the API for items beyond the high-water mark."""
+        """_check_for_drift loads a fresh cursor from DB and asks the API
+        if any items exist beyond it."""
         cmd = self._make_cmd()
 
-        cursor = _CursorStore("drift-check-svc", "user")
-        cursor.advance(100)
+        # Pre-seed cursor to PK=100
+        seed = _CursorStore("drift-check-svc", "user")
+        seed.advance(100)
 
-        # API returns results — drift detected
+        # API returns count > 0 — drift detected
         drift_resp = Mock()
         drift_resp.status_code = 200
-        drift_resp.json.return_value = {"results": [{"id": 101}, {"id": 102}, {"id": 103}], "next": None}
+        drift_resp.json.return_value = {"count": 3}
         list_fn = Mock(return_value=drift_resp)
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-check-svc", cursor) is True
+        assert cmd._check_for_drift(list_fn, "user", "drift-check-svc") is True
         call_filters = list_fn.call_args[1]["filters"]
         assert call_filters["id__gt"] == "100"
         assert call_filters["page_size"] == "1"
 
     def test_check_for_drift_returns_false_when_no_new_items(self):
-        """_check_for_drift returns False when the API returns empty results."""
+        """_check_for_drift returns False when the API returns count=0."""
         cmd = self._make_cmd()
 
-        cursor = _CursorStore("drift-empty-svc", "user")
-        cursor.advance(50)
+        seed = _CursorStore("drift-empty-svc", "user")
+        seed.advance(50)
 
         no_drift_resp = Mock()
         no_drift_resp.status_code = 200
-        no_drift_resp.json.return_value = {"results": [], "next": None}
+        no_drift_resp.json.return_value = {"count": 0}
         list_fn = Mock(return_value=no_drift_resp)
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc", cursor) is False
+        assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc") is False
 
     def test_check_for_drift_skips_when_cursor_is_zero(self):
-        """_check_for_drift skips the API call when last_advanced_pk is 0
+        """_check_for_drift skips the API call when cursor is at 0
         (fresh install with no prior progress to check against)."""
         cmd = self._make_cmd()
-        cursor = _CursorStore("drift-zero-svc", "user")
         list_fn = Mock()
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc", cursor) is False
+        assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc") is False
         list_fn.assert_not_called()
 
     def test_check_for_drift_returns_false_on_api_error(self):
@@ -542,12 +531,12 @@ class TestMigrateRoleAssignments:
         """
         cmd = self._make_cmd()
 
-        cursor = _CursorStore("drift-err-svc", "user")
-        cursor.advance(50)
+        seed = _CursorStore("drift-err-svc", "user")
+        seed.advance(50)
 
         list_fn = Mock(side_effect=RuntimeError("connection refused"))
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-err-svc", cursor) is False
+        assert cmd._check_for_drift(list_fn, "user", "drift-err-svc") is False
 
 
 # =============================================================================
