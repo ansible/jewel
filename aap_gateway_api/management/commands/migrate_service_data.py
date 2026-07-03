@@ -100,7 +100,7 @@ class Command(
             "--merge-teams",
             type=bool,
             help=("[IGNORED] If true, teams with the same names on different services will be combined. This flag is now ignored and defaults to True."),
-            default=True,
+            default=None,
         )
         parser.add_argument(
             "--merge-organizations",
@@ -108,7 +108,7 @@ class Command(
             help=(
                 "[IGNORED] If true, organizations with the same names on different services will be combined. This flag is now ignored and defaults to True."
             ),
-            default=True,
+            default=None,
         )
         parser.add_argument(
             "--log-file",
@@ -124,10 +124,10 @@ class Command(
                 self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
             )
 
-        if "merge_teams" in options:
+        if options.get("merge_teams") is not None:
             self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
 
-        if "merge_organizations" in options:
+        if options.get("merge_organizations") is not None:
             self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
 
     def handle(self, *args, **options) -> None:
