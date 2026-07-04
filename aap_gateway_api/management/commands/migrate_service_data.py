@@ -17,7 +17,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore as _CursorStore  # noqa: F401 — re-export for test compat
 from aap_gateway_api.management.commands._migrate_service_data.legacy_authenticators import LegacyAuthenticatorsMixin
-from aap_gateway_api.management.commands._migrate_service_data.logging_mixin import PROGRESS_STEP, LoggingMixin
+from aap_gateway_api.management.commands._migrate_service_data.logging_mixin import LoggingMixin
 from aap_gateway_api.management.commands._migrate_service_data.resource_migration import ResourceMigrationMixin
 from aap_gateway_api.management.commands._migrate_service_data.role_assignments import RoleAssignmentsMixin
 from aap_gateway_api.management.commands._migrate_service_data.service_orchestration import ServiceOrchestrationMixin
@@ -65,7 +65,7 @@ class Command(
     BIG_PAGE_FILTERS = {"page_size": str(get_setting('RESOURCE_LIST_MAX_PAGE_SIZE', DEFAULT_MAX_PAGE_SIZE))}
 
     # Progress reporting step size (percentage)
-    PROGRESS_STEP = PROGRESS_STEP
+    PROGRESS_STEP = 5
 
     # Service processing order - Controller first to establish priority for user merging
     SERVICE_TYPE_ORDER = [

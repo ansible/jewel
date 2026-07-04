@@ -3,9 +3,6 @@ from typing import Optional
 
 logger = logging.getLogger('aap.gateway.management.commands.migrate_service_data')
 
-# Progress reporting step size (percentage)
-PROGRESS_STEP = 5
-
 
 class LoggingMixin:
     @staticmethod
@@ -82,7 +79,7 @@ class LoggingMixin:
             msg = f"Migration progress [{label}]: 0 items to process"
         else:
             percent = (processed / total) * 100
-            threshold = (int(percent) // PROGRESS_STEP) * PROGRESS_STEP
+            threshold = (int(percent) // self.PROGRESS_STEP) * self.PROGRESS_STEP
             last = self._progress_thresholds.get(label, -1)
 
             if processed >= total:

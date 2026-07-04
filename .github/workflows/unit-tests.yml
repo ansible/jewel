@@ -62,14 +62,16 @@ jobs:
             test-filter: >-
               aap_gateway_api/tests/
               --ignore-glob=aap_gateway_api/tests/views/api/v1/*/
-              --ignore=aap_gateway_api/tests/management/test_migrate_resources.py
+              --ignore=aap_gateway_api/tests/management/commands/_migrate_service_data/
+              --ignore=aap_gateway_api/tests/management/commands/test_migrate_service_data.py
               --ignore=aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "remaining"
           - name: "Service tests"
             python-version: "3.12"
             processes: auto
             test-filter: >-
-              aap_gateway_api/tests/management/test_migrate_resources.py
+              aap_gateway_api/tests/management/commands/_migrate_service_data/
+              aap_gateway_api/tests/management/commands/test_migrate_service_data.py
               aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "services"
     steps:
