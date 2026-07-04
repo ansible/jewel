@@ -8,6 +8,8 @@ from aap_gateway_api.version import get_api_version
 
 __version__ = get_api_version()
 
+SANDBOX_TEST_MARKER = "jewel-gateway-repo-override-test"
+
 
 def manage():
     """Run administrative tasks."""
