@@ -1,0 +1,83 @@
+---
+name: Performance Tests
+on:
+  pull_request:
+  push:
+    branches:
+      - devel
+
+jobs:
+  perf-test:
+    name: "Performance Tests"
+    runs-on: ubuntu-24.04
+    env:
+      TOX_DOCKER_GATEWAY: "0.0.0.0"
+    if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+    permissions:
+      packages: write
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build requirements
+        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
+
+      - name: Install python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tox
+        run: pip3.12 install tox tox-docker requests
+
+      - name: Checkout dependencies
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base'
+
+      - name: Set tox environment name
+        id: tox-env
+        run: |
+          echo "name=py312" >> "$GITHUB_OUTPUT"
+
+      - name: Create tox environment and run setup
+        env:
+          GATEWAY_TEST_DIRS: ""
+        run: |
+          tox -e ${{ steps.tox-env.outputs.name }} \
+            -x testenv:${{ steps.tox-env.outputs.name }}.docker= \
+            -- --collect-only aap_gateway_api/tests/__init__.py
+
+      - name: Rebuild lxml and xmlsec from source
+        run: |
+          TOX_ENV="${{ steps.tox-env.outputs.name }}"
+          XMLSEC_VERSION=$(.tox/${TOX_ENV}/bin/pip freeze | grep xmlsec | sed 's:^.*=::')
+          LXML_VERSION=$(.tox/${TOX_ENV}/bin/pip freeze | grep lxml | sed 's:^.*=::')
+
+          echo "Rebuilding xmlsec==${XMLSEC_VERSION} and lxml==${LXML_VERSION} from source"
+
+          .tox/${TOX_ENV}/bin/pip install --no-cache-dir --no-binary lxml,xmlsec --force-reinstall \
+              lxml==${LXML_VERSION} xmlsec==${XMLSEC_VERSION}
+
+      - name: Run performance tests
+        env:
+          GATEWAY_TEST_DIRS: ""
+        run: |
+          tox -e ${{ steps.tox-env.outputs.name }} -- -m perf -v \
+            --junit-xml=junit-perf.xml
+
+      - name: Upload junit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-perf
+          path: junit-perf.xml
