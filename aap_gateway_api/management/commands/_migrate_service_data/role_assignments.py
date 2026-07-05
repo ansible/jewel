@@ -79,13 +79,9 @@ class RoleAssignmentsMixin:
 
         return created, all_object_roles
 
-    def _bulk_resolve_and_create_page(self, results: List[Dict[str, Any]], assignment_type: str) -> Tuple[int, set]:
-        """Resolve all assignments on a page using bulk queries and bulk-create them.
-
-        Returns (created_count, object_roles_set) for deferred cache rebuild.
-        """
-        actor_field = f'{assignment_type}_ansible_id'
-
+    @staticmethod
+    def _collect_unique_ids(results: List[Dict[str, Any]], actor_field: str) -> Tuple[set, set, set]:
+        """Extract unique role names, actor IDs, and object IDs from a results page."""
         role_names: set = set()
         actor_ansible_ids: set = set()
         object_ansible_ids: set = set()
@@ -101,6 +97,67 @@ class RoleAssignmentsMixin:
             if oid:
                 object_ansible_ids.add(str(oid))
 
+        return role_names, actor_ansible_ids, object_ansible_ids
+
+    def _resolve_single_assignment(
+        self,
+        item: Dict[str, Any],
+        actor_field: str,
+        assignment_type: str,
+        role_map: Dict[str, Any],
+        actor_resource_map: Dict[str, Any],
+        object_resource_map: Dict[str, Any],
+    ) -> 'Tuple[str, Tuple] | None':
+        """Resolve one API assignment item into a classified tuple.
+
+        Returns ``('global', tuple)`` or ``('object', tuple)`` on success,
+        or ``None`` when the item must be skipped.
+        """
+        actor_ansible_id = item.get(actor_field)
+        role_name = item.get('role_definition')
+        if not actor_ansible_id or not role_name:
+            return None
+
+        rd = role_map.get(role_name)
+        if rd is None:
+            self._log(f"Warning: Unable to find role definition '{role_name}', skipping assignment", logging.WARNING)
+            return None
+
+        actor_resource = actor_resource_map.get(str(actor_ansible_id))
+        if actor_resource is None:
+            self._log(
+                f"Warning: Unable to find {assignment_type} with ansible_id {actor_ansible_id}, skipping assignment",
+                logging.WARNING,
+            )
+            return None
+        actor_pk = actor_resource.object_id
+
+        object_ansible_id = item.get('object_ansible_id')
+        object_id = item.get('object_id')
+
+        if object_ansible_id:
+            obj_resource = object_resource_map.get(str(object_ansible_id))
+            if obj_resource is None:
+                self._log(
+                    f"Warning: Unable to find object with ansible_id {object_ansible_id}, skipping assignment",
+                    logging.WARNING,
+                )
+                return None
+            return ('object', (actor_pk, rd, rd.content_type_id, str(obj_resource.object_id), actor_ansible_id))
+        elif object_id is not None:
+            return ('object', (actor_pk, rd, rd.content_type_id, str(object_id), actor_ansible_id))
+        else:
+            return ('global', (actor_pk, rd, None, None, actor_ansible_id))
+
+    def _bulk_resolve_and_create_page(self, results: List[Dict[str, Any]], assignment_type: str) -> Tuple[int, set]:
+        """Resolve all assignments on a page using bulk queries and bulk-create them.
+
+        Returns (created_count, object_roles_set) for deferred cache rebuild.
+        """
+        actor_field = f'{assignment_type}_ansible_id'
+
+        role_names, actor_ansible_ids, object_ansible_ids = self._collect_unique_ids(results, actor_field)
+
         role_map = {rd.name: rd for rd in RoleDefinition.objects.filter(name__in=role_names)}
         actor_resource_map = {str(r.ansible_id): r for r in Resource.objects.filter(ansible_id__in=actor_ansible_ids)} if actor_ansible_ids else {}
         object_resource_map = {str(r.ansible_id): r for r in Resource.objects.filter(ansible_id__in=object_ansible_ids)} if object_ansible_ids else {}
@@ -109,41 +166,14 @@ class RoleAssignmentsMixin:
         object_assignments: List[Tuple] = []
 
         for item in results:
-            actor_ansible_id = item.get(actor_field)
-            role_name = item.get('role_definition')
-            if not actor_ansible_id or not role_name:
+            resolved = self._resolve_single_assignment(item, actor_field, assignment_type, role_map, actor_resource_map, object_resource_map)
+            if resolved is None:
                 continue
-
-            rd = role_map.get(role_name)
-            if rd is None:
-                self._log(f"Warning: Unable to find role definition '{role_name}', skipping assignment", logging.WARNING)
-                continue
-
-            actor_resource = actor_resource_map.get(str(actor_ansible_id))
-            if actor_resource is None:
-                self._log(
-                    f"Warning: Unable to find {assignment_type} with ansible_id {actor_ansible_id}, skipping assignment",
-                    logging.WARNING,
-                )
-                continue
-            actor_pk = actor_resource.object_id
-
-            object_ansible_id = item.get('object_ansible_id')
-            object_id = item.get('object_id')
-
-            if object_ansible_id:
-                obj_resource = object_resource_map.get(str(object_ansible_id))
-                if obj_resource is None:
-                    self._log(
-                        f"Warning: Unable to find object with ansible_id {object_ansible_id}, skipping assignment",
-                        logging.WARNING,
-                    )
-                    continue
-                object_assignments.append((actor_pk, rd, rd.content_type_id, str(obj_resource.object_id), actor_ansible_id))
-            elif object_id is not None:
-                object_assignments.append((actor_pk, rd, rd.content_type_id, str(object_id), actor_ansible_id))
+            kind, assignment_tuple = resolved
+            if kind == 'global':
+                global_assignments.append(assignment_tuple)
             else:
-                global_assignments.append((actor_pk, rd, None, None, actor_ansible_id))
+                object_assignments.append(assignment_tuple)
 
         created = 0
         object_roles_used: set = set()

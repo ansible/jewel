@@ -640,6 +640,125 @@ class TestBulkResolveAndCreatePage:
 
 
 # =============================================================================
+# TestCollectUniqueIds
+# =============================================================================
+
+
+class TestCollectUniqueIds:
+    def test_extracts_all_fields(self):
+        results = [
+            {"user_ansible_id": "u1", "role_definition": "Role A", "object_ansible_id": "obj1"},
+            {"user_ansible_id": "u2", "role_definition": "Role B", "object_ansible_id": "obj2"},
+            {"user_ansible_id": "u1", "role_definition": "Role A", "object_ansible_id": None},
+        ]
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids(results, "user_ansible_id")
+        assert role_names == {"Role A", "Role B"}
+        assert actor_ids == {"u1", "u2"}
+        assert object_ids == {"obj1", "obj2"}
+
+    def test_empty_results(self):
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids([], "user_ansible_id")
+        assert role_names == set()
+        assert actor_ids == set()
+        assert object_ids == set()
+
+    def test_skips_none_values(self):
+        results = [
+            {"user_ansible_id": None, "role_definition": None, "object_ansible_id": None},
+        ]
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids(results, "user_ansible_id")
+        assert role_names == set()
+        assert actor_ids == set()
+        assert object_ids == set()
+
+    def test_team_actor_field(self):
+        results = [
+            {"team_ansible_id": "t1", "role_definition": "Role A", "object_ansible_id": None},
+        ]
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids(results, "team_ansible_id")
+        assert actor_ids == {"t1"}
+
+
+# =============================================================================
+# TestResolveSingleAssignment
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestResolveSingleAssignment:
+    def _make_cmd(self):
+        cmd = MigrateCommand()
+        cmd.stdout = Mock()
+        cmd.stderr = Mock()
+        return cmd
+
+    def test_missing_actor_returns_none(self):
+        cmd = self._make_cmd()
+        item = {"user_ansible_id": None, "role_definition": "Some Role"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {}, {}, {})
+        assert result is None
+
+    def test_missing_role_returns_none(self):
+        cmd = self._make_cmd()
+        item = {"user_ansible_id": "u1", "role_definition": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {}, {}, {})
+        assert result is None
+
+    def test_unknown_role_returns_none_and_warns(self):
+        cmd = self._make_cmd()
+        item = {"user_ansible_id": "u1", "role_definition": "FakeRole"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {}, {}, {})
+        assert result is None
+        cmd.stderr.write.assert_called_once()
+        assert "Unable to find role definition 'FakeRole'" in cmd.stderr.write.call_args[0][0]
+
+    def test_unknown_actor_returns_none_and_warns(self):
+        cmd = self._make_cmd()
+        rd = Mock()
+        item = {"user_ansible_id": "u-missing", "role_definition": "TestRole"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {}, {})
+        assert result is None
+        assert "Unable to find user with ansible_id u-missing" in cmd.stderr.write.call_args[0][0]
+
+    def test_global_assignment_classified(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=None)
+        actor_resource = Mock(object_id=42)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": None, "object_id": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {})
+        assert result[0] == "global"
+        assert result[1][0] == 42
+
+    def test_object_assignment_by_ansible_id(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=5)
+        actor_resource = Mock(object_id=42)
+        obj_resource = Mock(object_id=99)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": "obj1", "object_id": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {"obj1": obj_resource})
+        assert result[0] == "object"
+        assert result[1][3] == str(99)
+
+    def test_object_assignment_by_object_id(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=5)
+        actor_resource = Mock(object_id=42)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": None, "object_id": "777"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {})
+        assert result[0] == "object"
+        assert result[1][3] == "777"
+
+    def test_missing_object_resource_returns_none_and_warns(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=5)
+        actor_resource = Mock(object_id=42)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": "missing-obj", "object_id": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {})
+        assert result is None
+        assert "Unable to find object with ansible_id missing-obj" in cmd.stderr.write.call_args[0][0]
+
+
+# =============================================================================
 # TestRaiseFetchError
 # =============================================================================
 
