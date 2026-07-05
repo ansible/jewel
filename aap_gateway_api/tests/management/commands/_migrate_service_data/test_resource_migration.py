@@ -257,3 +257,158 @@ def test_reconcile_existing_resource_matching_ansible_id_different_data():
     assert updated_service_resource["resource_data"] == local_data
     combined_output = cmd.stdout.getvalue() + cmd.stderr.getvalue()
     assert "Updating already-merged" in combined_output
+
+
+def test_deserialize_and_validate_resource_data_valid():
+    """When the serializer reports valid data, the validated_data dict is returned directly."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    validated = {"username": "tony", "email": "tony@stark.invalid"}
+    mock_serializer_instance = Mock()
+    mock_serializer_instance.is_valid.return_value = True
+    mock_serializer_instance.validated_data = validated
+
+    mock_serializer_cls = Mock(return_value=mock_serializer_instance)
+
+    upstream_resource = {
+        "ansible_id": "test-aid-001",
+        "resource_type": "shared.user",
+        "resource_data": {"username": "tony", "email": "tony@stark.invalid"},
+    }
+
+    result = cmd._deserialize_and_validate_resource_data(upstream_resource, mock_serializer_cls)
+
+    assert result == validated
+    mock_serializer_cls.assert_called_once_with(data=upstream_resource["resource_data"])
+    mock_serializer_instance.is_valid.assert_called_once_with(raise_exception=False)
+
+
+def test_deserialize_and_validate_resource_data_invalid_then_fixed():
+    """When validation fails but update_resource_data returns a fix, the fixed data is returned."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    fixed_data = {"username": "baduser", "email": ""}
+
+    mock_serializer_instance = Mock()
+    mock_serializer_instance.is_valid.return_value = False
+    mock_serializer_instance.errors = {"email": ["Enter a valid email address."]}
+    mock_serializer_instance.data = {"username": "baduser", "email": "not-an-email"}
+
+    mock_serializer_cls = Mock(return_value=mock_serializer_instance)
+
+    upstream_resource = {
+        "ansible_id": "test-aid-002",
+        "resource_type": "shared.user",
+        "resource_data": {"username": "baduser", "email": "not-an-email"},
+    }
+
+    with patch.object(MigrateCommand, "update_resource_data", return_value=fixed_data):
+        result = cmd._deserialize_and_validate_resource_data(upstream_resource, mock_serializer_cls)
+
+    assert result == fixed_data
+    # The upstream_resource should have its resource_data updated to the fixed data
+    assert upstream_resource["resource_data"] == fixed_data
+
+
+def test_deserialize_and_validate_resource_data_invalid_unfixable():
+    """When validation fails and update_resource_data returns None, RuntimeError is raised."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    mock_serializer_instance = Mock()
+    mock_serializer_instance.is_valid.return_value = False
+    mock_serializer_instance.errors = {"username": ["This field is required."]}
+    mock_serializer_instance.data = {}
+
+    mock_serializer_cls = Mock(return_value=mock_serializer_instance)
+
+    upstream_resource = {
+        "ansible_id": "test-aid-003",
+        "resource_type": "shared.user",
+        "resource_data": {},
+    }
+
+    with patch.object(MigrateCommand, "update_resource_data", return_value=None):
+        with pytest.raises(RuntimeError, match="invalid, non-correctable"):
+            cmd._deserialize_and_validate_resource_data(upstream_resource, mock_serializer_cls)
+
+
+def test_initialize_resource_sync_payloads():
+    """Payloads contain the upstream ansible_id and the gateway service_id."""
+    cmd = MigrateCommand()
+
+    upstream_resource = {
+        "ansible_id": "test-aid-100",
+        "resource_data": {"username": "pepper"},
+    }
+
+    with patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.service_id", return_value="gw-service-id-42"):
+        creation_kwargs, service_resource = cmd._initialize_resource_sync_payloads(upstream_resource)
+
+    assert creation_kwargs == {"ansible_id": "test-aid-100"}
+    assert service_resource == {"service_id": "gw-service-id-42"}
+
+
+def test_get_filtered_resources_excludes_system_user():
+    """For shared.user resources, the system user (settings.SYSTEM_USERNAME) is excluded."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
+
+    system_username = "_system"
+    mock_response = Mock()
+    mock_response.json.return_value = {
+        "count": 3,
+        "results": [
+            {"name": "tony", "ansible_id": "a1"},
+            {"name": system_username, "ansible_id": "a2"},
+            {"name": "pepper", "ansible_id": "a3"},
+        ],
+    }
+
+    cmd.client = Mock()
+    cmd.client.list_resources.return_value = mock_response
+
+    with patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.settings") as mock_settings:
+        mock_settings.SYSTEM_USERNAME = system_username
+        results, count = cmd._get_filtered_resources({}, "shared.user")
+
+    assert count == 3
+    assert len(results) == 2
+    names = [r["name"] for r in results]
+    assert system_username not in names
+    assert "tony" in names
+    assert "pepper" in names
+
+
+def test_get_filtered_resources_non_user_type():
+    """For non-user resource types, no filtering is applied and all results are returned."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
+
+    mock_response = Mock()
+    mock_response.json.return_value = {
+        "count": 2,
+        "results": [
+            {"name": "Org1", "ansible_id": "o1"},
+            {"name": "Org2", "ansible_id": "o2"},
+        ],
+    }
+
+    cmd.client = Mock()
+    cmd.client.list_resources.return_value = mock_response
+
+    results, count = cmd._get_filtered_resources({}, "shared.organization")
+
+    assert count == 2
+    assert len(results) == 2
+    assert results[0]["name"] == "Org1"
+    assert results[1]["name"] == "Org2"
