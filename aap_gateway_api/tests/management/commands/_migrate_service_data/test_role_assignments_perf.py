@@ -41,6 +41,7 @@ def _make_cmd():
     cmd = MigrateCommand()
     cmd.stdout = Mock()
     cmd.stderr = Mock()
+    cmd._progress_thresholds = {}
     return cmd
 
 

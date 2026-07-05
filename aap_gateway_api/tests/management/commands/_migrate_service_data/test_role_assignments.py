@@ -80,6 +80,7 @@ class TestPaginateAndCreate:
         cmd.client = Mock()
         cmd.stdout = Mock()
         cmd.stderr = Mock()
+        cmd._progress_thresholds = {}
         return cmd
 
     def test_first_run_creates_all(self):
@@ -319,6 +320,7 @@ class TestMigrateRoleAssignments:
         cmd.client = Mock()
         cmd.stdout = Mock()
         cmd.stderr = Mock()
+        cmd._progress_thresholds = {}
         return cmd
 
     def test_processes_user_and_team(self):
@@ -454,6 +456,7 @@ class TestBulkResolveAndCreatePage:
         cmd.client = Mock()
         cmd.stdout = Mock()
         cmd.stderr = Mock()
+        cmd._progress_thresholds = {}
         return cmd
 
     def test_empty_results_returns_zero(self):
@@ -629,11 +632,15 @@ class TestBulkResolveAndCreatePage:
         assert len(obj_roles) > 0
 
     def test_idempotent_via_ignore_conflicts(self):
-        """Calling twice with the same data does not duplicate rows."""
-        from aap_gateway_api.models import User
+        """Calling twice with the same data does not duplicate object-scoped rows."""
+        from ansible_base.rbac.models import DABContentType
+
+        from aap_gateway_api.models import Organization, User
 
         user = User.objects.create(username="bulk-idempotent-user")
-        RoleDefinition.objects.get_or_create(name="Test Bulk Idempotent Role", defaults={"managed": False})
+        org = Organization.objects.create(name="bulk-idempotent-org")
+        ct = DABContentType.objects.get_for_model(org)
+        RoleDefinition.objects.get_or_create(name="Test Bulk Idempotent Role", defaults={"managed": False, "content_type": ct})
 
         cmd = self._make_cmd()
         results = [
@@ -642,6 +649,8 @@ class TestBulkResolveAndCreatePage:
                 str(user.resource.ansible_id),
                 "Test Bulk Idempotent Role",
                 pk=1,
+                content_type="shared.organization",
+                object_ansible_id=str(org.resource.ansible_id),
             )
         ]
         created1, _ = cmd._bulk_resolve_and_create_page(results, "user")
