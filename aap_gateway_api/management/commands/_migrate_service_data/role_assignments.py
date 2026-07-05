@@ -51,10 +51,13 @@ class RoleAssignmentsMixin:
         """
         created = 0
         all_object_roles: set = set()
+        total = None
 
         base_filters: Dict[str, Any] = {'order_by': 'id', 'id__gt': str(cursor.last_pk), **self.BIG_PAGE_FILTERS}
         if roles_to_exclude:
             base_filters['not__role_definition__name__in'] = ','.join(roles_to_exclude)
+
+        progress_label = f"{assignment_type} role assignments"
 
         while True:
             response = list_fn(filters=base_filters)
@@ -66,9 +69,15 @@ class RoleAssignmentsMixin:
             if not results:
                 break
 
+            if total is None:
+                total = data.get('count', 0)
+
             page_created, page_object_roles = self._bulk_resolve_and_create_page(results, assignment_type)
             created += page_created
             all_object_roles.update(page_object_roles)
+
+            if total:
+                self._log_progress(progress_label, created, total)
 
             last_pk_on_page = results[-1].get('id')
             if last_pk_on_page is not None:
