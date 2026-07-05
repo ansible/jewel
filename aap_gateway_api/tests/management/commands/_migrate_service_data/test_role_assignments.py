@@ -362,12 +362,13 @@ class TestMigrateRoleAssignments:
         cmd.stdout.write.assert_any_call("Role assignment migration for controller completed (10 total created)")
 
     def test_rbac_cache_rebuilt_when_object_roles_exist(self):
-        """RBAC cache is rebuilt when object roles are returned from pagination."""
+        """RBAC cache is rebuilt with union of object roles from both user and team calls."""
         cmd = self._make_cmd()
-        mock_or = Mock()
+        mock_user_or = Mock()
+        mock_team_or = Mock()
 
         with (
-            patch.object(cmd, "_paginate_and_create", return_value=(5, {mock_or})),
+            patch.object(cmd, "_paginate_and_create", side_effect=[(5, {mock_user_or}), (4, {mock_team_or})]),
             patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles") as mock_team,
             patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_object_role_permissions") as mock_perms,
         ):
@@ -375,12 +376,25 @@ class TestMigrateRoleAssignments:
 
         mock_team.assert_called_once()
         mock_perms.assert_called_once()
-        # The set should be the union from both user and team calls
         call_kwargs = mock_perms.call_args[1]
-        assert mock_or in call_kwargs["object_roles"]
+        assert call_kwargs["object_roles"] == {mock_user_or, mock_team_or}
 
-    def test_rbac_cache_skipped_when_no_object_roles(self):
-        """RBAC cache rebuild is skipped when no object roles are returned."""
+    def test_rbac_cache_team_member_roles_called_for_global_only(self):
+        """compute_team_member_roles is called even when only global assignments are created."""
+        cmd = self._make_cmd()
+
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=(3, set())),
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles") as mock_team,
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_object_role_permissions") as mock_perms,
+        ):
+            cmd.migrate_role_assignments("controller", "controller")
+
+        mock_team.assert_called_once()
+        mock_perms.assert_not_called()
+
+    def test_rbac_cache_skipped_when_nothing_created(self):
+        """RBAC cache rebuild is skipped when no assignments are created."""
         cmd = self._make_cmd()
 
         with (
@@ -615,7 +629,7 @@ class TestBulkResolveAndCreatePage:
         assert len(obj_roles) > 0
 
     def test_idempotent_via_ignore_conflicts(self):
-        """Calling twice with the same data does not raise an error."""
+        """Calling twice with the same data does not duplicate rows."""
         from aap_gateway_api.models import User
 
         user = User.objects.create(username="bulk-idempotent-user")
@@ -633,10 +647,9 @@ class TestBulkResolveAndCreatePage:
         created1, _ = cmd._bulk_resolve_and_create_page(results, "user")
         assert created1 == 1
 
-        # Second call should not raise
         created2, _ = cmd._bulk_resolve_and_create_page(results, "user")
-        # bulk_create with ignore_conflicts may return 0 on second call
-        assert created2 >= 0
+        assert created2 in {0, 1}
+        assert RoleUserAssignment.objects.filter(user__username="bulk-idempotent-user").count() == 1
 
 
 # =============================================================================

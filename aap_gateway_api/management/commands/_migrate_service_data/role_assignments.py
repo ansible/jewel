@@ -274,12 +274,13 @@ class RoleAssignmentsMixin:
                 all_object_roles.update(object_roles)
                 self._log(f"  {assignment_type}: {created} assignments created", logging.INFO)
         finally:
-            if all_object_roles:
+            if total_created:
                 self._log(
-                    f"Rebuilding RBAC cache for {len(all_object_roles)} object roles",
+                    f"Rebuilding RBAC cache ({total_created} assignments created, {len(all_object_roles)} object roles)",
                     logging.INFO,
                 )
                 compute_team_member_roles()
-                compute_object_role_permissions(object_roles=all_object_roles)
+                if all_object_roles:
+                    compute_object_role_permissions(object_roles=all_object_roles)
 
         self._log(f"Role assignment migration for {service_slug} completed ({total_created} total created)", logging.INFO)
