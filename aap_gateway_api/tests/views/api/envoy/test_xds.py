@@ -170,13 +170,19 @@ def test_xds_health_check_interval_floor(admin_api_client, full_service_hierarch
 
 
 def test_xds_cluster_discover_service_route_tags(admin_api_client, full_service_hierarchy_controller, http_port_factory, randname):
+    route = full_service_hierarchy_controller.route
+
     def cds_nodes():
+        route.refresh_from_db()
+        target_cluster = route.envoy_cluster_name
         url = reverse("cds")
         response = admin_api_client.post(url, data={})
         assert response.status_code == 200
-        endpoints = response.data['resources'][0]['loadAssignment']['endpoints'][0]['lbEndpoints']
-        addresses = [x['endpoint']['address']['socketAddress']['address'] for x in endpoints]
-        return addresses
+        for resource in response.data['resources']:
+            if resource['loadAssignment']['clusterName'] == target_cluster:
+                lb_endpoints = resource['loadAssignment']['endpoints'][0].get('lbEndpoints', [])
+                return [x['endpoint']['address']['socketAddress']['address'] for x in lb_endpoints]
+        return []
 
     original_nodes = cds_nodes()
     assert len(original_nodes) == 1
@@ -233,8 +239,8 @@ def test_xds_cluster_discover_service_route_tags(admin_api_client, full_service_
     assert response.status_code == 200
 
     # All nodes should be gone
-    with pytest.raises(KeyError):
-        cds_nodes()
+    nodes = cds_nodes()
+    assert len(nodes) == 0
 
     # Add tag2 to old node
     response = admin_api_client.patch(old_node_url, {"tags": "tag2"})

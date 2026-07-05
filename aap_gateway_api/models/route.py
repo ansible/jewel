@@ -14,6 +14,7 @@ from aap_gateway_api.utils.preferences import get_preference_value
 
 API_PREFIX = "/api/"
 TYPE_KEY = "@type"
+_UNSET = object()
 
 
 class Route(UniqueNamedCommonModel, AuditableModel):
@@ -247,11 +248,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         route_idle = self.idle_timeout_seconds or 0
         return max(route_idle, get_preference_value('proxy', 'idle_timeout'))
 
-    def get_xds_route_config(self):
+    def get_xds_route_config(self, gateway_cluster_name=_UNSET):
         if not self.gateway_path or not self.service_path or not self.envoy_cluster_name:
             return []
 
-        returned_routes = self.get_xds_login_logout_routes()
+        returned_routes = self.get_xds_login_logout_routes(gateway_cluster_name=gateway_cluster_name)
 
         timeout = self.get_effective_timeout_seconds()
         idle_timeout = self.get_effective_idle_timeout_seconds()
@@ -327,21 +328,25 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         return returned_routes
 
-    def get_xds_login_logout_routes(self) -> list:
+    def get_xds_login_logout_routes(self, gateway_cluster_name=_UNSET) -> list:
         returned_routes = []
 
         # If we are a ServiceAPIRoute, reroute login requests to the gateway instead of the service
         if not self.enable_gateway_auth:
             return returned_routes
 
-        envoy_cluster_name = None
-        try:
-            sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
-            gw_route = Route.objects.get(service_cluster=sc)
-            envoy_cluster_name = gw_route.envoy_cluster_name
-        except ServiceCluster.DoesNotExist:
-            return returned_routes
-        except Route.DoesNotExist:
+        if gateway_cluster_name is _UNSET:
+            try:
+                sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
+                gw_route = Route.objects.get(service_cluster=sc)
+                gateway_cluster_name = gw_route.envoy_cluster_name
+            except ServiceCluster.DoesNotExist:
+                return returned_routes
+            except Route.DoesNotExist:
+                return returned_routes
+
+        envoy_cluster_name = gateway_cluster_name
+        if envoy_cluster_name is None:
             return returned_routes
 
         # Determine the login/logout URLs for this cluster type
