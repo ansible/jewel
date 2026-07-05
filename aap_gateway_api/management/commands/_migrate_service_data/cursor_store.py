@@ -51,6 +51,8 @@ class CursorStore:
         self.service_slug = service_slug
         self.assignment_type = assignment_type
         self._log_fn = log_fn
+        # Set once at init; not updated by advance(). Do not read mid-run
+        # as a DB failure during advance() leaves this stale at 0.
         self.last_pk = self._load()
 
     def _ensure_table(self):
