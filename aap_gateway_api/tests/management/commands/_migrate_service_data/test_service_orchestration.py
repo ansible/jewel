@@ -269,3 +269,136 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
         captured = capsys.readouterr()
         assert "Migration Summary" in captured.out
         assert "Migrating data for" in captured.out
+
+
+@pytest.mark.django_db
+def test_load_types_and_permissions_success(admin_user):
+    """When all services respond 200 with no pagination, returns empty failure list."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    service_api = Mock()
+    service_api.api_slug = "controller"
+
+    mock_client = Mock()
+
+    types_response = Mock()
+    types_response.status_code = 200
+    types_response.json.return_value = {"next": None, "results": []}
+    mock_client.list_role_types.return_value = types_response
+
+    perms_response = Mock()
+    perms_response.status_code = 200
+    perms_response.json.return_value = {"next": None, "results": []}
+    mock_client.list_role_permissions.return_value = perms_response
+
+    with patch(_ORCH_CLIENT, return_value=mock_client):
+        failed = cmd.load_types_and_permissions([service_api], admin_user)
+
+    assert failed == []
+    mock_client.list_role_types.assert_called_once()
+    mock_client.list_role_permissions.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_load_types_and_permissions_partial_failure(admin_user, capsys):
+    """When one service succeeds and another raises, only the failing slug is returned."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    good_service = Mock()
+    good_service.api_slug = "controller"
+
+    bad_service = Mock()
+    bad_service.api_slug = "hub"
+
+    good_client = Mock()
+    types_resp = Mock()
+    types_resp.status_code = 200
+    types_resp.json.return_value = {"next": None, "results": []}
+    good_client.list_role_types.return_value = types_resp
+    perms_resp = Mock()
+    perms_resp.status_code = 200
+    perms_resp.json.return_value = {"next": None, "results": []}
+    good_client.list_role_permissions.return_value = perms_resp
+
+    bad_client = Mock()
+    bad_client.list_role_types.side_effect = RuntimeError("connection refused")
+
+    def client_factory(service_api, **kwargs):
+        if service_api is good_service:
+            return good_client
+        return bad_client
+
+    with patch(_ORCH_CLIENT, side_effect=client_factory):
+        failed = cmd.load_types_and_permissions([good_service, bad_service], admin_user)
+
+    assert "hub" in failed
+    assert "controller" not in failed
+
+    captured = capsys.readouterr()
+    assert "Failed to load types and permissions from hub" in captured.err
+
+
+@pytest.mark.django_db
+def test_load_types_and_permissions_pagination_warning(admin_user, capsys):
+    """When list_role_types returns a non-None next URL, a warning is logged."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    service_api = Mock()
+    service_api.api_slug = "controller"
+
+    mock_client = Mock()
+    types_response = Mock()
+    types_response.status_code = 200
+    types_response.json.return_value = {"next": "http://service/api/v1/role_types/?page=2", "results": []}
+    mock_client.list_role_types.return_value = types_response
+
+    with patch(_ORCH_CLIENT, return_value=mock_client):
+        failed = cmd.load_types_and_permissions([service_api], admin_user)
+
+    assert "controller" in failed
+
+    captured = capsys.readouterr()
+    assert "has extra pages of types" in captured.err
+    assert "Failed to load types and permissions from controller" in captured.err
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "types_status,types_next,perms_status,perms_next,expected_err",
+    [
+        pytest.param(503, None, 200, None, "role types gave 503", id="types_non_200"),
+        pytest.param(200, None, 500, None, "permissions gave 500", id="perms_non_200"),
+        pytest.param(200, None, 200, "http://service/?page=2", "has extra pages of types", id="perms_pagination"),
+    ],
+)
+def test_load_types_and_permissions_error_scenarios(admin_user, capsys, types_status, types_next, perms_status, perms_next, expected_err):
+    """Various error responses from role types/permissions APIs mark the service as failed."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+
+    service_api = Mock()
+    service_api.api_slug = "controller"
+
+    mock_client = Mock()
+
+    types_response = Mock()
+    types_response.status_code = types_status
+    types_response.data = "error"
+    types_response.json.return_value = {"next": types_next, "results": []}
+    mock_client.list_role_types.return_value = types_response
+
+    perms_response = Mock()
+    perms_response.status_code = perms_status
+    perms_response.data = "error"
+    perms_response.json.return_value = {"next": perms_next, "results": []}
+    mock_client.list_role_permissions.return_value = perms_response
+
+    with patch(_ORCH_CLIENT, return_value=mock_client):
+        failed = cmd.load_types_and_permissions([service_api], admin_user)
+
+    assert "controller" in failed
+    captured = capsys.readouterr()
+    assert expected_err in captured.err

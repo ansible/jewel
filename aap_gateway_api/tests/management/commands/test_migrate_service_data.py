@@ -168,8 +168,6 @@ def test_single_service_migration(admin_user, capsys, service_api_route_controll
         assert f"Processing service: {service_api_route_controller.api_slug}" in captured.out
         assert "Successful migrations: 1" in captured.out
         assert "Failed migrations: 0" in captured.out
-        assert "All services migration completed successfully!" in captured.out
-
         assert "hub" not in captured.out
         assert "eda" not in captured.out
 
@@ -181,3 +179,58 @@ def test_no_services_found_error(admin_user):
         call_command("migrate_service_data", username=admin_user.username)
 
     assert "No services found with expected service types" in str(exc_info.value)
+
+
+def test_report_migration_summary_raises_on_failures():
+    """Test that _report_migration_summary raises CommandError when failed_services is non-empty."""
+    cmd = MigrateCommand()
+    cmd.stdout = Mock()
+    cmd.stderr = Mock()
+
+    with pytest.raises(CommandError) as exc_info:
+        cmd._report_migration_summary(service_apis=[], successful_services=[], failed_services={"my-svc": "some error"})
+
+    assert "my-svc" in str(exc_info.value)
+
+
+def test_report_migration_summary_no_error_on_success():
+    """Test that _report_migration_summary does not raise when all services succeed."""
+    cmd = MigrateCommand()
+    cmd.stdout = Mock()
+    cmd.stderr = Mock()
+
+    # Should not raise
+    cmd._report_migration_summary(service_apis=[], successful_services=["controller"], failed_services={})
+
+    # Verify the summary was written to stdout
+    written_output = " ".join(str(call) for call in cmd.stdout.write.call_args_list)
+    assert "Successful migrations: 1" in written_output
+
+
+@pytest.mark.django_db
+def test_add_arguments_registers_expected_args():
+    """Test that add_arguments registers all expected CLI arguments."""
+    cmd = MigrateCommand()
+    parser = cmd.create_parser("manage.py", "migrate_service_data")
+
+    expected_flags = ["--api-slug", "--username", "--merge-teams", "--merge-organizations", "--log-file", "--rerun"]
+    for flag in expected_flags:
+        assert flag in parser._option_string_actions, f"Expected argument {flag} not found in parser"
+
+    # Verify parsing works with known args
+    args = parser.parse_args(["--username", "admin"])
+    assert args.username == "admin"
+
+
+def test_warn_ignored_flags_partial():
+    """Test that _warn_ignored_flags only warns about the flags that are actually set."""
+    cmd = MigrateCommand()
+    cmd.stderr = Mock()
+
+    cmd._warn_ignored_flags({"api_slug": "controller"})
+
+    assert cmd.stderr.write.call_count == 1
+    warning_text = str(cmd.stderr.write.call_args_list[0])
+    assert "--api-slug" in warning_text
+    assert "--merge-teams" not in warning_text
+    assert "--merge-organizations" not in warning_text

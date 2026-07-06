@@ -1,5 +1,5 @@
 """Tests for RoleAssignmentsMixin: TestPaginateAndCreate, TestMigrateRoleAssignments,
-TestCreateAssignment, TestRaiseFetchError, TestGetRoleDefinitionsToExclude,
+TestBulkResolveAndCreatePage, TestRaiseFetchError, TestGetRoleDefinitionsToExclude,
 and integration tests for role assignment migration with live services.
 """
 
@@ -8,7 +8,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserAssignment
-from ansible_base.resource_registry.models import Resource
 from django.core.management import call_command
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore
@@ -81,6 +80,7 @@ class TestPaginateAndCreate:
         cmd.client = Mock()
         cmd.stdout = Mock()
         cmd.stderr = Mock()
+        cmd._progress_thresholds = {}
         return cmd
 
     def test_first_run_creates_all(self):
@@ -94,10 +94,11 @@ class TestPaginateAndCreate:
 
         cmd = self._make_cmd()
         cursor = CursorStore("test-svc", "user")
-        list_fn = Mock(return_value=resp)
+        empty_resp = _make_api_response([])
+        list_fn = Mock(side_effect=[resp, empty_resp])
 
-        with patch.object(cmd, "_create_assignment", return_value=True):
-            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
+        with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(2, set())):
+            created, obj_roles = cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert created == 2
         new_cursor = CursorStore("test-svc", "user")
@@ -119,8 +120,8 @@ class TestPaginateAndCreate:
         assert call_filters["id__gt"] == "100"
         assert call_filters["order_by"] == "id"
 
-    def test_cursor_not_in_filters_when_zero(self):
-        """When cursor is at 0, id__gt is not added to filters."""
+    def test_cursor_zero_in_filters_when_fresh(self):
+        """When cursor is at 0, id__gt is set to '0' in filters."""
         resp = _make_api_response([])
 
         cmd = self._make_cmd()
@@ -130,19 +131,20 @@ class TestPaginateAndCreate:
         cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         call_filters = list_fn.call_args[1]["filters"]
-        assert "id__gt" not in call_filters
+        assert call_filters["id__gt"] == "0"
 
     def test_cursor_advances_per_page(self):
         """Cursor is advanced in DB after each page for crash safety."""
         page1 = _make_api_response([_make_remote_assignment("user", "u1", "Role1", pk=10)], has_next=True)
         page2 = _make_api_response([_make_remote_assignment("user", "u2", "Role1", pk=20)])
+        empty = _make_api_response([])
 
         cmd = self._make_cmd()
         cursor = CursorStore("test-svc-pages", "user")
-        list_fn = Mock(side_effect=[page1, page2])
+        list_fn = Mock(side_effect=[page1, page2, empty])
 
-        with patch.object(cmd, "_create_assignment", return_value=True):
-            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
+        with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(1, set())):
+            created, obj_roles = cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert created == 2
         assert cursor.last_pk == 0
@@ -159,11 +161,11 @@ class TestPaginateAndCreate:
         cursor = CursorStore("test-svc-empty", "user")
         list_fn = Mock(return_value=resp)
 
-        with patch.object(cmd, "_create_assignment") as mock_create:
-            created = cmd._paginate_and_create(list_fn, "user", [], cursor)
+        with patch.object(cmd, "_bulk_resolve_and_create_page") as mock_bulk:
+            created, obj_roles = cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert created == 0
-        mock_create.assert_not_called()
+        mock_bulk.assert_not_called()
         new_cursor = CursorStore("test-svc-empty", "user")
         assert new_cursor.last_pk == 50
 
@@ -177,7 +179,7 @@ class TestPaginateAndCreate:
         cursor = CursorStore("test-svc-err", "user")
         list_fn = Mock(return_value=error_resp)
 
-        with pytest.raises(RuntimeError, match="Failed to fetch user assignments page 1: HTTP 500"):
+        with pytest.raises(RuntimeError, match="Failed to fetch user assignments page 0: HTTP 500"):
             cmd._paginate_and_create(list_fn, "user", [], cursor)
 
         assert list_fn.call_count == 1
@@ -193,7 +195,7 @@ class TestPaginateAndCreate:
         cursor = CursorStore("test-svc-mid", "user")
         list_fn = Mock(side_effect=[page1, error_resp])
 
-        with patch.object(cmd, "_create_assignment", return_value=True):
+        with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(1, set())):
             with pytest.raises(RuntimeError, match="Failed to fetch"):
                 cmd._paginate_and_create(list_fn, "user", [], cursor)
 
@@ -201,14 +203,14 @@ class TestPaginateAndCreate:
         assert new_cursor.last_pk == 10
 
     def test_missing_pk_raises_runtime_error(self):
-        """If the API returns an assignment without an 'id' field, raise RuntimeError."""
+        """If the API returns an assignment without an 'id' field, RuntimeError is raised."""
         resp = _make_api_response([{"user_ansible_id": "u1", "role_definition": "Role1"}])
 
         cmd = self._make_cmd()
         cursor = CursorStore("test-svc-nopk", "user")
         list_fn = Mock(return_value=resp)
 
-        with patch.object(cmd, "_create_assignment", return_value=True):
+        with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(1, set())):
             with pytest.raises(RuntimeError, match="without 'id' field"):
                 cmd._paginate_and_create(list_fn, "user", [], cursor)
 
@@ -226,24 +228,82 @@ class TestPaginateAndCreate:
         assert "not__role_definition__name__in" in call_filters
 
     def test_multi_page_snapshot_prevents_skipping(self):
-        """Verify that id__gt filter uses the snapshot value, not the advancing DB cursor."""
+        """Verify that id__gt filter uses the sliding window value correctly."""
         page1 = _make_api_response([_make_remote_assignment("user", "u1", "Role1", pk=10)], has_next=True)
         page2 = _make_api_response([_make_remote_assignment("user", "u2", "Role1", pk=20)])
+        empty = _make_api_response([])
 
         cmd = self._make_cmd()
         cursor = CursorStore("test-svc-snapshot", "user")
-        list_fn = Mock(side_effect=[page1, page2])
 
-        with patch.object(cmd, "_create_assignment", return_value=True):
+        captured_id_gts = []
+        pages = iter([page1, page2, empty])
+
+        def capture_filters(**kwargs):
+            captured_id_gts.append(kwargs["filters"]["id__gt"])
+            return next(pages)
+
+        list_fn = Mock(side_effect=capture_filters)
+
+        with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(1, set())):
             cmd._paginate_and_create(list_fn, "user", [], cursor)
 
-        page1_filters = list_fn.call_args_list[0][1]["filters"]
-        page2_filters = list_fn.call_args_list[1][1]["filters"]
-        assert "id__gt" not in page1_filters
-        assert "id__gt" not in page2_filters
+        assert captured_id_gts[0] == "0"
+        assert captured_id_gts[1] == "10"
 
         new_cursor = CursorStore("test-svc-snapshot", "user")
         assert new_cursor.last_pk == 20
+
+    def test_deletion_during_pagination_does_not_skip_items(self):
+        """Sliding window using id__gt is stable against mid-run deletions."""
+        page1 = _make_api_response(
+            [
+                _make_remote_assignment("user", "u1", "Role1", pk=5),
+                _make_remote_assignment("user", "u2", "Role1", pk=10),
+            ],
+            has_next=True,
+        )
+        # Between pages, items with lower PKs "disappear" -- doesn't matter
+        # because we use id__gt=10 (last PK from page 1)
+        page2 = _make_api_response(
+            [
+                _make_remote_assignment("user", "u3", "Role1", pk=15),
+                _make_remote_assignment("user", "u4", "Role1", pk=20),
+            ],
+            has_next=True,
+        )
+        page3 = _make_api_response(
+            [
+                _make_remote_assignment("user", "u5", "Role1", pk=25),
+            ],
+        )
+        empty = _make_api_response([])
+
+        cmd = self._make_cmd()
+        cursor = CursorStore("test-svc-deletion", "user")
+
+        captured_id_gts = []
+        pages = iter([page1, page2, page3, empty])
+
+        def capture_filters(**kwargs):
+            captured_id_gts.append(kwargs["filters"]["id__gt"])
+            return next(pages)
+
+        list_fn = Mock(side_effect=capture_filters)
+
+        with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(1, set())):
+            created, obj_roles = cmd._paginate_and_create(list_fn, "user", [], cursor)
+
+        assert list_fn.call_count == 4
+        assert created == 3  # 1 per page from mock
+
+        # Verify sliding window: page1 id__gt=0, page2 id__gt=10, page3 id__gt=20
+        assert captured_id_gts[0] == "0"
+        assert captured_id_gts[1] == "10"
+        assert captured_id_gts[2] == "20"
+
+        new_cursor = CursorStore("test-svc-deletion", "user")
+        assert new_cursor.last_pk == 25
 
 
 # =============================================================================
@@ -258,16 +318,14 @@ class TestMigrateRoleAssignments:
         cmd.client = Mock()
         cmd.stdout = Mock()
         cmd.stderr = Mock()
+        cmd._progress_thresholds = {}
         return cmd
 
     def test_processes_user_and_team(self):
         """Both user and team assignment types are processed with separate cursors."""
         cmd = self._make_cmd()
 
-        with (
-            patch.object(cmd, "_paginate_and_create", return_value=3) as mock_paginate,
-            patch.object(cmd, "_check_for_drift", return_value=False),
-        ):
+        with patch.object(cmd, "_paginate_and_create", return_value=(3, set())) as mock_paginate:
             cmd.migrate_role_assignments("controller", "controller")
 
         assert mock_paginate.call_count == 2
@@ -278,10 +336,7 @@ class TestMigrateRoleAssignments:
         """Each service gets its own cursor records in the DB."""
         cmd = self._make_cmd()
 
-        with (
-            patch.object(cmd, "_paginate_and_create", return_value=0),
-            patch.object(cmd, "_check_for_drift", return_value=False),
-        ):
+        with patch.object(cmd, "_paginate_and_create", return_value=(0, set())):
             cmd.migrate_role_assignments("controller", "controller")
 
         user_cursor = CursorStore("controller", "user")
@@ -297,314 +352,456 @@ class TestMigrateRoleAssignments:
             with pytest.raises(RuntimeError, match="HTTP 500"):
                 cmd.migrate_role_assignments("controller", "controller")
 
-    def test_drift_detected_raises_runtime_error(self):
-        """When post-run drift check detects new assignments, RuntimeError is raised."""
-        cmd = self._make_cmd()
-
-        with (
-            patch.object(cmd, "_paginate_and_create", return_value=5),
-            patch.object(cmd, "_check_for_drift", return_value=True),
-        ):
-            with pytest.raises(RuntimeError, match="concurrent modifications were detected"):
-                cmd.migrate_role_assignments("controller", "controller")
-
     def test_no_drift_completes_normally(self):
-        """When post-run drift check finds no new items, method completes without raising."""
+        """When migration completes successfully, completion message is logged."""
         cmd = self._make_cmd()
 
-        with (
-            patch.object(cmd, "_paginate_and_create", return_value=5),
-            patch.object(cmd, "_check_for_drift", return_value=False),
-        ):
+        with patch.object(cmd, "_paginate_and_create", return_value=(5, set())):
             cmd.migrate_role_assignments("controller", "controller")
 
         cmd.stdout.write.assert_any_call("Role assignment migration for controller completed (10 total created)")
 
-    def test_check_for_drift_queries_beyond_cursor(self):
-        """_check_for_drift loads a fresh cursor from DB and asks the API."""
+    def test_rbac_cache_rebuilt_when_object_roles_exist(self):
+        """RBAC cache is rebuilt with union of object roles from both user and team calls."""
+        cmd = self._make_cmd()
+        mock_user_or = Mock()
+        mock_team_or = Mock()
+
+        with (
+            patch.object(cmd, "_paginate_and_create", side_effect=[(5, {mock_user_or}), (4, {mock_team_or})]),
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles") as mock_team,
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_object_role_permissions") as mock_perms,
+        ):
+            cmd.migrate_role_assignments("controller", "controller")
+
+        mock_team.assert_called_once()
+        mock_perms.assert_called_once()
+        call_kwargs = mock_perms.call_args[1]
+        assert call_kwargs["object_roles"] == {mock_user_or, mock_team_or}
+
+    def test_rbac_cache_team_member_roles_called_for_global_only(self):
+        """compute_team_member_roles is called even when only global assignments are created."""
         cmd = self._make_cmd()
 
-        seed = CursorStore("drift-check-svc", "user")
-        seed.advance(100)
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=(3, set())),
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles") as mock_team,
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_object_role_permissions") as mock_perms,
+        ):
+            cmd.migrate_role_assignments("controller", "controller")
 
-        drift_resp = Mock()
-        drift_resp.status_code = 200
-        drift_resp.json.return_value = {"count": 3}
-        list_fn = Mock(return_value=drift_resp)
+        mock_team.assert_called_once()
+        mock_perms.assert_not_called()
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-check-svc") is True
-        call_filters = list_fn.call_args[1]["filters"]
-        assert call_filters["id__gt"] == "100"
-        assert call_filters["page_size"] == "1"
-
-    def test_check_for_drift_returns_false_when_no_new_items(self):
-        """_check_for_drift returns False when the API returns count=0."""
+    def test_rbac_cache_skipped_when_nothing_created(self):
+        """RBAC cache rebuild is skipped when no assignments are created."""
         cmd = self._make_cmd()
 
-        seed = CursorStore("drift-empty-svc", "user")
-        seed.advance(50)
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=(0, set())),
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles") as mock_team,
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_object_role_permissions") as mock_perms,
+        ):
+            cmd.migrate_role_assignments("controller", "controller")
 
-        no_drift_resp = Mock()
-        no_drift_resp.status_code = 200
-        no_drift_resp.json.return_value = {"count": 0}
-        list_fn = Mock(return_value=no_drift_resp)
+        mock_team.assert_not_called()
+        mock_perms.assert_not_called()
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-empty-svc") is False
-
-    def test_check_for_drift_skips_when_cursor_is_zero(self):
-        """_check_for_drift skips the API call when cursor is at 0."""
+    def test_rbac_cache_rebuilt_even_on_exception(self):
+        """RBAC cache is rebuilt in finally block even when an exception occurs.
+        When the cache rebuild itself fails, the original exception still propagates."""
         cmd = self._make_cmd()
-        list_fn = Mock()
+        mock_or = Mock()
 
-        assert cmd._check_for_drift(list_fn, "user", "drift-zero-svc") is False
-        list_fn.assert_not_called()
+        with (
+            patch.object(
+                cmd,
+                "_paginate_and_create",
+                side_effect=[(1, {mock_or}), RuntimeError("HTTP 500")],
+            ),
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles") as mock_team,
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_object_role_permissions") as mock_perms,
+        ):
+            with pytest.raises(RuntimeError, match="HTTP 500"):
+                cmd.migrate_role_assignments("controller", "controller")
 
-    def test_check_for_drift_returns_false_on_api_error(self):
-        """If the drift check API call fails, assume no drift and continue."""
+        mock_team.assert_called_once()
+        mock_perms.assert_called_once()
+
+    def test_rbac_cache_failure_does_not_mask_original_exception(self):
+        """When cache rebuild fails, the original exception propagates (not the cache error)."""
+        cmd = self._make_cmd()
+        mock_or = Mock()
+
+        with (
+            patch.object(
+                cmd,
+                "_paginate_and_create",
+                side_effect=[(1, {mock_or}), RuntimeError("HTTP 500")],
+            ),
+            patch(
+                "aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles",
+                side_effect=RuntimeError("cache rebuild exploded"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="HTTP 500"):
+                cmd.migrate_role_assignments("controller", "controller")
+
+    def test_cursor_store_receives_log_fn(self):
+        """CursorStore is instantiated with log_fn=cmd._log."""
         cmd = self._make_cmd()
 
-        seed = CursorStore("drift-err-svc", "user")
-        seed.advance(50)
+        with (
+            patch.object(cmd, "_paginate_and_create", return_value=(0, set())),
+            patch("aap_gateway_api.management.commands._migrate_service_data.role_assignments.CursorStore") as mock_cursor_cls,
+        ):
+            mock_cursor_cls.return_value = Mock(last_pk=0)
+            cmd.migrate_role_assignments("controller", "controller")
 
-        list_fn = Mock(side_effect=RuntimeError("connection refused"))
-
-        assert cmd._check_for_drift(list_fn, "user", "drift-err-svc") is False
+        for call_obj in mock_cursor_cls.call_args_list:
+            assert call_obj[1]["log_fn"] == cmd._log
 
 
 # =============================================================================
-# TestCreateAssignment
+# TestBulkResolveAndCreatePage
 # =============================================================================
 
 
 @pytest.mark.django_db
-class TestCreateAssignment:
-    def test_missing_actor_returns_false_silently(self):
+class TestBulkResolveAndCreatePage:
+    def _make_cmd(self):
         cmd = MigrateCommand()
+        cmd.client = Mock()
+        cmd.stdout = Mock()
         cmd.stderr = Mock()
-        assignment = {"role_definition": "Some Role", "user_ansible_id": None}
-        assert cmd._create_assignment(assignment, "user") is False
-        cmd.stderr.write.assert_not_called()
+        cmd._progress_thresholds = {}
+        return cmd
 
-    def test_missing_role_returns_false_silently(self):
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = {"user_ansible_id": "user-uuid-1", "role_definition": None}
-        assert cmd._create_assignment(assignment, "user") is False
-        cmd.stderr.write.assert_not_called()
+    def test_empty_results_returns_zero(self):
+        """Empty results list returns (0, set())."""
+        cmd = self._make_cmd()
+        created, obj_roles = cmd._bulk_resolve_and_create_page([], "user")
+        assert created == 0
+        assert obj_roles == set()
 
-    def test_missing_role_definition_returns_false(self):
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment("user", "user-uuid", "NonexistentRole")
-        assert cmd._create_assignment(assignment, "user") is False
+    def test_missing_actor_id_skipped(self):
+        """Assignment with user_ansible_id=None is skipped."""
+        cmd = self._make_cmd()
+        results = [_make_remote_assignment("user", None, "SomeRole", pk=1)]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
+        assert obj_roles == set()
+
+    def test_missing_role_name_skipped(self):
+        """Assignment with role_definition=None is skipped."""
+        cmd = self._make_cmd()
+        results = [_make_remote_assignment("user", str(uuid.uuid4()), None, pk=1)]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
+        assert obj_roles == set()
+
+    def test_unknown_role_definition_warns(self):
+        """Non-existent role definition produces a warning."""
+        cmd = self._make_cmd()
+        results = [_make_remote_assignment("user", str(uuid.uuid4()), "NonexistentRoleXYZ", pk=1)]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
         msg = cmd.stderr.write.call_args[0][0]
-        assert "Unable to find role definition 'NonexistentRole'" in msg
-        assert "actor user-uuid" in msg
+        assert "Unable to find role definition 'NonexistentRoleXYZ'" in msg
 
-    def test_missing_actor_resource_returns_false(self):
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        RoleDefinition.objects.get_or_create(name="Test Role Create", defaults={"managed": False})
-        fake_id = str(uuid.uuid4())
-        assignment = _make_remote_assignment("user", fake_id, "Test Role Create")
-        assert cmd._create_assignment(assignment, "user") is False
+    def test_missing_actor_resource_warns(self):
+        """Valid role but fake actor UUID produces a warning."""
+
+        cmd = self._make_cmd()
+        RoleDefinition.objects.get_or_create(name="Test Bulk Actor Role", defaults={"managed": False})
+        fake_actor_id = str(uuid.uuid4())
+        results = [_make_remote_assignment("user", fake_actor_id, "Test Bulk Actor Role", pk=1)]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
         msg = cmd.stderr.write.call_args[0][0]
-        assert f"Unable to find user with ansible_id {fake_id}" in msg
-        assert "role 'Test Role Create'" in msg
+        assert f"Unable to find user with ansible_id {fake_actor_id}" in msg
+
+    def test_missing_object_resource_warns(self):
+        """Valid actor but fake object UUID produces a warning."""
+        from aap_gateway_api.models import User
+
+        user = User.objects.create(username="bulk-obj-missing-user")
+        rd, _ = RoleDefinition.objects.get_or_create(name="Test Bulk Obj Role", defaults={"managed": False})
+        fake_obj_id = str(uuid.uuid4())
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(user.resource.ansible_id),
+                "Test Bulk Obj Role",
+                pk=1,
+                object_ansible_id=fake_obj_id,
+            )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
+        msg = cmd.stderr.write.call_args[0][0]
+        assert f"Unable to find object with ansible_id {fake_obj_id}" in msg
 
     def test_global_assignment_created(self):
+        """Global assignment (no object_ansible_id/object_id) creates successfully
+        and is idempotent — calling twice does not duplicate."""
         from aap_gateway_api.models import User
 
-        user = User.objects.create(username="global-perm-user")
-        RoleDefinition.objects.get_or_create(name="Test Global Role", defaults={"managed": False})
+        user = User.objects.create(username="bulk-global-user")
+        RoleDefinition.objects.get_or_create(name="Test Bulk Global Role", defaults={"managed": False})
 
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment("user", str(user.resource.ansible_id), "Test Global Role")
-        assert cmd._create_assignment(assignment, "user") is True
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(user.resource.ansible_id),
+                "Test Bulk Global Role",
+                pk=1,
+            )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 1
+        assert obj_roles == set()
 
-    def test_org_assignment_created(self):
+        # Second call should be idempotent — no new rows created
+        created2, _ = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created2 == 0
+        assert RoleUserAssignment.objects.filter(user=user, role_definition__name="Test Bulk Global Role", object_role__isnull=True).count() == 1
+
+    def test_object_assignment_created(self):
+        """Object-scoped assignment creates successfully with non-empty object roles set."""
         from ansible_base.rbac.models import DABContentType
 
         from aap_gateway_api.models import Organization, User
 
-        user = User.objects.create(username="org-perm-user")
-        org = Organization.objects.create(name="test-perm-org")
+        user = User.objects.create(username="bulk-obj-user")
+        org = Organization.objects.create(name="bulk-obj-org")
         ct = DABContentType.objects.get_for_model(org)
-        RoleDefinition.objects.get_or_create(name="Test Org Role", defaults={"managed": False, "content_type": ct})
-
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment(
-            "user",
-            str(user.resource.ansible_id),
-            "Test Org Role",
-            content_type="shared.organization",
-            object_ansible_id=str(org.resource.ansible_id),
+        RoleDefinition.objects.get_or_create(
+            name="Test Bulk Obj Assign Role",
+            defaults={"managed": False, "content_type": ct},
         )
-        assert cmd._create_assignment(assignment, "user") is True
 
-    def test_team_assignment_created(self):
-        from ansible_base.rbac.models import DABContentType
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(user.resource.ansible_id),
+                "Test Bulk Obj Assign Role",
+                pk=1,
+                content_type="shared.organization",
+                object_ansible_id=str(org.resource.ansible_id),
+            )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 1
+        assert len(obj_roles) > 0
 
-        from aap_gateway_api.models import Organization, Team, User
-
-        user = User.objects.create(username="team-perm-user")
-        org = Organization.objects.create(name="test-team-perm-org")
-        team = Team.objects.create(name="test-perm-team", organization=org)
-        ct = DABContentType.objects.get_for_model(team)
-        RoleDefinition.objects.get_or_create(name="Test Team Role", defaults={"managed": False, "content_type": ct})
-
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment(
-            "user",
-            str(user.resource.ansible_id),
-            "Test Team Role",
-            content_type="shared.team",
-            object_ansible_id=str(team.resource.ansible_id),
-        )
-        assert cmd._create_assignment(assignment, "user") is True
-
-    def test_team_actor_global_assignment_created(self):
+    def test_team_assignment_type(self):
+        """Team assignment type uses RoleTeamAssignment model."""
         from aap_gateway_api.models import Organization, Team
 
-        org = Organization.objects.create(name="team-actor-org")
-        team = Team.objects.create(name="team-actor-team", organization=org)
-        RoleDefinition.objects.get_or_create(name="Test Team Actor Role", defaults={"managed": False})
+        org = Organization.objects.create(name="bulk-team-org")
+        team = Team.objects.create(name="bulk-team-actor", organization=org)
+        RoleDefinition.objects.get_or_create(name="Test Bulk Team Role", defaults={"managed": False})
 
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment("team", str(team.resource.ansible_id), "Test Team Actor Role")
-        assert cmd._create_assignment(assignment, "team") is True
-
-    def test_remote_object_assignment_created(self):
-        from ansible_base.rbac.models import DABContentType
-
-        from aap_gateway_api.models import User
-
-        user = User.objects.create(username="remote-perm-user")
-        ct = DABContentType.objects.create(service="controller", model="inventory")
-        RoleDefinition.objects.get_or_create(name="Test Remote Role", defaults={"managed": False, "content_type": ct})
-
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment(
-            "user",
-            str(user.resource.ansible_id),
-            "Test Remote Role",
-            content_type="controller.inventory",
-            object_id="12345",
-        )
-        assert cmd._create_assignment(assignment, "user") is True
-
-    def test_content_object_not_found_returns_false(self):
-        from ansible_base.rbac.models import DABContentType
-
-        from aap_gateway_api.models import Organization, User
-
-        user = User.objects.create(username="obj-notfound-user")
-        org = Organization.objects.create(name="obj-notfound-org")
-        ct = DABContentType.objects.get_for_model(org)
-        RoleDefinition.objects.get_or_create(
-            name="Test ObjNotFound Role",
-            defaults={"managed": False, "content_type": ct},
-        )
-
-        fake_obj_id = str(uuid.uuid4())
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        assignment = _make_remote_assignment(
-            "user",
-            str(user.resource.ansible_id),
-            "Test ObjNotFound Role",
-            content_type="shared.organization",
-            object_ansible_id=fake_obj_id,
-        )
-        assert cmd._create_assignment(assignment, "user") is False
-        msg = cmd.stderr.write.call_args[0][0]
-        assert f"Unable to find content object with ansible_id {fake_obj_id}" in msg
-        assert "role 'Test ObjNotFound Role'" in msg
-
-    def test_give_permission_failure_includes_all_identifiers(self):
-        from aap_gateway_api.models import User
-
-        user = User.objects.create(username="fail-perm-user")
-        rd, _ = RoleDefinition.objects.get_or_create(name="Test Fail Role", defaults={"managed": False})
-
-        cmd = MigrateCommand()
-        cmd.stderr = Mock()
-        actor_id = str(user.resource.ansible_id)
-        assignment = _make_remote_assignment("user", actor_id, "Test Fail Role")
-
-        with patch.object(rd, "give_global_permission", side_effect=RuntimeError("DB constraint")):
-            with patch.object(RoleDefinition.objects, "get", return_value=rd):
-                result = cmd._create_assignment(assignment, "user")
-
-        assert result is False
-        cmd.stderr.write.assert_called_once()
-        msg = cmd.stderr.write.call_args[0][0]
-        assert "Unable to give permission for user assignment" in msg
-        assert f"actor={actor_id}" in msg
-        assert "role='Test Fail Role'" in msg
-
-    def test_stale_actor_content_object_returns_false(self):
-        from aap_gateway_api.models import User
-
-        user = User.objects.create(username="stale-actor-user")
-        actor_ansible_id = str(user.resource.ansible_id)
-        RoleDefinition.objects.get_or_create(name="Test Stale Actor Role", defaults={"managed": False})
-        cmd = MigrateCommand()
-        cmd.stdout = Mock()
-        cmd.stderr = Mock()
-
-        with patch.object(Resource.objects, "get") as mock_get:
-            mock_resource = Mock()
-            mock_resource.content_object = None
-            mock_get.return_value = mock_resource
-            result = cmd._create_assignment(
-                {
-                    "user_ansible_id": actor_ansible_id,
-                    "role_definition": "Test Stale Actor Role",
-                    "content_type": "",
-                    "object_id": None,
-                },
-                "user",
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "team",
+                str(team.resource.ansible_id),
+                "Test Bulk Team Role",
+                pk=1,
             )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "team")
+        assert created == 1
+        assert RoleTeamAssignment.objects.filter(team=team, role_definition__name="Test Bulk Team Role").exists()
 
-        assert result is False
-
-    def test_stale_org_content_object_returns_false(self):
+    def test_mixed_global_and_object(self):
+        """Mix of global and object-scoped assignments returns correct totals."""
         from ansible_base.rbac.models import DABContentType
 
         from aap_gateway_api.models import Organization, User
 
-        user = User.objects.create(username="stale-obj-user")
-        org = Organization.objects.create(name="stale-obj-org")
+        user = User.objects.create(username="bulk-mixed-user")
+        org = Organization.objects.create(name="bulk-mixed-org")
         ct = DABContentType.objects.get_for_model(org)
+        RoleDefinition.objects.get_or_create(name="Test Bulk Mixed Global", defaults={"managed": False})
         RoleDefinition.objects.get_or_create(
-            name="Test Stale Obj Role",
+            name="Test Bulk Mixed Obj",
             defaults={"managed": False, "content_type": ct},
         )
 
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(user.resource.ansible_id),
+                "Test Bulk Mixed Global",
+                pk=1,
+            ),
+            _make_remote_assignment(
+                "user",
+                str(user.resource.ansible_id),
+                "Test Bulk Mixed Obj",
+                pk=2,
+                content_type="shared.organization",
+                object_ansible_id=str(org.resource.ansible_id),
+            ),
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 2
+        assert len(obj_roles) > 0
+
+    def test_idempotent_via_ignore_conflicts(self):
+        """Calling twice with the same data does not duplicate object-scoped rows."""
+        from ansible_base.rbac.models import DABContentType
+
+        from aap_gateway_api.models import Organization, User
+
+        user = User.objects.create(username="bulk-idempotent-user")
+        org = Organization.objects.create(name="bulk-idempotent-org")
+        ct = DABContentType.objects.get_for_model(org)
+        RoleDefinition.objects.get_or_create(name="Test Bulk Idempotent Role", defaults={"managed": False, "content_type": ct})
+
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(user.resource.ansible_id),
+                "Test Bulk Idempotent Role",
+                pk=1,
+                content_type="shared.organization",
+                object_ansible_id=str(org.resource.ansible_id),
+            )
+        ]
+        created1, _ = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created1 == 1
+
+        created2, _ = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created2 in {0, 1}
+        assert RoleUserAssignment.objects.filter(user__username="bulk-idempotent-user").count() == 1
+
+
+# =============================================================================
+# TestCollectUniqueIds
+# =============================================================================
+
+
+class TestCollectUniqueIds:
+    def test_extracts_all_fields(self):
+        results = [
+            {"user_ansible_id": "u1", "role_definition": "Role A", "object_ansible_id": "obj1"},
+            {"user_ansible_id": "u2", "role_definition": "Role B", "object_ansible_id": "obj2"},
+            {"user_ansible_id": "u1", "role_definition": "Role A", "object_ansible_id": None},
+        ]
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids(results, "user_ansible_id")
+        assert role_names == {"Role A", "Role B"}
+        assert actor_ids == {"u1", "u2"}
+        assert object_ids == {"obj1", "obj2"}
+
+    def test_empty_results(self):
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids([], "user_ansible_id")
+        assert role_names == set()
+        assert actor_ids == set()
+        assert object_ids == set()
+
+    def test_skips_none_values(self):
+        results = [
+            {"user_ansible_id": None, "role_definition": None, "object_ansible_id": None},
+        ]
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids(results, "user_ansible_id")
+        assert role_names == set()
+        assert actor_ids == set()
+        assert object_ids == set()
+
+    def test_team_actor_field(self):
+        results = [
+            {"team_ansible_id": "t1", "role_definition": "Role A", "object_ansible_id": None},
+        ]
+        role_names, actor_ids, object_ids = MigrateCommand._collect_unique_ids(results, "team_ansible_id")
+        assert actor_ids == {"t1"}
+
+
+# =============================================================================
+# TestResolveSingleAssignment
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestResolveSingleAssignment:
+    def _make_cmd(self):
         cmd = MigrateCommand()
         cmd.stdout = Mock()
         cmd.stderr = Mock()
-        obj_ansible_id = str(org.resource.ansible_id)
+        return cmd
 
-        org.delete()
-        result = cmd._create_assignment(
-            {
-                "user_ansible_id": str(user.resource.ansible_id),
-                "role_definition": "Test Stale Obj Role",
-                "content_type": "shared.organization",
-                "object_ansible_id": obj_ansible_id,
-                "object_id": None,
-            },
-            "user",
-        )
+    def test_missing_actor_returns_none(self):
+        cmd = self._make_cmd()
+        item = {"user_ansible_id": None, "role_definition": "Some Role"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {}, {}, {})
+        assert result is None
 
-        assert result is False
+    def test_missing_role_returns_none(self):
+        cmd = self._make_cmd()
+        item = {"user_ansible_id": "u1", "role_definition": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {}, {}, {})
+        assert result is None
+
+    def test_unknown_role_returns_none_and_warns(self):
+        cmd = self._make_cmd()
+        item = {"user_ansible_id": "u1", "role_definition": "FakeRole"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {}, {}, {})
+        assert result is None
+        cmd.stderr.write.assert_called_once()
+        assert "Unable to find role definition 'FakeRole'" in cmd.stderr.write.call_args[0][0]
+
+    def test_unknown_actor_returns_none_and_warns(self):
+        cmd = self._make_cmd()
+        rd = Mock()
+        item = {"user_ansible_id": "u-missing", "role_definition": "TestRole"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {}, {})
+        assert result is None
+        assert "Unable to find user with ansible_id u-missing" in cmd.stderr.write.call_args[0][0]
+
+    def test_global_assignment_classified(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=None)
+        actor_resource = Mock(object_id=42)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": None, "object_id": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {})
+        assert result[0] == "global"
+        assert result[1][0] == 42
+
+    def test_object_assignment_by_ansible_id(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=5)
+        actor_resource = Mock(object_id=42)
+        obj_resource = Mock(object_id=99)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": "obj1", "object_id": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {"obj1": obj_resource})
+        assert result[0] == "object"
+        assert result[1][3] == str(99)
+
+    def test_object_assignment_by_object_id(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=5)
+        actor_resource = Mock(object_id=42)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": None, "object_id": "777"}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {})
+        assert result[0] == "object"
+        assert result[1][3] == "777"
+
+    def test_missing_object_resource_returns_none_and_warns(self):
+        cmd = self._make_cmd()
+        rd = Mock(content_type_id=5)
+        actor_resource = Mock(object_id=42)
+        item = {"user_ansible_id": "u1", "role_definition": "TestRole", "object_ansible_id": "missing-obj", "object_id": None}
+        result = cmd._resolve_single_assignment(item, "user_ansible_id", "user", {"TestRole": rd}, {"u1": actor_resource}, {})
+        assert result is None
+        assert "Unable to find object with ansible_id missing-obj" in cmd.stderr.write.call_args[0][0]
 
 
 # =============================================================================
@@ -978,4 +1175,4 @@ def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, se
         assert RoleUserAssignment.objects.count() == 0
 
         captured = capsys.readouterr()
-        assert f"Unable to find content object with ansible_id {invalid_object_ansible_id}" in captured.err
+        assert f"Unable to find object with ansible_id {invalid_object_ansible_id}" in captured.err

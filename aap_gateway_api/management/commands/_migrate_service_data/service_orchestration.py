@@ -90,9 +90,6 @@ class ServiceOrchestrationMixin:
         service_api.service_cluster.service_id = self.upstream_service_id
         service_api.service_cluster.save()
 
-        # No-op if legacy authenticators were already deleted on a previous run
-        self.delete_legacy_authenticators()
-
         if self._is_service_already_synced():
             self._log(f"Service {service_slug} is already synchronized — skipping resource migration.", logging.INFO)
         else:
