@@ -209,6 +209,7 @@ class RoleAssignmentsMixin:
         actor_field = 'user_id' if assignment_type == 'user' else 'team_id'
 
         # Build the set of (actor_pk, role_def_id) we want to create
+        # Cast actor_pk to int for comparison since values_list returns int FKs
         desired = {(actor_pk, rd.id) for actor_pk, rd, _, _, _ in assignments}
 
         # Query existing global assignments (object_role=None) for these combos
@@ -221,7 +222,8 @@ class RoleAssignmentsMixin:
         )
 
         # Only create ones that don't exist
-        new_assignments = [(a, rd, ct, oid, aid) for a, rd, ct, oid, aid in assignments if (a, rd.id) not in existing]
+        # Cast actor_pk to match the int type returned by values_list
+        new_assignments = [(a, rd, ct, oid, aid) for a, rd, ct, oid, aid in assignments if (int(a), rd.id) not in existing]
 
         assignment_objs = [
             AssignmentModel(
