@@ -202,8 +202,8 @@ class TestPaginateAndCreate:
         new_cursor = CursorStore("test-svc-mid", "user")
         assert new_cursor.last_pk == 10
 
-    def test_missing_pk_stops_pagination(self):
-        """If the API returns an assignment without an 'id' field, pagination stops gracefully."""
+    def test_missing_pk_raises_runtime_error(self):
+        """If the API returns an assignment without an 'id' field, RuntimeError is raised."""
         resp = _make_api_response([{"user_ansible_id": "u1", "role_definition": "Role1"}])
 
         cmd = self._make_cmd()
@@ -211,10 +211,8 @@ class TestPaginateAndCreate:
         list_fn = Mock(return_value=resp)
 
         with patch.object(cmd, "_bulk_resolve_and_create_page", return_value=(1, set())):
-            created, obj_roles = cmd._paginate_and_create(list_fn, "user", [], cursor)
-
-        assert created == 1
-        assert obj_roles == set()
+            with pytest.raises(RuntimeError, match="without 'id' field"):
+                cmd._paginate_and_create(list_fn, "user", [], cursor)
 
     def test_role_exclusion_filter_applied(self):
         """Role exclusion filter is passed to the API when non-empty."""
@@ -410,7 +408,8 @@ class TestMigrateRoleAssignments:
         mock_perms.assert_not_called()
 
     def test_rbac_cache_rebuilt_even_on_exception(self):
-        """RBAC cache is rebuilt in finally block even when an exception occurs."""
+        """RBAC cache is rebuilt in finally block even when an exception occurs.
+        When the cache rebuild itself fails, the original exception still propagates."""
         cmd = self._make_cmd()
         mock_or = Mock()
 
@@ -428,6 +427,25 @@ class TestMigrateRoleAssignments:
 
         mock_team.assert_called_once()
         mock_perms.assert_called_once()
+
+    def test_rbac_cache_failure_does_not_mask_original_exception(self):
+        """When cache rebuild fails, the original exception propagates (not the cache error)."""
+        cmd = self._make_cmd()
+        mock_or = Mock()
+
+        with (
+            patch.object(
+                cmd,
+                "_paginate_and_create",
+                side_effect=[(1, {mock_or}), RuntimeError("HTTP 500")],
+            ),
+            patch(
+                "aap_gateway_api.management.commands._migrate_service_data.role_assignments.compute_team_member_roles",
+                side_effect=RuntimeError("cache rebuild exploded"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="HTTP 500"):
+                cmd.migrate_role_assignments("controller", "controller")
 
     def test_cursor_store_receives_log_fn(self):
         """CursorStore is instantiated with log_fn=cmd._log."""
@@ -526,7 +544,8 @@ class TestBulkResolveAndCreatePage:
         assert f"Unable to find object with ansible_id {fake_obj_id}" in msg
 
     def test_global_assignment_created(self):
-        """Global assignment (no object_ansible_id/object_id) creates successfully."""
+        """Global assignment (no object_ansible_id/object_id) creates successfully
+        and is idempotent — calling twice does not duplicate."""
         from aap_gateway_api.models import User
 
         user = User.objects.create(username="bulk-global-user")
@@ -544,6 +563,11 @@ class TestBulkResolveAndCreatePage:
         created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
         assert created == 1
         assert obj_roles == set()
+
+        # Second call should be idempotent — no new rows created
+        created2, _ = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created2 == 0
+        assert RoleUserAssignment.objects.filter(user=user, role_definition__name="Test Bulk Global Role", object_role__isnull=True).count() == 1
 
     def test_object_assignment_created(self):
         """Object-scoped assignment creates successfully with non-empty object roles set."""

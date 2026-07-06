@@ -1,11 +1,11 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple
 
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
-from django.db import models, transaction
+from django.db import transaction
 
 
 class ResourceMigrationMixin:
@@ -21,53 +21,6 @@ class ResourceMigrationMixin:
             if data["count"] > 0:
                 return False
         return True
-
-    def get_new_resource_name(
-        self,
-        name: str,
-        unique_filter_kwargs: Dict[str, Any],
-        local_resource_model: Type[models.Model],
-        resource_type_name_field: str,
-        service_slug: str,
-    ) -> str:
-        """
-        Generate a unique name for a resource that doesn't conflict with existing resources.
-
-        When a resource name conflicts with an existing resource in the gateway, this method
-        generates a new name by prefixing with the service slug and adding a numeric suffix
-        if needed to ensure uniqueness.
-
-        Args:
-            name: Original resource name from upstream service
-            unique_filter_kwargs: Filter parameters used to check uniqueness
-            local_resource_model: Django model class for the resource type
-            resource_type_name_field: Field name used for the resource name
-
-        Returns:
-            A unique name that doesn't conflict with existing resources
-
-        Example:
-            If 'my-org' exists, will return 'service_my-org' or 'service_my-org1'
-        """
-        original_name = f'{service_slug}_{name}'
-
-        filter_kwargs = unique_filter_kwargs.copy()
-        filter_kwargs[f"{resource_type_name_field}__startswith"] = original_name
-        del filter_kwargs[resource_type_name_field]
-
-        highest = (
-            local_resource_model.objects.filter(**filter_kwargs)
-            .values_list(resource_type_name_field, flat=True)
-            .order_by(f"-{resource_type_name_field}")
-            .first()
-        )
-
-        if highest is None:
-            return original_name
-
-        suffix = highest[len(original_name) :]
-        counter = (int(suffix) + 1) if suffix.isdigit() else 1
-        return f"{original_name}{counter}"
 
     def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
         """

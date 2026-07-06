@@ -1,4 +1,5 @@
 import logging
+import traceback
 
 from django.db import connection
 
@@ -71,7 +72,7 @@ class CursorStore:
         except Exception:
             msg = f"Failed to load cursor for {self.service_slug}/{self.assignment_type}, will reprocess all assignments"
             if self._log_fn:
-                self._log_fn(msg, logging.WARNING)
+                self._log_fn(f"{msg}\n{traceback.format_exc()}", logging.WARNING)
             else:
                 logger.warning(msg, exc_info=True)
             return 0
@@ -91,6 +92,6 @@ class CursorStore:
         except Exception:
             msg = f"Failed to advance cursor for {self.service_slug}/{self.assignment_type} to {pk}; next run will reprocess from the old position"
             if self._log_fn:
-                self._log_fn(msg, logging.WARNING)
+                self._log_fn(f"{msg}\n{traceback.format_exc()}", logging.WARNING)
             else:
                 logger.warning(msg, exc_info=True)

@@ -94,7 +94,7 @@ class TestCursorStore:
 
     def test_load_failure_uses_custom_log_fn(self):
         """When log_fn is provided, _load failures route warnings through it
-        instead of the module-level logger."""
+        instead of the module-level logger, and include the traceback."""
         log_fn = Mock()
         cursor_mod = "aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection"
         with patch(cursor_mod) as mock_conn:
@@ -105,11 +105,12 @@ class TestCursorStore:
         log_fn.assert_called_once()
         msg, level = log_fn.call_args[0]
         assert "Failed to load cursor" in msg
+        assert "Traceback" in msg
         assert level == logging.WARNING
 
     def test_advance_failure_uses_custom_log_fn(self):
         """When log_fn is provided, advance() failures route warnings through it
-        instead of the module-level logger."""
+        instead of the module-level logger, and include the traceback."""
         cursor = CursorStore("controller-adv-log", "user")
         log_fn = Mock()
         cursor._log_fn = log_fn
@@ -122,6 +123,7 @@ class TestCursorStore:
         log_fn.assert_called_once()
         msg, level = log_fn.call_args[0]
         assert "Failed to advance cursor" in msg
+        assert "Traceback" in msg
         assert level == logging.WARNING
 
     def test_default_log_writes_to_logger_on_failure(self):

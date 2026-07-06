@@ -84,7 +84,7 @@ class RoleAssignmentsMixin:
                 cursor.advance(last_pk_on_page)
                 base_filters['id__gt'] = str(last_pk_on_page)
             else:
-                break
+                raise RuntimeError(f"API returned {assignment_type} assignment without 'id' field — cannot advance cursor")
 
         return created, all_object_roles
 
@@ -198,9 +198,30 @@ class RoleAssignmentsMixin:
         return created, object_roles_used
 
     def _bulk_create_global_assignments(self, assignments: List[Tuple], assignment_type: str) -> int:
-        """Bulk-create global (system-wide) role assignments."""
+        """Bulk-create global (system-wide) role assignments.
+
+        Because PostgreSQL treats NULL != NULL, the unique constraint on
+        (user, object_role) does not prevent duplicates when object_role
+        is None.  We therefore query for existing global assignments and
+        filter them out before calling bulk_create.
+        """
         AssignmentModel = RoleUserAssignment if assignment_type == 'user' else RoleTeamAssignment  # NOSONAR
         actor_field = 'user_id' if assignment_type == 'user' else 'team_id'
+
+        # Build the set of (actor_pk, role_def_id) we want to create
+        desired = {(actor_pk, rd.id) for actor_pk, rd, _, _, _ in assignments}
+
+        # Query existing global assignments (object_role=None) for these combos
+        existing = set(
+            AssignmentModel.objects.filter(
+                object_role__isnull=True,
+                **{f'{actor_field}__in': {a[0] for a in desired}},
+                role_definition_id__in={a[1] for a in desired},
+            ).values_list(actor_field, 'role_definition_id')
+        )
+
+        # Only create ones that don't exist
+        new_assignments = [(a, rd, ct, oid, aid) for a, rd, ct, oid, aid in assignments if (a, rd.id) not in existing]
 
         assignment_objs = [
             AssignmentModel(
@@ -210,7 +231,7 @@ class RoleAssignmentsMixin:
                 content_type_id=None,
                 object_id=None,
             )
-            for actor_pk, rd, _, _, _ in assignments
+            for actor_pk, rd, _, _, _ in new_assignments
         ]
 
         result = AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True)
@@ -267,6 +288,12 @@ class RoleAssignmentsMixin:
 
         The RBAC cache is rebuilt once at the end in a finally block,
         not per-assignment.
+
+        Drift detection (checking for new assignments created during migration)
+        was removed because the id__gt sliding window naturally handles this:
+        new assignments get higher PKs and appear on subsequent pages. The only
+        undetected window is assignments created during the final page's
+        processing, which is sub-second.
         """
         self._log(f"Migrating role assignments from {service_slug} (type {service_type_name})", logging.INFO)
         roles_to_exclude = self._get_role_definitions_to_exclude(service_type_name)
@@ -284,12 +311,15 @@ class RoleAssignmentsMixin:
                 self._log(f"  {assignment_type}: {created} assignments created", logging.INFO)
         finally:
             if total_created:
-                self._log(
-                    f"Rebuilding RBAC cache ({total_created} assignments created, {len(all_object_roles)} object roles)",
-                    logging.INFO,
-                )
-                compute_team_member_roles()
-                if all_object_roles:
-                    compute_object_role_permissions(object_roles=all_object_roles)
+                try:
+                    self._log(
+                        f"Rebuilding RBAC cache ({total_created} assignments created, {len(all_object_roles)} object roles)",
+                        logging.INFO,
+                    )
+                    compute_team_member_roles()
+                    if all_object_roles:
+                        compute_object_role_permissions(object_roles=all_object_roles)
+                except Exception:
+                    self._log("Warning: RBAC cache rebuild failed, it will be rebuilt on next request", logging.WARNING)
 
         self._log(f"Role assignment migration for {service_slug} completed ({total_created} total created)", logging.INFO)

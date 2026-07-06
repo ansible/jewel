@@ -1,6 +1,6 @@
 """Tests for ResourceMigrationMixin: migrate_conflicting_user, merge_users,
 correcting_user_service_id, migrating_user_with_invalid_email,
-updating_resource_data_for_invalid_resource, use_given_name_*,
+updating_resource_data_for_invalid_resource,
 process_migrate_resource_item_*, reconcile_existing_resource_*.
 """
 
@@ -162,24 +162,6 @@ def test_updating_resource_data_for_invalid_resource(migration_service_invalid_u
 
         assert not User.objects.filter(username="invaliduser").exists()
         assert not User.objects.filter(username="bademailuser1").exists()
-
-
-@pytest.mark.django_db
-def test_use_given_name_first_found(cmd):
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser'
-
-    User.objects.create(username='bob')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser'
-
-
-@pytest.mark.django_db
-def test_use_given_name_iteration(cmd):
-    User.objects.create(username='controller_foouser')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser1'
-
-    User.objects.create(username='controller_foouser1')
-    User.objects.create(username='controller_foouser2')
-    assert cmd.get_new_resource_name('foouser', {'username': 'bob'}, User, 'username', 'controller') == 'controller_foouser3'
 
 
 @pytest.mark.django_db
