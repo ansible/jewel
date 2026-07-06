@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import Any, Dict, List, Tuple
 
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
@@ -321,7 +322,7 @@ class RoleAssignmentsMixin:
                     compute_team_member_roles()
                     if all_object_roles:
                         compute_object_role_permissions(object_roles=all_object_roles)
-                except Exception:
-                    self._log("Warning: RBAC cache rebuild failed, it will be rebuilt on next request", logging.WARNING)
+                except Exception:  # noqa: BLE001 — intentionally broad to avoid masking the original migration exception
+                    self._log(f"Warning: RBAC cache rebuild failed, it will be rebuilt on next request\n{traceback.format_exc()}", logging.WARNING)
 
         self._log(f"Role assignment migration for {service_slug} completed ({total_created} total created)", logging.INFO)
