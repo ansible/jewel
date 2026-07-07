@@ -113,6 +113,12 @@ def pytest_configure():
         pass
 
 
+def pytest_collection_modifyitems(items):
+    for item in items:
+        if "_perf" in item.module.__name__:
+            item.add_marker(pytest.mark.perf)
+
+
 # set_preference fixture has been REMOVED!
 # All tests have been migrated to use preference_manager for better isolation and cleanup.
 #

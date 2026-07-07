@@ -14,10 +14,11 @@ from ansible_base.resource_registry.models import ResourceType
 from ansible_base.rest_pagination.default_paginator import DEFAULT_MAX_PAGE_SIZE
 from django.contrib.auth.models import AbstractUser
 from django.core.management.base import BaseCommand, CommandError
+from django.db import models
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore as _CursorStore  # noqa: F401 — re-export for test compat
 from aap_gateway_api.management.commands._migrate_service_data.legacy_authenticators import LegacyAuthenticatorsMixin
-from aap_gateway_api.management.commands._migrate_service_data.logging_mixin import PROGRESS_STEP, LoggingMixin
+from aap_gateway_api.management.commands._migrate_service_data.logging_mixin import LoggingMixin
 from aap_gateway_api.management.commands._migrate_service_data.resource_migration import ResourceMigrationMixin
 from aap_gateway_api.management.commands._migrate_service_data.role_assignments import RoleAssignmentsMixin
 from aap_gateway_api.management.commands._migrate_service_data.service_orchestration import ServiceOrchestrationMixin
@@ -65,7 +66,7 @@ class Command(
     BIG_PAGE_FILTERS = {"page_size": str(get_setting('RESOURCE_LIST_MAX_PAGE_SIZE', DEFAULT_MAX_PAGE_SIZE))}
 
     # Progress reporting step size (percentage)
-    PROGRESS_STEP = PROGRESS_STEP
+    PROGRESS_STEP = 5
 
     # Service processing order - Controller first to establish priority for user merging
     SERVICE_TYPE_ORDER = [
@@ -101,7 +102,7 @@ class Command(
             "--merge-teams",
             type=bool,
             help=("[IGNORED] If true, teams with the same names on different services will be combined. This flag is now ignored and defaults to True."),
-            default=True,
+            default=None,
         )
         parser.add_argument(
             "--merge-organizations",
@@ -109,7 +110,7 @@ class Command(
             help=(
                 "[IGNORED] If true, organizations with the same names on different services will be combined. This flag is now ignored and defaults to True."
             ),
-            default=True,
+            default=None,
         )
         parser.add_argument(
             "--log-file",
@@ -118,6 +119,12 @@ class Command(
             required=False,
             default=None,
         )
+        parser.add_argument(
+            "--rerun",
+            action="store_true",
+            help="Force migration to run even if it has already completed. Useful for testing and benchmarking.",
+            default=False,
+        )
 
     def _warn_ignored_flags(self, options: dict) -> None:
         if options.get("api_slug"):
@@ -125,10 +132,10 @@ class Command(
                 self.style.WARNING("Warning: --api-slug flag is ignored. The command now processes all services with DefaultServiceType (excluding gateway).")
             )
 
-        if "merge_teams" in options:
+        if options.get("merge_teams") is not None:
             self.stderr.write(self.style.WARNING("Warning: --merge-teams flag is ignored. The default value is now True."))
 
-        if "merge_organizations" in options:
+        if options.get("merge_organizations") is not None:
             self.stderr.write(self.style.WARNING("Warning: --merge-organizations flag is ignored. The default value is now True."))
 
     def handle(self, *args, **options) -> None:
@@ -151,67 +158,45 @@ class Command(
         self._warn_ignored_flags(options)
         self._configure_logging(options.get("log_file"))
 
-        if MigrateServiceDataHasRan.has_migration_completed():
+        if MigrateServiceDataHasRan.has_migration_completed() and not options.get("rerun"):
             self._log("Migration has already completed. Skipping.", logging.INFO)
             return
 
-        # Force merge options to True as per requirements
-        merge_teams = True
-        merge_organizations = True
         username = options["username"]
 
         # The order here matters. Organizations need to be migrated first.
-        self.resource_types_to_migrate = OrderedDict()
-
-        self.resource_types_to_migrate[SHARED_ORGANIZATION_RESOURCE_TYPE] = {
-            "merge": merge_organizations,
-            "type": ResourceType.objects.get(name=SHARED_ORGANIZATION_RESOURCE_TYPE),
-            "unique_fields": [
-                "name",
-            ],
-        }
-        self.resource_types_to_migrate[SHARED_TEAM_RESOURCE_TYPE] = {
-            "merge": merge_teams,
-            "type": ResourceType.objects.get(name=SHARED_TEAM_RESOURCE_TYPE),
-            "unique_fields": [
-                "name",
-                "organization",
-            ],
-        }
-        self.resource_types_to_migrate[SHARED_USER_RESOURCE_TYPE] = {
-            "merge": True,  # only indicates we merge the admin user
-            "type": ResourceType.objects.get(name=SHARED_USER_RESOURCE_TYPE),
-            "unique_fields": [
-                "username",
-            ],
-        }
-        self.resource_types_to_migrate[SHARED_ROLE_DEFINITION_RESOURCE_TYPE] = {
-            "merge": True,  # the JWT roles are already shared effectively
-            "type": ResourceType.objects.get(name=SHARED_ROLE_DEFINITION_RESOURCE_TYPE),
-            "unique_fields": [
-                "name",
-            ],
-        }
-        self.resource_types_to_migrate[SHARED_AAP_FLAG_RESOURCE_TYPE] = {
-            "merge": True,
-            "type": ResourceType.objects.get(name=SHARED_AAP_FLAG_RESOURCE_TYPE),
-            "unique_fields": [
-                "name",
-                "condition",
-            ],
-        }
+        self.resource_types_to_migrate = OrderedDict(
+            {
+                SHARED_ORGANIZATION_RESOURCE_TYPE: {
+                    "type": ResourceType.objects.get(name=SHARED_ORGANIZATION_RESOURCE_TYPE),
+                    "unique_fields": ["name"],
+                },
+                SHARED_TEAM_RESOURCE_TYPE: {
+                    "type": ResourceType.objects.get(name=SHARED_TEAM_RESOURCE_TYPE),
+                    "unique_fields": ["name", "organization"],
+                },
+                SHARED_USER_RESOURCE_TYPE: {
+                    "type": ResourceType.objects.get(name=SHARED_USER_RESOURCE_TYPE),
+                    "unique_fields": ["username"],
+                },
+                SHARED_ROLE_DEFINITION_RESOURCE_TYPE: {
+                    "type": ResourceType.objects.get(name=SHARED_ROLE_DEFINITION_RESOURCE_TYPE),
+                    "unique_fields": ["name"],
+                },
+                SHARED_AAP_FLAG_RESOURCE_TYPE: {
+                    "type": ResourceType.objects.get(name=SHARED_AAP_FLAG_RESOURCE_TYPE),
+                    "unique_fields": ["name", "condition"],
+                },
+            }
+        )
 
         user = self._get_gateway_user(username)
         if user is None:
             raise CommandError(f"Username {username} does not exist")
 
         # Get all services with DefaultServiceType in exact order: controller, hub, eda and metrics
-        service_apis_dict = {
-            api.service_cluster.service_type.name: api
-            for api in ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=self.SERVICE_TYPE_ORDER)
-        }
-
-        service_apis = [service_apis_dict[service_type] for service_type in self.SERVICE_TYPE_ORDER if service_type in service_apis_dict]
+        ordering = models.Case(*[models.When(service_cluster__service_type__name=name, then=pos) for pos, name in enumerate(self.SERVICE_TYPE_ORDER)])
+        service_apis = list(ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=self.SERVICE_TYPE_ORDER).order_by(ordering))
 
         if not service_apis:
             raise CommandError(f"No services found with expected service types: {', '.join(self.SERVICE_TYPE_ORDER)}")
@@ -227,22 +212,25 @@ class Command(
 
         self._progress_thresholds = {}
 
+        # Clean up legacy authenticators once before processing services
+        self.delete_legacy_authenticators()
+
         # Merge all partially migrated users before proceeding with migration
         self._log("\n=== Merging partially migrated users ===", logging.INFO)
         self._merge_partially_migrated_users(service_apis, user)
 
         # Process each service and report results
         successful_services, failed_services = self._process_all_services(service_apis, user)
-        self._report_migration_summary(service_apis, user, successful_services, failed_services)
+        self._report_migration_summary(service_apis, successful_services, failed_services)
+
+        self._ensure_superuser_consistency(service_apis, user)
+
+        self._log("\n=== Re-enabling service authentication ===", logging.INFO)
+        MigrateServiceDataHasRan.mark_migration_completed()
+        self._log("Migration flag updated: Service authentication is now enabled.", logging.INFO)
 
     def _process_all_services(self, service_apis: List[ServiceAPIRoute], user: AbstractUser) -> Tuple[List[str], Dict[str, str]]:
-        """
-        Process migration for all services, returning success/failure lists.
-
-        Returns:
-            Tuple of (successful_service_slugs, failed_services_with_errors)
-            where failed_services_with_errors is a dict of {slug: error_message}
-        """
+        """Process migration for all services, returning success/failure lists."""
         successful_services: List[str] = []
         failed_services: Dict[str, str] = {}
 
@@ -267,14 +255,12 @@ class Command(
     def _report_migration_summary(
         self,
         service_apis: List[ServiceAPIRoute],
-        user: AbstractUser,
         successful_services: List[str],
         failed_services: Dict[str, str],
     ) -> None:
-        """Report migration results and finalize state."""
-        total = len(successful_services) + len(failed_services)
+        """Report migration results. Raises CommandError if any service failed."""
         self._log("\n=== Migration Summary ===", logging.INFO)
-        self._log(f"Total services processed: {total}", logging.INFO)
+        self._log(f"Total services processed: {len(service_apis)}", logging.INFO)
         self._log(f"Successful migrations: {len(successful_services)}", logging.INFO)
         self._log(f"Failed migrations: {len(failed_services)}", logging.INFO)
 
@@ -286,10 +272,3 @@ class Command(
             for service_slug, error in failed_services.items():
                 self._log(f"  - {service_slug}: {error}", logging.WARNING)
             raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
-
-        self._ensure_superuser_consistency(service_apis, user)
-
-        self._log("\n=== Re-enabling service authentication ===", logging.INFO)
-        MigrateServiceDataHasRan.mark_migration_completed()
-        self._log("✓ Migration flag updated: Service authentication is now enabled.", logging.INFO)
-        self._log("\nAll services migration completed successfully!", logging.INFO)
