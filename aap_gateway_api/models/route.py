@@ -6,7 +6,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
-from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE, EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
@@ -283,7 +283,13 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         if not self.enable_gateway_auth:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
                 TYPE_KEY: EXT_AUTH_PER_ROUTE,
-                "disabled": not self.enable_gateway_auth,
+                "check_settings": {
+                    "context_extensions": {
+                        "is_internal_route": self.is_internal_route_string(),
+                        "service_type": self.service_cluster.service_type.name,
+                        "auth_type": AUTH_TYPE_NONE,
+                    },
+                },
             }
         else:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {

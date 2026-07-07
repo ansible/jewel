@@ -15,6 +15,7 @@ def _type_url(descriptor) -> str:
 
 # Filter name used in Envoy filter chain config — not a type URL.
 EXT_AUTH_FILTER = "envoy.filters.http.ext_authz"
+AUTH_TYPE_NONE = "NONE"
 
 # Type URLs derived from protobuf message descriptors.
 EXT_AUTH_PER_ROUTE = _type_url(ext_authz_pb2.ExtAuthzPerRoute.DESCRIPTOR)

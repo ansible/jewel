@@ -1,6 +1,7 @@
 import pytest
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 from aap_gateway_api.models.service_node import ServiceNode
 
@@ -130,6 +131,17 @@ class TestRoute:
         routes = route.get_xds_route_config()
         assert len(routes) == 1
         assert 'envoy.filters.http.ext_authz' in routes[0]["typed_per_filter_config"]
+
+        # Verify the new structure: uses check_settings with auth_type=NONE instead of disabled=True
+        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'disabled' not in ext_authz_config
+        assert 'check_settings' in ext_authz_config
+        assert 'context_extensions' in ext_authz_config["check_settings"]
+
+        context_extensions = ext_authz_config["check_settings"]["context_extensions"]
+        assert context_extensions["auth_type"] == AUTH_TYPE_NONE
+        assert context_extensions["service_type"] == service_cluster_eda.service_type.name
+        assert context_extensions["is_internal_route"] == "f"  # ServiceAPIRoute defaults to is_internal_route=False
 
     @pytest.mark.parametrize(
         "service,expected_route_len",
