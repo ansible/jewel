@@ -1,11 +1,11 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple
 
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
-from django.db import models, transaction
+from django.db import transaction
 
 
 class ResourceMigrationMixin:
@@ -21,47 +21,6 @@ class ResourceMigrationMixin:
             if data["count"] > 0:
                 return False
         return True
-
-    def get_new_resource_name(
-        self,
-        name: str,
-        unique_filter_kwargs: Dict[str, Any],
-        local_resource_model: Type[models.Model],
-        resource_type_name_field: str,
-        service_slug: str,
-    ) -> str:
-        """
-        Generate a unique name for a resource that doesn't conflict with existing resources.
-
-        When a resource name conflicts with an existing resource in the gateway, this method
-        generates a new name by prefixing with the service slug and adding a numeric suffix
-        if needed to ensure uniqueness.
-
-        Args:
-            name: Original resource name from upstream service
-            unique_filter_kwargs: Filter parameters used to check uniqueness
-            local_resource_model: Django model class for the resource type
-            resource_type_name_field: Field name used for the resource name
-
-        Returns:
-            A unique name that doesn't conflict with existing resources
-
-        Example:
-            If 'my-org' exists, will return 'service_my-org' or 'service_my-org1'
-        """
-        original_name = f'{service_slug}_{name}'
-        name = original_name
-
-        filter_kwargs = unique_filter_kwargs.copy()
-        filter_kwargs[resource_type_name_field] = name
-
-        counter = 1
-        while local_resource_model.objects.filter(**filter_kwargs).exists():
-            name = original_name + str(counter)
-            filter_kwargs[resource_type_name_field] = name
-            counter += 1
-
-        return name
 
     def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
         """
@@ -133,41 +92,10 @@ class ResourceMigrationMixin:
 
         return updated_resource_data
 
-    def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any], user_partial_migration: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Prepare payloads for creating Gateway resources and updating upstream resources.
-
-        This method sets up the data structures needed to:
-        1. Create a new resource in the gateway
-        2. Update the corresponding resource in the upstream service
-
-        For partially migrated users, the gateway resource retains the upstream
-        service_id to indicate it's not fully migrated.
-
-        Args:
-            upstream_resource: Complete resource data from upstream service
-            user_partial_migration: True if this is a user being partially migrated
-
-        Returns:
-            Tuple of (resource_creation_kwargs, updated_service_resource)
-            - resource_creation_kwargs: Data for creating Gateway resource
-            - updated_service_resource: Data for updating upstream resource
-        """
-        resource_creation_kwargs = {}
-        updated_service_resource = {}
-
-        resource_creation_kwargs["ansible_id"] = upstream_resource["ansible_id"]
-
-        if user_partial_migration:
-            # We do not update the service_id of a user on the service, only mark is_partially_migrated to True to exclude it from the
-            # while loop in migrate_resource()
-            updated_service_resource["is_partially_migrated"] = True
-            # The resource to be created in Gateway needs to show as unmigrated by having the original service_id
-            resource_creation_kwargs["service_id"] = self.upstream_service_id
-        else:
-            # if current resource is not shared.user or user is not partially migrated, we update the 'service_id' to Gateway's service_id
-            updated_service_resource["service_id"] = str(service_id())
-
+    def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Prepare payloads for creating Gateway resources and updating upstream resources."""
+        resource_creation_kwargs = {"ansible_id": upstream_resource["ansible_id"]}
+        updated_service_resource = {"service_id": str(service_id())}
         return resource_creation_kwargs, updated_service_resource
 
     def _reconcile_existing_resource(
@@ -311,11 +239,7 @@ class ResourceMigrationMixin:
             # Re-validate after potential superuser flag changes
             validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
-        # 'shared.user' type is treated differently
-        # If the user being migrated is not the current user (admin user), we need to check if we should partially migrate the user
-        user_partial_migration = False
-
-        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource, user_partial_migration)
+        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource)
 
         # handles case with existing resource and figure out if we should create a new resource in gateway or not
         create_gateway_resource = self._reconcile_existing_resource(upstream_resource, resource_context, validated_resource_data, updated_service_resource)
@@ -374,7 +298,6 @@ class ResourceMigrationMixin:
             "type_serializer": resource_type.serializer_class,
             "type_name_field": resource_type.get_resource_config().name_field,
             "unique_fields": self.resource_types_to_migrate[resource_type_name]["unique_fields"],
-            "merge_option": self.resource_types_to_migrate[resource_type_name]["merge"],
             "LocalResourceModel": resource_type.content_type.model_class(),
         }
 

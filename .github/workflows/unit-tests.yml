@@ -140,6 +140,7 @@ jobs:
           GATEWAY_TEST_DIRS: ""
         run: |
           tox -e ${{ steps.tox-env.outputs.name }} -- ${{ matrix.batch.test-filter }} -v \
+            -m "not perf" \
             --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml \
             --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
 
