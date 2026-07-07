@@ -83,6 +83,7 @@ DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
 addopts = "--strict-markers --reuse-db --create-db --migrations -s -vvv"
 pythonpath = ". aap_gateway_api"
 markers = [
+    "perf: performance and scaling tests (query counts, memory bounds, O-complexity)",
 ]
 
 [tool.tox]

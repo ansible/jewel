@@ -134,6 +134,10 @@ class ApiSpecs:
             # TODO fix in DAB and remove this exception
             if '/o/' in endpoint and not endpoint.endswith('o/'):
                 continue
+            # /.well-known/ catch-all returns JSON 404 for unhandled paths,
+            # not an API endpoint
+            if '.well-known' in endpoint:
+                continue
             # control plane endpoints intentionally hidden
             if 'discovery' in endpoint:
                 continue
