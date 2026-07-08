@@ -84,8 +84,8 @@ class _ExternalAuth:
     def is_route_internal(self, request) -> bool:
         return request.attributes.context_extensions["is_internal_route"] == "t"
 
-    def is_route_container_registry(self, request) -> bool:
-        return request.attributes.context_extensions.get("is_container_registry") == "t"
+    def reject_failed_auth(self, request) -> bool:
+        return request.attributes.context_extensions.get("reject_failed_auth") == "t"
 
     def _get_ms_delta(self, start_time):
         delta_ms = (time.time() - start_time) * 1000
@@ -238,8 +238,10 @@ class _ExternalAuth:
         except AuthenticationFailed:
             # Reject immediately for container registry requests with invalid credentials,
             # otherwise the token endpoint silently issues an anonymous token and podman reports login success.
-            if self.is_container_registry:
+            auth_header = self.drf_request.META.get("HTTP_AUTHORIZATION", "")
+            if self.reject_failed_auth and auth_header.startswith("Basic "):
                 return self._return_no_auth_with_reason("Invalid credentials.", http_status_code=401, code=16)
+
             user = None
 
         if self.is_internal_route:
@@ -291,7 +293,7 @@ class _ExternalAuth:
 
         self.request_path = request.attributes.request.http.path
         self.is_internal_route = self.is_route_internal(request)
-        self.is_container_registry = self.is_route_container_registry(request)
+        self.reject_failed_auth = self.reject_failed_auth(request)
 
         # OIDC/OAuth2 flow endpoints handle their own authentication via DOT.
         # This check runs before internal/external branching so it works regardless

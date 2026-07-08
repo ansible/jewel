@@ -68,7 +68,7 @@ class Request:
         body="",
         query="",
         is_internal_route="f",
-        is_container_registry="f",
+        reject_failed_auth="f",
         service_type="gateway",
         auth_type="JWT",
         scheme="http",
@@ -88,7 +88,7 @@ class Request:
         self.http = self
         self.context_extensions = {
             "is_internal_route": is_internal_route,
-            "is_container_registry": is_container_registry,
+            "reject_failed_auth": reject_failed_auth,
             "service_type": service_type,
             "auth_type": auth_type,
         }
@@ -248,7 +248,7 @@ class TestExternalAuth:
 class TestContainerRegistryAuth:
     """Tests for container registry authentication in the gRPC control plane.
 
-    Verifies that routes with is_container_registry=True reject invalid
+    Verifies that routes with reject_failed_auth=True reject invalid
     credentials instead of silently passing them through as anonymous.
     """
 
@@ -262,7 +262,7 @@ class TestContainerRegistryAuth:
         request = Request(
             path="/token/",
             service_type="hub",
-            is_container_registry="t",
+            reject_failed_auth="t",
             header_diff={"AUTHORIZATION": "Basic aW52YWxpZDppbnZhbGlk"},
         )
 
@@ -278,7 +278,7 @@ class TestContainerRegistryAuth:
 
     def test_anonymous_request_passes_through_for_registry_route(self, ext_auth):
         """Registry route without credentials should pass through for the token handshake."""
-        request = Request(path="/v2/", service_type="hub", is_container_registry="t")
+        request = Request(path="/v2/", service_type="hub", reject_failed_auth="t")
 
         response = ext_auth.Check(request, None)
 
@@ -289,7 +289,7 @@ class TestContainerRegistryAuth:
         request = Request(
             path="/v2/",
             service_type="hub",
-            is_container_registry="t",
+            reject_failed_auth="t",
             header_diff={"AUTHORIZATION": "Basic YWRtaW46cGFzc3dvcmQ="},  # admin:password
         )
 
@@ -301,12 +301,29 @@ class TestContainerRegistryAuth:
 
         assert response.status.code == 0
 
+    def test_non_basic_auth_failure_passes_through_for_registry_route(self, ext_auth):
+        """Non-Basic auth failure on a registry route should pass through (not be rejected)."""
+        request = Request(
+            path="/token/",
+            service_type="hub",
+            reject_failed_auth="t",
+            header_diff={"AUTHORIZATION": "Bearer some-invalid-token"},
+        )
+
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            side_effect=AuthenticationFailed("Invalid token"),
+        ):
+            response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+
     def test_invalid_credentials_pass_through_for_non_registry_route(self, ext_auth):
         """Invalid credentials on a non-registry route should pass through (existing behavior)."""
         request = Request(
             path="/api/galaxy/v3/namespaces/",
             service_type="hub",
-            is_container_registry="f",
+            reject_failed_auth="f",
             header_diff={"AUTHORIZATION": "Basic aW52YWxpZDppbnZhbGlk"},
         )
 
