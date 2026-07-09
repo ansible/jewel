@@ -271,6 +271,134 @@ def test_cache_dependent(isolated_cache):
 - `cache.clear()` only clears current worker's keys
 - Prevents parallel test workers from interfering with each other
 
+## Performance Tests (Perf)
+
+Performance tests catch scaling regressions at the unit level. They are not load tests — they detect structural issues like N+1 queries and unbounded memory growth that can run on any CI server.
+
+### What Perf Tests Can Do
+
+- **Query count scaling**: Count SQL queries at two data scales and assert the ratio stays constant
+- **Memory bounds**: Use `tracemalloc` to verify memory stays proportional to batch size, not total data
+- **O(n) detection**: Prove that a function is O(1) per page/batch, not O(items)
+
+### How They Work
+
+The core technique is **relative comparison at two scales**:
+
+1. Run a function with a small dataset (e.g., 5 items)
+2. Run the same function with a larger dataset (e.g., 20 items)
+3. Compare the query count (or memory) ratio
+4. Assert the ratio stays below a threshold (e.g., < 2.0x)
+
+This catches N+1 queries without needing absolute benchmarks that vary by hardware.
+
+### File Naming Convention
+
+Perf test files use the `*_perf.py` suffix:
+
+```
+aap_gateway_api/tests/management/commands/_migrate_service_data/test_role_assignments_perf.py
+aap_gateway_api/tests/views/api/envoy/test_rest_control_plane_perf.py
+```
+
+Files matching this pattern are **automatically marked** with `@pytest.mark.perf` via a `pytest_collection_modifyitems` hook in `conftest.py` — no manual decorators needed.
+
+### Running Perf Tests
+
+```bash
+# Run only perf tests
+make check_perf
+
+# Run all tests except perf tests
+make check_test
+
+# Run perf tests directly via tox
+GATEWAY_TEST_DIRS="" TOX_DOCKER_GATEWAY=0.0.0.0 tox -e py312 -- -m perf -v
+
+# Run a specific perf test file
+GATEWAY_TEST_DIRS="" TOX_DOCKER_GATEWAY=0.0.0.0 tox -e py312 -- aap_gateway_api/tests/path/to/test_file_perf.py -v
+```
+
+### Writing Perf Tests
+
+#### Query Count Test (Absolute Bound)
+
+Use `CaptureQueriesContext` to assert a fixed upper bound on queries:
+
+```python
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+@pytest.mark.django_db
+def test_bulk_operation_query_count_bounded():
+    # Setup: create test data
+    users, orgs, _ = create_test_data(user_count=200, org_count=10)
+    results = build_assignments(users, orgs, 200)
+
+    with CaptureQueriesContext(connection) as ctx:
+        process_page(results)
+
+    assert len(ctx.captured_queries) < 20, (
+        f"Expected <20 queries, got {len(ctx.captured_queries)}. "
+        f"Queries: {[q['sql'][:80] for q in ctx.captured_queries]}"
+    )
+```
+
+#### Query Count Test (Ratio/Scaling)
+
+Compare query counts at two scales to detect O(n) regressions:
+
+```python
+@pytest.mark.django_db
+def test_query_count_scales_with_pages_not_items():
+    def count_queries(n_items):
+        results = build_data(n_items)
+        with CaptureQueriesContext(connection) as ctx:
+            process(results)
+        return len(ctx.captured_queries)
+
+    queries_small = count_queries(100)
+    queries_large = count_queries(400)
+
+    ratio = queries_large / max(queries_small, 1)
+    assert ratio < 1.5, (
+        f"Query count scaled {ratio:.1f}x for 4x items"
+    )
+```
+
+#### Memory Bounds Test
+
+Use `tracemalloc` to verify memory stays bounded by batch size:
+
+```python
+import tracemalloc
+
+def measure_memory(num_items, page_size=50):
+    tracemalloc.start()
+    snapshot_before = tracemalloc.take_snapshot()
+
+    process_in_pages(num_items, page_size)
+
+    snapshot_after = tracemalloc.take_snapshot()
+    tracemalloc.stop()
+    stats = snapshot_after.compare_to(snapshot_before, "lineno")
+    return sum(s.size_diff for s in stats if s.size_diff > 0)
+
+@pytest.mark.django_db
+def test_memory_scales_with_page_size_not_total():
+    mem_small = measure_memory(500)
+    mem_large = measure_memory(2000)
+
+    ratio = mem_large / max(mem_small, 1)
+    assert ratio < 2.5, (
+        f"Memory scaled {ratio:.1f}x for 4x data"
+    )
+```
+
+### CI Integration
+
+Perf tests run in a dedicated CI workflow (`perf-tests.yml`) separate from unit tests. The unit test workflow excludes perf tests via `-m "not perf"` so they don't slow down the main test pipeline.
+
 ## CI Structure
 
 ### 3-Batch Parallel Strategy
