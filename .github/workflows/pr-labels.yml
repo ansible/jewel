@@ -348,9 +348,14 @@ jobs:
                 cr => !ignoredChecks.has(cr.name)
                   && !ignoredSuffixes.some(s => cr.name.endsWith(s))
               );
+              const ignoredButTracked = checkRuns.check_runs.filter(
+                cr => !ignoredChecks.has(cr.name)
+                  && ignoredSuffixes.some(s => cr.name.endsWith(s))
+              );
 
               const allCompleted = ciChecks.length > 0
-                && ciChecks.every(cr => cr.status === 'completed');
+                && ciChecks.every(cr => cr.status === 'completed')
+                && ignoredButTracked.every(cr => cr.status === 'completed');
 
               if (allCompleted) {
                 const anyFailed = ciChecks.some(cr =>
