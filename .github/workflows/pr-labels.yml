@@ -154,11 +154,48 @@ jobs:
             // --- Helpers ---
             const currentLabels = new Set(pr.labels.map(l => l.name.toLowerCase()));
 
+            // --- Detect synchronize (new push) ---
+            const isSynchronize = context.eventName === 'pull_request_target'
+              && context.payload.action === 'synchronize';
+
+            // --- Detect manually changed labels ---
+            const managedLabelNames = new Set(Object.keys(LABELS).map(n => n.toLowerCase()));
+            const manualOverrides = new Set();
+
+            if (!isSynchronize) {
+              try {
+                const timelineEvents = await github.paginate(
+                  github.rest.issues.listEventsForTimeline,
+                  { owner, repo, issue_number: prNumber, per_page: 100 }
+                );
+                const lastActorByLabel = new Map();
+                for (const event of timelineEvents) {
+                  if ((event.event === 'labeled' || event.event === 'unlabeled')
+                      && event.label
+                      && managedLabelNames.has(event.label.name.toLowerCase())) {
+                    lastActorByLabel.set(event.label.name.toLowerCase(), event.actor?.login || '');
+                  }
+                }
+                for (const [labelName, actor] of lastActorByLabel) {
+                  if (actor && actor !== 'github-actions[bot]') {
+                    manualOverrides.add(labelName);
+                    core.info(`Label "${labelName}" last changed by ${actor} — skipping automation`);
+                  }
+                }
+              } catch (e) {
+                core.warning(`Failed to fetch timeline events: ${e.message}`);
+              }
+            }
+
             function hasLabel(name) {
               return currentLabels.has(name.toLowerCase());
             }
 
             async function addLabel(name) {
+              if (manualOverrides.has(name.toLowerCase())) {
+                core.info(`Skipping add "${name}" — manually overridden`);
+                return;
+              }
               if (!hasLabel(name)) {
                 await github.rest.issues.addLabels({
                   owner, repo, issue_number: prNumber, labels: [name],
@@ -169,6 +206,10 @@ jobs:
             }
 
             async function removeLabel(name) {
+              if (manualOverrides.has(name.toLowerCase())) {
+                core.info(`Skipping remove "${name}" — manually overridden`);
+                return;
+              }
               if (hasLabel(name)) {
                 try {
                   await github.rest.issues.removeLabel({
@@ -274,8 +315,6 @@ jobs:
 
             // --- CI status ---
             let ciPassed = false;
-            const isSynchronize = context.eventName === 'pull_request_target'
-              && context.payload.action === 'synchronize';
 
             if (isSynchronize) {
               await removeLabel('fix-ci');
