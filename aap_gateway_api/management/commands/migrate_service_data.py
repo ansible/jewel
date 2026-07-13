@@ -73,6 +73,7 @@ class Command(
         DefaultServiceType.CONTROLLER.value,
         DefaultServiceType.HUB.value,
         DefaultServiceType.EDA.value,
+        DefaultServiceType.METRICS.value,
     ]
 
     help = """Migrate Organizations and teams from existing AAP installations into the gateway.
@@ -193,7 +194,7 @@ class Command(
         if user is None:
             raise CommandError(f"Username {username} does not exist")
 
-        # Get all services with DefaultServiceType in exact order: controller, hub, eda
+        # Get all services with DefaultServiceType in exact order: controller, hub, eda and metrics
         ordering = models.Case(*[models.When(service_cluster__service_type__name=name, then=pos) for pos, name in enumerate(self.SERVICE_TYPE_ORDER)])
         service_apis = list(ServiceAPIRoute.objects.filter(service_cluster__service_type__name__in=self.SERVICE_TYPE_ORDER).order_by(ordering))
 

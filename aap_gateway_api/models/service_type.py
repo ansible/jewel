@@ -36,6 +36,7 @@ class DefaultServiceType(str, Enum):
     CONTROLLER = "controller"
     EDA = "eda"
     HUB = "hub"
+    METRICS = "metrics"
 
     @staticmethod
     def is_default(name: str) -> bool:
