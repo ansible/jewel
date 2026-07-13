@@ -29,10 +29,17 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        id: app-token
+        with:
+          app-id: ${{ vars.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_APP_ID }}
+          private-key: ${{ secrets.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_PRIVATE_KEY }}
+          owner: ansible
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         id: labeler
         env:
           USERNAME_MAPPING: ${{ secrets.USERNAME_MAPPING }}
+          ORG_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           script: |
             const LABELS = {
@@ -269,16 +276,23 @@ jobs:
 
             if (!isInternal) {
               try {
-                const { data: orgs } = await github.request('GET /users/{username}/orgs', {
+                const { Octokit } = require('@octokit/rest');
+                const orgOctokit = new Octokit({ auth: process.env.ORG_TOKEN });
+                const { status } = await orgOctokit.orgs.checkMembershipForUser({
+                  org: 'ansible',
                   username: pr.user.login,
-                  per_page: 100,
                 });
-                if (orgs.some(org => org.login === 'ansible')) {
+                if (status === 204) {
                   isInternal = true;
                   core.info(`${pr.user.login} is a member of the ansible org`);
                 }
               } catch (e) {
-                core.warning(`Failed to check org membership for ${pr.user.login}: ${e.message}`);
+                if (e.status === 302) {
+                  isInternal = true;
+                  core.info(`${pr.user.login} is a member of the ansible org (requester is not org member)`);
+                } else if (e.status !== 404) {
+                  core.warning(`Failed to check org membership for ${pr.user.login}: ${e.message}`);
+                }
               }
             }
 
