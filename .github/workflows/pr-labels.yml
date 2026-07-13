@@ -267,6 +267,21 @@ jobs:
             const internalAssociations = new Set(['MEMBER', 'COLLABORATOR', 'OWNER']);
             let isInternal = internalAssociations.has(pr.author_association);
 
+            if (!isInternal) {
+              try {
+                const { data: orgs } = await github.request('GET /users/{username}/orgs', {
+                  username: pr.user.login,
+                  per_page: 100,
+                });
+                if (orgs.some(org => org.login === 'ansible')) {
+                  isInternal = true;
+                  core.info(`${pr.user.login} is a member of the ansible org`);
+                }
+              } catch (e) {
+                core.warning(`Failed to check org membership for ${pr.user.login}: ${e.message}`);
+              }
+            }
+
             if (!isInternal && Object.keys(usernameMapping).length > 0) {
               const normalizedMapping = Object.fromEntries(
                 Object.entries(usernameMapping).map(([k, v]) => [k.toLowerCase(), v])
