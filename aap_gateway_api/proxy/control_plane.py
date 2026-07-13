@@ -84,7 +84,7 @@ class _ExternalAuth:
     def is_route_internal(self, request) -> bool:
         return request.attributes.context_extensions["is_internal_route"] == "t"
 
-    def reject_failed_auth(self, request) -> bool:
+    def should_reject_failed_auth(self, request) -> bool:
         return request.attributes.context_extensions.get("reject_failed_auth") == "t"
 
     def _get_ms_delta(self, start_time):
@@ -293,7 +293,7 @@ class _ExternalAuth:
 
         self.request_path = request.attributes.request.http.path
         self.is_internal_route = self.is_route_internal(request)
-        self.reject_failed_auth = self.reject_failed_auth(request)
+        self.reject_failed_auth = self.should_reject_failed_auth(request)
 
         # OIDC/OAuth2 flow endpoints handle their own authentication via DOT.
         # This check runs before internal/external branching so it works regardless

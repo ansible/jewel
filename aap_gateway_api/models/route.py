@@ -69,7 +69,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     )
     reject_failed_auth = models.BooleanField(
         default=False,
-        help_text=_("If true this route will return a 401 instead of allowing unauthenticated requests to the back end."),
+        help_text=_("If true, requests with invalid Basic credentials will receive a 401 instead of being passed to the back end as anonymous."),
     )
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
