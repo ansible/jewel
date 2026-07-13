@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
             name='reject_failed_auth',
             field=models.BooleanField(
                 default=False,
-                help_text='If true, requests with invalid Basic credentials will receive a 401 instead of being passed to the back end as anonymous.',
+                help_text='If true, requests with invalid Basic credentials will receive a 401 instead of being passed to the back end as anonymous. Requests without credentials continue to be passed through anonymously.',
             ),
         ),
     ]
