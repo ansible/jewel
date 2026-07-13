@@ -12,6 +12,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
+from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.tests.management.commands._migrate_service_data.conftest import setup_basic_service_client_mocks, setup_empty_assignment_mocks
 
 
@@ -36,6 +37,11 @@ def test_warn_ignored_flags_only_when_present(capsys):
     cmd._warn_ignored_flags({})
     captured = capsys.readouterr()
     assert "Warning:" not in captured.err
+
+
+def test_service_type_order_includes_metrics():
+    """Validate that METRICS is present in SERVICE_TYPE_ORDER — the core fix for AAP-80948."""
+    assert DefaultServiceType.METRICS.value in MigrateCommand.SERVICE_TYPE_ORDER
 
 
 @pytest.mark.django_db(transaction=True)
