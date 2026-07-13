@@ -385,12 +385,30 @@ jobs:
               await removeLabel('Ready-for-review');
 
               if (!alreadyReadyToMerge) {
-                const normalizedLogin = pr.user.login.toLowerCase();
                 const normalizedMappingForSlack = Object.fromEntries(
                   Object.entries(usernameMapping).map(([k, v]) => [k.toLowerCase(), v])
                 );
-                const authorSlackId = normalizedMappingForSlack[normalizedLogin];
-                const mention = authorSlackId ? `<@${authorSlackId}>` : pr.user.login;
+                let mention = '';
+                const authorSlackId = normalizedMappingForSlack[pr.user.login.toLowerCase()];
+                if (authorSlackId) {
+                  mention = `<@${authorSlackId}>`;
+                } else {
+                  const { data: prData } = await github.rest.pulls.get({
+                    owner, repo, pull_number: prNumber,
+                  });
+                  const reviewers = prData.requested_reviewers || [];
+                  for (const reviewer of reviewers) {
+                    const reviewerSlackId = normalizedMappingForSlack[reviewer.login.toLowerCase()];
+                    if (reviewerSlackId) {
+                      mention = `<@${reviewerSlackId}>`;
+                      core.info(`Author not in USERNAME_MAPPING — mentioning reviewer ${reviewer.login}`);
+                      break;
+                    }
+                  }
+                  if (!mention) {
+                    mention = pr.user.login;
+                  }
+                }
 
                 core.setOutput('notify', 'true');
                 core.setOutput('slack_mention', mention);
