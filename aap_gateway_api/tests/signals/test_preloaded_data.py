@@ -2,8 +2,14 @@ from unittest import mock
 
 import pytest
 
-from aap_gateway_api.models import Organization
-from aap_gateway_api.signals.preloaded_data import create_default_organization, create_preload_data, set_system_user_managed_flag, set_system_user_password
+from aap_gateway_api.models import Organization, Preference, ServiceType
+from aap_gateway_api.signals.preloaded_data import (
+    create_default_organization,
+    create_preload_data,
+    remove_console_service_type,
+    set_system_user_managed_flag,
+    set_system_user_password,
+)
 
 
 class TestCreatePreloadedData:
@@ -77,3 +83,24 @@ class TestCreatePreloadedData:
         with mock.patch('aap_gateway_api.signals.preloaded_data.create_default_organization', mock_function):
             with expected_log('aap_gateway_api.signals.preloaded_data.logger', log_level, 'Failed to'):
                 create_preload_data(verbosity=verbosity, plan=[('0000', False)])
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type(self):
+        """remove_console_service_type deletes console ServiceType and RED_HAT_CONSOLE_URL preference."""
+        ServiceType.objects.get_or_create(name="console")
+        Preference.objects.bulk_create(
+            [Preference(section="analytics", name="RED_HAT_CONSOLE_URL", raw_value="https://console.redhat.com")],
+            ignore_conflicts=True,
+        )
+
+        assert remove_console_service_type() is True, "Should delete existing records"
+        assert not ServiceType.objects.filter(name="console").exists()
+        assert not Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_idempotent(self):
+        """remove_console_service_type is a no-op when records don't exist."""
+        ServiceType.objects.filter(name="console").delete()
+        Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").delete()
+
+        assert remove_console_service_type() is False, "Should return False when nothing to delete"
