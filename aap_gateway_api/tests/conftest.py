@@ -477,6 +477,7 @@ _service_index_paths = {
     DefaultServiceType.CONTROLLER.value: "/v2/service-index/",
     DefaultServiceType.HUB.value: "/service-index/",
     DefaultServiceType.EDA.value: "/v1/service-index/",
+    DefaultServiceType.METRICS.value: "/v1/service-index/",
 }
 
 for name in [x.value for x in DefaultServiceType]:
@@ -537,6 +538,7 @@ for name in [x.value for x in DefaultServiceType]:
             DefaultServiceType.EDA: 2,
             DefaultServiceType.HUB: 3,
             DefaultServiceType.GATEWAY: 4,
+            DefaultServiceType.METRICS: 5,
         }
 
         port_prefix = port_prefixes[service_cluster.service_type.name]
@@ -576,6 +578,7 @@ for name in [x.value for x in DefaultServiceType]:
             DefaultServiceType.EDA: 2,
             DefaultServiceType.HUB: 3,
             DefaultServiceType.GATEWAY: 4,
+            DefaultServiceType.METRICS: 5,
         }
 
         port_prefix = port_prefixes[service_cluster.service_type.name]
