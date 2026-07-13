@@ -56,6 +56,8 @@ def create_preload_data(**kwargs) -> None:
                 action = 'Created'
                 if name.startswith('set'):
                     action = 'Set'
+                elif name.startswith('remove'):
+                    action = 'Removed'
                 logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
         except Exception as e:
             if verbosity in [0, 1]:
@@ -152,10 +154,21 @@ def remove_console_service_type() -> bool:
     migration 0023_remove_console_service_type.py with an idempotent signal-based cleanup
     to avoid migration dependency chain issues on stable branches.
     """
-    ServiceType = global_apps.get_model('aap_gateway_api', 'ServiceType')
-    Preference = global_apps.get_model('aap_gateway_api', 'Preference')
+    try:
+        ServiceType = global_apps.get_model('aap_gateway_api', 'ServiceType')
+        Preference = global_apps.get_model('aap_gateway_api', 'Preference')
+    except LookupError:
+        return False
 
-    deleted_st, _ = ServiceType.objects.filter(name="console").delete()
+    console_clusters = ServiceType.objects.filter(name="console").values_list('servicecluster__name', flat=True)
+    cluster_names = [n for n in console_clusters if n is not None]
+    if cluster_names:
+        logger.warning("Cascade-deleting ServiceCluster(s) for console ServiceType: %s", cluster_names)
+
+    deleted_st, st_details = ServiceType.objects.filter(name="console").delete()
+    if deleted_st:
+        logger.info("Console ServiceType delete details: %s", st_details)
+
     deleted_pref, _ = Preference.objects.filter(
         section="analytics",
         name="RED_HAT_CONSOLE_URL",

@@ -104,3 +104,38 @@ class TestCreatePreloadedData:
         Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").delete()
 
         assert remove_console_service_type() is False, "Should return False when nothing to delete"
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_only_service_type(self):
+        """remove_console_service_type handles case where only ServiceType exists."""
+        Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").delete()
+        ServiceType.objects.get_or_create(name="console")
+
+        assert remove_console_service_type() is True
+        assert not ServiceType.objects.filter(name="console").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_only_preference(self):
+        """remove_console_service_type handles case where only Preference exists."""
+        ServiceType.objects.filter(name="console").delete()
+        Preference.objects.bulk_create(
+            [Preference(section="analytics", name="RED_HAT_CONSOLE_URL", raw_value="https://console.redhat.com")],
+            ignore_conflicts=True,
+        )
+
+        assert remove_console_service_type() is True
+        assert not Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_via_preload_data(self):
+        """remove_console_service_type is wired into create_preload_data function_order."""
+        ServiceType.objects.get_or_create(name="console")
+        Preference.objects.bulk_create(
+            [Preference(section="analytics", name="RED_HAT_CONSOLE_URL", raw_value="https://console.redhat.com")],
+            ignore_conflicts=True,
+        )
+
+        create_preload_data(verbosity=0, plan=[('0000', False)])
+
+        assert not ServiceType.objects.filter(name="console").exists()
+        assert not Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").exists()
