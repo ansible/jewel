@@ -393,10 +393,7 @@ jobs:
                 if (authorSlackId) {
                   mention = `<@${authorSlackId}>`;
                 } else {
-                  const { data: prData } = await github.rest.pulls.get({
-                    owner, repo, pull_number: prNumber,
-                  });
-                  const reviewers = prData.requested_reviewers || [];
+                  const reviewers = pr.requested_reviewers || [];
                   for (const reviewer of reviewers) {
                     const reviewerSlackId = normalizedMappingForSlack[reviewer.login.toLowerCase()];
                     if (reviewerSlackId) {
