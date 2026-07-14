@@ -151,7 +151,7 @@ def remove_console_service_type() -> bool:
 
     The console ServiceType was gated behind FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED
     and is no longer supported (AAP-74714). This replaces the operations previously in
-    migration 0023_remove_console_service_type.py with an idempotent signal-based cleanup
+    migration 0023 (now 0023_merge_0021_0022.py) with an idempotent signal-based cleanup
     to avoid migration dependency chain issues on stable branches.
     """
     try:
