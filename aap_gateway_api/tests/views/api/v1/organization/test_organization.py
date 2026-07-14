@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleUserAssignment
 
-from aap_gateway_api.models import Organization
+from aap_gateway_api.models import Organization, Team
 
 
 def test_prevent_deletion_of_managed_organization(admin_api_client):
@@ -213,3 +216,74 @@ def test_managed_organization_field_manual(admin_api_client):
     response = admin_api_client.patch(url, data={"managed": False})
     assert response.status_code == 200
     assert response.data["managed"] is True
+
+
+@pytest.mark.django_db(transaction=True)
+class TestOrgDeleteCleansUpRBAC:
+    """Verify that a successful org delete removes all RBAC data consistently."""
+
+    def test_successful_delete_cleans_up_everything(self, admin_api_client, organization, team, user):
+        RoleDefinition.objects.managed.org_member.give_permission(user, organization)
+        RoleDefinition.objects.managed.team_member.give_permission(user, team)
+
+        assert RoleUserAssignment.objects.filter(user_id=user.pk, object_id=organization.pk).exists()
+        assert RoleUserAssignment.objects.filter(user_id=user.pk, object_id=team.pk).exists()
+
+        url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
+        response = admin_api_client.delete(url)
+        assert response.status_code == 204
+
+        assert not Organization.objects.filter(pk=organization.pk).exists()
+        assert not Team.objects.filter(pk=team.pk).exists()
+        assert not RoleUserAssignment.objects.filter(object_id=organization.pk).exists()
+        assert not RoleUserAssignment.objects.filter(object_id=team.pk).exists()
+        assert not ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestOrgDeleteRBACFlushRollback:
+    """Verify that RBAC flush failure rolls back the entire org delete.
+
+    The call chain is:
+      dispatch() -> defer_rbac_computations [with transaction.atomic]
+        -> perform_destroy() [@transaction.atomic — savepoint]
+          -> instance.delete() -> signals fire, work deferred
+        -> defer_rbac_computations.__exit__ -> _flush_rbac()
+
+    If the flush raises, transaction.atomic must roll back the delete
+    so the org and all RBAC data remain intact.
+    """
+
+    def test_flush_failure_rolls_back_delete(self, admin_api_client, organization, team, user):
+        RoleDefinition.objects.managed.org_member.give_permission(user, organization)
+        RoleDefinition.objects.managed.team_member.give_permission(user, team)
+
+        org_assignments_before = RoleUserAssignment.objects.filter(object_id=organization.pk).count()
+        team_assignments_before = RoleUserAssignment.objects.filter(object_id=team.pk).count()
+
+        url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
+
+        with (
+            patch(
+                "ansible_base.rbac.triggers.compute_team_member_roles",
+                side_effect=RuntimeError("Simulated RBAC flush failure"),
+            ),
+            patch(
+                "ansible_base.rbac.triggers.compute_object_role_permissions",
+                side_effect=RuntimeError("Simulated RBAC flush failure"),
+            ),
+        ):
+            try:
+                response = admin_api_client.delete(url)
+                assert response.status_code == 500
+            except RuntimeError:
+                pass
+
+        assert Organization.objects.filter(pk=organization.pk).exists(), (
+            "Organization was deleted despite RBAC flush failure -- the flush is running OUTSIDE the transaction!"
+        )
+
+        assert Team.objects.filter(pk=team.pk).exists(), "Team was deleted despite RBAC flush failure -- cascade delete was not rolled back!"
+
+        assert RoleUserAssignment.objects.filter(user_id=user.pk, object_id=organization.pk).count() == org_assignments_before
+        assert RoleUserAssignment.objects.filter(user_id=user.pk, object_id=team.pk).count() == team_assignments_before
