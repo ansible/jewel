@@ -2,6 +2,7 @@
 name: Unit Tests
 on:
   pull_request:
+  merge_group:
   push:    # This is triggered on a PR being merged into devel or a stable branch
     branches:
       - devel
