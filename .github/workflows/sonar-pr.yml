@@ -78,13 +78,14 @@ jobs:
           EVENT_TYPE: ${{ github.event.workflow_run.event }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ "$EVENT_TYPE" = "pull_request" ]; then
+          if [ "$EVENT_TYPE" = "pull_request" ] || [ "$EVENT_TYPE" = "merge_group" ]; then
             # workflow_run doesn't expose the PR base branch, so we can't check it here.
-            # Allow PRs through the gate; the PR analysis job resolves the base branch
-            # via the GitHub API and rechecks it against SONAR_BRANCHES before scanning.
+            # Allow PRs and merge_group events through the gate; the PR analysis job
+            # resolves the base branch via the GitHub API and rechecks it against
+            # SONAR_BRANCHES before scanning. Merge group events run a branch analysis.
             echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
             echo "allowed=true" >> "$GITHUB_OUTPUT"
-            echo "✅ PR event — deferring base branch check to PR analysis job"
+            echo "✅ $EVENT_TYPE event — allowing through gate"
             exit 0
           fi
 
@@ -289,7 +290,7 @@ jobs:
       actions: read
     if: |
       needs.gate.outputs.allowed == 'true' &&
-      github.event.workflow_run.event == 'push'
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'merge_group')
     steps:
       # Pin to the exact commit that the Unit Tests workflow ran against,
       # since workflow_run context defaults to the repo's default branch.
@@ -311,6 +312,7 @@ jobs:
       - name: Print SonarCloud Analysis Summary
         env:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
+          EVENT_TYPE: ${{ github.event.workflow_run.event }}
         run: |
           # Find all downloaded coverage XML files
           coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
@@ -319,7 +321,7 @@ jobs:
 
           echo "🔍 SonarCloud Analysis Summary"
           echo "=============================="
-          echo "├── CI Event: ✅ Push (via workflow_run)"
+          echo "├── CI Event: ✅ $EVENT_TYPE (via workflow_run)"
           echo "├── Branch: $BRANCH_NAME"
           echo "├── Coverage Files: ${coverage_files:-none}"
           echo "├── Python Changes: ➖ N/A (Full codebase scan)"
