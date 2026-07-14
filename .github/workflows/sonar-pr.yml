@@ -312,6 +312,7 @@ jobs:
       - name: Print SonarCloud Analysis Summary
         env:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
+          EVENT_TYPE: ${{ github.event.workflow_run.event }}
         run: |
           # Find all downloaded coverage XML files
           coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
@@ -320,7 +321,7 @@ jobs:
 
           echo "🔍 SonarCloud Analysis Summary"
           echo "=============================="
-          echo "├── CI Event: ✅ Push (via workflow_run)"
+          echo "├── CI Event: ✅ $EVENT_TYPE (via workflow_run)"
           echo "├── Branch: $BRANCH_NAME"
           echo "├── Coverage Files: ${coverage_files:-none}"
           echo "├── Python Changes: ➖ N/A (Full codebase scan)"
