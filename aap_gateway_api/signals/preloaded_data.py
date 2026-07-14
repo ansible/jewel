@@ -160,10 +160,13 @@ def remove_console_service_type() -> bool:
     except LookupError:
         return False
 
-    console_clusters = ServiceType.objects.filter(name="console").values_list('servicecluster__name', flat=True)
-    cluster_names = [n for n in console_clusters if n is not None]
-    if cluster_names:
-        logger.warning("Cascade-deleting ServiceCluster(s) for console ServiceType: %s", cluster_names)
+    try:
+        console_clusters = ServiceType.objects.filter(name="console").values_list('clusters__name', flat=True)
+        cluster_names = [n for n in console_clusters if n is not None]
+        if cluster_names:
+            logger.warning("Cascade-deleting ServiceCluster(s) for console ServiceType: %s", cluster_names)
+    except Exception:
+        pass
 
     deleted_st, st_details = ServiceType.objects.filter(name="console").delete()
     if deleted_st:
