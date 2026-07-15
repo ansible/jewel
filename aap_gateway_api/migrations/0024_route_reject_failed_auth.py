@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('aap_gateway_api', '0023_remove_console_service_type'),
+        ('aap_gateway_api', '0023_merge_0021_0022'),
     ]
 
     operations = [
