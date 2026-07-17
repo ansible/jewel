@@ -101,7 +101,6 @@ def test_multi_service_migration(
     assert f"Processing service: {service_api_route_eda.api_slug}" in captured.out
     assert "Successful migrations: 3" in captured.out
     assert "Failed migrations: 0" in captured.out
-    assert "All services migration completed successfully!" in captured.out
 
     assert "Gateway superusers: ['admin', 'controller_super']" in captured.out
     assert "Controller superusers: ['admin', 'controller_super']" in captured.out

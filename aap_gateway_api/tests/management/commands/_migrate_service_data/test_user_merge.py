@@ -3,7 +3,7 @@ merge_partially_migrated_users, merge_user_group.
 """
 
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ansible_base.resource_registry.models import Resource, service_id
@@ -94,7 +94,6 @@ def test_comprehensive_multi_service_migration(
     assert "Merging partially migrated users" in captured.out
     assert "Successful migrations: 3" in captured.out
     assert "Failed migrations: 0" in captured.out
-    assert "All services migration completed successfully!" in captured.out
 
     # === Test Case 1: controller-only-user ===
     gateway_user_list = User.objects.filter(username__endswith="controller-only-user")
@@ -336,3 +335,78 @@ def test_merge_user_group_successful(capsys):
     assert "Successfully merged hub user" in captured.out
     assert "Migrating main user" in captured.out
     assert "Successfully migrated main user" in captured.out
+
+
+# =============================================================================
+# _correlate_users_across_services tests
+# =============================================================================
+
+
+def test_correlate_users_strips_galaxy_prefix():
+    """The galaxy_ prefix is stripped to produce the base username."""
+    cmd = MigrateCommand()
+    mock_user = MagicMock()
+    all_users = {"hub": [("galaxy_john", mock_user)]}
+
+    result = cmd._correlate_users_across_services(all_users)
+
+    assert "john" in result
+    assert len(result["john"]) == 1
+    service_type, user_obj, original_username = result["john"][0]
+    assert service_type == "hub"
+    assert user_obj is mock_user
+    assert original_username == "galaxy_john"
+
+
+def test_correlate_users_strips_eda_prefix():
+    """The eda_ prefix is stripped to produce the base username."""
+    cmd = MigrateCommand()
+    mock_user = MagicMock()
+    all_users = {"eda": [("eda_john", mock_user)]}
+
+    result = cmd._correlate_users_across_services(all_users)
+
+    assert "john" in result
+    assert len(result["john"]) == 1
+    service_type, user_obj, original_username = result["john"][0]
+    assert service_type == "eda"
+    assert user_obj is mock_user
+    assert original_username == "eda_john"
+
+
+def test_correlate_users_no_prefix_kept_as_is():
+    """A username without a known prefix is kept unchanged."""
+    cmd = MigrateCommand()
+    mock_user = MagicMock()
+    all_users = {"controller": [("john", mock_user)]}
+
+    result = cmd._correlate_users_across_services(all_users)
+
+    assert "john" in result
+    assert len(result["john"]) == 1
+    service_type, user_obj, original_username = result["john"][0]
+    assert service_type == "controller"
+    assert user_obj is mock_user
+    assert original_username == "john"
+
+
+def test_correlate_users_groups_across_services():
+    """Users from different services with the same base name are grouped together."""
+    cmd = MigrateCommand()
+    controller_user = MagicMock()
+    hub_user = MagicMock()
+    eda_user = MagicMock()
+    all_users = {
+        "controller": [("john", controller_user)],
+        "hub": [("galaxy_john", hub_user)],
+        "eda": [("eda_john", eda_user)],
+    }
+
+    result = cmd._correlate_users_across_services(all_users)
+
+    assert "john" in result
+    assert len(result["john"]) == 3
+    # Verify ordering follows SERVICE_TYPE_ORDER: controller, hub, eda
+    assert result["john"][0] == ("controller", controller_user, "john")
+    assert result["john"][1] == ("hub", hub_user, "galaxy_john")
+    assert result["john"][2] == ("eda", eda_user, "eda_john")

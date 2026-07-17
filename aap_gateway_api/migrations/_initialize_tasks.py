@@ -36,6 +36,13 @@ _default_service_types = [
         "logout_path": "/v1/auth/session/logout/",
         "service_index_path": "/v1/service-index/",
     },
+    {
+        "name": DefaultServiceType.METRICS.value,
+        "ping_url": "/ping/",
+        "login_path": None,
+        "logout_path": None,
+        "service_index_path": "/v1/service-index/",
+    },
 ]
 
 

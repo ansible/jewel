@@ -5,7 +5,8 @@ never mutated.  advance() only persists to the database.  This ensures
 the HTTP id__gt filter stays immutable across all pages of a single run.
 """
 
-from unittest.mock import patch
+import logging
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -90,3 +91,50 @@ class TestCursorStore:
         # The advance failed, so a new cursor should still read 0
         new_cursor = CursorStore("controller-adv-err", "user")
         assert new_cursor.last_pk == 0
+
+    def test_load_failure_uses_custom_log_fn(self):
+        """When log_fn is provided, _load failures route warnings through it
+        instead of the module-level logger, and include the traceback."""
+        log_fn = Mock()
+        cursor_mod = "aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection"
+        with patch(cursor_mod) as mock_conn:
+            mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
+            cursor = CursorStore("controller", "user", log_fn=log_fn)
+
+        assert cursor.last_pk == 0
+        log_fn.assert_called_once()
+        msg, level = log_fn.call_args[0]
+        assert "Failed to load cursor" in msg
+        assert "Traceback" in msg
+        assert level == logging.WARNING
+
+    def test_advance_failure_uses_custom_log_fn(self):
+        """When log_fn is provided, advance() failures route warnings through it
+        instead of the module-level logger, and include the traceback."""
+        cursor = CursorStore("controller-adv-log", "user")
+        log_fn = Mock()
+        cursor._log_fn = log_fn
+
+        cursor_mod = "aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection"
+        with patch(cursor_mod) as mock_conn:
+            mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
+            cursor.advance(100)
+
+        log_fn.assert_called_once()
+        msg, level = log_fn.call_args[0]
+        assert "Failed to advance cursor" in msg
+        assert "Traceback" in msg
+        assert level == logging.WARNING
+
+    def test_default_log_writes_to_logger_on_failure(self):
+        """When no log_fn is provided, _load failures go through the module-level logger."""
+        cursor_mod = "aap_gateway_api.management.commands._migrate_service_data.cursor_store.connection"
+        logger_mod = "aap_gateway_api.management.commands._migrate_service_data.cursor_store.logger"
+        with patch(cursor_mod) as mock_conn, patch(logger_mod) as mock_logger:
+            mock_conn.cursor.side_effect = RuntimeError("DB unavailable")
+            cursor = CursorStore("controller", "user")
+
+        assert cursor.last_pk == 0
+        mock_logger.warning.assert_called_once()
+        msg = mock_logger.warning.call_args[0][0]
+        assert "Failed to load cursor" in msg
