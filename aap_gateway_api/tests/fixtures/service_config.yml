@@ -33,7 +33,7 @@ services:
         # Only /token/ is marked because that's where the anonymous token
         # issuance happens; /v2/ relies on the standard Www-Authenticate
         # challenge flow.
-        reject_failed_auth: true
+        reject_failed_basic_auth: true
       - name: "hub ui"
         description: "Hub UI"
         gateway_path: "/ui/"

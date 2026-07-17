@@ -68,7 +68,7 @@ class Request:
         body="",
         query="",
         is_internal_route="f",
-        reject_failed_auth="f",
+        reject_failed_basic_auth="f",
         service_type="gateway",
         auth_type="JWT",
         scheme="http",
@@ -88,7 +88,7 @@ class Request:
         self.http = self
         self.context_extensions = {
             "is_internal_route": is_internal_route,
-            "reject_failed_auth": reject_failed_auth,
+            "reject_failed_basic_auth": reject_failed_basic_auth,
             "service_type": service_type,
             "auth_type": auth_type,
         }
@@ -248,7 +248,7 @@ class TestExternalAuth:
 class TestContainerRegistryAuth:
     """Tests for container registry authentication in the gRPC control plane.
 
-    Verifies that routes with reject_failed_auth=True reject invalid
+    Verifies that routes with reject_failed_basic_auth=True reject invalid
     credentials instead of silently passing them through as anonymous.
     """
 
@@ -262,7 +262,7 @@ class TestContainerRegistryAuth:
         request = Request(
             path="/token/",
             service_type="hub",
-            reject_failed_auth="t",
+            reject_failed_basic_auth="t",
             header_diff={"AUTHORIZATION": "Basic aW52YWxpZDppbnZhbGlk"},
         )
 
@@ -278,7 +278,7 @@ class TestContainerRegistryAuth:
 
     def test_anonymous_request_passes_through_for_registry_route(self, ext_auth):
         """Registry route without credentials should pass through for the token handshake."""
-        request = Request(path="/v2/", service_type="hub", reject_failed_auth="t")
+        request = Request(path="/v2/", service_type="hub", reject_failed_basic_auth="t")
 
         response = ext_auth.Check(request, None)
 
@@ -289,7 +289,7 @@ class TestContainerRegistryAuth:
         request = Request(
             path="/v2/",
             service_type="hub",
-            reject_failed_auth="t",
+            reject_failed_basic_auth="t",
             header_diff={"AUTHORIZATION": "Basic YWRtaW46cGFzc3dvcmQ="},  # admin:password
         )
 
@@ -306,7 +306,7 @@ class TestContainerRegistryAuth:
         request = Request(
             path="/token/",
             service_type="hub",
-            reject_failed_auth="t",
+            reject_failed_basic_auth="t",
             header_diff={"AUTHORIZATION": "Bearer some-invalid-token"},
         )
 
@@ -323,7 +323,7 @@ class TestContainerRegistryAuth:
         request = Request(
             path="/api/galaxy/v3/namespaces/",
             service_type="hub",
-            reject_failed_auth="f",
+            reject_failed_basic_auth="f",
             header_diff={"AUTHORIZATION": "Basic aW52YWxpZDppbnZhbGlk"},
         )
 
