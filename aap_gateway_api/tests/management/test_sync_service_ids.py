@@ -4,7 +4,6 @@ from unittest import mock
 
 import pytest
 from django.core.management import call_command
-from django.core.management.base import CommandError
 
 from aap_gateway_api.models import ServiceCluster
 
@@ -47,15 +46,14 @@ def test_null_cluster_fetch_success(service_cluster_controller, service_api_rout
 
 @pytest.mark.django_db
 def test_null_cluster_fetch_failure(service_cluster_controller, service_api_route_controller):
-    """Failed clusters are reported on stderr and raise CommandError."""
+    """Failed clusters are reported on stderr; command still exits 0."""
     service_cluster_controller.service_id = None
     service_cluster_controller.save()
 
     out, err = StringIO(), StringIO()
 
     with mock.patch(FETCH_TARGET, return_value=None):
-        with pytest.raises(CommandError, match="Failed to populate service_id"):
-            call_command("sync_service_ids", stdout=out, stderr=err)
+        call_command("sync_service_ids", stdout=out, stderr=err)
 
     assert service_cluster_controller.name in err.getvalue()
     assert out.getvalue() == ""
@@ -75,8 +73,7 @@ def test_handle_reports_both_populated_and_failed(service_cluster_controller, se
     out, err = StringIO(), StringIO()
     try:
         with mock.patch(FETCH_TARGET, return_value=str(uuid.uuid4())):
-            with pytest.raises(CommandError, match="Failed to populate service_id"):
-                call_command("sync_service_ids", stdout=out, stderr=err)
+            call_command("sync_service_ids", stdout=out, stderr=err)
 
         assert service_cluster_controller.name in out.getvalue()
         assert extra_cluster.name in err.getvalue()
@@ -109,15 +106,14 @@ def test_force_overwrites_existing_service_id(service_cluster_controller, servic
 
 @pytest.mark.django_db
 def test_force_failure_leaves_existing_id(service_cluster_controller, service_api_route_controller):
-    """--force with a failed fetch leaves the original service_id intact and raises CommandError."""
+    """--force with a failed fetch leaves the original service_id intact."""
     original_id = uuid.uuid4()
     service_cluster_controller.service_id = original_id
     service_cluster_controller.save()
 
     err = StringIO()
     with mock.patch(FETCH_TARGET, return_value=None):
-        with pytest.raises(CommandError, match="Failed to populate service_id"):
-            call_command("sync_service_ids", force=True, stderr=err)
+        call_command("sync_service_ids", force=True, stderr=err)
 
     assert service_cluster_controller.name in err.getvalue()
     service_cluster_controller.refresh_from_db()
