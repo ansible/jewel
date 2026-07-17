@@ -1,5 +1,3 @@
-import uuid
-
 import yaml
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -111,22 +109,12 @@ class Command(BaseCommand):
             except (TypeError, ValueError):
                 raise CommandError(f"{config_path}: entry '{name}' service_port must be an integer.")
 
-            try:
-                uuid.UUID(str(cfg.get("api_slug", "")))
-            except ValueError:
-                pass  # api_slug is a slug, not a UUID — this is fine
-
             for i, node in enumerate(cfg.get("nodes", [])):
                 if not isinstance(node, dict) or "address" not in node:
                     raise CommandError(f"{config_path}: entry '{name}' node[{i}] must have an 'address' key.")
 
     def _register_from_config(self, config_path):
         """Reads a YAML config, validates it, then upserts service records atomically.
-
-        Validates the entire document before touching the database. Wraps all ORM
-        writes in a single transaction so either every service is applied or none are.
-        Looks up existing clusters by name alone and updates their service_type if it
-        has changed, preserving the existing cluster row.
 
         Args:
             config_path: Filesystem path to the YAML config file.
@@ -144,9 +132,21 @@ class Command(BaseCommand):
             raise CommandError(f"{config_path} is not valid YAML: {exc}")
 
         self._validate_config(config, config_path)
+        resolved = self._resolve_service_types(config)
+        self._apply_services(resolved)
 
-        # Resolve all ServiceType objects before touching the DB so we can raise
-        # early on unknown types without leaving partial state.
+    def _resolve_service_types(self, config):
+        """Maps each service name to its (cfg, ServiceType) pair, raising early on unknown types.
+
+        Args:
+            config: Validated YAML dict with a 'services' key.
+
+        Returns:
+            Dict of {name: (cfg_dict, ServiceType)}.
+
+        Raises:
+            CommandError: If any service references an unknown ServiceType name.
+        """
         resolved = {}
         allowed = list(ServiceType.objects.values_list("name", flat=True))
         for name, cfg in config["services"].items():
@@ -154,7 +154,19 @@ class Command(BaseCommand):
             if service_type is None:
                 raise CommandError(f"Unknown service type '{cfg['type']}' for '{name}'. Allowed: {allowed}")
             resolved[name] = (cfg, service_type)
+        return resolved
 
+    def _apply_services(self, resolved):
+        """Upserts all resolved services atomically: cluster, nodes, and API route.
+
+        Validates the entire document before touching the database. Wraps all ORM
+        writes in a single transaction so either every service is applied or none are.
+        Looks up existing clusters by name alone and updates service_type if it changed.
+        Nodes are diffed: removed addresses deleted, new addresses created, unchanged kept.
+
+        Args:
+            resolved: Dict of {name: (cfg_dict, ServiceType)} from _resolve_service_types.
+        """
         with transaction.atomic():
             for name, (cfg, service_type) in resolved.items():
                 cluster, created = ServiceCluster.objects.get_or_create(
@@ -167,13 +179,7 @@ class Command(BaseCommand):
 
                 self.stdout.write(f"{'Created' if created else 'Updated'} cluster '{name}' (type={cfg['type']})")
 
-                ServiceNode.objects.filter(service_cluster=cluster).delete()
-                for node in cfg.get("nodes", []):
-                    ServiceNode.objects.create(
-                        name=f"Node {name} - {node['address']}",
-                        service_cluster=cluster,
-                        address=node["address"],
-                    )
+                self._sync_nodes(cluster, name, cfg.get("nodes", []))
 
                 ServiceAPIRoute.objects.update_or_create(
                     service_cluster=cluster,
@@ -184,4 +190,31 @@ class Command(BaseCommand):
                         "service_path": cfg["service_path"],
                         "is_service_https": cfg.get("is_service_https", False),
                     },
+                )
+
+    def _sync_nodes(self, cluster, service_name, nodes):
+        """Diffs the desired node list against the DB and applies only the delta.
+
+        Existing nodes whose address appears in the config are left untouched.
+        Nodes removed from the config are deleted. New addresses are created.
+        This avoids unnecessary churn on audit logs or FK-referencing systems.
+
+        Args:
+            cluster: The ServiceCluster to sync nodes for.
+            service_name: Used to build the node name on creation.
+            nodes: List of node dicts from the YAML config, each with an 'address' key.
+        """
+        existing = set(ServiceNode.objects.filter(service_cluster=cluster).values_list("address", flat=True))
+        desired = {node["address"] for node in nodes}
+
+        removed = existing - desired
+        if removed:
+            ServiceNode.objects.filter(service_cluster=cluster, address__in=removed).delete()
+
+        for node in nodes:
+            if node["address"] not in existing:
+                ServiceNode.objects.create(
+                    name=f"Node {service_name} - {node['address']}",
+                    service_cluster=cluster,
+                    address=node["address"],
                 )

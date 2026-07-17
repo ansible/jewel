@@ -1,4 +1,3 @@
-import tempfile
 import uuid
 from io import StringIO
 from unittest import mock
@@ -106,13 +105,8 @@ def test_force_failure_leaves_existing_id(service_cluster_controller, service_ap
 # ---------------------------------------------------------------------------
 
 
-def _write_config(path, data):
-    with open(path, "w") as f:
-        yaml.dump(data, f)
-
-
 @pytest.mark.django_db
-def test_register_creates_cluster_node_and_route(service_type_controller, service_api_route_controller):
+def test_register_creates_cluster_node_and_route(service_type_controller, service_api_route_controller, tmp_path):
     """--register creates ServiceCluster, ServiceNode, and ServiceAPIRoute from YAML."""
     config = {
         "services": {
@@ -127,14 +121,13 @@ def test_register_creates_cluster_node_and_route(service_type_controller, servic
         }
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-        yaml.dump(config, f)
-        config_path = f.name
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
 
     out = StringIO()
     # Return a fresh UUID per call so multiple null-id clusters don't collide on the unique constraint.
     with mock.patch(FETCH_TARGET, side_effect=lambda *a, **kw: str(uuid.uuid4())):
-        call_command("sync_service_ids", register=config_path, stdout=out)
+        call_command("sync_service_ids", register=str(config_path), stdout=out)
 
     assert ServiceCluster.objects.filter(name="mymetrics").exists()
     assert ServiceNode.objects.filter(address="10.0.0.1").exists()
@@ -143,8 +136,8 @@ def test_register_creates_cluster_node_and_route(service_type_controller, servic
 
 
 @pytest.mark.django_db
-def test_register_existing_cluster_is_idempotent(service_cluster_controller, service_type_controller, service_api_route_controller):
-    """--register does not duplicate an existing cluster; nodes are replaced."""
+def test_register_existing_cluster_is_idempotent(service_cluster_controller, service_type_controller, service_api_route_controller, tmp_path):
+    """--register does not duplicate an existing cluster; new nodes are added, removed ones deleted."""
     config = {
         "services": {
             service_cluster_controller.name: {
@@ -158,14 +151,13 @@ def test_register_existing_cluster_is_idempotent(service_cluster_controller, ser
         }
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-        yaml.dump(config, f)
-        config_path = f.name
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
 
     initial_cluster_count = ServiceCluster.objects.count()
 
     with mock.patch(FETCH_TARGET, return_value=str(uuid.uuid4())):
-        call_command("sync_service_ids", register=config_path)
+        call_command("sync_service_ids", register=str(config_path))
 
     assert ServiceCluster.objects.count() == initial_cluster_count
     assert ServiceNode.objects.filter(address="10.9.9.9").exists()
@@ -179,7 +171,7 @@ def test_register_missing_file_raises_command_error():
 
 
 @pytest.mark.django_db
-def test_register_unknown_service_type_raises_command_error(service_type_controller):
+def test_register_unknown_service_type_raises_command_error(service_type_controller, tmp_path):
     """--register with an unknown service type raises CommandError."""
     config = {
         "services": {
@@ -193,22 +185,18 @@ def test_register_unknown_service_type_raises_command_error(service_type_control
         }
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-        yaml.dump(config, f)
-        config_path = f.name
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
 
     with pytest.raises(CommandError, match="Unknown service type"):
-        call_command("sync_service_ids", register=config_path)
+        call_command("sync_service_ids", register=str(config_path))
 
 
 @pytest.mark.django_db
-def test_register_invalid_yaml_raises_command_error():
+def test_register_invalid_yaml_raises_command_error(tmp_path):
     """--register with a YAML file missing the 'services' key raises CommandError."""
-    config = {"not_services": {}}
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-        yaml.dump(config, f)
-        config_path = f.name
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump({"not_services": {}}))
 
     with pytest.raises(CommandError, match="must be a YAML mapping with a 'services' key"):
-        call_command("sync_service_ids", register=config_path)
+        call_command("sync_service_ids", register=str(config_path))

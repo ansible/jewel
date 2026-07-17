@@ -15,6 +15,10 @@ _lazy_populate_cooldown: dict[str, float] = {}
 _LAZY_POPULATE_COOLDOWN_SECONDS = 60
 _LAZY_POPULATE_MAX_COOLDOWN_ENTRIES = 1000
 
+# Cap on how many null-id clusters are probed per unknown-issuer auth request.
+# Bounds the number of outbound HTTP calls on the first request from each issuer.
+_MAX_CLUSTERS_TO_PROBE = 5
+
 
 def _check_and_set_cooldown(issuer: str) -> bool:
     """Returns True if issuer is on cooldown (caller should skip), False if ok to proceed.
@@ -93,12 +97,16 @@ def populate_missing_service_ids(user=None, force: bool = False) -> tuple[list[s
 
     qs = ServiceCluster.objects.exclude(service_type__name=DefaultServiceType.GATEWAY.value).select_related('service_type')
 
-    clusters = qs if force else qs.filter(service_id__isnull=True)
+    clusters = list(qs if force else qs.filter(service_id__isnull=True))
+    if not clusters:
+        return populated, failed
+
+    # Single query for all ServiceAPIRoutes to avoid N+1.
+    api_routes_by_cluster = {r.service_cluster_id: r for r in ServiceAPIRoute.objects.filter(service_cluster_id__in=[c.pk for c in clusters])}
 
     for cluster in clusters:
-        try:
-            service_api = ServiceAPIRoute.objects.get(service_cluster=cluster)
-        except ServiceAPIRoute.DoesNotExist:
+        service_api = api_routes_by_cluster.get(cluster.pk)
+        if service_api is None:
             logger.warning("No ServiceAPIRoute for cluster %s — skipping", cluster.name)
             failed.append(cluster.name)
             continue
@@ -122,45 +130,47 @@ def populate_missing_service_ids(user=None, force: bool = False) -> tuple[list[s
     return populated, failed
 
 
-def try_populate_service_id(unverified_service_id: str) -> bool:
+def try_populate_service_id(unverified_service_id: str) -> Optional[ServiceCluster]:
     """Lazy fallback: checks null-id clusters for one whose metadata matches the given UUID.
 
     Intended for use inside token validation when a ServiceCluster.DoesNotExist is raised.
     A per-issuer cooldown prevents this from triggering serial DB+HTTP calls on every
     request when a service is persistently unreachable or the issuer is unknown.
+    At most _MAX_CLUSTERS_TO_PROBE clusters are probed to bound outbound HTTP calls.
     All exceptions from HTTP calls are caught and logged — this never raises.
 
     Args:
         unverified_service_id: The UUID string from the JWT's iss claim.
 
     Returns:
-        True if a matching cluster was found and its service_id was populated.
+        The populated ServiceCluster if a matching cluster was found, None otherwise.
     """
     if _check_and_set_cooldown(unverified_service_id):
         logger.debug("Lazy service_id populate skipped for %s (on cooldown)", unverified_service_id)
-        return False
+        return None
 
-    clusters = (
-        ServiceCluster.objects.filter(service_id__isnull=True).exclude(service_type__name=DefaultServiceType.GATEWAY.value).select_related('service_type')
+    # Single query: get ServiceAPIRoutes for null-id clusters, capped to limit HTTP calls.
+    api_routes = (
+        ServiceAPIRoute.objects.filter(service_cluster__service_id__isnull=True)
+        .exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
+        .select_related('service_cluster', 'service_cluster__service_type')[:_MAX_CLUSTERS_TO_PROBE]
     )
 
-    for cluster in clusters:
-        try:
-            service_api = ServiceAPIRoute.objects.get(service_cluster=cluster)
-        except ServiceAPIRoute.DoesNotExist:
-            continue
+    for service_api in api_routes:
+        cluster = service_api.service_cluster
 
         fetched_id = _fetch_service_id_for_route(service_api)
-        if not fetched_id or fetched_id != str(unverified_service_id):
+        if not fetched_id or fetched_id != unverified_service_id:
             continue
 
         rows = ServiceCluster.objects.filter(pk=cluster.pk, service_id__isnull=True).update(service_id=fetched_id)
         if rows or ServiceCluster.objects.filter(pk=cluster.pk, service_id=fetched_id).exists():
+            cluster.service_id = fetched_id  # sync in-memory object to avoid extra DB round-trip
             logger.warning(
                 "Lazily populated service_id %s for cluster %s — run sync_service_ids to avoid this on future requests",
                 fetched_id,
                 cluster.name,
             )
-            return True
+            return cluster
 
-    return False
+    return None

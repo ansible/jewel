@@ -393,8 +393,10 @@ def test_lazy_populate_succeeds_allows_auth(service_cluster_controller, user):
     token = _create_jwt(user, key, service=target_id)
 
     def _populate_and_set(uid):
+        # Write to DB and return the cluster object directly (matches the new return type).
         ServiceCluster.objects.filter(pk=service_cluster_controller.pk).update(service_id=uid)
-        return True
+        service_cluster_controller.service_id = uid
+        return service_cluster_controller
 
     with mock.patch("aap_gateway_api.utils.service_token.try_populate_service_id", side_effect=_populate_and_set):
         result = validate_service_token(token)
@@ -414,7 +416,7 @@ def test_lazy_populate_fails_raises_validation_error(service_cluster_controller,
     key = service_cluster_controller.generate_key()
     token = _create_jwt(user, key, service=target_id)
 
-    with mock.patch("aap_gateway_api.utils.service_token.try_populate_service_id", return_value=False):
+    with mock.patch("aap_gateway_api.utils.service_token.try_populate_service_id", return_value=None):
         with pytest.raises(ValidationError, match="does not exist"):
             validate_service_token(token)
 

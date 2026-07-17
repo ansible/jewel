@@ -170,7 +170,7 @@ def test_populate_race_condition_safe(service_cluster_controller, service_api_ro
     # Simulate the loser: update() returns 0 rows (another process already wrote),
     # but the cluster now has the id so the exists() check passes.
     with mock.patch(MOCK_TARGET, return_value=shared_id):
-        with mock.patch.object(ServiceCluster.objects.__class__, "filter") as mock_filter:
+        with mock.patch.object(ServiceCluster.objects, "filter") as mock_filter:
             mock_qs = mock.MagicMock()
             mock_qs.update.return_value = 0  # loser: 0 rows updated
             mock_qs.exists.return_value = True  # but id is already there
@@ -186,40 +186,40 @@ def test_populate_race_condition_safe(service_cluster_controller, service_api_ro
 
 
 @pytest.mark.django_db
-def test_try_populate_returns_false_when_no_null_clusters(service_cluster_controller, service_api_route_controller):
-    """Returns False when all clusters already have a service_id."""
+def test_try_populate_returns_none_when_no_null_clusters(service_cluster_controller, service_api_route_controller):
+    """Returns None when all clusters already have a service_id."""
     service_cluster_controller.service_id = uuid.uuid4()
     service_cluster_controller.save()
 
     result = try_populate_service_id(str(uuid.uuid4()))
-    assert result is False
+    assert result is None
 
 
 @pytest.mark.django_db
-def test_try_populate_returns_false_when_no_route(service_cluster_controller):
-    """Returns False when the null-id cluster has no ServiceAPIRoute."""
+def test_try_populate_returns_none_when_no_route(service_cluster_controller):
+    """Returns None when the null-id cluster has no ServiceAPIRoute."""
     service_cluster_controller.service_id = None
     service_cluster_controller.save()
 
     result = try_populate_service_id(str(uuid.uuid4()))
-    assert result is False
+    assert result is None
 
 
 @pytest.mark.django_db
-def test_try_populate_returns_false_when_id_does_not_match(service_cluster_controller, service_api_route_controller):
-    """Returns False when the fetched service_id does not match the JWT iss claim."""
+def test_try_populate_returns_none_when_id_does_not_match(service_cluster_controller, service_api_route_controller):
+    """Returns None when the fetched service_id does not match the JWT iss claim."""
     service_cluster_controller.service_id = None
     service_cluster_controller.save()
 
     with mock.patch(MOCK_TARGET, return_value=str(uuid.uuid4())):
         result = try_populate_service_id(str(uuid.uuid4()))  # different UUID
 
-    assert result is False
+    assert result is None
 
 
 @pytest.mark.django_db
-def test_try_populate_returns_true_and_writes_on_match(service_cluster_controller, service_api_route_controller):
-    """Returns True and sets service_id when a cluster's metadata matches the JWT iss claim."""
+def test_try_populate_returns_cluster_and_writes_on_match(service_cluster_controller, service_api_route_controller):
+    """Returns the ServiceCluster and sets service_id when metadata matches the JWT iss claim."""
     service_cluster_controller.service_id = None
     service_cluster_controller.save()
 
@@ -228,14 +228,15 @@ def test_try_populate_returns_true_and_writes_on_match(service_cluster_controlle
     with mock.patch(MOCK_TARGET, return_value=target_id):
         result = try_populate_service_id(target_id)
 
-    assert result is True
+    assert isinstance(result, ServiceCluster)
+    assert str(result.service_id) == target_id
     service_cluster_controller.refresh_from_db()
     assert str(service_cluster_controller.service_id) == target_id
 
 
 @pytest.mark.django_db
 def test_try_populate_swallows_fetch_exception(service_cluster_controller, service_api_route_controller):
-    """Returns False when the HTTP call raises; _fetch_service_id_for_route swallows it."""
+    """Returns None when the HTTP call raises; _fetch_service_id_for_route swallows it."""
     service_cluster_controller.service_id = None
     service_cluster_controller.save()
 
@@ -246,4 +247,4 @@ def test_try_populate_swallows_fetch_exception(service_cluster_controller, servi
         mock_cls.return_value.get_service_metadata.side_effect = RuntimeError("network failure")
         result = try_populate_service_id(target_id)
 
-    assert result is False
+    assert result is None
