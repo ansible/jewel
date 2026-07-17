@@ -25,6 +25,7 @@ def create_preload_data(**kwargs) -> None:
         set_system_user_password,
         set_system_user_managed_flag,
         toggle_install_time_flags,
+        remove_console_service_type,
     ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
@@ -55,6 +56,8 @@ def create_preload_data(**kwargs) -> None:
                 action = 'Created'
                 if name.startswith('set'):
                     action = 'Set'
+                elif name.startswith('remove'):
+                    action = 'Removed'
                 logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
         except Exception as e:
             if verbosity in [0, 1]:
@@ -141,3 +144,36 @@ def toggle_install_time_flags() -> None:
             existing_flag.value = state
             existing_flag.full_clean()
             existing_flag.save()
+
+
+def remove_console_service_type() -> bool:
+    """Remove legacy console service type and associated preference.
+
+    The console ServiceType was gated behind FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED
+    and is no longer supported (AAP-74714). This replaces the operations previously in
+    migration 0023 (now 0023_merge_0021_0022.py) with an idempotent signal-based cleanup
+    to avoid migration dependency chain issues on stable branches.
+    """
+    try:
+        ServiceType = global_apps.get_model('aap_gateway_api', 'ServiceType')
+        Preference = global_apps.get_model('aap_gateway_api', 'Preference')
+    except LookupError:
+        return False
+
+    try:
+        console_clusters = ServiceType.objects.filter(name="console").values_list('clusters__name', flat=True)
+        cluster_names = [n for n in console_clusters if n is not None]
+        if cluster_names:
+            logger.warning("Cascade-deleting ServiceCluster(s) for console ServiceType: %s", cluster_names)
+    except Exception:
+        pass
+
+    deleted_st, st_details = ServiceType.objects.filter(name="console").delete()
+    if deleted_st:
+        logger.info("Console ServiceType delete details: %s", st_details)
+
+    deleted_pref, _ = Preference.objects.filter(
+        section="analytics",
+        name="RED_HAT_CONSOLE_URL",
+    ).delete()
+    return (deleted_st + deleted_pref) > 0

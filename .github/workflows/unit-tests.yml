@@ -2,6 +2,7 @@
 name: Unit Tests
 on:
   pull_request:
+  merge_group:
   push:    # This is triggered on a PR being merged into devel or a stable branch
     branches:
       - devel
@@ -62,14 +63,16 @@ jobs:
             test-filter: >-
               aap_gateway_api/tests/
               --ignore-glob=aap_gateway_api/tests/views/api/v1/*/
-              --ignore=aap_gateway_api/tests/management/test_migrate_resources.py
+              --ignore=aap_gateway_api/tests/management/commands/_migrate_service_data/
+              --ignore=aap_gateway_api/tests/management/commands/test_migrate_service_data.py
               --ignore=aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "remaining"
           - name: "Service tests"
             python-version: "3.12"
             processes: auto
             test-filter: >-
-              aap_gateway_api/tests/management/test_migrate_resources.py
+              aap_gateway_api/tests/management/commands/_migrate_service_data/
+              aap_gateway_api/tests/management/commands/test_migrate_service_data.py
               aap_gateway_api/tests/utils/test_crud_resource_in_services.py
             artifact-suffix: "services"
     steps:
@@ -138,6 +141,7 @@ jobs:
           GATEWAY_TEST_DIRS: ""
         run: |
           tox -e ${{ steps.tox-env.outputs.name }} -- ${{ matrix.batch.test-filter }} -v \
+            -m "not perf" \
             --cov=. --cov-report=xml:coverage-${{ matrix.batch.artifact-suffix }}.xml \
             --junit-xml=junit-${{ matrix.batch.artifact-suffix }}.xml
 
