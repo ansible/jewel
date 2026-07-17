@@ -437,6 +437,51 @@ def test_lazy_populate_not_called_when_service_id_set(service_cluster_gateway, u
     assert resp.status_code == 200
 
 
+@pytest.mark.parametrize(
+    "auth_backend,expected",
+    [
+        (None, None),
+        ("django.contrib.auth.backends.ModelBackend", "local"),
+        ("ansible_base.authentication.backends.PrefixedUserAuthBackend", "local"),
+        ("ansible_base.authentication.backends.LDAPBackend", "ldap"),
+        ("ansible_base.authentication.backends.RADIUSBackend", "radius"),
+        ("ansible_base.authentication.backends.TACACSPlusBackend", "tacacs+"),
+        ("some.unknown.backend", "some.unknown.backend"),
+    ],
+)
+def test_classify_backend(auth_backend, expected):
+    """classify_backend maps known auth backend strings to canonical type names."""
+    from aap_gateway_api.utils.service_token import classify_backend
+
+    assert classify_backend(auth_backend) == expected
+
+
+@pytest.mark.django_db
+def test_validate_service_token_required_type_mismatch(service_jwt_token):
+    """validate_service_token raises ValidationError when required_type does not match the token."""
+    from django.core.exceptions import ValidationError
+
+    from aap_gateway_api.utils.service_token import validate_service_token
+
+    with pytest.raises(ValidationError, match="Expected token of type"):
+        validate_service_token(service_jwt_token, required_type="expected_type")
+
+
+@pytest.mark.django_db
+def test_verify_token_signature_iss_mismatch(service_cluster_gateway, user, service_jwt_token):
+    """_verify_token_signature raises ValidationError when the verified iss differs from the unverified one."""
+    from django.core.exceptions import ValidationError
+
+    from aap_gateway_api.utils.service_token import _verify_token_signature
+
+    # Mock decode_complete to return a payload where iss disagrees with what was in the unverified decode.
+    tampered_payload = {"iss": str(uuid.uuid4()), "exp": 9999999999, "sub": "anything"}
+    with mock.patch("aap_gateway_api.utils.service_token.jwt.api_jwt.decode_complete") as mock_dec:
+        mock_dec.return_value = {"payload": tampered_payload, "header": {}, "signature": b""}
+        with pytest.raises(ValidationError, match="Verified token data does not match unverified data"):
+            _verify_token_signature(service_jwt_token, service_cluster_gateway, "original-issuer-uuid")
+
+
 def test_ca_certificate_with_service_token_auth(service_jwt_client, ca_certificate):
     """Test that CA certificate endpoints work with service token authentication."""
     # Test list endpoint

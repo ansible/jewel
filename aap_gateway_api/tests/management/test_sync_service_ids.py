@@ -200,3 +200,178 @@ def test_register_invalid_yaml_raises_command_error(tmp_path):
 
     with pytest.raises(CommandError, match="must be a YAML mapping with a 'services' key"):
         call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_register_yaml_parse_error_raises_command_error(tmp_path):
+    """--register with a syntactically broken YAML file raises CommandError."""
+    config_path = tmp_path / "services.yml"
+    config_path.write_text("key: [unclosed bracket")
+
+    with pytest.raises(CommandError, match="is not valid YAML"):
+        call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_validate_config_services_not_a_mapping(tmp_path):
+    """--register raises CommandError when 'services' is a list instead of a mapping."""
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump({"services": ["a", "b"]}))
+
+    with pytest.raises(CommandError, match="'services' must be a mapping"):
+        call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_validate_config_entry_not_a_mapping(tmp_path):
+    """--register raises CommandError when a service entry value is not a mapping."""
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump({"services": {"myservice": "just a string"}}))
+
+    with pytest.raises(CommandError, match="must be a mapping"):
+        call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_validate_config_missing_required_fields(tmp_path):
+    """--register raises CommandError when required fields are absent from a service entry."""
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump({"services": {"bad": {"type": "controller"}}}))
+
+    with pytest.raises(CommandError, match="missing required fields"):
+        call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_validate_config_invalid_service_port(service_type_controller, tmp_path):
+    """--register raises CommandError when service_port is not convertible to an integer."""
+    config = {
+        "services": {
+            "svc": {
+                "type": service_type_controller.name,
+                "api_slug": "svc",
+                "service_port": "not-a-number",
+                "service_path": "/",
+                "nodes": [],
+            }
+        }
+    }
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
+
+    with pytest.raises(CommandError, match="service_port must be an integer"):
+        call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_validate_config_node_missing_address(service_type_controller, tmp_path):
+    """--register raises CommandError when a node entry lacks an 'address' key."""
+    config = {
+        "services": {
+            "svc": {
+                "type": service_type_controller.name,
+                "api_slug": "svc",
+                "service_port": 9000,
+                "service_path": "/",
+                "nodes": [{"not_address": "10.0.0.1"}],
+            }
+        }
+    }
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
+
+    with pytest.raises(CommandError, match="must have an 'address' key"):
+        call_command("sync_service_ids", register=str(config_path))
+
+
+@pytest.mark.django_db
+def test_handle_reports_both_populated_and_failed(service_cluster_controller, service_api_route_controller):
+    """When some clusters succeed and some fail, both stdout and stderr are written."""
+    service_cluster_controller.service_id = None
+    service_cluster_controller.save()
+
+    out, err = StringIO(), StringIO()
+    # First call (controller cluster) returns a valid id; any subsequent call returns None.
+    call_count = [0]
+
+    def side_effect(*a, **kw):
+        call_count[0] += 1
+        return str(uuid.uuid4()) if call_count[0] == 1 else None
+
+    # Create a second cluster with no route so it ends up in failed.
+    extra_cluster = ServiceCluster.objects.create(
+        name="extra-cluster",
+        service_type=service_cluster_controller.service_type,
+    )
+    try:
+        with mock.patch(FETCH_TARGET, side_effect=side_effect):
+            call_command("sync_service_ids", stdout=out, stderr=err)
+
+        assert service_cluster_controller.name in out.getvalue()
+        assert extra_cluster.name in err.getvalue()
+    finally:
+        extra_cluster.delete()
+
+
+@pytest.mark.django_db
+def test_apply_services_updates_service_type_on_existing_cluster(
+    service_cluster_controller, service_type_controller, service_type_hub, service_api_route_controller, tmp_path
+):
+    """--register updates service_type on an existing cluster when the type has changed."""
+    assert service_cluster_controller.service_type == service_type_controller
+
+    config = {
+        "services": {
+            service_cluster_controller.name: {
+                "type": service_type_hub.name,
+                "api_slug": service_api_route_controller.api_slug,
+                "service_port": service_api_route_controller.service_port,
+                "service_path": service_api_route_controller.service_path,
+                "nodes": [],
+            }
+        }
+    }
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
+
+    with mock.patch(FETCH_TARGET, return_value=str(uuid.uuid4())):
+        call_command("sync_service_ids", register=str(config_path))
+
+    service_cluster_controller.refresh_from_db()
+    assert service_cluster_controller.service_type == service_type_hub
+
+
+@pytest.mark.django_db
+def test_sync_nodes_deletes_removed_and_skips_existing(service_cluster_controller, service_type_controller, service_api_route_controller, tmp_path):
+    """_sync_nodes removes addresses absent from config and does not duplicate existing ones."""
+    # Pre-create two nodes: one that should be kept, one that should be removed.
+    ServiceNode.objects.create(
+        name="keep-node",
+        service_cluster=service_cluster_controller,
+        address="10.0.0.1",
+    )
+    ServiceNode.objects.create(
+        name="remove-node",
+        service_cluster=service_cluster_controller,
+        address="10.0.0.2",
+    )
+
+    config = {
+        "services": {
+            service_cluster_controller.name: {
+                "type": service_type_controller.name,
+                "api_slug": service_api_route_controller.api_slug,
+                "service_port": service_api_route_controller.service_port,
+                "service_path": service_api_route_controller.service_path,
+                "nodes": [{"address": "10.0.0.1"}],  # keep "10.0.0.1", drop "10.0.0.2"
+            }
+        }
+    }
+    config_path = tmp_path / "services.yml"
+    config_path.write_text(yaml.dump(config))
+
+    with mock.patch(FETCH_TARGET, return_value=str(uuid.uuid4())):
+        call_command("sync_service_ids", register=str(config_path))
+
+    addresses = set(ServiceNode.objects.filter(service_cluster=service_cluster_controller).values_list("address", flat=True))
+    assert addresses == {"10.0.0.1"}  # removed "10.0.0.2", kept "10.0.0.1" without duplication
