@@ -1085,8 +1085,8 @@ class TestUserUpdateRollbackScenario:
     def _test_rollback(self, admin_api_client, user, payload, initial_values):
         """Helper function to handle rollback tests."""
         url = get_relative_url('user-detail', kwargs={'pk': user.id})
-        with patch.object(UserSerializer, '_update_users_authenticators', side_effect=Exception("Simulated failure")):
-            with pytest.raises(Exception):
+        with patch.object(UserSerializer, '_update_users_authenticators', side_effect=RuntimeError("Simulated failure")):
+            with pytest.raises(RuntimeError):
                 with transaction.atomic():
                     _ = admin_api_client.patch(url, payload)
 

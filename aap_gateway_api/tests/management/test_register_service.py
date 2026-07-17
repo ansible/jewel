@@ -112,7 +112,4 @@ def test_register_service_never_throws_KeyError(yaml_key, service_config):
         out = StringIO()
         err = StringIO()
 
-        try:
-            call_command('register_service', '--config', SERVICE_CONFIG_PATH, stdout=out, stderr=err)
-        except KeyError:
-            pytest.fail(f"KeyError thrown for {yaml_key}")
+        call_command('register_service', '--config', SERVICE_CONFIG_PATH, stdout=out, stderr=err)
