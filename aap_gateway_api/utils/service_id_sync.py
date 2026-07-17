@@ -1,0 +1,123 @@
+import logging
+from typing import Optional
+
+from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
+from aap_gateway_api.models.service_type import DefaultServiceType
+from aap_gateway_api.utils import resources_client
+
+logger = logging.getLogger('aap.gateway.utils.service_id_sync')
+
+
+def _fetch_service_id_for_route(service_api: ServiceAPIRoute, user=None) -> Optional[str]:
+    """Calls the service metadata endpoint and returns the service_id string.
+
+    Args:
+        service_api: The ServiceAPIRoute whose upstream to query.
+        user: Optional user for JWT signing. Falls back to the first superuser.
+
+    Returns:
+        The service_id UUID string, or None if the fetch failed or returned no id.
+    """
+    try:
+        client = resources_client.GWResourceAPIClient(service_api, user=user)
+        response = client.get_service_metadata()
+        if response.status_code != 200:
+            logger.warning("Metadata fetch for %s returned %s", service_api.api_slug, response.status_code)
+            return None
+        return str(response.json().get("service_id") or "").strip() or None
+    except Exception:
+        logger.exception("Failed to fetch metadata for cluster %s", service_api.service_cluster.name)
+        return None
+
+
+def populate_missing_service_ids(user=None, force: bool = False) -> tuple[list[str], list[str]]:
+    """Fetches and persists service_id for clusters that need one.
+
+    Skips clusters of type GATEWAY (they self-assign in ServiceCluster.save()).
+    Skips clusters that have no ServiceAPIRoute.
+    Uses a conditional UPDATE (when not forced) to be safe against concurrent calls.
+
+    Args:
+        user: Optional user for JWT signing on metadata requests.
+        force: When True, re-fetches and overwrites service_id for all non-gateway clusters,
+            including those that already have one. Use after a service re-deployment or
+            disaster recovery to ensure stored IDs match what each service reports.
+
+    Returns:
+        A tuple of (populated_names, failed_names) — lists of cluster names.
+    """
+    populated: list[str] = []
+    failed: list[str] = []
+
+    qs = ServiceCluster.objects.exclude(
+        service_type__name=DefaultServiceType.GATEWAY.value
+    ).select_related('service_type')
+
+    clusters = qs if force else qs.filter(service_id__isnull=True)
+
+    for cluster in clusters:
+        try:
+            service_api = ServiceAPIRoute.objects.get(service_cluster=cluster)
+        except ServiceAPIRoute.DoesNotExist:
+            logger.warning("No ServiceAPIRoute for cluster %s — skipping", cluster.name)
+            failed.append(cluster.name)
+            continue
+
+        fetched_id = _fetch_service_id_for_route(service_api, user=user)
+        if not fetched_id:
+            failed.append(cluster.name)
+            continue
+
+        # Without --force: conditional update guards against concurrent writes.
+        # With --force: unconditionally overwrite whatever is stored.
+        filter_kw = {"pk": cluster.pk} if force else {"pk": cluster.pk, "service_id__isnull": True}
+        rows = ServiceCluster.objects.filter(**filter_kw).update(service_id=fetched_id)
+        if rows or ServiceCluster.objects.filter(pk=cluster.pk, service_id=fetched_id).exists():
+            logger.info("Populated service_id %s for cluster %s", fetched_id, cluster.name)
+            populated.append(cluster.name)
+        else:
+            logger.warning("Could not confirm service_id write for cluster %s", cluster.name)
+            failed.append(cluster.name)
+
+    return populated, failed
+
+
+def try_populate_service_id(unverified_service_id: str) -> bool:
+    """Lazy fallback: checks null-id clusters for one whose metadata matches the given UUID.
+
+    Intended for use inside token validation when a ServiceCluster.DoesNotExist is raised.
+    Iterates only clusters with service_id=null and stops at the first match.
+    All exceptions from HTTP calls are caught and logged — this never raises.
+
+    Args:
+        unverified_service_id: The UUID string from the JWT's iss claim.
+
+    Returns:
+        True if a matching cluster was found and its service_id was populated.
+    """
+    clusters = ServiceCluster.objects.filter(
+        service_id__isnull=True
+    ).exclude(
+        service_type__name=DefaultServiceType.GATEWAY.value
+    ).select_related('service_type')
+
+    for cluster in clusters:
+        try:
+            service_api = ServiceAPIRoute.objects.get(service_cluster=cluster)
+        except ServiceAPIRoute.DoesNotExist:
+            continue
+
+        fetched_id = _fetch_service_id_for_route(service_api)
+        if not fetched_id or fetched_id != str(unverified_service_id):
+            continue
+
+        rows = ServiceCluster.objects.filter(pk=cluster.pk, service_id__isnull=True).update(service_id=fetched_id)
+        if rows or ServiceCluster.objects.filter(pk=cluster.pk, service_id=fetched_id).exists():
+            logger.warning(
+                "Lazily populated service_id %s for cluster %s — run sync_service_ids to avoid this on future requests",
+                fetched_id,
+                cluster.name,
+            )
+            return True
+
+    return False

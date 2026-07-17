@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.models import ServiceCluster, ServiceKey, User
+from aap_gateway_api.utils.service_id_sync import try_populate_service_id
 
 
 class ValidatedToken(TypedDict):
@@ -37,35 +38,44 @@ def validate_service_token(token, required_type=None) -> ValidatedToken:
     except jwt.exceptions.PyJWTError as pje:
         raise ValidationError(_("Token is not a valid JWT: %(exception)s") % {"exception": pje})
 
+    # Look up the cluster by the iss claim, with a lazy fallback for services that were
+    # registered after migrate_service_data ran (e.g. a new service added in a later upgrade).
     try:
         service_cluster = ServiceCluster.objects.get(service_id=unverified_service_id)
-        verified_payload = None
-        valid_key = None
-        full_data = None
-
-        # Loop through the service's active keys until a key is found that matches the
-        # token's signature
-        for key in service_cluster.service_keys.filter(is_active=True).order_by("-created"):
-            try:
-                full_data = jwt.api_jwt.decode_complete(token, key.secret, algorithms=key.algorithm)
-                verified_payload = full_data["payload"]
-                valid_key = key
-
-                # Double check that the signature verified payload matches the unverified
-                # service id.
-                assert verified_payload["iss"] == unverified_service_id
-                break
-
-            except jwt.exceptions.PyJWTError:
-                continue
-            except AssertionError:
-                raise ValidationError(_("Verified token data does not match unverified data."))
-
-        if verified_payload is None:
-            raise ValidationError(_("Unable to validate JWT token against any keys for %(iss)s.") % {"iss": unverified_service_id})
-
     except ServiceCluster.DoesNotExist:
-        raise ValidationError(_("Token issuer %(iss)s does not exist.") % {'iss': unverified_service_id})
+        # try_populate_service_id never raises — safe to call on the hot auth path.
+        if try_populate_service_id(str(unverified_service_id)):
+            try:
+                service_cluster = ServiceCluster.objects.get(service_id=unverified_service_id)
+            except ServiceCluster.DoesNotExist:
+                raise ValidationError(_("Token issuer %(iss)s does not exist.") % {'iss': unverified_service_id})
+        else:
+            raise ValidationError(_("Token issuer %(iss)s does not exist.") % {'iss': unverified_service_id})
+
+    # Loop through the service's active keys until a key is found that matches the
+    # token's signature
+    verified_payload = None
+    valid_key = None
+    full_data = None
+
+    for key in service_cluster.service_keys.filter(is_active=True).order_by("-created"):
+        try:
+            full_data = jwt.api_jwt.decode_complete(token, key.secret, algorithms=key.algorithm)
+            verified_payload = full_data["payload"]
+            valid_key = key
+
+            # Double check that the signature verified payload matches the unverified
+            # service id.
+            assert verified_payload["iss"] == unverified_service_id
+            break
+
+        except jwt.exceptions.PyJWTError:
+            continue
+        except AssertionError:
+            raise ValidationError(_("Verified token data does not match unverified data."))
+
+    if verified_payload is None:
+        raise ValidationError(_("Unable to validate JWT token against any keys for %(iss)s.") % {"iss": unverified_service_id})
 
     token_type = full_data["payload"].get("type", None)
     if required_type != token_type:

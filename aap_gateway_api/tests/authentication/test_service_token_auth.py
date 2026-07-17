@@ -9,7 +9,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import ServiceKey
+from aap_gateway_api.models import ServiceCluster, ServiceKey
 
 
 def _create_jwt(user, key, additional_payload=None, service=None, expiration=60):
@@ -376,6 +376,63 @@ def test_migration_not_complete_blocks_auth(service_cluster_gateway, user):
         assert resp.status_code == 423
     finally:
         MigrateServiceDataHasRan.mark_migration_completed()
+
+
+# ---------------------------------------------------------------------------
+# Lazy service_id population in validate_service_token
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_lazy_populate_succeeds_allows_auth(service_cluster_controller, user):
+    """When service_id is null but lazy population succeeds, the token is accepted."""
+    from aap_gateway_api.utils.service_token import validate_service_token
+
+    target_id = str(uuid.uuid4())
+    key = service_cluster_controller.generate_key()
+    token = _create_jwt(user, key, service=target_id)
+
+    def _populate_and_set(uid):
+        ServiceCluster.objects.filter(pk=service_cluster_controller.pk).update(service_id=uid)
+        return True
+
+    with mock.patch("aap_gateway_api.utils.service_token.try_populate_service_id", side_effect=_populate_and_set):
+        result = validate_service_token(token)
+
+    assert result["service_cluster"].pk == service_cluster_controller.pk
+    assert result["user"] == user
+
+
+@pytest.mark.django_db
+def test_lazy_populate_fails_raises_validation_error(service_cluster_controller, user):
+    """When service_id is null and lazy population fails, a ValidationError is raised."""
+    from django.core.exceptions import ValidationError
+
+    from aap_gateway_api.utils.service_token import validate_service_token
+
+    target_id = str(uuid.uuid4())
+    key = service_cluster_controller.generate_key()
+    token = _create_jwt(user, key, service=target_id)
+
+    with mock.patch("aap_gateway_api.utils.service_token.try_populate_service_id", return_value=False):
+        with pytest.raises(ValidationError, match="does not exist"):
+            validate_service_token(token)
+
+
+@pytest.mark.django_db
+def test_lazy_populate_not_called_when_service_id_set(service_cluster_gateway, user, service_jwt_token):
+    """try_populate_service_id is never called when the cluster already has a service_id."""
+    from ansible_base.lib.utils.response import get_relative_url
+    from rest_framework.test import APIClient
+
+    client = APIClient(headers={"X-ANSIBLE-SERVICE-AUTH": service_jwt_token})
+    url = get_relative_url("resource-list")
+
+    with mock.patch("aap_gateway_api.utils.service_token.try_populate_service_id") as mock_lazy:
+        resp = client.get(url)
+
+    mock_lazy.assert_not_called()
+    assert resp.status_code == 200
 
 
 def test_ca_certificate_with_service_token_auth(service_jwt_client, ca_certificate):
