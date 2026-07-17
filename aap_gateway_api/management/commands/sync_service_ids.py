@@ -109,9 +109,22 @@ class Command(BaseCommand):
             except (TypeError, ValueError):
                 raise CommandError(f"{config_path}: entry '{name}' service_port must be an integer.")
 
-            for i, node in enumerate(cfg.get("nodes", [])):
-                if not isinstance(node, dict) or "address" not in node:
-                    raise CommandError(f"{config_path}: entry '{name}' node[{i}] must have an 'address' key.")
+            self._validate_nodes(name, cfg.get("nodes", []), config_path)
+
+    def _validate_nodes(self, name, nodes, config_path):
+        """Validates node entries in a service config.
+
+        Args:
+            name: Service name, used in error messages.
+            nodes: List of node dicts from the YAML config.
+            config_path: Filesystem path, used in error messages.
+
+        Raises:
+            CommandError: If any node entry lacks an 'address' key.
+        """
+        for i, node in enumerate(nodes):
+            if not isinstance(node, dict) or "address" not in node:
+                raise CommandError(f"{config_path}: entry '{name}' node[{i}] must have an 'address' key.")
 
     def _register_from_config(self, config_path):
         """Reads a YAML config, validates it, then upserts service records atomically.

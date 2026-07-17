@@ -188,8 +188,9 @@ def test_register_unknown_service_type_raises_command_error(service_type_control
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump(config))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="Unknown service type"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -198,8 +199,9 @@ def test_register_invalid_yaml_raises_command_error(tmp_path):
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump({"not_services": {}}))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="must be a YAML mapping with a 'services' key"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -208,8 +210,9 @@ def test_register_yaml_parse_error_raises_command_error(tmp_path):
     config_path = tmp_path / "services.yml"
     config_path.write_text("key: [unclosed bracket")
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="is not valid YAML"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -218,8 +221,9 @@ def test_validate_config_services_not_a_mapping(tmp_path):
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump({"services": ["a", "b"]}))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="'services' must be a mapping"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -228,8 +232,9 @@ def test_validate_config_entry_not_a_mapping(tmp_path):
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump({"services": {"myservice": "just a string"}}))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="must be a mapping"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -238,8 +243,9 @@ def test_validate_config_missing_required_fields(tmp_path):
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump({"services": {"bad": {"type": "controller"}}}))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="missing required fields"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -259,8 +265,9 @@ def test_validate_config_invalid_service_port(service_type_controller, tmp_path)
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump(config))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="service_port must be an integer"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
@@ -280,8 +287,9 @@ def test_validate_config_node_missing_address(service_type_controller, tmp_path)
     config_path = tmp_path / "services.yml"
     config_path.write_text(yaml.dump(config))
 
+    register = str(config_path)
     with pytest.raises(CommandError, match="must have an 'address' key"):
-        call_command("sync_service_ids", register=str(config_path))
+        call_command("sync_service_ids", register=register)
 
 
 @pytest.mark.django_db
