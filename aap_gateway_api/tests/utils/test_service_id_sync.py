@@ -366,11 +366,13 @@ def test_populate_write_not_confirmed_goes_to_failed(service_cluster_controller,
 
 
 @pytest.mark.django_db
-def test_try_populate_skips_unknown_service_type(service_cluster_controller, service_api_route_controller):
+def test_try_populate_skips_unknown_service_type():
     """try_populate_service_id does not probe clusters whose service type is not in DefaultServiceType."""
     from aap_gateway_api.models import ServiceCluster, ServiceType
 
-    # Create a cluster with a custom (non-enum) service type.
+    # Create a cluster with a custom (non-enum) service type and no ServiceAPIRoute.
+    # No known-type clusters with null service_id exist in this test so the query returns
+    # no routes — _fetch_service_id_for_route must never be called.
     custom_type, _ = ServiceType.objects.get_or_create(name="custom-unknown-type")
     custom_cluster = ServiceCluster.objects.create(name="custom-cluster", service_type=custom_type)
     try:
