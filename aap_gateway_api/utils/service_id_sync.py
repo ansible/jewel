@@ -15,14 +15,14 @@ _populate_cooldown: dict[str, float] = {}
 _POPULATE_COOLDOWN_SECONDS = 60
 _POPULATE_MAX_COOLDOWN_ENTRIES = 1000
 
-# Cap on how many null-id clusters are probed per unknown-issuer auth request.
-# Bounds the number of outbound HTTP calls on the first request from each issuer.
-_MAX_CLUSTERS_TO_PROBE = 5
-
 # Service types eligible for automatic service_id population on the auth path.
 # Restricting to known DefaultServiceType values (excluding GATEWAY) prevents the
 # fallback from probing custom or unknown service types during token validation.
 _SYNCABLE_TYPES = [e.value for e in DefaultServiceType if e != DefaultServiceType.GATEWAY]
+
+# The maximum number of null-id clusters we can ever need to probe equals the number of
+# known non-gateway service types — there can be at most one cluster per type.
+_MAX_CLUSTERS_TO_PROBE = len(_SYNCABLE_TYPES)
 
 
 def _check_and_set_cooldown(issuer: str) -> bool:
@@ -33,7 +33,7 @@ def _check_and_set_cooldown(issuer: str) -> bool:
     preventing unbounded growth under a flood of unique attacker-supplied tokens.
 
     Note: _populate_cooldown is per-process. In a multi-worker deployment each worker
-    maintains its own dict; the DoS bound is per-worker (_MAX_CLUSTERS_TO_PROBE × N workers).
+    maintains its own dict; the effective DoS bound is per-worker.
 
     Args:
         issuer: The JWT iss claim string used as the cooldown key.
@@ -100,10 +100,11 @@ def populate_service_id(unverified_service_id: str) -> Optional[ServiceCluster]:
     can continue authentication without an extra DB round-trip.
 
     A per-issuer cooldown prevents serial DB+HTTP calls on repeated requests from an
-    unknown or attacker-supplied issuer. At most _MAX_CLUSTERS_TO_PROBE clusters are
-    probed per request to bound outbound HTTP calls. All DB and HTTP operations are wrapped
-    in a broad except so that a transient DB error returns None rather than propagating a
-    500 through the gRPC auth handler.
+    unknown or attacker-supplied issuer. All eligible null-id clusters are probed in
+    deterministic (pk) order, capped at _MAX_CLUSTERS_TO_PROBE (= len(_SYNCABLE_TYPES)),
+    which is provably sufficient to cover every possible matching cluster.
+    All DB and HTTP operations are wrapped in a broad except so that a transient DB error
+    returns None rather than propagating a 500 through the gRPC auth handler.
 
     Args:
         unverified_service_id: The UUID string from the JWT's iss claim.
@@ -125,9 +126,9 @@ def populate_service_id(unverified_service_id: str) -> Optional[ServiceCluster]:
         return None
 
     try:
-        # Single query: null-id clusters of known service types only, capped to limit HTTP calls.
-        # Restricting to _SYNCABLE_TYPES means the fallback never probes custom or unknown
-        # service types during token validation.
+        # Single query: null-id clusters of known service types, ordered deterministically by pk.
+        # Slicing to _MAX_CLUSTERS_TO_PROBE (= len(_SYNCABLE_TYPES)) guarantees we cover every
+        # possible eligible cluster in one pass — there can be at most one cluster per type.
         api_routes = (
             ServiceAPIRoute.objects.filter(
                 service_cluster__service_id__isnull=True,
