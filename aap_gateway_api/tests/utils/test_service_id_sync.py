@@ -358,3 +358,31 @@ def test_populate_write_not_confirmed_goes_to_failed(service_cluster_controller,
 
     assert service_cluster_controller.name in failed
     assert populated == []
+
+
+# ---------------------------------------------------------------------------
+# try_populate_service_id — enum type restriction
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_try_populate_skips_unknown_service_type(service_cluster_controller, service_api_route_controller):
+    """try_populate_service_id does not probe clusters whose service type is not in DefaultServiceType."""
+    from aap_gateway_api.models import ServiceCluster, ServiceType
+
+    # Create a cluster with a custom (non-enum) service type.
+    custom_type, _ = ServiceType.objects.get_or_create(name="custom-unknown-type")
+    custom_cluster = ServiceCluster.objects.create(name="custom-cluster", service_type=custom_type)
+    try:
+        target_id = str(uuid.uuid4())
+        _lazy_populate_cooldown.pop(target_id, None)
+        try:
+            with mock.patch(MOCK_TARGET) as mock_fetch:
+                result = try_populate_service_id(target_id)
+                mock_fetch.assert_not_called()
+            assert result is None
+        finally:
+            _lazy_populate_cooldown.pop(target_id, None)
+    finally:
+        custom_cluster.delete()
+        custom_type.delete()

@@ -19,6 +19,11 @@ _LAZY_POPULATE_MAX_COOLDOWN_ENTRIES = 1000
 # Bounds the number of outbound HTTP calls on the first request from each issuer.
 _MAX_CLUSTERS_TO_PROBE = 5
 
+# Service types eligible for lazy service_id population on the auth hot path.
+# Restricting to known DefaultServiceType values (excluding GATEWAY) prevents the
+# lazy path from probing custom or unknown service types during token validation.
+_LAZY_SYNCABLE_TYPES = [e.value for e in DefaultServiceType if e != DefaultServiceType.GATEWAY]
+
 
 def _check_and_set_cooldown(issuer: str) -> bool:
     """Returns True if issuer is on cooldown (caller should skip), False if ok to proceed.
@@ -149,12 +154,13 @@ def try_populate_service_id(unverified_service_id: str) -> Optional[ServiceClust
         logger.debug("Lazy service_id populate skipped for %s (on cooldown)", unverified_service_id)
         return None
 
-    # Single query: get ServiceAPIRoutes for null-id clusters, capped to limit HTTP calls.
-    api_routes = (
-        ServiceAPIRoute.objects.filter(service_cluster__service_id__isnull=True)
-        .exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
-        .select_related('service_cluster', 'service_cluster__service_type')[:_MAX_CLUSTERS_TO_PROBE]
-    )
+    # Single query: null-id clusters of known service types only, capped to limit HTTP calls.
+    # Restricting to _LAZY_SYNCABLE_TYPES means the lazy auth path never probes custom
+    # or unknown service types during token validation.
+    api_routes = ServiceAPIRoute.objects.filter(
+        service_cluster__service_id__isnull=True,
+        service_cluster__service_type__name__in=_LAZY_SYNCABLE_TYPES,
+    ).select_related('service_cluster', 'service_cluster__service_type')[:_MAX_CLUSTERS_TO_PROBE]
 
     for service_api in api_routes:
         cluster = service_api.service_cluster
