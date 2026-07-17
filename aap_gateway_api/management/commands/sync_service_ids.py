@@ -125,10 +125,7 @@ class Command(BaseCommand):
         for name, cfg in config["services"].items():
             service_type = ServiceType.objects.filter(name=cfg["type"]).first()
             if service_type is None:
-                raise CommandError(
-                    f"Unknown service type '{cfg['type']}' for '{name}'. "
-                    f"Allowed: {list(ServiceType.objects.values_list('name', flat=True))}"
-                )
+                raise CommandError(f"Unknown service type '{cfg['type']}' for '{name}'. Allowed: {list(ServiceType.objects.values_list('name', flat=True))}")
 
             cluster, _ = ServiceCluster.objects.get_or_create(name=name, service_type=service_type)
             self.stdout.write(f"Registered cluster '{name}' (type={cfg['type']})")

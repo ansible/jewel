@@ -49,9 +49,7 @@ def populate_missing_service_ids(user=None, force: bool = False) -> tuple[list[s
     populated: list[str] = []
     failed: list[str] = []
 
-    qs = ServiceCluster.objects.exclude(
-        service_type__name=DefaultServiceType.GATEWAY.value
-    ).select_related('service_type')
+    qs = ServiceCluster.objects.exclude(service_type__name=DefaultServiceType.GATEWAY.value).select_related('service_type')
 
     clusters = qs if force else qs.filter(service_id__isnull=True)
 
@@ -95,11 +93,9 @@ def try_populate_service_id(unverified_service_id: str) -> bool:
     Returns:
         True if a matching cluster was found and its service_id was populated.
     """
-    clusters = ServiceCluster.objects.filter(
-        service_id__isnull=True
-    ).exclude(
-        service_type__name=DefaultServiceType.GATEWAY.value
-    ).select_related('service_type')
+    clusters = (
+        ServiceCluster.objects.filter(service_id__isnull=True).exclude(service_type__name=DefaultServiceType.GATEWAY.value).select_related('service_type')
+    )
 
     for cluster in clusters:
         try:
