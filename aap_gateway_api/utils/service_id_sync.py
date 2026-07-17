@@ -166,8 +166,17 @@ def try_populate_service_id(unverified_service_id: str) -> Optional[ServiceClust
     Returns:
         The populated ServiceCluster if a matching cluster was found, None otherwise.
     """
-    if _check_and_set_cooldown(unverified_service_id):
-        logger.debug("Lazy service_id populate skipped for %s (on cooldown)", unverified_service_id)
+    # Normalize to canonical lowercase so the cooldown key and comparison are consistent
+    # regardless of how the JWT iss claim was formatted (uppercase, braced, etc.).
+    # An invalid (non-UUID) issuer can never match any cluster — return None immediately.
+    try:
+        canonical_id = str(_uuid_mod.UUID(unverified_service_id))
+    except ValueError:
+        logger.debug("JWT iss claim is not a valid UUID: %s", unverified_service_id)
+        return None
+
+    if _check_and_set_cooldown(canonical_id):
+        logger.debug("Lazy service_id populate skipped for %s (on cooldown)", canonical_id)
         return None
 
     try:
@@ -183,7 +192,7 @@ def try_populate_service_id(unverified_service_id: str) -> Optional[ServiceClust
             cluster = service_api.service_cluster
 
             fetched_id = _fetch_service_id_for_route(service_api)
-            if not fetched_id or fetched_id != unverified_service_id:
+            if not fetched_id or fetched_id != canonical_id:
                 continue
 
             rows = ServiceCluster.objects.filter(pk=cluster.pk, service_id__isnull=True).update(service_id=fetched_id)

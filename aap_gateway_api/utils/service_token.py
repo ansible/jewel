@@ -39,13 +39,13 @@ def _verify_token_signature(token, service_cluster, unverified_service_id):
             full_data = jwt.api_jwt.decode_complete(token, key.secret, algorithms=key.algorithm)
             verified_payload = full_data["payload"]
             valid_key = key
-            # Double check that the signature verified payload matches the unverified service id.
-            assert verified_payload["iss"] == unverified_service_id
-            break
         except jwt.exceptions.PyJWTError:
             continue
-        except AssertionError:
+        # Cross-check the signature-verified iss against the unverified value. Using an explicit
+        # conditional rather than assert so the check cannot be compiled away with -O.
+        if verified_payload["iss"] != unverified_service_id:
             raise ValidationError(_("Verified token data does not match unverified data."))
+        break
 
     if verified_payload is None:
         raise ValidationError(_("Unable to validate JWT token against any keys for %(iss)s.") % {"iss": unverified_service_id})
