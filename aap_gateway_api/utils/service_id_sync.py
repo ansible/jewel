@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import uuid as _uuid_mod
 from typing import Optional
@@ -12,6 +13,7 @@ logger = logging.getLogger('aap.gateway.utils.service_id_sync')
 # Per-issuer cooldown for the auth fallback — prevents serial DB+HTTP calls on
 # repeated unknown tokens (e.g. a mis-configured or attacker-supplied JWT).
 _populate_cooldown: dict[str, float] = {}
+_populate_cooldown_lock = threading.Lock()
 _POPULATE_COOLDOWN_SECONDS = 60
 _POPULATE_MAX_COOLDOWN_ENTRIES = 1000
 
@@ -42,21 +44,22 @@ def _check_and_set_cooldown(issuer: str) -> bool:
         True if a recent attempt was made for this issuer (or the dict is full), False otherwise.
     """
     now = time.monotonic()
-    if len(_populate_cooldown) > _POPULATE_MAX_COOLDOWN_ENTRIES:
-        cutoff = now - _POPULATE_COOLDOWN_SECONDS
-        expired = [k for k, t in _populate_cooldown.items() if t < cutoff]
-        for k in expired:
-            del _populate_cooldown[k]
+    with _populate_cooldown_lock:
         if len(_populate_cooldown) >= _POPULATE_MAX_COOLDOWN_ENTRIES:
-            # Still full after pruning — all entries are fresh. Refuse without adding
-            # so the dict cannot grow without bound under a flood of unique tokens.
+            cutoff = now - _POPULATE_COOLDOWN_SECONDS
+            expired = [k for k, t in _populate_cooldown.items() if t < cutoff]
+            for k in expired:
+                del _populate_cooldown[k]
+            if len(_populate_cooldown) >= _POPULATE_MAX_COOLDOWN_ENTRIES:
+                # Still full after pruning — all entries are fresh. Refuse without adding
+                # so the dict cannot grow without bound under a flood of unique tokens.
+                return True
+
+        if now - _populate_cooldown.get(issuer, 0) < _POPULATE_COOLDOWN_SECONDS:
             return True
 
-    if now - _populate_cooldown.get(issuer, 0) < _POPULATE_COOLDOWN_SECONDS:
-        return True
-
-    _populate_cooldown[issuer] = now
-    return False
+        _populate_cooldown[issuer] = now
+        return False
 
 
 def _fetch_service_id_for_route(service_api: ServiceAPIRoute, user=None) -> Optional[str]:
@@ -128,10 +131,14 @@ def populate_service_id(unverified_service_id: str) -> Optional[ServiceCluster]:
         # Single query: null-id clusters of known service types only, capped to limit HTTP calls.
         # Restricting to _SYNCABLE_TYPES means the fallback never probes custom or unknown
         # service types during token validation.
-        api_routes = ServiceAPIRoute.objects.filter(
-            service_cluster__service_id__isnull=True,
-            service_cluster__service_type__name__in=_SYNCABLE_TYPES,
-        ).select_related('service_cluster', 'service_cluster__service_type')[:_MAX_CLUSTERS_TO_PROBE]
+        api_routes = (
+            ServiceAPIRoute.objects.filter(
+                service_cluster__service_id__isnull=True,
+                service_cluster__service_type__name__in=_SYNCABLE_TYPES,
+            )
+            .order_by('service_cluster__pk')
+            .select_related('service_cluster', 'service_cluster__service_type')[:_MAX_CLUSTERS_TO_PROBE]
+        )
 
         for service_api in api_routes:
             cluster = service_api.service_cluster
