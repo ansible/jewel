@@ -1,4 +1,4 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from aap_gateway_api.utils.service_id_sync import populate_missing_service_ids
 
@@ -46,3 +46,4 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Populated: {', '.join(populated)}"))
         if failed:
             self.stderr.write(self.style.WARNING(f"Failed: {', '.join(failed)}"))
+            raise CommandError(f"Failed to populate service_id for {len(failed)} cluster(s): {', '.join(failed)}")

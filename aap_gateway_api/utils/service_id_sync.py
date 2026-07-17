@@ -189,8 +189,8 @@ def try_populate_service_id(unverified_service_id: str) -> Optional[ServiceClust
             rows = ServiceCluster.objects.filter(pk=cluster.pk, service_id__isnull=True).update(service_id=fetched_id)
             if rows or ServiceCluster.objects.filter(pk=cluster.pk, service_id=fetched_id).exists():
                 cluster.service_id = fetched_id  # sync in-memory object to avoid extra DB round-trip
-                logger.warning(
-                    "Lazily populated service_id %s for cluster %s — run sync_service_ids to avoid this on future requests",
+                logger.info(
+                    "Lazily populated service_id %s for cluster %s",
                     fetched_id,
                     cluster.name,
                 )
