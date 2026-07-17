@@ -1,8 +1,13 @@
+import uuid
+
 import yaml
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster, ServiceNode, ServiceType
 from aap_gateway_api.utils.service_id_sync import populate_missing_service_ids
+
+_REQUIRED_SERVICE_FIELDS = ("type", "api_slug", "service_port", "service_path")
 
 
 class Command(BaseCommand):
@@ -13,7 +18,11 @@ class Command(BaseCommand):
     then populates service_id for any cluster (including newly created ones) that lacks one.
     With --force: re-fetches and overwrites service_id even for clusters that already have one.
 
-    Safe to run on every upgrade.
+    Safe to run on every upgrade. Invoke via::
+
+        aap-gateway-manage sync_service_ids
+        aap-gateway-manage sync_service_ids --register /path/to/services.yml
+        aap-gateway-manage sync_service_ids --force
 
     Example YAML for --register::
 
@@ -31,12 +40,6 @@ class Command(BaseCommand):
     help = "Populate service_id for registered clusters; optionally register new services first."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--username",
-            type=str,
-            default=None,
-            help="Gateway username for API requests. Defaults to the first superuser.",
-        )
         parser.add_argument(
             "--register",
             type=str,
@@ -58,16 +61,17 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Optionally registers services from config, then populates all missing service_ids.
 
+        With --force, re-fetches service_id for every non-gateway cluster regardless of
+        whether one is already stored.
+
         Args:
             *args: Unused positional arguments.
-            **options: Parsed command options (username, register, force).
+            **options: Parsed command options (register, force).
         """
-        user = self._resolve_user(options["username"])
-
         if options["register"]:
             self._register_from_config(options["register"])
 
-        populated, failed = populate_missing_service_ids(user=user, force=options["force"])
+        populated, failed = populate_missing_service_ids(force=options["force"])
 
         if not populated and not failed:
             self.stdout.write("No clusters with missing service_id found.")
@@ -78,39 +82,57 @@ class Command(BaseCommand):
         if failed:
             self.stderr.write(self.style.WARNING(f"Failed: {', '.join(failed)}"))
 
-    def _resolve_user(self, username):
-        """Returns the User for the given username, or None to use the default superuser.
+    def _validate_config(self, config, config_path):
+        """Validates the parsed YAML config document before any ORM writes.
 
         Args:
-            username: The username string, or None.
-
-        Returns:
-            User instance, or None if username was not provided.
+            config: The parsed YAML object.
+            config_path: Filesystem path, used only in error messages.
 
         Raises:
-            CommandError: If username is provided but does not exist in the database.
+            CommandError: If the document structure or any service entry is invalid.
         """
-        if not username:
-            return None
-        from aap_gateway_api.models import User
+        if not isinstance(config, dict) or "services" not in config:
+            raise CommandError(f"{config_path} must be a YAML mapping with a 'services' key.")
 
-        try:
-            return User.objects.get(username=username)
-        except User.DoesNotExist:
-            raise CommandError(f"User '{username}' does not exist.")
+        if not isinstance(config["services"], dict):
+            raise CommandError(f"{config_path}: 'services' must be a mapping of name → config.")
+
+        for name, cfg in config["services"].items():
+            if not isinstance(cfg, dict):
+                raise CommandError(f"{config_path}: entry '{name}' must be a mapping.")
+
+            missing = [f for f in _REQUIRED_SERVICE_FIELDS if f not in cfg]
+            if missing:
+                raise CommandError(f"{config_path}: entry '{name}' is missing required fields: {', '.join(missing)}.")
+
+            try:
+                int(cfg["service_port"])
+            except (TypeError, ValueError):
+                raise CommandError(f"{config_path}: entry '{name}' service_port must be an integer.")
+
+            try:
+                uuid.UUID(str(cfg.get("api_slug", "")))
+            except ValueError:
+                pass  # api_slug is a slug, not a UUID — this is fine
+
+            for i, node in enumerate(cfg.get("nodes", [])):
+                if not isinstance(node, dict) or "address" not in node:
+                    raise CommandError(f"{config_path}: entry '{name}' node[{i}] must have an 'address' key.")
 
     def _register_from_config(self, config_path):
-        """Reads a YAML config and upserts ServiceCluster, ServiceNode, and ServiceAPIRoute records.
+        """Reads a YAML config, validates it, then upserts service records atomically.
 
-        Nodes for each cluster are replaced on every run (delete + recreate) to reflect the
-        current config. The ServiceAPIRoute is created or updated via update_or_create so that
-        changes to port or path are applied without duplication.
+        Validates the entire document before touching the database. Wraps all ORM
+        writes in a single transaction so either every service is applied or none are.
+        Looks up existing clusters by name alone and updates their service_type if it
+        has changed, preserving the existing cluster row.
 
         Args:
             config_path: Filesystem path to the YAML config file.
 
         Raises:
-            CommandError: If the file is missing, not valid YAML, lacks a 'services' key,
+            CommandError: If the file is missing, invalid YAML, fails schema validation,
                 or references an unknown ServiceType.
         """
         try:
@@ -118,33 +140,48 @@ class Command(BaseCommand):
                 config = yaml.safe_load(f)
         except FileNotFoundError:
             raise CommandError(f"{config_path} does not exist.")
+        except yaml.YAMLError as exc:
+            raise CommandError(f"{config_path} is not valid YAML: {exc}")
 
-        if not isinstance(config, dict) or "services" not in config:
-            raise CommandError(f"{config_path} must be a YAML mapping with a 'services' key.")
+        self._validate_config(config, config_path)
 
+        # Resolve all ServiceType objects before touching the DB so we can raise
+        # early on unknown types without leaving partial state.
+        resolved = {}
+        allowed = list(ServiceType.objects.values_list("name", flat=True))
         for name, cfg in config["services"].items():
             service_type = ServiceType.objects.filter(name=cfg["type"]).first()
             if service_type is None:
-                raise CommandError(f"Unknown service type '{cfg['type']}' for '{name}'. Allowed: {list(ServiceType.objects.values_list('name', flat=True))}")
+                raise CommandError(f"Unknown service type '{cfg['type']}' for '{name}'. Allowed: {allowed}")
+            resolved[name] = (cfg, service_type)
 
-            cluster, _ = ServiceCluster.objects.get_or_create(name=name, service_type=service_type)
-            self.stdout.write(f"Registered cluster '{name}' (type={cfg['type']})")
-
-            ServiceNode.objects.filter(service_cluster=cluster).delete()
-            for node in cfg.get("nodes", []):
-                ServiceNode.objects.create(
-                    name=f"Node {name} - {node['address']}",
-                    service_cluster=cluster,
-                    address=node["address"],
+        with transaction.atomic():
+            for name, (cfg, service_type) in resolved.items():
+                cluster, created = ServiceCluster.objects.get_or_create(
+                    name=name,
+                    defaults={"service_type": service_type},
                 )
+                if not created and cluster.service_type_id != service_type.pk:
+                    cluster.service_type = service_type
+                    cluster.save(update_fields=["service_type"])
 
-            ServiceAPIRoute.objects.update_or_create(
-                service_cluster=cluster,
-                defaults={
-                    "name": f"{name} api",
-                    "api_slug": cfg["api_slug"],
-                    "service_port": cfg["service_port"],
-                    "service_path": cfg["service_path"],
-                    "is_service_https": cfg.get("is_service_https", False),
-                },
-            )
+                self.stdout.write(f"{'Created' if created else 'Updated'} cluster '{name}' (type={cfg['type']})")
+
+                ServiceNode.objects.filter(service_cluster=cluster).delete()
+                for node in cfg.get("nodes", []):
+                    ServiceNode.objects.create(
+                        name=f"Node {name} - {node['address']}",
+                        service_cluster=cluster,
+                        address=node["address"],
+                    )
+
+                ServiceAPIRoute.objects.update_or_create(
+                    service_cluster=cluster,
+                    defaults={
+                        "name": f"{name} api",
+                        "api_slug": cfg["api_slug"],
+                        "service_port": cfg["service_port"],
+                        "service_path": cfg["service_path"],
+                        "is_service_https": cfg.get("is_service_https", False),
+                    },
+                )

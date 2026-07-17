@@ -10,7 +10,6 @@ from django.core.management.base import CommandError
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster, ServiceNode
 
-POPULATE_TARGET = "aap_gateway_api.management.commands.sync_service_ids.populate_missing_service_ids"
 FETCH_TARGET = "aap_gateway_api.utils.service_id_sync._fetch_service_id_for_route"
 
 
@@ -61,26 +60,6 @@ def test_null_cluster_fetch_failure(service_cluster_controller, service_api_rout
 
     assert service_cluster_controller.name in err.getvalue()
     assert out.getvalue() == ""
-
-
-@pytest.mark.django_db
-def test_username_resolves_existing_user(user, service_cluster_controller, service_api_route_controller):
-    """--username resolves to a User and passes it through to populate_missing_service_ids."""
-    service_cluster_controller.service_id = None
-    service_cluster_controller.save()
-
-    out = StringIO()
-    with mock.patch(POPULATE_TARGET, return_value=([service_cluster_controller.name], [])) as mock_pop:
-        call_command("sync_service_ids", username=user.username, stdout=out)
-
-    mock_pop.assert_called_once_with(user=user, force=False)
-
-
-@pytest.mark.django_db
-def test_username_missing_raises_command_error():
-    """--username with a non-existent user raises CommandError."""
-    with pytest.raises(CommandError, match="does not exist"):
-        call_command("sync_service_ids", username="ghost_user_xyz")
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +114,6 @@ def _write_config(path, data):
 @pytest.mark.django_db
 def test_register_creates_cluster_node_and_route(service_type_controller, service_api_route_controller):
     """--register creates ServiceCluster, ServiceNode, and ServiceAPIRoute from YAML."""
-    new_id = str(uuid.uuid4())
-
     config = {
         "services": {
             "mymetrics": {
@@ -155,7 +132,8 @@ def test_register_creates_cluster_node_and_route(service_type_controller, servic
         config_path = f.name
 
     out = StringIO()
-    with mock.patch(FETCH_TARGET, return_value=new_id):
+    # Return a fresh UUID per call so multiple null-id clusters don't collide on the unique constraint.
+    with mock.patch(FETCH_TARGET, side_effect=lambda *a, **kw: str(uuid.uuid4())):
         call_command("sync_service_ids", register=config_path, stdout=out)
 
     assert ServiceCluster.objects.filter(name="mymetrics").exists()

@@ -1,4 +1,6 @@
 import logging
+import time
+import uuid as _uuid_mod
 from typing import Optional
 
 from aap_gateway_api.models import ServiceAPIRoute, ServiceCluster
@@ -7,16 +9,48 @@ from aap_gateway_api.utils import resources_client
 
 logger = logging.getLogger('aap.gateway.utils.service_id_sync')
 
+# Per-issuer cooldown for the lazy auth fallback — prevents serial DB+HTTP calls on
+# repeated unknown tokens (e.g. a mis-configured or attacker-supplied JWT).
+_lazy_populate_cooldown: dict[str, float] = {}
+_LAZY_POPULATE_COOLDOWN_SECONDS = 60
+_LAZY_POPULATE_MAX_COOLDOWN_ENTRIES = 1000
+
+
+def _check_and_set_cooldown(issuer: str) -> bool:
+    """Returns True if issuer is on cooldown (caller should skip), False if ok to proceed.
+
+    Prunes expired entries when the dict grows past the cap to prevent unbounded growth.
+
+    Args:
+        issuer: The JWT iss claim string used as the cooldown key.
+
+    Returns:
+        True if a recent attempt was made for this issuer, False otherwise.
+    """
+    now = time.monotonic()
+    if len(_lazy_populate_cooldown) > _LAZY_POPULATE_MAX_COOLDOWN_ENTRIES:
+        cutoff = now - _LAZY_POPULATE_COOLDOWN_SECONDS
+        expired = [k for k, t in _lazy_populate_cooldown.items() if t < cutoff]
+        for k in expired:
+            del _lazy_populate_cooldown[k]
+
+    if now - _lazy_populate_cooldown.get(issuer, 0) < _LAZY_POPULATE_COOLDOWN_SECONDS:
+        return True
+
+    _lazy_populate_cooldown[issuer] = now
+    return False
+
 
 def _fetch_service_id_for_route(service_api: ServiceAPIRoute, user=None) -> Optional[str]:
-    """Calls the service metadata endpoint and returns the service_id string.
+    """Calls the service metadata endpoint and returns a validated service_id string.
 
     Args:
         service_api: The ServiceAPIRoute whose upstream to query.
         user: Optional user for JWT signing. Falls back to the first superuser.
 
     Returns:
-        The service_id UUID string, or None if the fetch failed or returned no id.
+        A valid UUID string for the service_id, or None if the fetch failed,
+        returned no id, or returned an invalid value.
     """
     try:
         client = resources_client.GWResourceAPIClient(service_api, user=user)
@@ -24,7 +58,15 @@ def _fetch_service_id_for_route(service_api: ServiceAPIRoute, user=None) -> Opti
         if response.status_code != 200:
             logger.warning("Metadata fetch for %s returned %s", service_api.api_slug, response.status_code)
             return None
-        return str(response.json().get("service_id") or "").strip() or None
+
+        raw_id = str(response.json().get("service_id") or "").strip()
+        try:
+            _uuid_mod.UUID(raw_id)
+        except ValueError:
+            logger.warning("Invalid service_id value '%s' from %s metadata", raw_id, service_api.api_slug)
+            return None
+
+        return raw_id
     except Exception:
         logger.exception("Failed to fetch metadata for cluster %s", service_api.service_cluster.name)
         return None
@@ -84,7 +126,8 @@ def try_populate_service_id(unverified_service_id: str) -> bool:
     """Lazy fallback: checks null-id clusters for one whose metadata matches the given UUID.
 
     Intended for use inside token validation when a ServiceCluster.DoesNotExist is raised.
-    Iterates only clusters with service_id=null and stops at the first match.
+    A per-issuer cooldown prevents this from triggering serial DB+HTTP calls on every
+    request when a service is persistently unreachable or the issuer is unknown.
     All exceptions from HTTP calls are caught and logged — this never raises.
 
     Args:
@@ -93,6 +136,10 @@ def try_populate_service_id(unverified_service_id: str) -> bool:
     Returns:
         True if a matching cluster was found and its service_id was populated.
     """
+    if _check_and_set_cooldown(unverified_service_id):
+        logger.debug("Lazy service_id populate skipped for %s (on cooldown)", unverified_service_id)
+        return False
+
     clusters = (
         ServiceCluster.objects.filter(service_id__isnull=True).exclude(service_type__name=DefaultServiceType.GATEWAY.value).select_related('service_type')
     )

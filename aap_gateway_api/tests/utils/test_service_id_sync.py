@@ -235,13 +235,15 @@ def test_try_populate_returns_true_and_writes_on_match(service_cluster_controlle
 
 @pytest.mark.django_db
 def test_try_populate_swallows_fetch_exception(service_cluster_controller, service_api_route_controller):
-    """Returns False when the HTTP fetch raises; never propagates the exception."""
+    """Returns False when the HTTP call raises; _fetch_service_id_for_route swallows it."""
     service_cluster_controller.service_id = None
     service_cluster_controller.save()
 
     target_id = str(uuid.uuid4())
 
-    with mock.patch(MOCK_TARGET, side_effect=RuntimeError("network failure")):
+    # Mock the HTTP client so the real _fetch_service_id_for_route runs its internal try/except.
+    with mock.patch("aap_gateway_api.utils.service_id_sync.resources_client.GWResourceAPIClient") as mock_cls:
+        mock_cls.return_value.get_service_metadata.side_effect = RuntimeError("network failure")
         result = try_populate_service_id(target_id)
 
     assert result is False
