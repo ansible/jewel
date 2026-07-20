@@ -145,3 +145,51 @@ class TestOrgAdminUserAssignmentVisibility:
         assert response.status_code == 200
         ids = [r['id'] for r in response.data['results']]
         assert assignment.id in ids
+
+    def test_org_admin_sees_own_remote_assignment(self, org_admin_api_client, org_admin_user, jt_execute_rd, preference_manager):
+        """Org admin should see their own assignment on a remote object."""
+        from ansible_base.rbac.remote import RemoteObject
+
+        remote_jt = RemoteObject(content_type=jt_execute_rd.content_type, object_id=200)
+        jt_execute_rd.give_permission(org_admin_user, remote_jt)
+        assignment = RoleUserAssignment.objects.get(user=org_admin_user, role_definition=jt_execute_rd, object_id='200')
+
+        with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', True):
+            url = get_relative_url('roleuserassignment-list')
+            response = org_admin_api_client.get(url, {'object_id': 200, 'content_type__api_slug': 'awx.jobtemplate'})
+
+        assert response.status_code == 200
+        ids = [r['id'] for r in response.data['results']]
+        assert assignment.id in ids
+
+    def test_same_org_user_assignment_no_duplicates(self, org_admin_api_client, org_a, jt_execute_rd, local_authenticator, preference_manager):
+        """When the assigned user is in the same org as the org admin, the
+        assignment should appear exactly once (no duplicates from overlapping
+        visibility paths)."""
+        from ansible_base.rbac.remote import RemoteObject
+
+        same_org_user = User.objects.create_user(username='same-org-user', password='password')
+        org_member_rd = RoleDefinition.objects.get(name='Organization Member')
+        org_member_rd.give_permission(same_org_user, org_a)
+
+        remote_jt = RemoteObject(content_type=jt_execute_rd.content_type, object_id=201)
+        jt_execute_rd.give_permission(same_org_user, remote_jt)
+        assignment = RoleUserAssignment.objects.get(user=same_org_user, role_definition=jt_execute_rd, object_id='201')
+
+        with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', True):
+            url = get_relative_url('roleuserassignment-list')
+            response = org_admin_api_client.get(url, {'object_id': 201, 'content_type__api_slug': 'awx.jobtemplate'})
+
+        assert response.status_code == 200
+        ids = [r['id'] for r in response.data['results']]
+        assert ids.count(assignment.id) == 1
+
+    def test_org_admin_can_retrieve_single_remote_assignment(self, org_admin_api_client, cross_org_user_assignment, preference_manager):
+        """The detail (retrieve) endpoint should also respect the visibility
+        fix, not just the list endpoint."""
+        with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', True):
+            url = get_relative_url('roleuserassignment-detail', kwargs={'pk': cross_org_user_assignment.pk})
+            response = org_admin_api_client.get(url)
+
+        assert response.status_code == 200
+        assert response.data['id'] == cross_org_user_assignment.id
