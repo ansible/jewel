@@ -124,7 +124,11 @@ class TestRoute:
         assert routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]["is_internal_route"] == "t"
 
     @pytest.mark.django_db
-    def test_xds_route_config_disable_gateway_auth(self, service_cluster_eda):
+    def test_xds_route_config_disable_gateway_auth_for_eda(self, service_cluster_eda):
+        """
+        Test that EDA routes with enable_gateway_auth=False use AUTH_TYPE_NONE.
+        This allows EDA webhooks to handle their own auth while still getting X-Trusted-Proxy.
+        """
         route = ServiceAPIRoute(
             gateway_path='/', service_path='/path', envoy_cluster_name='testing', enable_gateway_auth=False, service_cluster=service_cluster_eda
         )
@@ -134,7 +138,7 @@ class TestRoute:
 
         # Verify the new structure: uses check_settings with auth_type=NONE instead of disabled=True
         ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
-        assert 'disabled' not in ext_authz_config
+        assert 'disabled' not in ext_authz_config, "EDA routes should NOT disable ext_auth completely"
         assert 'check_settings' in ext_authz_config
         assert 'context_extensions' in ext_authz_config["check_settings"]
 
@@ -142,6 +146,40 @@ class TestRoute:
         assert context_extensions["auth_type"] == AUTH_TYPE_NONE
         assert context_extensions["service_type"] == service_cluster_eda.service_type.name
         assert context_extensions["is_internal_route"] == "f"  # ServiceAPIRoute defaults to is_internal_route=False
+
+    @pytest.mark.django_db
+    def test_service_type_is_gateway_service(self, service_cluster_gateway, service_cluster_eda):
+        """Verify ServiceType.is_gateway_service cached_property identifies gateway vs non-gateway."""
+        assert service_cluster_gateway.service_type.is_gateway_service is True
+        assert service_cluster_eda.service_type.is_gateway_service is False
+
+    @pytest.mark.django_db
+    def test_is_gateway_service_property(self, service_cluster_gateway, service_cluster_eda):
+        """Verify the Route.is_gateway_service property delegates correctly to ServiceType."""
+        gw_route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_gateway)
+        eda_route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        assert gw_route.is_gateway_service is True
+        assert eda_route.is_gateway_service is False
+
+    @pytest.mark.django_db
+    def test_xds_route_config_disable_gateway_auth_for_gateway(self, service_cluster_gateway):
+        """
+        Test that GATEWAY routes with enable_gateway_auth=False completely disable ext_auth.
+        This is necessary to prevent X-Trusted-Proxy from being added, which would cause
+        DisallowWriteFromProxy to block configuration changes.
+        """
+        route = ServiceAPIRoute(
+            gateway_path='/', service_path='/path', envoy_cluster_name='testing', enable_gateway_auth=False, service_cluster=service_cluster_gateway
+        )
+        routes = route.get_xds_route_config()
+        assert len(routes) == 1
+        assert 'envoy.filters.http.ext_authz' in routes[0]["typed_per_filter_config"]
+
+        # Verify the gateway special case: ext_auth is completely disabled
+        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'disabled' in ext_authz_config, "Gateway routes MUST disable ext_auth completely"
+        assert ext_authz_config['disabled'] is True
+        assert 'check_settings' not in ext_authz_config, "Gateway routes should not have check_settings"
 
     @pytest.mark.parametrize(
         "service,expected_route_len",

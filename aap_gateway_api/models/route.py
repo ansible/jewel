@@ -123,6 +123,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         ),
     )
 
+    @property
+    def is_gateway_service(self):
+        """True if this route targets the gateway service itself."""
+        return self.service_cluster.service_type.is_gateway_service
+
     def is_internal_route_string(self):
         return "t" if self.is_internal_route else "f"
 
@@ -281,16 +286,22 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             }
 
         if not self.enable_gateway_auth:
-            cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
-                TYPE_KEY: EXT_AUTH_PER_ROUTE,
-                "check_settings": {
-                    "context_extensions": {
-                        "is_internal_route": self.is_internal_route_string(),
-                        "service_type": self.service_cluster.service_type.name,
-                        "auth_type": AUTH_TYPE_NONE,
+            if self.is_gateway_service:
+                cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                    TYPE_KEY: EXT_AUTH_PER_ROUTE,
+                    "disabled": True,
+                }
+            else:
+                cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                    TYPE_KEY: EXT_AUTH_PER_ROUTE,
+                    "check_settings": {
+                        "context_extensions": {
+                            "is_internal_route": self.is_internal_route_string(),
+                            "service_type": self.service_cluster.service_type.name,
+                            "auth_type": AUTH_TYPE_NONE,
+                        },
                     },
-                },
-            }
+                }
         else:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
                 TYPE_KEY: EXT_AUTH_PER_ROUTE,

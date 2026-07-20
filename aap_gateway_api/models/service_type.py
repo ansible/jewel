@@ -1,4 +1,5 @@
 from enum import Enum
+from functools import cached_property
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
@@ -12,6 +13,11 @@ class ServiceType(UniqueNamedCommonModel, AuditableModel):
     """
 
     router_basename = 'service_type'
+
+    @cached_property
+    def is_gateway_service(self):
+        """True if this is the gateway service type."""
+        return self.name == DefaultServiceType.GATEWAY
 
     ping_url = models.CharField(max_length=255, blank=False, null=True, help_text=_("URL to the ping/status page of the service, ex. /pulp/api/v3/status/"))
 
