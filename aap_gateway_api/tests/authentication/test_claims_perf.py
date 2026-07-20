@@ -5,8 +5,8 @@ Background
 AAP-79732 fixed a critical bug where SAML/OIDC login took 60-120+ seconds
 with 300+ authenticator maps. The root cause was _process_user_value()
 evaluating every user attribute value against every map trigger in a nested
-loop, producing O(n×m) iterations — each with a DEBUG log line costing ~5ms
-of I/O in production.
+loop, producing O(n×m) iterations — each with a DEBUG log line that added
+significant I/O overhead in production.
 
 The fix has two parts:
   1. "in" operator: replaced the per-value loop with a set intersection.
@@ -18,10 +18,11 @@ The fix has two parts:
 
 What these tests catch
 ----------------------
-- A regression that reintroduces per-value iteration in the "in" operator.
-- A regression that removes early exit from scalar operators.
-- Any future change that adds hidden O(n) or O(n²) work (e.g. expensive
-  per-value computation that doesn't emit log lines).
+- A regression that reintroduces per-value logging in the "in" operator.
+- A regression that removes early exit from scalar operators (both or/and
+  join conditions).
+- Any future change that adds hidden expensive work (e.g. per-value
+  computation that doesn't emit log lines).
 
 Why two metrics
 ---------------
@@ -35,13 +36,11 @@ Each test class uses two complementary metrics:
   Elapsed time ratio (empirical):
     Catches performance regressions that don't manifest as extra log lines —
     for example, an expensive computation added inside the loop that doesn't
-    log. TESTING.md (§274-295) discourages absolute wall-clock thresholds
-    because they are hardware-dependent and flaky on loaded CI runners.
-    These tests use RELATIVE time ratios instead: run the same function at
-    two scales and compare the ratio. A slow CI runner is slow for both
-    measurements, so the ratio stays stable. This technique is consistent
-    with the ratio approach described in TESTING.md and used in
-    test_role_assignments_perf.py.
+    log. TESTING.md's "Performance Tests (Perf)" section recommends relative
+    comparison at two scales for query counts and memory; these tests extend
+    that same ratio technique to elapsed time. By comparing ratios rather
+    than absolute thresholds, the measurements stay hardware-independent —
+    a slow CI runner is slow for both scales, so the ratio is stable.
 """
 
 import hashlib
@@ -55,6 +54,8 @@ _CLAIMS_LOGGER = 'ansible_base.authentication.utils.claims'
 # Deterministic group names at two scales.
 # 33 groups matches the scale observed in the production SAML responses that
 # triggered AAP-79732. 330 groups is the 10x scale used for ratio comparison.
+# In production, each authenticator map typically has a single trigger value
+# (one SAML group name), so the trigger list uses m=1 to mirror that scenario.
 _GROUPS_33 = [f"group-{hashlib.sha256(f'seed-{i}'.encode()).hexdigest()[:16]}" for i in range(33)]
 _GROUPS_330 = [f"group-{hashlib.sha256(f'seed-{i}'.encode()).hexdigest()[:16]}" for i in range(330)]
 
@@ -80,18 +81,18 @@ def _measure_time(func, *args, iterations=_TIMING_ITERATIONS, **kwargs):
 
 
 class TestInOperatorScaling:
-    """Verify the "in" operator evaluates in O(n+m) time with O(1) logging.
+    """Verify the "in" operator evaluates with O(1) logging per map.
 
-    The set-based implementation builds two sets (user values and trigger values)
-    and intersects them. This is O(n+m) in the number of values — some linear
-    scaling with input size is expected and acceptable. What we are guarding
-    against is a regression to the OLD O(n×m) behavior where each user value
-    was checked individually against the trigger list in a nested loop, with a
-    per-iteration log line.
+    The set-based implementation builds two sets and intersects them. The
+    computation is O(n+m), so some linear time scaling with input size is
+    expected. The critical invariant is that logging is O(1) per evaluation
+    (one summary line), not O(n) per user value as in the old code.
 
-    Concretely, for 33 vs 330 user groups (10x increase):
-      - O(n+m) (current): time scales ~7-8x, log count stays at 1
-      - O(n×m) (regression): time scales ~100x, log count scales 10x
+    The trigger list uses m=1 to match the production scenario where each
+    authenticator map checks membership in a single SAML/OIDC group. With
+    m=1, the timing test catches regressions worse than O(n) (e.g. accidental
+    O(n²) sorting or per-value overhead) but cannot distinguish O(n×m) from
+    O(n+m) — the log-count test is the primary guard for that.
     """
 
     def _run_in(self, user_groups):
@@ -99,35 +100,26 @@ class TestInOperatorScaling:
         return claims._process_user_value(None, tc, user_groups, 'or', 'groups', 1, 'perf')
 
     def test_log_count_constant_as_user_values_grow(self, caplog):
-        """The "in" operator must emit exactly 1 summary log line per map
-        evaluation, regardless of how many user values are checked.
+        """O(1) logging: exactly 1 summary log line regardless of user value count.
 
-        Before the fix, 33 groups produced 33 log lines per map, and 330
-        groups produced 330 log lines — each costing ~5ms of I/O in
-        production. The fix replaces this with a single summary line.
+        See module docstring for background on the per-value logging regression
+        this test guards against.
         """
-        _, logs_33 = _count_log_records(caplog, self._run_in, _GROUPS_33)
-        _, logs_330 = _count_log_records(caplog, self._run_in, _GROUPS_330)
+        result_33, logs_33 = _count_log_records(caplog, self._run_in, _GROUPS_33)
+        result_330, logs_330 = _count_log_records(caplog, self._run_in, _GROUPS_330)
 
+        assert result_33 is False
+        assert result_330 is False
         assert logs_33 == 1, f"Expected 1 log line for 33 groups, got {logs_33}"
         assert logs_330 == 1, f"Expected 1 log line for 330 groups, got {logs_330}"
 
     def test_elapsed_time_linear_as_user_values_grow(self):
-        """Elapsed time must scale at most linearly (O(n+m)), not quadratically.
+        """Time must scale at most linearly with user value count.
 
-        The set-based "in" operator constructs two sets and intersects them,
-        which is O(n+m). For a 10x increase in user values (33 → 330), we
-        expect roughly linear time growth (~7-8x observed in practice due to
-        set construction overhead, which is acceptable).
-
-        What would FAIL this test: a regression to the old per-value loop
-        where each of n user values was compared individually against m
-        trigger values, producing O(n×m) iterations. With 10x more user
-        values, the old code would scale 10x in iterations PLUS 10x in log
-        I/O, easily exceeding the 10x threshold.
-
-        The threshold of < 10.0x is deliberately generous to avoid CI flakiness
-        while still catching quadratic regressions. Observed ratios are ~7-8x.
+        The set construction is O(n), so linear growth is expected. The
+        threshold of < 10.0x for a 10x input increase is deliberately generous
+        to avoid CI flakiness while catching super-linear regressions (e.g.
+        per-value overhead reintroduced inside the loop).
         """
         time_33 = _measure_time(self._run_in, _GROUPS_33)
         time_330 = _measure_time(self._run_in, _GROUPS_330)
@@ -135,24 +127,20 @@ class TestInOperatorScaling:
         ratio = time_330 / max(time_33, 1e-9)
         assert ratio < 10.0, (
             f"Time scaled {ratio:.1f}x for 10x user values — expected <10.0x (at most linear). "
-            f"Super-linear scaling suggests a regression to per-value iteration. "
+            f"Super-linear scaling suggests per-value overhead was reintroduced. "
             f"33 groups: {time_33:.4f}s, 330 groups: {time_330:.4f}s "
             f"({_TIMING_ITERATIONS} iterations each)"
         )
 
 
 class TestScalarOperatorEarlyExitScaling:
-    """Verify scalar operators exit early and don't scan values past the match.
+    """Verify scalar operators exit early and don't scan values past the decision point.
 
-    For operators like equals, contains, ends_with, and matches with an "or"
-    join condition, the loop should break on the first matching value. This
-    means the number of values AFTER the match point is irrelevant — a list
-    of 10 values and a list of 100 values with the match at the same position
-    should produce identical work.
+    With an "or" join, the loop should break on the first matching value.
+    With an "and" join, the loop should break on the first mismatching value.
+    In both cases, the number of values after the decision point is irrelevant.
 
-    Concretely, with a match at position 3:
-      - With early exit (current): evaluates exactly 4 values (0, 1, 2, 3)
-      - Without early exit (regression): evaluates all 10 or all 100 values
+    See module docstring for background on the early-exit optimization.
     """
 
     def _make_values_with_match_at(self, match_position, total):
@@ -161,40 +149,51 @@ class TestScalarOperatorEarlyExitScaling:
         values[match_position] = "target"
         return values
 
-    def _run_equals(self, values):
+    def _make_values_with_mismatch_at(self, mismatch_position, total):
+        """Build a value list where all values match except at mismatch_position."""
+        values = ["target"] * total
+        values[mismatch_position] = "miss"
+        return values
+
+    # --- equals operator ---
+
+    def _run_equals(self, values, join_condition='or'):
         tc = {'attr': {'equals': 'target'}}
-        return claims._process_user_value(None, tc, values, 'or', 'attr', 1, 'perf')
+        return claims._process_user_value(None, tc, values, join_condition, 'attr', 1, 'perf')
 
-    def test_log_count_constant_with_early_exit(self, caplog):
-        """Log count must depend on match position, not total list length.
-
-        With the match at position 3, exactly 4 values are evaluated (indices
-        0, 1, 2, 3) producing 4 log lines — regardless of whether the list
-        has 10 or 100 elements. The remaining elements are never touched.
-
-        A regression that removes the early exit break would produce 10 log
-        lines for the short list and 100 for the long list.
-        """
+    def test_equals_log_count_constant_or_join(self, caplog):
+        """With or join, log count depends on match position, not list length."""
         values_10 = self._make_values_with_match_at(3, 10)
         values_100 = self._make_values_with_match_at(3, 100)
 
-        _, logs_10 = _count_log_records(caplog, self._run_equals, values_10)
-        _, logs_100 = _count_log_records(caplog, self._run_equals, values_100)
+        result_10, logs_10 = _count_log_records(caplog, self._run_equals, values_10)
+        result_100, logs_100 = _count_log_records(caplog, self._run_equals, values_100)
 
+        assert result_10 is True
+        assert result_100 is True
         assert logs_10 == 4, f"Expected 4 log lines (match at pos 3) for 10 values, got {logs_10}"
         assert logs_100 == 4, f"Expected 4 log lines (match at pos 3) for 100 values, got {logs_100}"
         assert logs_10 == logs_100, f"Early exit should make log count independent of list size: 10 values={logs_10}, 100 values={logs_100}"
 
-    def test_elapsed_time_constant_with_early_exit(self):
-        """Elapsed time must not grow when values are added after the match point.
+    def test_equals_log_count_constant_and_join(self, caplog):
+        """With and join, log count depends on mismatch position, not list length."""
+        values_10 = self._make_values_with_mismatch_at(3, 10)
+        values_100 = self._make_values_with_mismatch_at(3, 100)
 
-        With the match at position 3, the loop breaks after evaluating 4 values.
-        Adding 90 more values after the match point (10 → 100 total) should
-        have zero effect on execution time because those values are never reached.
+        result_10, logs_10 = _count_log_records(caplog, self._run_equals, values_10, join_condition='and')
+        result_100, logs_100 = _count_log_records(caplog, self._run_equals, values_100, join_condition='and')
 
-        The threshold of < 2.0x is tight because this truly IS O(1) — the work
-        done is identical regardless of list length. Any ratio above 2.0x would
-        indicate the loop is not actually breaking on match.
+        assert result_10 is False
+        assert result_100 is False
+        assert logs_10 == 4, f"Expected 4 log lines (mismatch at pos 3) for 10 values, got {logs_10}"
+        assert logs_100 == 4, f"Expected 4 log lines (mismatch at pos 3) for 100 values, got {logs_100}"
+        assert logs_10 == logs_100, f"Early exit should make log count independent of list size: 10 values={logs_10}, 100 values={logs_100}"
+
+    def test_equals_elapsed_time_constant_or_join(self):
+        """With or join and early exit, trailing values should not affect time.
+
+        The threshold of < 2.0x is tight because with early exit the work
+        is identical regardless of list length.
         """
         values_10 = self._make_values_with_match_at(3, 10)
         values_100 = self._make_values_with_match_at(3, 100)
@@ -205,7 +204,67 @@ class TestScalarOperatorEarlyExitScaling:
         ratio = time_100 / max(time_10, 1e-9)
         assert ratio < 2.0, (
             f"Time scaled {ratio:.1f}x for 10x list size — expected <2.0x with early exit at position 3. "
-            f"The extra 90 values after the match should never be evaluated. "
             f"10 values: {time_10:.4f}s, 100 values: {time_100:.4f}s "
             f"({_TIMING_ITERATIONS} iterations each)"
         )
+
+    # --- contains operator ---
+
+    def test_contains_log_count_constant_or_join(self, caplog):
+        """Contains operator must also exit early on first match."""
+        values_10 = [f"miss-{i}" for i in range(10)]
+        values_10[3] = "has-target-inside"
+        values_100 = [f"miss-{i}" for i in range(100)]
+        values_100[3] = "has-target-inside"
+
+        tc = {'attr': {'contains': 'target'}}
+
+        result_10, logs_10 = _count_log_records(caplog, claims._process_user_value, None, tc, values_10, 'or', 'attr', 1, 'perf')
+        result_100, logs_100 = _count_log_records(caplog, claims._process_user_value, None, tc, values_100, 'or', 'attr', 1, 'perf')
+
+        assert result_10 is True
+        assert result_100 is True
+        assert logs_10 == 4, f"Expected 4 log lines for contains, got {logs_10}"
+        assert logs_100 == 4, f"Expected 4 log lines for contains, got {logs_100}"
+
+    # --- ends_with operator ---
+
+    def test_ends_with_log_count_constant_or_join(self, caplog):
+        """ends_with operator must also exit early on first match."""
+        values_10 = [f"miss-{i}" for i in range(10)]
+        values_10[3] = "user@target.com"
+        values_100 = [f"miss-{i}" for i in range(100)]
+        values_100[3] = "user@target.com"
+
+        tc = {'attr': {'ends_with': '@target.com'}}
+
+        result_10, logs_10 = _count_log_records(caplog, claims._process_user_value, None, tc, values_10, 'or', 'attr', 1, 'perf')
+        result_100, logs_100 = _count_log_records(caplog, claims._process_user_value, None, tc, values_100, 'or', 'attr', 1, 'perf')
+
+        assert result_10 is True
+        assert result_100 is True
+        assert logs_10 == 4, f"Expected 4 log lines for ends_with, got {logs_10}"
+        assert logs_100 == 4, f"Expected 4 log lines for ends_with, got {logs_100}"
+
+    # --- matches (regex) operator ---
+
+    def test_matches_log_count_constant_or_join(self, caplog):
+        """matches (regex) operator must also exit early on first match.
+
+        Regex has different performance characteristics than string comparison
+        (re.match() compilation per call), so it gets its own test.
+        """
+        values_10 = [f"miss-{i}" for i in range(10)]
+        values_10[3] = "admin-group-1"
+        values_100 = [f"miss-{i}" for i in range(100)]
+        values_100[3] = "admin-group-1"
+
+        tc = {'attr': {'matches': r'^admin-.*'}}
+
+        result_10, logs_10 = _count_log_records(caplog, claims._process_user_value, None, tc, values_10, 'or', 'attr', 1, 'perf')
+        result_100, logs_100 = _count_log_records(caplog, claims._process_user_value, None, tc, values_100, 'or', 'attr', 1, 'perf')
+
+        assert result_10 is True
+        assert result_100 is True
+        assert logs_10 == 4, f"Expected 4 log lines for matches, got {logs_10}"
+        assert logs_100 == 4, f"Expected 4 log lines for matches, got {logs_100}"
