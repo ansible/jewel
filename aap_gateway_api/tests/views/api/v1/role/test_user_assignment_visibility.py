@@ -1,11 +1,11 @@
-"""Tests for GatewayRoleUserAssignmentViewSet.filter_queryset (AAP-80758).
+"""Tests for BypassVisibleItemsForPrivilegedUsersMixin on user assignments (AAP-80758).
 
 Org admins with ORG_ADMINS_CAN_SEE_ALL_USERS enabled should be able to see
 user role assignments on remote objects (e.g. AWX job templates), even though
 the gateway's RoleEvaluation cache does not cover those objects.
 
-This mirrors test_team_assignment_visibility.py (AAP-70503) for the user
-assignment endpoint.
+The bypass logic is shared with team assignments via
+BypassVisibleItemsForPrivilegedUsersMixin (see also test_team_assignment_visibility.py).
 """
 
 import pytest
