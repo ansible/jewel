@@ -67,6 +67,13 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     is_internal_route = models.BooleanField(
         default=False, help_text=_("If true, the gateway will only allow other Ansible services to access this route. Requires gateway auth to be enabled.")
     )
+    reject_failed_basic_auth = models.BooleanField(
+        default=False,
+        help_text=_(
+            "If true, requests with invalid Basic credentials will receive a 401 instead of being passed to the back end."
+            " Requests without credentials continue to be passed through anonymously."
+        ),
+    )
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every
@@ -118,6 +125,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
     def is_internal_route_string(self):
         return "t" if self.is_internal_route else "f"
+
+    def reject_failed_basic_auth_string(self):
+        return "t" if self.reject_failed_basic_auth else "f"
 
     def node_tags_list(self):
         return [tag.strip() for tag in self.node_tags.split(",")] if self.node_tags else []
@@ -282,6 +292,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     # map<string, string> to be sent to auth server per route
                     "context_extensions": {
                         "is_internal_route": self.is_internal_route_string(),
+                        "reject_failed_basic_auth": self.reject_failed_basic_auth_string(),
                         "service_type": self.service_cluster.service_type.name,
                         "auth_type": self.service_cluster.auth_type,
                     },
