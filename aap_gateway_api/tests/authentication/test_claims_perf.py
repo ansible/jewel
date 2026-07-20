@@ -47,6 +47,7 @@ import hashlib
 import logging
 import time
 
+import pytest
 from ansible_base.authentication.utils import claims
 
 _CLAIMS_LOGGER = 'ansible_base.authentication.utils.claims'
@@ -133,6 +134,18 @@ class TestInOperatorScaling:
         )
 
 
+# Parametrized data for scalar operator early-exit tests.
+# Each tuple: (operator_key, trigger_value, matching_user_value)
+# The matching value is placed at position 3 in the value list; all other
+# values are non-matching "miss-N" strings that don't satisfy any operator.
+_SCALAR_OPERATOR_CASES = [
+    ("equals", "target", "target"),
+    ("contains", "target", "has-target-inside"),
+    ("ends_with", "@target.com", "user@target.com"),
+    ("matches", r"^admin-.*", "admin-group-1"),
+]
+
+
 class TestScalarOperatorEarlyExitScaling:
     """Verify scalar operators exit early and don't scan values past the decision point.
 
@@ -143,63 +156,61 @@ class TestScalarOperatorEarlyExitScaling:
     See module docstring for background on the early-exit optimization.
     """
 
-    def _make_values_with_match_at(self, match_position, total):
-        """Build a value list where 'target' appears at match_position (0-indexed), rest are misses."""
-        values = [f"miss-{i}" for i in range(total)]
-        values[match_position] = "target"
-        return values
+    @pytest.mark.parametrize(
+        "operator,trigger_value,matching_value",
+        _SCALAR_OPERATOR_CASES,
+        ids=[c[0] for c in _SCALAR_OPERATOR_CASES],
+    )
+    def test_log_count_constant_or_join(self, caplog, operator, trigger_value, matching_value):
+        """With or join, log count depends on match position, not list length.
 
-    def _make_values_with_mismatch_at(self, mismatch_position, total):
-        """Build a value list where all values match except at mismatch_position."""
-        values = ["target"] * total
-        values[mismatch_position] = "miss"
-        return values
+        The match is placed at position 3. With early exit, exactly 4 values
+        are evaluated (indices 0, 1, 2, 3) regardless of total list size.
+        """
+        for total in (10, 100):
+            values = [f"miss-{i}" for i in range(total)]
+            values[3] = matching_value
+            tc = {'attr': {operator: trigger_value}}
 
-    # --- equals operator ---
+            result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, values, 'or', 'attr', 1, 'perf')
 
-    def _run_equals(self, values, join_condition='or'):
-        tc = {'attr': {'equals': 'target'}}
-        return claims._process_user_value(None, tc, values, join_condition, 'attr', 1, 'perf')
+            assert result is True, f"{operator}: expected True for {total} values"
+            assert logs == 4, f"{operator}: expected 4 log lines (match at pos 3) for {total} values, got {logs}"
 
-    def test_equals_log_count_constant_or_join(self, caplog):
-        """With or join, log count depends on match position, not list length."""
-        values_10 = self._make_values_with_match_at(3, 10)
-        values_100 = self._make_values_with_match_at(3, 100)
+    def test_log_count_constant_and_join(self, caplog):
+        """With and join, log count depends on mismatch position, not list length.
 
-        result_10, logs_10 = _count_log_records(caplog, self._run_equals, values_10)
-        result_100, logs_100 = _count_log_records(caplog, self._run_equals, values_100)
+        All values are "target" except at position 3. With early exit on first
+        mismatch, exactly 4 values are evaluated regardless of total list size.
+        """
+        for total in (10, 100):
+            values = ["target"] * total
+            values[3] = "miss"
+            tc = {'attr': {'equals': 'target'}}
 
-        assert result_10 is True
-        assert result_100 is True
-        assert logs_10 == 4, f"Expected 4 log lines (match at pos 3) for 10 values, got {logs_10}"
-        assert logs_100 == 4, f"Expected 4 log lines (match at pos 3) for 100 values, got {logs_100}"
-        assert logs_10 == logs_100, f"Early exit should make log count independent of list size: 10 values={logs_10}, 100 values={logs_100}"
+            result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, values, 'and', 'attr', 1, 'perf')
 
-    def test_equals_log_count_constant_and_join(self, caplog):
-        """With and join, log count depends on mismatch position, not list length."""
-        values_10 = self._make_values_with_mismatch_at(3, 10)
-        values_100 = self._make_values_with_mismatch_at(3, 100)
+            assert result is False, f"Expected False for {total} values"
+            assert logs == 4, f"Expected 4 log lines (mismatch at pos 3) for {total} values, got {logs}"
 
-        result_10, logs_10 = _count_log_records(caplog, self._run_equals, values_10, join_condition='and')
-        result_100, logs_100 = _count_log_records(caplog, self._run_equals, values_100, join_condition='and')
-
-        assert result_10 is False
-        assert result_100 is False
-        assert logs_10 == 4, f"Expected 4 log lines (mismatch at pos 3) for 10 values, got {logs_10}"
-        assert logs_100 == 4, f"Expected 4 log lines (mismatch at pos 3) for 100 values, got {logs_100}"
-        assert logs_10 == logs_100, f"Early exit should make log count independent of list size: 10 values={logs_10}, 100 values={logs_100}"
-
-    def test_equals_elapsed_time_constant_or_join(self):
+    def test_elapsed_time_constant_or_join(self):
         """With or join and early exit, trailing values should not affect time.
 
-        The threshold of < 2.0x is tight because with early exit the work
-        is identical regardless of list length.
+        Uses the equals operator as a representative case. The threshold of
+        < 2.0x is tight because with early exit the work is identical
+        regardless of list length.
         """
-        values_10 = self._make_values_with_match_at(3, 10)
-        values_100 = self._make_values_with_match_at(3, 100)
+        values_10 = [f"miss-{i}" for i in range(10)]
+        values_10[3] = "target"
+        values_100 = [f"miss-{i}" for i in range(100)]
+        values_100[3] = "target"
 
-        time_10 = _measure_time(self._run_equals, values_10)
-        time_100 = _measure_time(self._run_equals, values_100)
+        def run(values):
+            tc = {'attr': {'equals': 'target'}}
+            return claims._process_user_value(None, tc, values, 'or', 'attr', 1, 'perf')
+
+        time_10 = _measure_time(run, values_10)
+        time_100 = _measure_time(run, values_100)
 
         ratio = time_100 / max(time_10, 1e-9)
         assert ratio < 2.0, (
@@ -207,64 +218,3 @@ class TestScalarOperatorEarlyExitScaling:
             f"10 values: {time_10:.4f}s, 100 values: {time_100:.4f}s "
             f"({_TIMING_ITERATIONS} iterations each)"
         )
-
-    # --- contains operator ---
-
-    def test_contains_log_count_constant_or_join(self, caplog):
-        """Contains operator must also exit early on first match."""
-        values_10 = [f"miss-{i}" for i in range(10)]
-        values_10[3] = "has-target-inside"
-        values_100 = [f"miss-{i}" for i in range(100)]
-        values_100[3] = "has-target-inside"
-
-        tc = {'attr': {'contains': 'target'}}
-
-        result_10, logs_10 = _count_log_records(caplog, claims._process_user_value, None, tc, values_10, 'or', 'attr', 1, 'perf')
-        result_100, logs_100 = _count_log_records(caplog, claims._process_user_value, None, tc, values_100, 'or', 'attr', 1, 'perf')
-
-        assert result_10 is True
-        assert result_100 is True
-        assert logs_10 == 4, f"Expected 4 log lines for contains, got {logs_10}"
-        assert logs_100 == 4, f"Expected 4 log lines for contains, got {logs_100}"
-
-    # --- ends_with operator ---
-
-    def test_ends_with_log_count_constant_or_join(self, caplog):
-        """ends_with operator must also exit early on first match."""
-        values_10 = [f"miss-{i}" for i in range(10)]
-        values_10[3] = "user@target.com"
-        values_100 = [f"miss-{i}" for i in range(100)]
-        values_100[3] = "user@target.com"
-
-        tc = {'attr': {'ends_with': '@target.com'}}
-
-        result_10, logs_10 = _count_log_records(caplog, claims._process_user_value, None, tc, values_10, 'or', 'attr', 1, 'perf')
-        result_100, logs_100 = _count_log_records(caplog, claims._process_user_value, None, tc, values_100, 'or', 'attr', 1, 'perf')
-
-        assert result_10 is True
-        assert result_100 is True
-        assert logs_10 == 4, f"Expected 4 log lines for ends_with, got {logs_10}"
-        assert logs_100 == 4, f"Expected 4 log lines for ends_with, got {logs_100}"
-
-    # --- matches (regex) operator ---
-
-    def test_matches_log_count_constant_or_join(self, caplog):
-        """matches (regex) operator must also exit early on first match.
-
-        Regex has different performance characteristics than string comparison
-        (re.match() compilation per call), so it gets its own test.
-        """
-        values_10 = [f"miss-{i}" for i in range(10)]
-        values_10[3] = "admin-group-1"
-        values_100 = [f"miss-{i}" for i in range(100)]
-        values_100[3] = "admin-group-1"
-
-        tc = {'attr': {'matches': r'^admin-.*'}}
-
-        result_10, logs_10 = _count_log_records(caplog, claims._process_user_value, None, tc, values_10, 'or', 'attr', 1, 'perf')
-        result_100, logs_100 = _count_log_records(caplog, claims._process_user_value, None, tc, values_100, 'or', 'attr', 1, 'perf')
-
-        assert result_10 is True
-        assert result_100 is True
-        assert logs_10 == 4, f"Expected 4 log lines for matches, got {logs_10}"
-        assert logs_100 == 4, f"Expected 4 log lines for matches, got {logs_100}"
