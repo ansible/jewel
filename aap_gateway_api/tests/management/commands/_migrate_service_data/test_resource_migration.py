@@ -1,7 +1,7 @@
 """Tests for ResourceMigrationMixin: migrate_conflicting_user, merge_users,
 correcting_user_service_id, migrating_user_with_invalid_email,
 updating_resource_data_for_invalid_resource,
-process_migrate_resource_item_*, reconcile_existing_resource_*.
+process_resource_page_batch_*, reconcile_existing_resource_*.
 """
 
 from io import StringIO
@@ -165,14 +165,267 @@ def test_updating_resource_data_for_invalid_resource(migration_service_invalid_u
 
 
 @pytest.mark.django_db
-def test_process_migrate_resource_item_raises_on_missing_resource_data():
-    """Test that _process_and_migrate_resource_item raises when resource_data is missing."""
+def test_process_resource_page_batch_raises_on_missing_resource_data():
+    """Test that _process_resource_page_batch raises when resource_data is missing."""
     cmd = MigrateCommand()
-    resource_item = {"ansible_id": "test-id-123", "name": "test"}
+    results = [{"ansible_id": "test-id-456", "name": "test"}]
     resource_context = {"type": Mock()}
 
     with pytest.raises(RuntimeError, match="missing 'resource_data'"):
-        cmd._process_and_migrate_resource_item(resource_item, resource_context)
+        cmd._process_resource_page_batch(results, resource_context)
+
+
+@pytest.mark.django_db
+def test_process_resource_page_batch_bulk_update():
+    """Test that _process_resource_page_batch calls bulk_update_resources with correct payloads."""
+    import uuid
+
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = str(uuid.uuid4())
+
+    mock_client = Mock()
+    mock_client.service.service_cluster.service_type.name = "awx"
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"updated": 2, "errors": []}
+    mock_client.bulk_update_resources.return_value = mock_resp
+    cmd.client = mock_client
+
+    Organization.objects.create(name="BatchOrg1")
+
+    org_resource_type = ResourceType.objects.get(name="shared.organization")
+    resource_context = {
+        "type": org_resource_type,
+        "type_name": "shared.organization",
+        "type_serializer": org_resource_type.serializer_class,
+        "type_name_field": org_resource_type.get_resource_config().name_field,
+        "unique_fields": ["name"],
+        "LocalResourceModel": Organization,
+    }
+
+    batch_org_id = str(uuid.uuid4())
+    new_org_id = str(uuid.uuid4())
+    results = [
+        {
+            "ansible_id": batch_org_id,
+            "name": "BatchOrg1",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "BatchOrg1"},
+        },
+        {
+            "ansible_id": new_org_id,
+            "name": "NewOrg",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "NewOrg"},
+        },
+    ]
+
+    count = cmd._process_resource_page_batch(results, resource_context)
+    # Returns the "updated" count from the bulk response
+    assert count == 2
+
+    mock_client.bulk_update_resources.assert_called_once()
+    bulk_items = mock_client.bulk_update_resources.call_args[0][0]
+    assert len(bulk_items) == 2
+    assert all("ansible_id" in item for item in bulk_items)
+    # The first item (BatchOrg1 exists) triggers reconcile which sets ansible_id and resource_data
+    merged_item = bulk_items[0]
+    assert "new_ansible_id" in merged_item
+    assert "resource_data" in merged_item
+    # The second item (NewOrg is new) only gets service_id
+    new_item = bulk_items[1]
+    assert "service_id" in new_item
+
+
+@pytest.mark.django_db
+def test_process_resource_page_batch_with_partially_migrated():
+    """Test that is_partially_migrated is included in bulk payload when set."""
+    import uuid
+    from unittest.mock import patch as mock_patch
+
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = str(uuid.uuid4())
+
+    mock_client = Mock()
+    mock_client.service.service_cluster.service_type.name = "awx"
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"updated": 1, "errors": []}
+    mock_client.bulk_update_resources.return_value = mock_resp
+    cmd.client = mock_client
+
+    org_resource_type = ResourceType.objects.get(name="shared.organization")
+    resource_context = {
+        "type": org_resource_type,
+        "type_name": "shared.organization",
+        "type_serializer": org_resource_type.serializer_class,
+        "type_name_field": org_resource_type.get_resource_config().name_field,
+        "unique_fields": ["name"],
+        "LocalResourceModel": Organization,
+    }
+
+    results = [
+        {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "PartialOrg",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "PartialOrg"},
+        },
+    ]
+
+    # Mock _reconcile_existing_resource to inject is_partially_migrated
+    def mock_reconcile(upstream_resource, ctx, validated_data, updated_service_resource):
+        updated_service_resource["is_partially_migrated"] = True
+        return True
+
+    with mock_patch.object(cmd, "_reconcile_existing_resource", side_effect=mock_reconcile):
+        count = cmd._process_resource_page_batch(results, resource_context)
+
+    assert count == 1
+    bulk_items = mock_client.bulk_update_resources.call_args[0][0]
+    assert bulk_items[0]["is_partially_migrated"] is True
+
+
+@pytest.mark.django_db
+def test_process_resource_page_batch_graceful_on_bulk_failure():
+    """Test that bulk update HTTP failure is non-fatal and returns 0 (items will be retried)."""
+    import uuid
+
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = str(uuid.uuid4())
+
+    mock_client = Mock()
+    mock_client.service.service_cluster.service_type.name = "awx"
+    mock_resp = Mock()
+    mock_resp.status_code = 500
+    mock_resp.text = "Internal Server Error"
+    mock_client.bulk_update_resources.return_value = mock_resp
+    cmd.client = mock_client
+
+    org_resource_type = ResourceType.objects.get(name="shared.organization")
+    resource_context = {
+        "type": org_resource_type,
+        "type_name": "shared.organization",
+        "type_serializer": org_resource_type.serializer_class,
+        "type_name_field": org_resource_type.get_resource_config().name_field,
+        "unique_fields": ["name"],
+        "LocalResourceModel": Organization,
+    }
+
+    results = [
+        {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "RetryOrg",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "RetryOrg"},
+        },
+    ]
+
+    # Bulk failure is non-fatal: returns 0 and logs warning (items retry next iteration)
+    count = cmd._process_resource_page_batch(results, resource_context)
+    assert count == 0
+
+    # Local gateway resource was still created (will be reconciled on retry)
+    assert Organization.objects.filter(name="RetryOrg").exists()
+
+
+@pytest.mark.django_db
+def test_process_resource_page_batch_partial_errors():
+    """Test that per-item errors from bulk update are logged as warnings."""
+    import uuid
+
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = str(uuid.uuid4())
+
+    mock_client = Mock()
+    mock_client.service.service_cluster.service_type.name = "awx"
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "updated": 1,
+        "errors": [{"ansible_id": "some-id", "error": "Resource not found."}],
+    }
+    mock_client.bulk_update_resources.return_value = mock_resp
+    cmd.client = mock_client
+
+    Organization.objects.create(name="PartialErrOrg")
+
+    org_resource_type = ResourceType.objects.get(name="shared.organization")
+    resource_context = {
+        "type": org_resource_type,
+        "type_name": "shared.organization",
+        "type_serializer": org_resource_type.serializer_class,
+        "type_name_field": org_resource_type.get_resource_config().name_field,
+        "unique_fields": ["name"],
+        "LocalResourceModel": Organization,
+    }
+
+    results = [
+        {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "PartialErrOrg",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "PartialErrOrg"},
+        },
+        {
+            "ansible_id": str(uuid.uuid4()),
+            "name": "NewPartialOrg",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "NewPartialOrg"},
+        },
+    ]
+
+    count = cmd._process_resource_page_batch(results, resource_context)
+    # Only 1 updated (the other had an error on upstream side)
+    assert count == 1
+    # Warning was logged for the failed item
+    output = cmd.stderr.getvalue()
+    assert "bulk-update failed" in output
+
+
+def test_build_bulk_update_item_all_fields():
+    """Test that _build_bulk_update_item includes all present fields."""
+    import uuid
+
+    cmd = MigrateCommand()
+    ansible_id = str(uuid.uuid4())
+    new_ansible_id = uuid.uuid4()
+    updated_service_resource = {
+        "service_id": "svc-123",
+        "is_partially_migrated": True,
+        "ansible_id": new_ansible_id,
+        "resource_data": {"username": "test"},
+    }
+
+    result = cmd._build_bulk_update_item(ansible_id, updated_service_resource)
+    assert result["ansible_id"] == ansible_id
+    assert result["service_id"] == "svc-123"
+    assert result["is_partially_migrated"] is True
+    assert result["new_ansible_id"] == str(new_ansible_id)
+    assert result["resource_data"] == {"username": "test"}
+
+
+def test_build_bulk_update_item_minimal():
+    """Test that _build_bulk_update_item only includes ansible_id when no updates."""
+    cmd = MigrateCommand()
+    result = cmd._build_bulk_update_item("some-id", {})
+    assert result == {"ansible_id": "some-id"}
 
 
 @pytest.mark.django_db
@@ -394,3 +647,77 @@ def test_get_filtered_resources_non_user_type():
     assert len(results) == 2
     assert results[0]["name"] == "Org1"
     assert results[1]["name"] == "Org2"
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_network_error():
+    """Network exceptions in _send_bulk_update are caught and return 0."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = req.exceptions.ConnectionError("Connection refused")
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "service_id": "svc-id"}])
+    assert count == 0
+    assert "network error" in cmd.stderr.getvalue()
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_invalid_json_response():
+    """Non-JSON response body in _send_bulk_update is caught and returns 0."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.side_effect = ValueError("No JSON object could be decoded")
+    mock_resp.text = "<html>Bad Gateway</html>"
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.return_value = mock_resp
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "service_id": "svc-id"}])
+    assert count == 0
+    assert "not valid JSON" in cmd.stderr.getvalue()
+
+
+@pytest.mark.django_db
+def test_migrate_resource_circuit_breaker():
+    """Migration raises RuntimeError after consecutive zero-progress pages."""
+    import uuid
+
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = str(uuid.uuid4())
+    cmd.RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
+    cmd._progress_thresholds = {}
+
+    org_resource_type = ResourceType.objects.get(name="shared.organization")
+    cmd.resource_types_to_migrate = {
+        "shared.organization": {
+            "type": org_resource_type,
+            "unique_fields": ["name"],
+        }
+    }
+
+    mock_client = Mock()
+    mock_client.service.api_slug = "controller"
+    cmd.client = mock_client
+
+    # Simulate a page that always returns items but bulk update always fails
+    with patch.object(cmd, "_get_filtered_resources") as mock_get, patch.object(cmd, "_process_resource_page_batch") as mock_batch:
+        mock_get.return_value = ([{"ansible_id": "a1"}], 1)
+        mock_batch.return_value = 0
+
+        with pytest.raises(RuntimeError, match="Migration stalled"):
+            cmd.migrate_resource("shared.organization")
