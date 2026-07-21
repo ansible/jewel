@@ -15,9 +15,9 @@ class ServiceType(UniqueNamedCommonModel, AuditableModel):
     router_basename = 'service_type'
 
     @cached_property
-    def is_gateway_service(self):
-        """True if this is the gateway service type."""
-        return self.name == DefaultServiceType.GATEWAY
+    def is_eda_service(self):
+        """True if this is the EDA service type."""
+        return self.name == DefaultServiceType.EDA
 
     ping_url = models.CharField(max_length=255, blank=False, null=True, help_text=_("URL to the ping/status page of the service, ex. /pulp/api/v3/status/"))
 

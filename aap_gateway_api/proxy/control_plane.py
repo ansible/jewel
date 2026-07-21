@@ -268,6 +268,7 @@ class _ExternalAuth:
 
         self.headers = []
         self.service_type = request.attributes.context_extensions["service_type"]
+        self.auth_type = request.attributes.context_extensions["auth_type"]
 
         # Clear the thread local request. If we log before we get the new one, we'll log the wrong request.
         logging_thread_local.request = None
