@@ -114,6 +114,20 @@ class TestInOperatorScaling:
         assert logs_33 == 1, f"Expected 1 log line for 33 groups, got {logs_33}"
         assert logs_330 == 1, f"Expected 1 log line for 330 groups, got {logs_330}"
 
+    @pytest.mark.parametrize("user_groups", [_GROUPS_33, _GROUPS_330], ids=["33_groups", "330_groups"])
+    def test_log_count_constant_with_matching_trigger(self, caplog, user_groups):
+        """O(1) logging holds on the match path, not just the miss path.
+
+        The base test uses a nonexistent trigger (no intersection). This test
+        places a trigger that IS present in the user groups, exercising the
+        set-intersection hit-path which may have different logging behavior.
+        """
+        tc = {'groups': {'in': [user_groups[0]]}}
+        result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, user_groups, 'or', 'groups', 1, 'perf')
+
+        assert result is True, "Expected True when trigger matches a user group"
+        assert logs == 1, f"Expected 1 log line on match path for {len(user_groups)} groups, got {logs}"
+
     def test_elapsed_time_linear_as_user_values_grow(self):
         """Time must scale at most linearly with user value count.
 
@@ -193,6 +207,72 @@ class TestScalarOperatorEarlyExitScaling:
             assert result is False, f"Expected False for {total} values"
             assert logs == 4, f"Expected 4 log lines (mismatch at pos 3) for {total} values, got {logs}"
 
+    @pytest.mark.parametrize(
+        "operator,trigger_value,matching_value",
+        _SCALAR_OPERATOR_CASES,
+        ids=[c[0] for c in _SCALAR_OPERATOR_CASES],
+    )
+    def test_log_count_full_scan_or_join_no_match(self, caplog, operator, trigger_value, matching_value):
+        """With or join and NO match, all values are scanned — log count = total.
+
+        Contrasts with test_log_count_constant_or_join: without this test,
+        the assertion `logs == 4` could be right for the wrong reason (e.g.
+        the function always logs exactly 4 lines). This test proves the
+        early-exit test is actually testing early exit.
+        """
+        for total in (10, 100):
+            values = [f"miss-{i}" for i in range(total)]
+            tc = {'attr': {operator: trigger_value}}
+
+            result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, values, 'or', 'attr', 1, 'perf')
+
+            assert result is False, f"{operator}: expected False with no matching values for {total} values"
+            assert logs == total, f"{operator}: expected {total} log lines (full scan, no match), got {logs}"
+
+    @pytest.mark.parametrize(
+        "operator,trigger_value,matching_value",
+        _SCALAR_OPERATOR_CASES,
+        ids=[c[0] for c in _SCALAR_OPERATOR_CASES],
+    )
+    def test_log_count_early_exit_at_position_0(self, caplog, operator, trigger_value, matching_value):
+        """With or join and match at position 0, exactly 1 log line.
+
+        Verifies the break happens on the very first iteration — the earliest
+        possible early exit.
+        """
+        values = [matching_value] + [f"miss-{i}" for i in range(99)]
+        tc = {'attr': {operator: trigger_value}}
+
+        result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, values, 'or', 'attr', 1, 'perf')
+
+        assert result is True, f"{operator}: expected True with match at position 0"
+        assert logs == 1, f"{operator}: expected 1 log line (match at pos 0), got {logs}"
+
+    def test_log_count_full_scan_and_join_all_match(self, caplog):
+        """With and join where ALL values match, every value is scanned.
+
+        Contrasts with test_log_count_constant_and_join: that test verifies
+        early exit on mismatch. This test verifies the full-scan path when
+        no early exit is possible (all values satisfy the condition).
+        """
+        for total in (10, 100):
+            values = ["target"] * total
+            tc = {'attr': {'equals': 'target'}}
+
+            result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, values, 'and', 'attr', 1, 'perf')
+
+            assert result is True, f"Expected True when all {total} values match"
+            assert logs == total, f"Expected {total} log lines (all match, full scan), got {logs}"
+
+    def test_empty_user_values(self, caplog):
+        """Empty user values list: no crash, no log lines, has_access unchanged."""
+        tc = {'attr': {'equals': 'target'}}
+
+        result, logs = _count_log_records(caplog, claims._process_user_value, None, tc, [], 'or', 'attr', 1, 'perf')
+
+        assert result is None, "Expected None (has_access unchanged) for empty values"
+        assert logs == 0, f"Expected 0 log lines for empty values, got {logs}"
+
     def test_elapsed_time_constant_or_join(self):
         """With or join and early exit, trailing values should not affect time.
 
@@ -208,6 +288,32 @@ class TestScalarOperatorEarlyExitScaling:
         def run(values):
             tc = {'attr': {'equals': 'target'}}
             return claims._process_user_value(None, tc, values, 'or', 'attr', 1, 'perf')
+
+        time_10 = _measure_time(run, values_10)
+        time_100 = _measure_time(run, values_100)
+
+        ratio = time_100 / max(time_10, 1e-9)
+        assert ratio < 2.0, (
+            f"Time scaled {ratio:.1f}x for 10x list size — expected <2.0x with early exit at position 3. "
+            f"10 values: {time_10:.4f}s, 100 values: {time_100:.4f}s "
+            f"({_TIMING_ITERATIONS} iterations each)"
+        )
+
+    def test_elapsed_time_constant_and_join(self):
+        """With and join and early exit on mismatch, trailing values should not affect time.
+
+        Complements test_elapsed_time_constant_or_join: the log count tests
+        cover the and join structurally, but a timing test catches non-logging
+        regressions (expensive computation that doesn't emit log lines).
+        """
+        values_10 = ["target"] * 10
+        values_10[3] = "miss"
+        values_100 = ["target"] * 100
+        values_100[3] = "miss"
+
+        def run(values):
+            tc = {'attr': {'equals': 'target'}}
+            return claims._process_user_value(None, tc, values, 'and', 'attr', 1, 'perf')
 
         time_10 = _measure_time(run, values_10)
         time_100 = _measure_time(run, values_100)
