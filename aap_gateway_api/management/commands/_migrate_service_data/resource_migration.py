@@ -150,7 +150,7 @@ class ResourceMigrationMixin:
         # so this will correct the service_id and possibly update the stale resource_data
         if str(existing_resource.ansible_id) == resource_ansible_id:
             create_gateway_resource = False
-            updated_service_resource["new_service_id"] = existing_resource.service_id
+            updated_service_resource["new_service_id"] = str(existing_resource.service_id)
 
             if incoming_data == local_data:
                 self._log(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.", logging.INFO)
