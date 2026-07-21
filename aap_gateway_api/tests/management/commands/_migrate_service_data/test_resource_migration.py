@@ -650,8 +650,9 @@ def test_get_filtered_resources_non_user_type():
 
 
 @pytest.mark.django_db
-def test_send_bulk_update_network_error():
-    """Network exceptions in _send_bulk_update are caught and return 0."""
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_network_error(mock_sleep):
+    """Network exceptions in _send_bulk_update are retried then return 0."""
     import requests as req
 
     cmd = MigrateCommand()
@@ -665,11 +666,13 @@ def test_send_bulk_update_network_error():
     count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert count == 0
     assert "network error" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
 
 
 @pytest.mark.django_db
-def test_send_bulk_update_invalid_json_response():
-    """Non-JSON response body in _send_bulk_update is caught and returns 0."""
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_invalid_json_response(mock_sleep):
+    """Non-JSON response body in _send_bulk_update is retried then returns 0."""
     cmd = MigrateCommand()
     cmd.stdout = StringIO()
     cmd.stderr = StringIO()
@@ -686,6 +689,74 @@ def test_send_bulk_update_invalid_json_response():
     count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert count == 0
     assert "not valid JSON" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_permanent_error():
+    """4xx errors (permanent) are not retried and return 0."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    mock_resp = Mock()
+    mock_resp.status_code = 400
+    mock_resp.text = '{"detail": "Bad request"}'
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.return_value = mock_resp
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 0
+    assert "permanent error" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == 1
+
+
+@pytest.mark.django_db
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_transient_then_success(mock_sleep):
+    """Transient 502 followed by success returns the updated count."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    transient_resp = Mock()
+    transient_resp.status_code = 502
+    transient_resp.text = "Bad Gateway"
+
+    success_resp = Mock()
+    success_resp.status_code = 200
+    success_resp.json.return_value = {"updated": 5, "errors": []}
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = [transient_resp, success_resp]
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 5
+    assert cmd.client.bulk_update_resources.call_count == 2
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_chunks_large_batches():
+    """Items exceeding MAX_BULK_CHUNK_SIZE are sent in multiple chunks."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    success_resp = Mock()
+    success_resp.status_code = 200
+    success_resp.json.return_value = {"updated": 1000, "errors": []}
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.return_value = success_resp
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    items = [{"ansible_id": f"id-{i}", "new_service_id": "svc"} for i in range(2500)]
+    count = cmd._send_bulk_update(items)
+    assert count == 3000  # 1000 * 3 chunks
+    assert cmd.client.bulk_update_resources.call_count == 3
 
 
 @pytest.mark.django_db

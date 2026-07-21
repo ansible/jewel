@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -217,45 +218,94 @@ class ResourceMigrationMixin:
             bulk_item["resource_data"] = updated_service_resource["resource_data"]
         return bulk_item
 
+    MAX_BULK_CHUNK_SIZE = 1000
+    MAX_TRANSIENT_RETRIES = 3
+    TRANSIENT_STATUS_CODES = {502, 503, 504}
+
     def _send_bulk_update(self, bulk_update_items: List[Dict[str, Any]]) -> int:
         """Send bulk update to upstream and return the number of successfully updated items.
 
-        Per-item errors are logged as warnings. Items whose upstream update failed
-        will reappear on the next query (the filter naturally retries them).
+        Items are chunked to respect the upstream MAX_BULK_SIZE limit (1000).
+        Transient HTTP errors (502/503/504, network errors) are retried with
+        exponential backoff. Permanent errors (4xx) fail immediately.
+        Per-item errors from successful responses are logged as warnings.
         """
-        try:
-            resp = self.client.bulk_update_resources(bulk_update_items)
-        except requests.exceptions.RequestException as exc:
-            self._log(
-                f"Bulk resource update failed with network error: {exc}. Items will be retried on next page fetch.",
-                logging.WARNING,
-            )
-            return 0
+        total_updated = 0
+        for i in range(0, len(bulk_update_items), self.MAX_BULK_CHUNK_SIZE):
+            chunk = bulk_update_items[i : i + self.MAX_BULK_CHUNK_SIZE]
+            updated = self._send_bulk_update_chunk(chunk)
+            total_updated += updated
+        return total_updated
 
-        if resp.status_code != 200:
-            self._log(
-                f"Bulk resource update returned HTTP {resp.status_code}. Items will be retried on next page fetch. Response: {resp.text[:500]}",
-                logging.WARNING,
-            )
-            return 0
-
-        try:
-            resp_data = resp.json()
-        except ValueError:
-            self._log(
-                f"Bulk resource update returned HTTP {resp.status_code} but response body was not valid JSON. "
-                f"Items will be retried. Response: {resp.text[:500]}",
-                logging.WARNING,
-            )
-            return 0
-
-        if resp_data.get("errors"):
-            for err in resp_data["errors"]:
+    def _send_bulk_update_chunk(self, chunk: List[Dict[str, Any]]) -> int:
+        """Send a single chunk of bulk update items with retry logic for transient errors."""
+        for attempt in range(self.MAX_TRANSIENT_RETRIES):
+            try:
+                resp = self.client.bulk_update_resources(chunk)
+            except requests.exceptions.RequestException as exc:
+                if attempt < self.MAX_TRANSIENT_RETRIES - 1:
+                    wait = 2**attempt
+                    self._log(
+                        f"Bulk update network error (attempt {attempt + 1}/{self.MAX_TRANSIENT_RETRIES}): {exc}. Retrying in {wait}s.",
+                        logging.WARNING,
+                    )
+                    time.sleep(wait)
+                    continue
                 self._log(
-                    f"Warning: bulk-update failed for {err.get('ansible_id')}: {err.get('error')}",
-                    logging.WARNING,
+                    f"Bulk update failed after {self.MAX_TRANSIENT_RETRIES} attempts due to network error: {exc}.",
+                    logging.ERROR,
                 )
-        return resp_data.get("updated", 0)
+                return 0
+
+            if resp.status_code in self.TRANSIENT_STATUS_CODES:
+                if attempt < self.MAX_TRANSIENT_RETRIES - 1:
+                    wait = 2**attempt
+                    self._log(
+                        f"Bulk update returned HTTP {resp.status_code} (attempt {attempt + 1}/{self.MAX_TRANSIENT_RETRIES}). Retrying in {wait}s.",
+                        logging.WARNING,
+                    )
+                    time.sleep(wait)
+                    continue
+                self._log(
+                    f"Bulk update failed after {self.MAX_TRANSIENT_RETRIES} attempts with HTTP {resp.status_code}. Response: {resp.text[:500]}",
+                    logging.ERROR,
+                )
+                return 0
+
+            if resp.status_code != 200:
+                self._log(
+                    f"Bulk update returned HTTP {resp.status_code} (permanent error, will not retry). Response: {resp.text[:500]}",
+                    logging.ERROR,
+                )
+                return 0
+
+            try:
+                resp_data = resp.json()
+            except ValueError:
+                if attempt < self.MAX_TRANSIENT_RETRIES - 1:
+                    wait = 2**attempt
+                    self._log(
+                        f"Bulk update response was not valid JSON (likely proxy error, "
+                        f"attempt {attempt + 1}/{self.MAX_TRANSIENT_RETRIES}). Retrying in {wait}s.",
+                        logging.WARNING,
+                    )
+                    time.sleep(wait)
+                    continue
+                self._log(
+                    f"Bulk update response was not valid JSON after {self.MAX_TRANSIENT_RETRIES} attempts. Response: {resp.text[:500]}",
+                    logging.ERROR,
+                )
+                return 0
+
+            if resp_data.get("errors"):
+                for err in resp_data["errors"]:
+                    self._log(
+                        f"Bulk-update per-item failure for {err.get('ansible_id')}: {err.get('error')}",
+                        logging.WARNING,
+                    )
+            return resp_data.get("updated", 0)
+
+        return 0
 
     def _process_resource_page_batch(self, results: List[Dict[str, Any]], resource_context: Dict[str, Any]) -> int:
         """
@@ -413,7 +463,7 @@ class ResourceMigrationMixin:
             resource_processed += batch_size
             if batch_size < len(results):
                 self._log(
-                    f"Only {batch_size}/{len(results)} items updated upstream. Remaining items will be retried.",
+                    f"Only {batch_size}/{len(results)} items updated upstream. Failed items remain unmigrated and will reappear on the next page fetch.",
                     logging.WARNING,
                 )
             self._log_progress(progress_label, resource_processed, resource_total)
