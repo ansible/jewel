@@ -95,7 +95,7 @@ class ResourceMigrationMixin:
     def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Prepare payloads for creating Gateway resources and updating upstream resources."""
         resource_creation_kwargs = {"ansible_id": upstream_resource["ansible_id"]}
-        updated_service_resource = {"service_id": str(service_id())}
+        updated_service_resource = {"new_service_id": str(service_id())}
         return resource_creation_kwargs, updated_service_resource
 
     def _reconcile_existing_resource(
@@ -149,7 +149,7 @@ class ResourceMigrationMixin:
         # so this will correct the service_id and possibly update the stale resource_data
         if str(existing_resource.ansible_id) == resource_ansible_id:
             create_gateway_resource = False
-            updated_service_resource["service_id"] = existing_resource.service_id
+            updated_service_resource["new_service_id"] = existing_resource.service_id
 
             if incoming_data == local_data:
                 self._log(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.", logging.INFO)
@@ -207,8 +207,8 @@ class ResourceMigrationMixin:
     def _build_bulk_update_item(resource_ansible_id: str, updated_service_resource: Dict[str, Any]) -> Dict[str, Any]:
         """Build a single bulk-update payload item from the reconciled service resource fields."""
         bulk_item: Dict[str, Any] = {"ansible_id": resource_ansible_id}
-        if "service_id" in updated_service_resource:
-            bulk_item["service_id"] = updated_service_resource["service_id"]
+        if "new_service_id" in updated_service_resource:
+            bulk_item["new_service_id"] = updated_service_resource["new_service_id"]
         if "is_partially_migrated" in updated_service_resource:
             bulk_item["is_partially_migrated"] = updated_service_resource["is_partially_migrated"]
         if "ansible_id" in updated_service_resource:

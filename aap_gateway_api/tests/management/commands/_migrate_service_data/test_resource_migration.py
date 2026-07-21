@@ -236,9 +236,9 @@ def test_process_resource_page_batch_bulk_update():
     merged_item = bulk_items[0]
     assert "new_ansible_id" in merged_item
     assert "resource_data" in merged_item
-    # The second item (NewOrg is new) only gets service_id
+    # The second item (NewOrg is new) only gets new_service_id
     new_item = bulk_items[1]
-    assert "service_id" in new_item
+    assert "new_service_id" in new_item
 
 
 @pytest.mark.django_db
@@ -407,7 +407,7 @@ def test_build_bulk_update_item_all_fields():
     ansible_id = str(uuid.uuid4())
     new_ansible_id = uuid.uuid4()
     updated_service_resource = {
-        "service_id": "svc-123",
+        "new_service_id": "svc-123",
         "is_partially_migrated": True,
         "ansible_id": new_ansible_id,
         "resource_data": {"username": "test"},
@@ -415,7 +415,7 @@ def test_build_bulk_update_item_all_fields():
 
     result = cmd._build_bulk_update_item(ansible_id, updated_service_resource)
     assert result["ansible_id"] == ansible_id
-    assert result["service_id"] == "svc-123"
+    assert result["new_service_id"] == "svc-123"
     assert result["is_partially_migrated"] is True
     assert result["new_ansible_id"] == str(new_ansible_id)
     assert result["resource_data"] == {"username": "test"}
@@ -586,7 +586,7 @@ def test_initialize_resource_sync_payloads():
         creation_kwargs, service_resource = cmd._initialize_resource_sync_payloads(upstream_resource)
 
     assert creation_kwargs == {"ansible_id": "test-aid-100"}
-    assert service_resource == {"service_id": "gw-service-id-42"}
+    assert service_resource == {"new_service_id": "gw-service-id-42"}
 
 
 def test_get_filtered_resources_excludes_system_user():
@@ -662,7 +662,7 @@ def test_send_bulk_update_network_error():
     cmd.client.bulk_update_resources.side_effect = req.exceptions.ConnectionError("Connection refused")
     cmd.client.service.service_cluster.service_type.name = "awx"
 
-    count = cmd._send_bulk_update([{"ansible_id": "test-id", "service_id": "svc-id"}])
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert count == 0
     assert "network error" in cmd.stderr.getvalue()
 
@@ -683,7 +683,7 @@ def test_send_bulk_update_invalid_json_response():
     cmd.client.bulk_update_resources.return_value = mock_resp
     cmd.client.service.service_cluster.service_type.name = "awx"
 
-    count = cmd._send_bulk_update([{"ansible_id": "test-id", "service_id": "svc-id"}])
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert count == 0
     assert "not valid JSON" in cmd.stderr.getvalue()
 
