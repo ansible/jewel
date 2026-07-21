@@ -122,10 +122,19 @@ jobs:
     steps:
       # Pin to the exact commit that the Unit Tests workflow ran against,
       # since workflow_run context defaults to the repo's default branch.
-      - uses: actions/checkout@v4
+      #
+      # allow-unsafe-pr-checkout: required since actions/checkout v4.2+
+      # (backported from v7 on 2026-07-16) refuses to check out fork PR
+      # code in workflow_run contexts by default. Safe here because this
+      # workflow only reads source for static analysis — no fork code is
+      # executed.
+      # SONAR githubactions:S7631 - safe: workflow only reads source for static analysis, no fork code is executed, permissions are read-only
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
+          allow-unsafe-pr-checkout: true
+          persist-credentials: false
 
       # Download all individual coverage artifacts from Unit Tests workflow
       - name: Download coverage artifacts
@@ -294,10 +303,13 @@ jobs:
     steps:
       # Pin to the exact commit that the Unit Tests workflow ran against,
       # since workflow_run context defaults to the repo's default branch.
-      - uses: actions/checkout@v4
+      #
+      # SONAR githubactions:S7631 - safe: this job only runs for push events (see the 'if' above), which come from repo collaborators, never from forks
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
       # Download all individual coverage artifacts from Unit Tests workflow (optional for branch pushes)
       - name: Download coverage artifacts
