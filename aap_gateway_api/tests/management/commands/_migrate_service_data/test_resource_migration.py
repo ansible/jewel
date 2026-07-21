@@ -396,7 +396,7 @@ def test_process_resource_page_batch_partial_errors():
     assert count == 1
     # Warning was logged for the failed item
     output = cmd.stderr.getvalue()
-    assert "bulk-update failed" in output
+    assert "per-item failure" in output
 
 
 def test_build_bulk_update_item_all_fields():
