@@ -1,9 +1,10 @@
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
+import requests
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
 from ansible_base.resource_registry.models import Resource, service_id
-from ansible_base.resource_registry.rest_client import ResourceRequestBody
 from django.conf import settings
 from django.db import transaction
 
@@ -95,7 +96,7 @@ class ResourceMigrationMixin:
     def _initialize_resource_sync_payloads(self, upstream_resource: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Prepare payloads for creating Gateway resources and updating upstream resources."""
         resource_creation_kwargs = {"ansible_id": upstream_resource["ansible_id"]}
-        updated_service_resource = {"service_id": str(service_id())}
+        updated_service_resource = {"new_service_id": str(service_id())}
         return resource_creation_kwargs, updated_service_resource
 
     def _reconcile_existing_resource(
@@ -149,7 +150,7 @@ class ResourceMigrationMixin:
         # so this will correct the service_id and possibly update the stale resource_data
         if str(existing_resource.ansible_id) == resource_ansible_id:
             create_gateway_resource = False
-            updated_service_resource["service_id"] = existing_resource.service_id
+            updated_service_resource["new_service_id"] = str(existing_resource.service_id)
 
             if incoming_data == local_data:
                 self._log(f"Correcting service_id of {resource_type.name} with name {upstream_resource['name']}.", logging.INFO)
@@ -203,55 +204,179 @@ class ResourceMigrationMixin:
             results = [res for res in results if res['name'] != settings.SYSTEM_USERNAME]
         return results, data['count']
 
-    def _process_and_migrate_resource_item(self, upstream_resource_item: Dict[str, Any], resource_context: Dict[str, Any]) -> None:
-        """
-        Process and migrate a single resource item from upstream to Gateway.
+    @staticmethod
+    def _build_bulk_update_item(resource_ansible_id: str, updated_service_resource: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a single bulk-update payload item from the reconciled service resource fields."""
+        bulk_item: Dict[str, Any] = {"ansible_id": resource_ansible_id}
+        if "new_service_id" in updated_service_resource:
+            bulk_item["new_service_id"] = updated_service_resource["new_service_id"]
+        if "is_partially_migrated" in updated_service_resource:
+            bulk_item["is_partially_migrated"] = updated_service_resource["is_partially_migrated"]
+        if "ansible_id" in updated_service_resource:
+            bulk_item["new_ansible_id"] = str(updated_service_resource["ansible_id"])
+        if "resource_data" in updated_service_resource:
+            bulk_item["resource_data"] = updated_service_resource["resource_data"]
+        return bulk_item
 
-        This method handles the complete migration workflow for a single resource:
-        1. Fetch detailed resource data from upstream
-        2. Validate and prepare resource data
-        3. Handle conflicts with existing resources
-        4. Create/update Gateway resource and upstream resource atomically
+    MAX_BULK_CHUNK_SIZE = 1000
+    MAX_TRANSIENT_RETRIES = 3
+    TRANSIENT_STATUS_CODES = {502, 503, 504}
+
+    def _send_bulk_update(self, bulk_update_items: List[Dict[str, Any]]) -> int:
+        """Send bulk update to upstream and return the number of successfully updated items.
+
+        Items are chunked to respect the upstream MAX_BULK_SIZE limit (1000).
+        Transient HTTP errors (502/503/504, network errors) are retried with
+        exponential backoff. Permanent errors (4xx) fail immediately.
+        Per-item errors from successful responses are logged as warnings.
+        """
+        total_updated = 0
+        for i in range(0, len(bulk_update_items), self.MAX_BULK_CHUNK_SIZE):
+            chunk = bulk_update_items[i : i + self.MAX_BULK_CHUNK_SIZE]
+            updated = self._send_bulk_update_chunk(chunk)
+            total_updated += updated
+        return total_updated
+
+    _RETRY_SENTINEL = object()
+
+    def _should_retry(self, attempt: int, reason: str, detail: str) -> bool:
+        """Decide whether to retry a transient error, logging appropriately.
+
+        Returns True if the caller should retry (sleep already performed),
+        False if retries are exhausted (error already logged).
+        """
+        if attempt < self.MAX_TRANSIENT_RETRIES - 1:
+            wait = 2**attempt
+            self._log(
+                f"Bulk update {reason} (attempt {attempt + 1}/{self.MAX_TRANSIENT_RETRIES}): {detail}. Retrying in {wait}s.",
+                logging.WARNING,
+            )
+            time.sleep(wait)
+            return True
+        self._log(
+            f"Bulk update failed after {self.MAX_TRANSIENT_RETRIES} attempts — {reason}: {detail}",
+            logging.ERROR,
+        )
+        return False
+
+    def _try_bulk_update_once(self, chunk: List[Dict[str, Any]], attempt: int):
+        """Execute one bulk-update attempt.
+
+        Returns the parsed response dict on success, _RETRY_SENTINEL if a
+        transient error occurred and retries remain, or 0 if the request
+        failed permanently.
+        """
+        try:
+            resp = self.client.bulk_update_resources(chunk)
+        except requests.exceptions.RequestException as exc:
+            if self._should_retry(attempt, "network error", str(exc)):
+                return self._RETRY_SENTINEL
+            return 0
+
+        if resp.status_code in self.TRANSIENT_STATUS_CODES:
+            if self._should_retry(attempt, f"HTTP {resp.status_code}", resp.text[:500]):
+                return self._RETRY_SENTINEL
+            return 0
+
+        if resp.status_code != 200:
+            self._log(
+                f"Bulk update returned HTTP {resp.status_code} (permanent error, will not retry). Response: {resp.text[:500]}",
+                logging.ERROR,
+            )
+            return 0
+
+        try:
+            return resp.json()
+        except ValueError:
+            if self._should_retry(attempt, "non-JSON response", resp.text[:500]):
+                return self._RETRY_SENTINEL
+            return 0
+
+    def _send_bulk_update_chunk(self, chunk: List[Dict[str, Any]]) -> int:
+        """Send a single chunk of bulk update items with retry logic for transient errors."""
+        for attempt in range(self.MAX_TRANSIENT_RETRIES):
+            result = self._try_bulk_update_once(chunk, attempt)
+            if result is self._RETRY_SENTINEL:
+                continue
+            if result == 0:
+                return 0
+            return self._process_bulk_response(result)
+        return 0
+
+    def _process_bulk_response(self, resp_data: Dict[str, Any]) -> int:
+        """Extract the updated count from a successful bulk-update response, logging per-item errors."""
+        for err in resp_data.get("errors") or []:
+            self._log(
+                f"Bulk-update per-item failure for {err.get('ansible_id')}: {err.get('error')}",
+                logging.WARNING,
+            )
+        return resp_data.get("updated", 0)
+
+    def _process_resource_page_batch(self, results: List[Dict[str, Any]], resource_context: Dict[str, Any]) -> int:
+        """
+        Process and migrate a batch of resource items from a single API page.
+
+        Follows the same pattern as role assignments: validates all items,
+        performs bulk local writes, then sends a single bulk HTTP call to
+        update upstream. Per-item failures are logged as warnings rather than
+        aborting the entire page — failed items will reappear on the next
+        iteration since their service_id/is_partially_migrated was not updated.
 
         Args:
-            upstream_resource_item: Basic resource data from upstream service list
-            resource_context: Static data about the resource type and migration settings
+            results: List of resource items from the upstream service API page
+            resource_context: Static data about the resource type
 
-        Note:
-            All operations are wrapped in a database transaction to ensure
-            consistency between Gateway and upstream service updates.
+        Returns:
+            Number of items successfully processed in this batch
         """
-        resource_ansible_id = upstream_resource_item["ansible_id"]
         resource_type = resource_context["type"]
+        bulk_update_items = []
+        create_operations = []
 
-        if "resource_data" not in upstream_resource_item:
-            raise RuntimeError(
-                f"Resource {resource_ansible_id} is missing 'resource_data'. Ensure all services are running a version of DAB that supports extra_fields."
-            )
+        # NOTE: If any item fails validation, the entire page is aborted via exception.
+        # Validation failures indicate systemic issues (incompatible DAB version, corrupt
+        # data) rather than per-item corruption, so halting is the correct behavior.
+        for upstream_resource_item in results:
+            resource_ansible_id = upstream_resource_item["ansible_id"]
 
-        upstream_resource = upstream_resource_item
+            if "resource_data" not in upstream_resource_item:
+                raise RuntimeError(
+                    f"Resource {resource_ansible_id} is missing 'resource_data'. Ensure all services are running a version of DAB that supports extra_fields."
+                )
 
-        validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
-
-        # Sync superuser flags for user resources
-        if resource_context["type_name"] == SHARED_USER_RESOURCE_TYPE:
-            upstream_resource = self._sync_user_superuser_flag(upstream_resource, validated_resource_data)
-            # Re-validate after potential superuser flag changes
+            upstream_resource = upstream_resource_item
             validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
-        resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource)
+            if resource_context["type_name"] == SHARED_USER_RESOURCE_TYPE:
+                upstream_resource = self._sync_user_superuser_flag(upstream_resource, validated_resource_data)
+                validated_resource_data = self._deserialize_and_validate_resource_data(upstream_resource, resource_context["type_serializer"])
 
-        # handles case with existing resource and figure out if we should create a new resource in gateway or not
-        create_gateway_resource = self._reconcile_existing_resource(upstream_resource, resource_context, validated_resource_data, updated_service_resource)
+            resource_creation_kwargs, updated_service_resource = self._initialize_resource_sync_payloads(upstream_resource)
+            create_gateway_resource = self._reconcile_existing_resource(upstream_resource, resource_context, validated_resource_data, updated_service_resource)
 
-        # Run this as a transaction so that if the REST call to update the resource on the service fails
-        # we also rollback any database changes that were made on the gateway.
-        with transaction.atomic():
-            # determine the resource to use in Gateway
             if create_gateway_resource:
-                Resource.create_resource(resource_type, upstream_resource["resource_data"], **resource_creation_kwargs)
+                create_operations.append((resource_type, upstream_resource["resource_data"], resource_creation_kwargs))
 
-            self.client.update_resource(resource_ansible_id, ResourceRequestBody(**updated_service_resource), partial=True)
+            bulk_update_items.append(self._build_bulk_update_item(resource_ansible_id, updated_service_resource))
+
+        # Create gateway resources locally. If a resource already exists (e.g. from a
+        # previous interrupted run), the reconcile logic above will have set
+        # create_gateway_resource=False, so duplicates are safe.
+        # NOTE: Local creates are committed BEFORE the bulk update is sent.
+        # If the bulk update fails, local resources persist but upstream is not
+        # updated. This is safe because _reconcile_existing_resource detects
+        # existing resources on retry, and the upstream filter naturally retries
+        # unmigrated items.
+        with transaction.atomic():
+            for rt, resource_data, creation_kwargs in create_operations:
+                Resource.create_resource(rt, resource_data, **creation_kwargs)
+
+        # Send bulk update to upstream service.
+        if bulk_update_items:
+            return self._send_bulk_update(bulk_update_items)
+
+        # No items to update upstream (results was empty or all filtered out).
+        return 0
 
     def migrate_resource(self, resource_type_name: str) -> None:
         """
@@ -313,6 +438,8 @@ class ResourceMigrationMixin:
 
         resource_total = None
         resource_processed = 0
+        consecutive_zero_progress = 0
+        max_zero_progress_pages = 3
         progress_label = f"{self.client.service.api_slug} {resource_type_name} resources"
 
         # Following 'while True' loop is used because we are modifying the list as we go through it.
@@ -328,7 +455,20 @@ class ResourceMigrationMixin:
                 self._log("No more items remaining to migrate.", logging.INFO)
                 break
 
-            for upstream_resource_item in results:
-                resource_processed += 1
-                self._log_progress(progress_label, resource_processed, resource_total)
-                self._process_and_migrate_resource_item(upstream_resource_item, resource_context)
+            batch_size = self._process_resource_page_batch(results, resource_context)
+            if batch_size == 0:
+                consecutive_zero_progress += 1
+                if consecutive_zero_progress >= max_zero_progress_pages:
+                    raise RuntimeError(
+                        f"Migration stalled: {max_zero_progress_pages} consecutive pages made no forward progress. Check upstream service availability."
+                    )
+            else:
+                consecutive_zero_progress = 0
+
+            resource_processed += batch_size
+            if batch_size < len(results):
+                self._log(
+                    f"Only {batch_size}/{len(results)} items updated upstream. Failed items remain unmigrated and will reappear on the next page fetch.",
+                    logging.WARNING,
+                )
+            self._log_progress(progress_label, resource_processed, resource_total)
