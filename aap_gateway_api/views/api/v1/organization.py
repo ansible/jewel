@@ -1,5 +1,8 @@
 import logging
 
+from ansible_base.activitystream import deferred_activity_stream
+from ansible_base.rbac.triggers import defer_rbac_computations
+from ansible_base.resource_registry.signals.handlers import defer_resource_cleanup
 from django.utils.translation import gettext_lazy as _
 from rest_framework import status
 from rest_framework.response import Response
@@ -26,5 +29,7 @@ class OrganizationViewSet(ResourceAPIUpdateMixin, RoleModelViewSet):
         if instance.managed:
             logger.info("Managed organizations cannot be deleted.")
             return Response(status=status.HTTP_400_BAD_REQUEST, data={"details": _("Managed organizations cannot be deleted.")})
-        else:
-            return super().destroy(request, *args, **kwargs)
+        with deferred_activity_stream():
+            with defer_resource_cleanup():
+                with defer_rbac_computations():
+                    return super().destroy(request, *args, **kwargs)
