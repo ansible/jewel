@@ -35,6 +35,15 @@ class GWResourceAPIClient(DABResourceAPIClient):
             return get_user_model().objects.first()
         return user
 
+    def bulk_update_resources(self, items: list[dict]):
+        """
+        Bulk-update multiple resources in a single HTTP request.
+
+        Each item must contain 'ansible_id' and one or more fields to update:
+        service_id, new_ansible_id, is_partially_migrated, resource_data.
+        """
+        return self._make_request("post", "resources/bulk-update/", data={"items": items})
+
     def get_url_for_service(self, service):
         http_port = service.http_port
         protocol = "https" if http_port.use_https else "http"
