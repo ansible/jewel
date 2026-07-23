@@ -12,7 +12,7 @@ grpcio-tools
 protobuf>=5.29.5  # CVE-2025-4565
 psycopg
 pyjwt>=2.13.0  # AAP-78775
-requests
+requests>=2.32.4  # CVE-2024-47081
 sqlparse>=0.5.2 
 uwsgi
 xds-protos>=1.58
