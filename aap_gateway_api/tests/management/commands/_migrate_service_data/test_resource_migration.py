@@ -811,6 +811,146 @@ def test_send_bulk_update_per_item_errors():
 
 
 @pytest.mark.django_db
+def test_send_bulk_update_http_error_permanent():
+    """HTTPError with 4xx status (raised by raise_if_bad_request) fails immediately without retry."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    response_mock = Mock()
+    response_mock.status_code = 405
+    response_mock.text = '{"detail":"Method Not Allowed"}'
+    http_error = req.exceptions.HTTPError("405 Client Error", response=response_mock)
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = http_error
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 0
+    assert "permanent error" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == 1
+
+
+@pytest.mark.django_db
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_http_error_transient(mock_sleep):
+    """HTTPError with 502 status (raised by raise_if_bad_request) is retried as transient."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    response_502 = Mock()
+    response_502.status_code = 502
+    response_502.text = "Bad Gateway"
+
+    success_resp = Mock()
+    success_resp.status_code = 200
+    success_resp.json.return_value = {"updated": 3, "errors": []}
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = [
+        req.exceptions.HTTPError("502 Server Error", response=response_502),
+        success_resp,
+    ]
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 3
+    assert cmd.client.bulk_update_resources.call_count == 2
+
+
+@pytest.mark.django_db
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_http_error_transient_exhaustion(mock_sleep):
+    """HTTPError with 502 status exhausting all retries returns 0."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    response_502 = Mock()
+    response_502.status_code = 502
+    response_502.text = "Bad Gateway"
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = req.exceptions.HTTPError("502 Server Error", response=response_502)
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 0
+    assert "failed after" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_http_error_no_response():
+    """HTTPError with response=None is treated as permanent error."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = req.exceptions.HTTPError("Unknown error", response=None)
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 0
+    assert "HTTP 0" in cmd.stderr.getvalue()
+    assert "permanent error" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == 1
+
+
+@pytest.mark.django_db
+def test_process_bulk_response_non_dict():
+    """Non-dict JSON body from a 200 response is handled gracefully without crashing."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.client = Mock()
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    assert cmd._process_bulk_response(None) == 0
+    assert cmd._process_bulk_response([]) == 0
+    assert cmd._process_bulk_response(42) == 0
+    assert "unexpected response type" in cmd.stderr.getvalue()
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_early_exit_on_chunk_failure():
+    """When a chunk fails, remaining chunks are skipped to avoid wasted retries."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.MAX_BULK_CHUNK_SIZE = 2
+
+    response_405 = Mock()
+    response_405.status_code = 405
+    response_405.text = '{"detail":"Method Not Allowed"}'
+    http_error = req.exceptions.HTTPError("405 Client Error", response=response_405)
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = http_error
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    items = [{"ansible_id": f"id-{i}", "new_service_id": "svc"} for i in range(6)]
+    count = cmd._send_bulk_update(items)
+    assert count == 0
+    assert "skipping remaining chunks" in cmd.stderr.getvalue()
+    # Only 1 chunk attempted (not all 3), since first chunk failed permanently
+    assert cmd.client.bulk_update_resources.call_count == 1
+
+
+@pytest.mark.django_db
 def test_migrate_resource_partial_batch_warning():
     """Partial batch success logs a warning about failed items."""
     import uuid

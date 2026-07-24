@@ -229,11 +229,20 @@ class ResourceMigrationMixin:
         Transient HTTP errors (502/503/504, network errors) are retried with
         exponential backoff. Permanent errors (4xx) fail immediately.
         Per-item errors from successful responses are logged as warnings.
+
+        If a chunk fails permanently (returns 0), remaining chunks are skipped
+        since the failure is likely systemic and they would fail too.
         """
         total_updated = 0
         for i in range(0, len(bulk_update_items), self.MAX_BULK_CHUNK_SIZE):
             chunk = bulk_update_items[i : i + self.MAX_BULK_CHUNK_SIZE]
             updated = self._send_bulk_update_chunk(chunk)
+            if updated == 0 and chunk:
+                self._log(
+                    f"Chunk starting at index {i} failed; skipping remaining chunks to avoid wasted retries.",
+                    logging.WARNING,
+                )
+                break
             total_updated += updated
         return total_updated
 
@@ -259,15 +268,42 @@ class ResourceMigrationMixin:
         )
         return False
 
+    def _handle_http_error(self, exc: requests.exceptions.HTTPError, attempt: int):
+        """Classify an HTTPError as transient or permanent and act accordingly.
+
+        Called when raise_if_bad_request=True causes the client to raise
+        HTTPError for non-2xx responses. Returns _RETRY_SENTINEL for transient
+        5xx errors (if retries remain), or 0 for permanent errors.
+        """
+        status = exc.response.status_code if exc.response is not None else 0
+        detail = str(exc)[:500]
+        if status in self.TRANSIENT_STATUS_CODES:
+            if self._should_retry(attempt, f"HTTP {status}", detail):
+                return self._RETRY_SENTINEL
+            return 0
+        self._log(
+            f"Bulk update returned HTTP {status} (permanent error, will not retry): {detail}",
+            logging.ERROR,
+        )
+        return 0
+
     def _try_bulk_update_once(self, chunk: List[Dict[str, Any]], attempt: int):
         """Execute one bulk-update attempt.
 
         Returns the parsed response dict on success, _RETRY_SENTINEL if a
         transient error occurred and retries remain, or 0 if the request
         failed permanently.
+
+        Note: The client is created with raise_if_bad_request=True, so non-2xx
+        responses raise HTTPError (a subclass of RequestException) before
+        returning. We catch HTTPError first to distinguish transient (5xx) from
+        permanent (4xx) errors, then catch the broader RequestException for
+        genuine network/connection failures.
         """
         try:
             resp = self.client.bulk_update_resources(chunk)
+        except requests.exceptions.HTTPError as exc:
+            return self._handle_http_error(exc, attempt)
         except requests.exceptions.RequestException as exc:
             if self._should_retry(attempt, "network error", str(exc)):
                 return self._RETRY_SENTINEL
@@ -303,8 +339,14 @@ class ResourceMigrationMixin:
             return self._process_bulk_response(result)
         return 0
 
-    def _process_bulk_response(self, resp_data: Dict[str, Any]) -> int:
+    def _process_bulk_response(self, resp_data) -> int:
         """Extract the updated count from a successful bulk-update response, logging per-item errors."""
+        if not isinstance(resp_data, dict):
+            self._log(
+                f"Bulk update returned unexpected response type ({type(resp_data).__name__}); treating as failure.",
+                logging.ERROR,
+            )
+            return 0
         for err in resp_data.get("errors") or []:
             self._log(
                 f"Bulk-update per-item failure for {err.get('ansible_id')}: {err.get('error')}",
