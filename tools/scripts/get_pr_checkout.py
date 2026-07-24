@@ -284,6 +284,14 @@ def get_env_config():
     target_branch = os.environ.get('GITHUB_BASE_REF') or os.environ.get('GITHUB_REF_NAME')
     token = os.environ.get('GH_TOKEN') or os.environ.get('ANSIBLE_TOKEN')
 
+    # Handle GitHub merge queue branch names (gh-readonly-queue/<base-branch>/pr-<number>-<sha>)
+    if target_branch:
+        merge_queue_match = re.match(r'^gh-readonly-queue/(.+)/pr-\d+-', target_branch)
+        if merge_queue_match:
+            base_branch = merge_queue_match.group(1)
+            print(f"ℹ️  Detected merge queue branch '{target_branch}', using base branch: '{base_branch}'")
+            target_branch = base_branch
+
     print(f"Target branch: {target_branch or 'unknown'}")
     print(f"Token available: {'yes' if token else 'no'}")
 
