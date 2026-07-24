@@ -133,7 +133,7 @@ def test_service_model_write_from_proxy_non_default(admin_api_client):
         url = get_relative_url("service_cluster-detail", kwargs={"pk": ServiceCluster.objects.filter(name="testsc").first().id})
         response = admin_api_client.patch(url, {"name": "changed"})
         assert response.status_code == 200
-        assert "changed" == ServiceCluster.objects.filter(name="changed").first().name, "Expected cluster to have name changed"
+        assert ServiceCluster.objects.filter(name="changed").first().name == "changed", "Expected cluster to have name changed"
 
 
 @pytest.mark.parametrize(
@@ -164,3 +164,40 @@ def test_service_outlier_detection_max_ejection_percent_min_max(value, message, 
     response = admin_api_client.patch(url, {"outlier_detection_max_ejection_percent": value})
     assert response.status_code == 400
     assert response.data["outlier_detection_max_ejection_percent"][0] == message
+
+
+@pytest.mark.django_db
+def test_service_cluster_gateway_modification_allowed_without_proxy_header(admin_api_client, service_cluster_gateway):
+    """
+    Test that the gateway service cluster CAN be modified when there's no X-Trusted-Proxy header.
+
+    With ext_auth disabled on gateway routes, Envoy does not add X-Trusted-Proxy, so
+    DisallowWriteFromProxy does not block admin configuration changes.
+    """
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_gateway.pk})
+
+    response = admin_api_client.patch(url, {"outlier_detection_enabled": False})
+    assert response.status_code == 200
+    assert response.data["outlier_detection_enabled"] is False
+
+
+@pytest.mark.django_db
+def test_service_cluster_gateway_blocked_with_proxy_header(admin_api_client, service_cluster_gateway):
+    """
+    Document DisallowWriteFromProxy: writes to default service clusters are blocked
+    when X-Trusted-Proxy is present.
+
+    This does not validate Envoy/xDS route config (see
+    test_xds_route_config_disable_gateway_auth_for_gateway). It asserts the permission
+    check itself still rejects unsafe proxied writes.
+    """
+    url = get_relative_url("service_cluster-detail", kwargs={"pk": service_cluster_gateway.pk})
+
+    extras = {"HTTP_X_TRUSTED_PROXY": "simulated-jwt-signature"}
+
+    # from_proxy() is True, method is unsafe, and gateway is a default service type
+    # → DisallowWriteFromProxy raises ProxyDenied
+    response = admin_api_client.patch(url, {"outlier_detection_enabled": True}, **extras)
+
+    assert response.status_code == 403, "Default service clusters should be blocked when X-Trusted-Proxy header is present"
+    assert "proxy" in str(response.content).lower()
