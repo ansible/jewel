@@ -916,6 +916,24 @@ def test_send_bulk_update_http_error_no_response():
 
 
 @pytest.mark.django_db
+def test_extract_error_detail_branches():
+    """_extract_error_detail covers JSON-without-detail and no-text-attr branches."""
+    cmd = MigrateCommand()
+
+    resp_list_json = Mock()
+    resp_list_json.json.return_value = ["error1", "error2"]
+    assert cmd._extract_error_detail(resp_list_json) == "['error1', 'error2']"
+
+    resp_dict_no_detail = Mock()
+    resp_dict_no_detail.json.return_value = {"error": "something went wrong"}
+    assert "something went wrong" in cmd._extract_error_detail(resp_dict_no_detail)
+
+    resp_no_text = Mock(spec=[])
+    resp_no_text.json = Mock(side_effect=ValueError("no json"))
+    assert cmd._extract_error_detail(resp_no_text) == "(no response body)"
+
+
+@pytest.mark.django_db
 def test_process_bulk_response_non_dict():
     """Non-dict JSON body from a 200 response is handled gracefully without crashing."""
     cmd = MigrateCommand()
