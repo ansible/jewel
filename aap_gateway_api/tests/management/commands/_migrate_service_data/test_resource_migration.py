@@ -295,8 +295,8 @@ def test_process_resource_page_batch_with_partially_migrated():
 
 
 @pytest.mark.django_db
-def test_process_resource_page_batch_graceful_on_bulk_failure():
-    """Test that bulk update HTTP failure is non-fatal and returns 0 (items will be retried)."""
+def test_process_resource_page_batch_raises_on_bulk_failure():
+    """Test that permanent bulk update failure raises RuntimeError immediately."""
     import uuid
 
     from ansible_base.resource_registry.models import ResourceType
@@ -311,6 +311,7 @@ def test_process_resource_page_batch_graceful_on_bulk_failure():
     mock_resp = Mock()
     mock_resp.status_code = 500
     mock_resp.text = "Internal Server Error"
+    mock_resp.json.side_effect = ValueError("not JSON")
     mock_client.bulk_update_resources.return_value = mock_resp
     cmd.client = mock_client
 
@@ -333,11 +334,10 @@ def test_process_resource_page_batch_graceful_on_bulk_failure():
         },
     ]
 
-    # Bulk failure is non-fatal: returns 0 and logs warning (items retry next iteration)
-    count = cmd._process_resource_page_batch(results, resource_context)
-    assert count == 0
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._process_resource_page_batch(results, resource_context)
 
-    # Local gateway resource was still created (will be reconciled on retry)
+    # Local gateway resource was still created before the upstream call failed
     assert Organization.objects.filter(name="RetryOrg").exists()
 
 
