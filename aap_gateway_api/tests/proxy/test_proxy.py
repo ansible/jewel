@@ -187,8 +187,9 @@ class TestExternalAuth:
             if header.header.key == 'content-type':
                 assert expected_type == header.header.value
 
-    def test_no_auth_required(self, ext_auth, expected_log):
-        request = Request(path="/static/favicon.ico")
+    @pytest.mark.parametrize("path", ["/api/gateway/v1/ping/", "/static/favicon.ico"])
+    def test_no_auth_required(self, ext_auth, expected_log, path):
+        request = Request(path=path)
         response = ext_auth.Check(request, None)
         assert response.status.code == 0
         assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
@@ -230,6 +231,7 @@ class TestExternalAuth:
         ):
             response = ext_auth.Check(request, None)
         assert response.status.code == 0
+        assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
 
     def test_check_up_endpoint_no_auth(self, ext_auth, admin_user):
         request = Request(path="/up")
