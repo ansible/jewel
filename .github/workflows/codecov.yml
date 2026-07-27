@@ -32,10 +32,15 @@ jobs:
       # This checks out the PR head in a workflow_run context, but no code from
       # the checkout is executed — only downloaded artifacts are processed.
       # persist-credentials: false prevents GITHUB_TOKEN from leaking via git config.
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # allow-unsafe-pr-checkout: required since actions/checkout v4.2+
+      # (backported from v7 on 2026-07-16) refuses to check out fork PR
+      # code in workflow_run contexts by default. Safe here because only
+      # coverage artifacts are processed — no fork code is executed.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
+          allow-unsafe-pr-checkout: true
 
       - name: Download coverage artifacts
         uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21

@@ -164,25 +164,30 @@ class AssignmentSyncMixin(ResourceAllClientMixin):
         return super().perform_destroy(assignment)
 
 
-class GatewayRoleUserAssignmentViewSet(AssignmentSyncMixin, RoleUserAssignmentViewSet):
-    """ViewSet for managing user role assignments with upstream service synchronization."""
+class BypassVisibleItemsForPrivilegedUsersMixin:
+    """Bypasses BaseAssignmentViewSet's visible_items filter for callers who
+    can view all users (superusers and org admins when
+    ORG_ADMINS_CAN_SEE_ALL_USERS is enabled).
 
+    The gateway does not enforce remote object permissions
+    (ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS=False), so the
+    RoleEvaluation cache that visible_items relies on is incomplete for
+    remote objects (e.g. AWX job templates).  That causes visible_items
+    to hide assignments the privileged user should see.
 
-class GatewayRoleTeamAssignmentViewSet(AssignmentSyncMixin, RoleTeamAssignmentViewSet):
-    serializer_class = GatewayRoleTeamAssignmentSerializer
+    DRF filter backends still apply query-param filtering (object_id,
+    content_type, etc.).
+    """
 
     def filter_queryset(self, qs):
         if can_view_all_users(self.request.user):
-            # Superusers and org admins (when ORG_ADMINS_CAN_SEE_ALL_USERS is
-            # enabled) skip the visible_items filter from BaseAssignmentViewSet.
-            #
-            # The gateway does not enforce remote object permissions
-            # (ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS=False), so the
-            # RoleEvaluation cache that visible_items relies on is incomplete
-            # for remote objects (e.g. AWX job templates).  That causes
-            # visible_items to hide team assignments the org admin just created.
-            #
-            # DRF filter backends still apply query-param filtering
-            # (object_id, content_type, etc.).
             return super(BaseAssignmentViewSet, self).filter_queryset(qs)
         return super().filter_queryset(qs)
+
+
+class GatewayRoleUserAssignmentViewSet(BypassVisibleItemsForPrivilegedUsersMixin, AssignmentSyncMixin, RoleUserAssignmentViewSet):
+    """ViewSet for managing user role assignments with upstream service synchronization."""
+
+
+class GatewayRoleTeamAssignmentViewSet(BypassVisibleItemsForPrivilegedUsersMixin, AssignmentSyncMixin, RoleTeamAssignmentViewSet):
+    serializer_class = GatewayRoleTeamAssignmentSerializer
