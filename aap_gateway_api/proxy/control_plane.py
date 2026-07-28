@@ -27,6 +27,7 @@ from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
 from aap_gateway_api.common.authentication import SERVICE_TOKEN_AUTH_STRING
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
 
 MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware, LogRequestMiddleware]
@@ -247,7 +248,7 @@ class _ExternalAuth:
         if self.is_internal_route:
             if self.drf_request.auth != SERVICE_TOKEN_AUTH_STRING:
                 return self._return_no_auth_with_reason("User is not authorized to reach internal route", code=16, http_status_code=401)
-            elif self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
+            elif self.request_path.startswith(('/api/gateway/', '/static/')):
                 return self._return_no_authentication_required()
 
         if not user or not user.pk:
@@ -267,6 +268,7 @@ class _ExternalAuth:
 
         self.headers = []
         self.service_type = request.attributes.context_extensions["service_type"]
+        self.auth_type = request.attributes.context_extensions["auth_type"]
 
         # Clear the thread local request. If we log before we get the new one, we'll log the wrong request.
         logging_thread_local.request = None
@@ -295,6 +297,13 @@ class _ExternalAuth:
         self.is_internal_route = self.is_route_internal(request)
         self.reject_failed_basic_auth = self.should_reject_failed_basic_auth(request)
 
+        # Routes with auth_type=NONE (enable_gateway_auth=false) skip authentication
+        # but still get the X-Trusted-Proxy header to verify they came through the gateway.
+        # This is useful for services like EDA that handle their own authentication.
+        if self.auth_type == AUTH_TYPE_NONE:
+            logger.debug(f"Auth type is NONE for {self.request_id} {self.request_path} - adding trusted proxy header without authentication")
+            return self._return_no_authentication_required()
+
         # OIDC/OAuth2 flow endpoints handle their own authentication via DOT.
         # This check runs before internal/external branching so it works regardless
         # of the route's is_internal_route setting.
@@ -303,7 +312,7 @@ class _ExternalAuth:
 
         # /static endpoints and gateway API requests do not require proxy-level authentication.
         # This should never trigger if enable_gateway_auth is set to False on the gateway service.
-        if not self.is_internal_route and (self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/')):
+        if not self.is_internal_route and self.request_path.startswith(('/api/gateway/', '/static/')):
             return self._return_no_authentication_required()
 
         # Try to authenticate request: The try block should either return a CheckResponse or raise an error to be handled here.

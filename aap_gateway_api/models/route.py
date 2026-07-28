@@ -6,7 +6,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
-from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE, EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
@@ -122,6 +122,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             "See effective_idle_timeout_seconds for the computed value applied to the route."
         ),
     )
+
+    @property
+    def is_eda_service(self):
+        """True if this route targets the EDA service."""
+        return self.service_cluster.service_type.is_eda_service
 
     def is_internal_route_string(self):
         return "t" if self.is_internal_route else "f"
@@ -281,10 +286,28 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             }
 
         if not self.enable_gateway_auth:
-            cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
-                TYPE_KEY: EXT_AUTH_PER_ROUTE,
-                "disabled": not self.enable_gateway_auth,
-            }
+            if self.is_eda_service:
+                # EDA webhooks handle their own auth but need X-Trusted-Proxy
+                # to verify requests originated from the gateway (CVE fix)
+                cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                    TYPE_KEY: EXT_AUTH_PER_ROUTE,
+                    "check_settings": {
+                        "context_extensions": {
+                            "is_internal_route": self.is_internal_route_string(),
+                            "service_type": self.service_cluster.service_type.name,
+                            "auth_type": AUTH_TYPE_NONE,
+                        },
+                    },
+                }
+            else:
+                # All other services: completely disable ext_auth to restore
+                # pre-CVE-fix behavior. This avoids X-Trusted-Proxy being added
+                # (which causes 403 on gateway config writes) and prevents
+                # unnecessary gRPC calls (which causes 401 in proxy environments).
+                cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                    TYPE_KEY: EXT_AUTH_PER_ROUTE,
+                    "disabled": True,
+                }
         else:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
                 TYPE_KEY: EXT_AUTH_PER_ROUTE,

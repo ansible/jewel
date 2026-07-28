@@ -187,8 +187,9 @@ class TestExternalAuth:
             if header.header.key == 'content-type':
                 assert expected_type == header.header.value
 
-    def test_no_auth_required(self, ext_auth, expected_log):
-        request = Request(path="/static/favicon.ico")
+    @pytest.mark.parametrize("path", ["/api/gateway/v1/ping/", "/static/favicon.ico"])
+    def test_no_auth_required(self, ext_auth, expected_log, path):
+        request = Request(path=path)
         response = ext_auth.Check(request, None)
         assert response.status.code == 0
         assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
@@ -220,6 +221,17 @@ class TestExternalAuth:
         if return_message_string:
             assert response.denied_response.status.code == expected_http_status_code
             assert return_message_string in response.status.message
+
+    @pytest.mark.parametrize("path", ["/api/gateway/v1/ping/", "/static/favicon.ico"])
+    def test_check_internal_route_gateway_and_static_bypass(self, ext_auth, admin_user, path):
+        request = Request(path=path, is_internal_route="t")
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            return_value=(admin_user, "ServiceTokenAuthentication"),
+        ):
+            response = ext_auth.Check(request, None)
+        assert response.status.code == 0
+        assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
 
     def test_check_up_endpoint_no_auth(self, ext_auth, admin_user):
         request = Request(path="/up")
@@ -334,6 +346,17 @@ class TestContainerRegistryAuth:
             response = ext_auth.Check(request, None)
 
         assert response.status.code == 0
+
+    def test_jwt_without_credentials_passes_through_without_token(self, ext_auth, admin_user):
+        """Verify that auth_type=JWT requests without credentials pass through but don't get a JWT token."""
+        request = Request(method="GET", path="/api/eda/v1/activations/", auth_type="JWT")
+
+        response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+        assert "X-DAB-JW-TOKEN" not in header_keys
 
 
 class MockOAuth2Token:
@@ -768,6 +791,66 @@ class TestOAuth2ScopeValidation:
                         assert path in log_message, f"Path {path} should be in log message"
 
             assert response.status.code == 7, f"Should deny DELETE on {path} with read scope"
+
+
+@pytest.mark.django_db
+class TestAuthTypeNone:
+    """Tests for auth_type=NONE (enable_gateway_auth=false) which adds X-Trusted-Proxy without authentication."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def mock_close_old_connections(self):
+        with mock.patch("aap_gateway_api.proxy.control_plane.close_old_connections"):
+            yield
+
+    def test_auth_type_none_adds_trusted_proxy_without_auth(self, ext_auth):
+        """Verify that auth_type=NONE adds X-Trusted-Proxy header without attempting authentication."""
+        request = Request(method="POST", path="/api/eda/v1/external-event-stream/a1b2c3d4-5678-9012-3456-789012345678/", auth_type="NONE")
+        response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+        assert "X-DAB-JW-TOKEN" not in header_keys
+
+    def test_auth_type_none_works_for_get_requests(self, ext_auth):
+        """Verify that auth_type=NONE works for GET requests on event streams."""
+        request = Request(method="GET", path="/api/eda/v1/external-event-stream/12345678-1234-5678-1234-567812345678/", auth_type="NONE")
+        response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+
+    def test_auth_type_none_with_webhook_payload(self, ext_auth):
+        """Verify that auth_type=NONE works for POST requests with webhook payloads."""
+        webhook_payload = '{"source": "github", "event": "push", "data": {"ref": "refs/heads/main"}}'
+        request = Request(
+            method="POST",
+            path="/api/eda/v1/external-event-stream/abcdef12-3456-7890-abcd-ef1234567890/",
+            auth_type="NONE",
+            body=webhook_payload,
+            header_diff={"CONTENT_TYPE": "application/json"},
+        )
+        response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+
+    def test_auth_type_none_with_internal_route(self, ext_auth):
+        """Verify that auth_type=NONE combined with is_internal_route=True still skips auth and adds header."""
+        request = Request(
+            method="POST",
+            path="/api/eda/v1/external-event-stream/a1b2c3d4-5678-9012-3456-789012345678/",
+            auth_type="NONE",
+            is_internal_route="t",
+        )
+        response = ext_auth.Check(request, None)
+
+        assert response.status.code == 0
+        header_keys = [h.header.key for h in response.ok_response.headers]
+        assert "x-trusted-proxy" in header_keys
+        assert "X-DAB-JW-TOKEN" not in header_keys
 
 
 @pytest.mark.django_db
