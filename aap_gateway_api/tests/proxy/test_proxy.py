@@ -187,8 +187,9 @@ class TestExternalAuth:
             if header.header.key == 'content-type':
                 assert expected_type == header.header.value
 
-    def test_no_auth_required(self, ext_auth, expected_log):
-        request = Request(path="/static/favicon.ico")
+    @pytest.mark.parametrize("path", ["/api/gateway/v1/ping/", "/static/favicon.ico"])
+    def test_no_auth_required(self, ext_auth, expected_log, path):
+        request = Request(path=path)
         response = ext_auth.Check(request, None)
         assert response.status.code == 0
         assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
@@ -220,6 +221,17 @@ class TestExternalAuth:
         if return_message_string:
             assert response.denied_response.status.code == expected_http_status_code
             assert return_message_string in response.status.message
+
+    @pytest.mark.parametrize("path", ["/api/gateway/v1/ping/", "/static/favicon.ico"])
+    def test_check_internal_route_gateway_and_static_bypass(self, ext_auth, admin_user, path):
+        request = Request(path=path, is_internal_route="t")
+        with mock.patch(
+            "aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication.authenticate",
+            return_value=(admin_user, "ServiceTokenAuthentication"),
+        ):
+            response = ext_auth.Check(request, None)
+        assert response.status.code == 0
+        assert response.ok_response.headers[0].header.key == "x-trusted-proxy"
 
     def test_check_up_endpoint_no_auth(self, ext_auth, admin_user):
         request = Request(path="/up")

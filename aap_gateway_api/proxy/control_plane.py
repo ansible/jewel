@@ -248,7 +248,7 @@ class _ExternalAuth:
         if self.is_internal_route:
             if self.drf_request.auth != SERVICE_TOKEN_AUTH_STRING:
                 return self._return_no_auth_with_reason("User is not authorized to reach internal route", code=16, http_status_code=401)
-            elif self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
+            elif self.request_path.startswith(('/api/gateway/', '/static/')):
                 return self._return_no_authentication_required()
 
         if not user or not user.pk:
@@ -312,7 +312,7 @@ class _ExternalAuth:
 
         # /static endpoints and gateway API requests do not require proxy-level authentication.
         # This should never trigger if enable_gateway_auth is set to False on the gateway service.
-        if not self.is_internal_route and (self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/')):
+        if not self.is_internal_route and self.request_path.startswith(('/api/gateway/', '/static/')):
             return self._return_no_authentication_required()
 
         # Try to authenticate request: The try block should either return a CheckResponse or raise an error to be handled here.
