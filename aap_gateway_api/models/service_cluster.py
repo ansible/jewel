@@ -66,7 +66,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     )
 
     health_check_interval_seconds = models.PositiveIntegerField(
-        default=10,
+        default=30,
         help_text=_("The time between health check requests."),
     )
 
@@ -203,6 +203,10 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
             max_route_timeout,
             get_preference_value('proxy', 'request_timeout'),
         )
+
+    def get_effective_health_check_interval_seconds(self):
+        effective_timeout = self.get_effective_health_check_timeout_seconds()
+        return max(self.health_check_interval_seconds, effective_timeout)
 
     @staticmethod
     def get_cluster_by_type(service_type: ServiceType | str):

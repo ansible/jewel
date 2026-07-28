@@ -9,6 +9,10 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
         help_text="The effective health check timeout Envoy will use, computed as the maximum of the cluster's "
         "health_check_timeout_seconds, the highest route request_timeout_seconds, and the global request_timeout preference."
     )
+    effective_health_check_interval_seconds = serializers.SerializerMethodField(
+        help_text="The effective health check interval Envoy will use, computed as the maximum of the cluster's "
+        "health_check_interval_seconds and the effective health check timeout."
+    )
 
     class Meta:
         model = ServiceCluster
@@ -31,7 +35,11 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
             'health_check_healthy_threshold',
             'healthy_panic_threshold',
             'effective_health_check_timeout_seconds',
+            'effective_health_check_interval_seconds',
         ]
 
     def get_effective_health_check_timeout_seconds(self, obj):
         return obj.get_effective_health_check_timeout_seconds()
+
+    def get_effective_health_check_interval_seconds(self, obj):
+        return obj.get_effective_health_check_interval_seconds()

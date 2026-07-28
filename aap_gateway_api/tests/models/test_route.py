@@ -783,3 +783,82 @@ class TestRouteRequestTimeout:
             route.node_tags = "eda"
             cluster_cfg = route.get_xds_cluster_config()
             assert cluster_cfg["health_checks"][0]["timeout"] == "600s"
+
+    @pytest.mark.parametrize(
+        "health_check_interval,health_check_timeout,route_timeout,preference_timeout,expected_interval",
+        [
+            (10, 5, None, 30, 30),
+            (60, 5, None, 30, 60),
+            (10, 5, 600, 30, 600),
+            (700, 5, 600, 30, 700),
+        ],
+        ids=[
+            "interval_below_effective_timeout_uses_effective_timeout",
+            "interval_above_effective_timeout_preserved",
+            "interval_below_route_timeout_uses_route_timeout",
+            "interval_above_route_timeout_preserved",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_effective_health_check_interval(
+        self,
+        health_check_interval,
+        health_check_timeout,
+        route_timeout,
+        preference_timeout,
+        expected_interval,
+        service_cluster_eda,
+        http_port,
+        preference_manager,
+    ):
+        service_cluster_eda.health_check_timeout_seconds = health_check_timeout
+        service_cluster_eda.health_check_interval_seconds = health_check_interval
+        service_cluster_eda.save()
+
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            AdditionalRoute.objects.create(
+                name="test-interval-route",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path",
+                gateway_path="/test-interval/",
+                request_timeout_seconds=route_timeout,
+            )
+            assert service_cluster_eda.get_effective_health_check_interval_seconds() == expected_interval
+
+    @pytest.mark.django_db
+    def test_xds_cluster_config_uses_effective_health_check_interval(self, service_cluster_eda, http_port, preference_manager):
+        service_cluster_eda.health_checks_enabled = True
+        service_cluster_eda.health_check_timeout_seconds = 5
+        service_cluster_eda.health_check_interval_seconds = 10
+        service_cluster_eda.save()
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="node-for-interval-test",
+                    service_cluster=service_cluster_eda,
+                    address="10.0.0.1",
+                    tags="eda",
+                )
+            ]
+        )
+
+        seed_feature_flags()
+
+        with preference_manager.set("proxy", "request_timeout", 30):
+            route = AdditionalRoute.objects.create(
+                name="interval-xds-test-route",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path",
+                gateway_path="/xds-interval-test/",
+                request_timeout_seconds=600,
+            )
+            route.node_tags = "eda"
+            cluster_cfg = route.get_xds_cluster_config()
+            assert cluster_cfg["health_checks"][0]["timeout"] == "600s"
+            assert cluster_cfg["health_checks"][0]["interval"] == "600s"

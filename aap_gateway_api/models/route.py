@@ -205,10 +205,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         if self.service_cluster.health_checks_enabled:
             effective_health_check_timeout = self.service_cluster.get_effective_health_check_timeout_seconds()
+            effective_health_check_interval = self.service_cluster.get_effective_health_check_interval_seconds()
             cfg["health_checks"] = [
                 {
                     "timeout": f"{effective_health_check_timeout}s",
-                    "interval": f"{self.service_cluster.health_check_interval_seconds}s",
+                    "interval": f"{effective_health_check_interval}s",
                     "unhealthy_threshold": self.service_cluster.health_check_unhealthy_threshold,
                     "healthy_threshold": self.service_cluster.health_check_healthy_threshold,
                     "http_health_check": {
