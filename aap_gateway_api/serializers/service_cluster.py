@@ -42,4 +42,5 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
         return obj.get_effective_health_check_timeout_seconds()
 
     def get_effective_health_check_interval_seconds(self, obj):
-        return obj.get_effective_health_check_interval_seconds()
+        effective_timeout = self.get_effective_health_check_timeout_seconds(obj)
+        return obj.get_effective_health_check_interval_seconds(effective_timeout)
