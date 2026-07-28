@@ -204,8 +204,9 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
             get_preference_value('proxy', 'request_timeout'),
         )
 
-    def get_effective_health_check_interval_seconds(self):
-        effective_timeout = self.get_effective_health_check_timeout_seconds()
+    def get_effective_health_check_interval_seconds(self, effective_timeout=None):
+        if effective_timeout is None:
+            effective_timeout = self.get_effective_health_check_timeout_seconds()
         return max(self.health_check_interval_seconds, effective_timeout)
 
     @staticmethod
