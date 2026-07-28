@@ -91,8 +91,11 @@ def create_default_organization() -> bool:
 def create_managed_roles() -> None:
     # Permissions and types must be created before creating managed roles
     create_dab_permissions(global_apps.get_app_config('dab_rbac'))
-    # Create the managed=True entries of RoleDefinition model
-    permission_registry.create_managed_roles(global_apps)
+    # Create the managed=True entries of RoleDefinition model.
+    # update_perms=True ensures existing managed roles stay in sync with
+    # their code-defined permissions (e.g. when DAB adds view_team to
+    # OrganizationMember).
+    permission_registry.create_managed_roles(global_apps, update_perms=True)
 
 
 def set_system_user_password() -> bool:
