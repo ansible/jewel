@@ -295,8 +295,8 @@ def test_process_resource_page_batch_with_partially_migrated():
 
 
 @pytest.mark.django_db
-def test_process_resource_page_batch_graceful_on_bulk_failure():
-    """Test that bulk update HTTP failure is non-fatal and returns 0 (items will be retried)."""
+def test_process_resource_page_batch_raises_on_bulk_failure():
+    """Test that permanent bulk update failure raises RuntimeError immediately."""
     import uuid
 
     from ansible_base.resource_registry.models import ResourceType
@@ -311,6 +311,7 @@ def test_process_resource_page_batch_graceful_on_bulk_failure():
     mock_resp = Mock()
     mock_resp.status_code = 500
     mock_resp.text = "Internal Server Error"
+    mock_resp.json.side_effect = ValueError("not JSON")
     mock_client.bulk_update_resources.return_value = mock_resp
     cmd.client = mock_client
 
@@ -333,11 +334,10 @@ def test_process_resource_page_batch_graceful_on_bulk_failure():
         },
     ]
 
-    # Bulk failure is non-fatal: returns 0 and logs warning (items retry next iteration)
-    count = cmd._process_resource_page_batch(results, resource_context)
-    assert count == 0
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._process_resource_page_batch(results, resource_context)
 
-    # Local gateway resource was still created (will be reconciled on retry)
+    # Local gateway resource was still created before the upstream call failed
     assert Organization.objects.filter(name="RetryOrg").exists()
 
 
@@ -652,7 +652,7 @@ def test_get_filtered_resources_non_user_type():
 @pytest.mark.django_db
 @patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
 def test_send_bulk_update_network_error(mock_sleep):
-    """Network exceptions in _send_bulk_update are retried then return 0."""
+    """Network exceptions in _send_bulk_update are retried then raise RuntimeError."""
     import requests as req
 
     cmd = MigrateCommand()
@@ -663,8 +663,8 @@ def test_send_bulk_update_network_error(mock_sleep):
     cmd.client.bulk_update_resources.side_effect = req.exceptions.ConnectionError("Connection refused")
     cmd.client.service.service_cluster.service_type.name = "awx"
 
-    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
-    assert count == 0
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert "network error" in cmd.stderr.getvalue()
     assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
 
@@ -672,7 +672,7 @@ def test_send_bulk_update_network_error(mock_sleep):
 @pytest.mark.django_db
 @patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
 def test_send_bulk_update_invalid_json_response(mock_sleep):
-    """Non-JSON response body in _send_bulk_update is retried then returns 0."""
+    """Non-JSON response body in _send_bulk_update is retried then raises RuntimeError."""
     cmd = MigrateCommand()
     cmd.stdout = StringIO()
     cmd.stderr = StringIO()
@@ -686,15 +686,15 @@ def test_send_bulk_update_invalid_json_response(mock_sleep):
     cmd.client.bulk_update_resources.return_value = mock_resp
     cmd.client.service.service_cluster.service_type.name = "awx"
 
-    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
-    assert count == 0
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert "non-JSON response" in cmd.stderr.getvalue()
     assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
 
 
 @pytest.mark.django_db
 def test_send_bulk_update_permanent_error():
-    """4xx errors (permanent) are not retried and return 0."""
+    """4xx errors (permanent) are not retried and raise RuntimeError immediately."""
     cmd = MigrateCommand()
     cmd.stdout = StringIO()
     cmd.stderr = StringIO()
@@ -702,14 +702,16 @@ def test_send_bulk_update_permanent_error():
     mock_resp = Mock()
     mock_resp.status_code = 400
     mock_resp.text = '{"detail": "Bad request"}'
+    mock_resp.json.return_value = {"detail": "Bad request"}
 
     cmd.client = Mock()
     cmd.client.bulk_update_resources.return_value = mock_resp
     cmd.client.service.service_cluster.service_type.name = "awx"
 
-    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
-    assert count == 0
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert "permanent error" in cmd.stderr.getvalue()
+    assert "Bad request" in cmd.stderr.getvalue()
     assert cmd.client.bulk_update_resources.call_count == 1
 
 
@@ -724,6 +726,7 @@ def test_send_bulk_update_transient_then_success(mock_sleep):
     transient_resp = Mock()
     transient_resp.status_code = 502
     transient_resp.text = "Bad Gateway"
+    transient_resp.json.side_effect = ValueError("not JSON")
 
     success_resp = Mock()
     success_resp.status_code = 200
@@ -762,7 +765,7 @@ def test_send_bulk_update_chunks_large_batches():
 @pytest.mark.django_db
 @patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
 def test_send_bulk_update_transient_http_exhaustion(mock_sleep):
-    """Transient HTTP status (502) exhausting all retries returns 0."""
+    """Transient HTTP status (502) exhausting all retries raises RuntimeError."""
     cmd = MigrateCommand()
     cmd.stdout = StringIO()
     cmd.stderr = StringIO()
@@ -770,13 +773,14 @@ def test_send_bulk_update_transient_http_exhaustion(mock_sleep):
     transient_resp = Mock()
     transient_resp.status_code = 502
     transient_resp.text = "Bad Gateway"
+    transient_resp.json.side_effect = ValueError("not JSON")
 
     cmd.client = Mock()
     cmd.client.bulk_update_resources.return_value = transient_resp
     cmd.client.service.service_cluster.service_type.name = "awx"
 
-    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
-    assert count == 0
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
     assert "failed after" in cmd.stderr.getvalue()
     assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
 
@@ -808,6 +812,166 @@ def test_send_bulk_update_per_item_errors():
     assert "per-item failure" in stderr_output
     assert "bad-id-1" in stderr_output
     assert "bad-id-2" in stderr_output
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_http_error_permanent():
+    """HTTPError with 4xx status (raised by raise_if_bad_request) raises RuntimeError immediately."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    response_mock = Mock()
+    response_mock.status_code = 405
+    response_mock.text = '{"detail":"Method Not Allowed"}'
+    response_mock.json.return_value = {"detail": "Method Not Allowed"}
+    http_error = req.exceptions.HTTPError("405 Client Error", response=response_mock)
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = http_error
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert "permanent error" in cmd.stderr.getvalue()
+    assert "Method Not Allowed" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == 1
+
+
+@pytest.mark.django_db
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_http_error_transient(mock_sleep):
+    """HTTPError with 502 status (raised by raise_if_bad_request) is retried as transient."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    response_502 = Mock()
+    response_502.status_code = 502
+    response_502.text = "Bad Gateway"
+    response_502.json.side_effect = ValueError("not JSON")
+
+    success_resp = Mock()
+    success_resp.status_code = 200
+    success_resp.json.return_value = {"updated": 3, "errors": []}
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = [
+        req.exceptions.HTTPError("502 Server Error", response=response_502),
+        success_resp,
+    ]
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    count = cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert count == 3
+    assert cmd.client.bulk_update_resources.call_count == 2
+
+
+@pytest.mark.django_db
+@patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.time.sleep")
+def test_send_bulk_update_http_error_transient_exhaustion(mock_sleep):
+    """HTTPError with 502 status exhausting all retries raises RuntimeError."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    response_502 = Mock()
+    response_502.status_code = 502
+    response_502.text = "Bad Gateway"
+    response_502.json.side_effect = ValueError("not JSON")
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = req.exceptions.HTTPError("502 Server Error", response=response_502)
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert "failed after" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == cmd.MAX_TRANSIENT_RETRIES
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_http_error_no_response():
+    """HTTPError with response=None raises RuntimeError immediately."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = req.exceptions.HTTPError("Unknown error", response=None)
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    with pytest.raises(RuntimeError, match="permanent failure"):
+        cmd._send_bulk_update([{"ansible_id": "test-id", "new_service_id": "svc-id"}])
+    assert "without a response object" in cmd.stderr.getvalue()
+    assert cmd.client.bulk_update_resources.call_count == 1
+
+
+@pytest.mark.django_db
+def test_extract_error_detail_branches():
+    """_extract_error_detail covers JSON-without-detail and no-text-attr branches."""
+    cmd = MigrateCommand()
+
+    resp_list_json = Mock()
+    resp_list_json.json.return_value = ["error1", "error2"]
+    assert cmd._extract_error_detail(resp_list_json) == "['error1', 'error2']"
+
+    resp_dict_no_detail = Mock()
+    resp_dict_no_detail.json.return_value = {"error": "something went wrong"}
+    assert "something went wrong" in cmd._extract_error_detail(resp_dict_no_detail)
+
+    resp_no_text = Mock(spec=[])
+    resp_no_text.json = Mock(side_effect=ValueError("no json"))
+    assert cmd._extract_error_detail(resp_no_text) == "(no response body)"
+
+
+@pytest.mark.django_db
+def test_process_bulk_response_non_dict():
+    """Non-dict JSON body from a 200 response is handled gracefully without crashing."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.client = Mock()
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    assert cmd._process_bulk_response(None) == 0
+    assert cmd._process_bulk_response([]) == 0
+    assert cmd._process_bulk_response(42) == 0
+    assert "unexpected response type" in cmd.stderr.getvalue()
+
+
+@pytest.mark.django_db
+def test_send_bulk_update_early_exit_on_chunk_failure():
+    """When a chunk fails permanently, raises RuntimeError immediately without trying other chunks."""
+    import requests as req
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.MAX_BULK_CHUNK_SIZE = 2
+
+    response_405 = Mock()
+    response_405.status_code = 405
+    response_405.text = '{"detail":"Method Not Allowed"}'
+    response_405.json.return_value = {"detail": "Method Not Allowed"}
+    http_error = req.exceptions.HTTPError("405 Client Error", response=response_405)
+
+    cmd.client = Mock()
+    cmd.client.bulk_update_resources.side_effect = http_error
+    cmd.client.service.service_cluster.service_type.name = "awx"
+
+    items = [{"ansible_id": f"id-{i}", "new_service_id": "svc"} for i in range(6)]
+    with pytest.raises(RuntimeError, match="permanent failure at chunk index 0"):
+        cmd._send_bulk_update(items)
+    assert cmd.client.bulk_update_resources.call_count == 1
 
 
 @pytest.mark.django_db
