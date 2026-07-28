@@ -535,6 +535,7 @@ class TestMergeQueueBranchParsing:
             ("gh-readonly-queue/main/pr-42-cafebabe9876", "main"),
             ("gh-readonly-queue/test-release-0.0/pr-999-deadbeef1234", "test-release-0.0"),
             ("gh-readonly-queue/test-release-0.1/pr-1503-190debac0f96", "test-release-0.1"),
+            ("gh-readonly-queue/feature/my-feature/pr-42-abc123def456", "feature/my-feature"),
         ],
     )
     def test_merge_queue_extracts_base_branch(self, monkeypatch, merge_queue_ref, expected_base):
