@@ -112,8 +112,7 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
         url = get_relative_url('team-users-list', kwargs={'pk': team.id})
         response = self.api_client.get(url)
 
-        if user_type in ['user', 'org_member']:
-            # Org Member doesn't see Team Members
+        if user_type in ['user']:
             assert response.status_code == 404
         else:
             assert response.status_code == 200
@@ -122,8 +121,11 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
                 # Team Member doesn't see other Team members
                 assert response.data['count'] == 1, response.data['results']
                 assert response.data['results'][0]['id'] == user.id
+            elif user_type == 'org_member':
+                # Org Member can view the team but can't see other team members
+                assert response.data['count'] == 0, response.data['results']
             else:
-                # Team Admin, Auditor and Superuser see Team members
+                # Team Admin, Org Admin, Auditor and Superuser see Team members
                 assert response.data['count'] == 2, response.data['results']
                 assert set(self._get_ids(response.data['results'])) == set([member.id for member in members])
 
@@ -133,20 +135,20 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
         url = get_relative_url('team-admins-list', kwargs={'pk': team.id})
         response = self.api_client.get(url)
 
-        if user_type in ['user', 'org_member']:
+        if user_type in ['user']:
             assert response.status_code == 404
         else:
             assert response.status_code == 200
 
-            if user_type == 'team_member':
-                # Team Member doesn't see Team Admins
+            if user_type in ['team_member', 'org_member']:
+                # Team Member and Org Member can't see Team Admins
                 assert response.data['count'] == 0, response.data['results']
             elif user_type == 'team_admin':
                 # Team Admin does see all Team Admins (including self)
                 assert response.data['count'] == 3, response.data['results']
                 assert set(self._get_ids(response.data['results'])) == set([admin.id for admin in admins] + [user.id])
             else:
-                # Auditor + Superuser see all Team Admins
+                # Org Admin, Auditor + Superuser see all Team Admins
                 assert response.data['count'] == 2, response.data['results']
                 assert set(self._get_ids(response.data['results'])) == set([admin.id for admin in admins])
 
@@ -185,7 +187,10 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
                 if user_type == 'user':
                     assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
                 elif user_type == 'org_member':
-                    assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
+                    # Org member can view the team (view_team) but lacks modify permission.
+                    # old_api checks view/change perm on the team first (403).
+                    # rbac_api validates the user field first - rando isn't visible (400).
+                    assert response.status_code == (403 if api_type == 'old_api' else 400), response.data
                 elif user_type == 'org_admin':
                     # With security-first approach (False), org admins can't associate users they can't see
                     assert response.status_code == 400, response.data
@@ -213,8 +218,7 @@ class TestTeamRelatedUserViews(TestRelatedViewsBase):
             # Org member cannot add other org member although (s)he sees him/her
             elif user_type == 'org_member':
                 organization.add_member(rando)
-                # user now see rando, but is not a team admin so criteria for adding team member isn't met
+                # user now sees rando, but is not a team admin so criteria for adding team member isn't met
                 response = self.api_client.post(url, data=data)
                 assert not team.users.filter(id=rando.id).exists()
-                # Note: the old API might return also 400
-                assert response.status_code == (404 if api_type == 'old_api' else 400), response.data
+                assert response.status_code == 403, response.data
