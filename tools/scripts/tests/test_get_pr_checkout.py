@@ -523,3 +523,90 @@ class TestMainScenarios:
             get_pr_checkout.main()
 
         assert exc_info.value.code == 1
+
+
+class TestMergeQueueBranchParsing:
+    """Test merge queue branch name parsing in get_env_config()"""
+
+    @pytest.mark.parametrize(
+        "merge_queue_ref, expected_base",
+        [
+            ("gh-readonly-queue/devel/pr-158-abc123def456", "devel"),
+            ("gh-readonly-queue/main/pr-42-cafebabe9876", "main"),
+            ("gh-readonly-queue/test-release-0.0/pr-999-deadbeef1234", "test-release-0.0"),
+            ("gh-readonly-queue/test-release-0.1/pr-1503-190debac0f96", "test-release-0.1"),
+            ("gh-readonly-queue/feature/my-feature/pr-42-abc123def456", "feature/my-feature"),
+        ],
+    )
+    def test_merge_queue_extracts_base_branch(self, monkeypatch, merge_queue_ref, expected_base):
+        """Test that merge queue branch names are resolved to their base branch"""
+        monkeypatch.setenv("PR_BODY", "")
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+        monkeypatch.setenv("GITHUB_REF_NAME", merge_queue_ref)
+        monkeypatch.setenv("GH_TOKEN", "test_token")
+
+        _, target_branch, _ = get_pr_checkout.get_env_config()
+
+        assert target_branch == expected_base
+
+    @pytest.mark.parametrize(
+        "env_var, env_value, expected",
+        [
+            ("GITHUB_BASE_REF", "devel", "devel"),
+            ("GITHUB_REF_NAME", "test-release-0.0", "test-release-0.0"),
+            ("GITHUB_BASE_REF", "feature/my-work", "feature/my-work"),
+        ],
+    )
+    def test_regular_branch_unchanged(self, monkeypatch, env_var, env_value, expected):
+        """Test that non-merge-queue branch names pass through unchanged"""
+        monkeypatch.setenv("PR_BODY", "")
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+        monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
+        monkeypatch.setenv(env_var, env_value)
+        monkeypatch.setenv("GH_TOKEN", "test_token")
+
+        _, target_branch, _ = get_pr_checkout.get_env_config()
+
+        assert target_branch == expected
+
+    @patch("get_pr_checkout.execute_git_clone")
+    @patch("get_pr_checkout.branch_exists")
+    def test_merge_queue_end_to_end_release(self, mock_branch_exists, mock_clone, monkeypatch):
+        """End-to-end: merge queue resolves base branch for dependency lookup"""
+        monkeypatch.setenv("PR_BODY", "")
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+        monkeypatch.setenv("GITHUB_REF_NAME", "gh-readonly-queue/test-release-0.0/pr-1503-190debac0f96")
+        monkeypatch.setenv("GH_TOKEN", "test_token")
+        _set_cli_args("ansible/django-ansible-base")
+
+        mock_branch_exists.return_value = True
+        mock_clone.return_value = True
+
+        with pytest.raises(SystemExit) as exc_info:
+            get_pr_checkout.main()
+
+        assert exc_info.value.code == 0
+        mock_branch_exists.assert_called_once_with("ansible/django-ansible-base", "test-release-0.0", "test_token")
+        mock_clone.assert_called_once()
+        assert mock_clone.call_args[0][1] == "test-release-0.0"
+
+    @patch("get_pr_checkout.execute_git_clone")
+    @patch("get_pr_checkout.branch_exists")
+    def test_merge_queue_end_to_end_devel(self, mock_branch_exists, mock_clone, monkeypatch):
+        """End-to-end: merge queue for devel clones dependency from devel"""
+        monkeypatch.setenv("PR_BODY", "")
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+        monkeypatch.setenv("GITHUB_REF_NAME", "gh-readonly-queue/devel/pr-158-abc123def456")
+        monkeypatch.setenv("GH_TOKEN", "test_token")
+        _set_cli_args("ansible/django-ansible-base")
+
+        mock_branch_exists.return_value = True
+        mock_clone.return_value = True
+
+        with pytest.raises(SystemExit) as exc_info:
+            get_pr_checkout.main()
+
+        assert exc_info.value.code == 0
+        mock_branch_exists.assert_called_once_with("ansible/django-ansible-base", "devel", "test_token")
+        mock_clone.assert_called_once()
+        assert mock_clone.call_args[0][1] == "devel"
