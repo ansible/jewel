@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -11,6 +12,8 @@ from django.utils.translation import gettext as _
 
 from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
+
+logger = logging.getLogger(__name__)
 
 
 class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
@@ -207,7 +210,15 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     def get_effective_health_check_interval_seconds(self, effective_timeout=None):
         if effective_timeout is None:
             effective_timeout = self.get_effective_health_check_timeout_seconds()
-        return max(self.health_check_interval_seconds, effective_timeout)
+        effective_interval = max(self.health_check_interval_seconds, effective_timeout)
+        if effective_interval != self.health_check_interval_seconds:
+            logger.debug(
+                "Health check interval for cluster %s floored from %ds to %ds (effective timeout)",
+                self.name,
+                self.health_check_interval_seconds,
+                effective_interval,
+            )
+        return effective_interval
 
     @staticmethod
     def get_cluster_by_type(service_type: ServiceType | str):

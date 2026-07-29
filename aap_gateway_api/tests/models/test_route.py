@@ -787,13 +787,17 @@ class TestRouteRequestTimeout:
     @pytest.mark.parametrize(
         "health_check_interval,health_check_timeout,route_timeout,preference_timeout,expected_interval",
         [
+            (0, 5, None, 30, 30),
             (10, 5, None, 30, 30),
+            (30, 5, None, 30, 30),
             (60, 5, None, 30, 60),
             (10, 5, 600, 30, 600),
             (700, 5, 600, 30, 700),
         ],
         ids=[
+            "zero_interval_uses_effective_timeout",
             "interval_below_effective_timeout_uses_effective_timeout",
+            "interval_equals_effective_timeout",
             "interval_above_effective_timeout_preserved",
             "interval_below_route_timeout_uses_route_timeout",
             "interval_above_route_timeout_preserved",
