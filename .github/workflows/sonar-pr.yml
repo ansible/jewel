@@ -28,9 +28,8 @@
 # JOB 2: sonar-pr-analysis (for PRs)
 # - Runs when: Unit Tests finished after a pull_request event
 # - Steps: Download coverage → Get PR info → Verify base branch is in SONAR_BRANCHES →
-#          Get changed files → Run SonarCloud PR analysis
-# - Scans: All changed files in the PR (Python, YAML, JSON, etc.)
-# - Quality gate: Focuses on new/changed code in PR only
+#          Run SonarCloud PR analysis
+# - Scans: Full codebase (quality gate evaluates new code vs devel)
 #
 # JOB 3: sonar-branch-analysis (for long-lived branches)
 # - Runs when: Unit Tests finished after a push to a matched branch
@@ -41,8 +40,9 @@
 # Coverage data produced by Unit Tests is downloaded as artifacts before analysis runs.
 #
 # What files are scanned:
-# - All files in the repository that SonarCloud can analyze
-# - Excludes: tests, scripts, dev environments, external collections (see sonar-project.properties)
+# - Full codebase on both PR and branch analysis
+# - Excludes: tests, scripts, dev environments, build artifacts (see sonar-project.properties)
+# - Quality gate on PRs evaluates "new code" (diff from sonar.newCode.referenceBranch)
 
 
 # With much help from:
@@ -147,8 +147,9 @@ jobs:
 
       # Extract PR metadata from workflow_run event and verify the PR targets
       # a branch listed in SONAR_BRANCHES. If the base branch doesn't match,
-      # the step exits cleanly and the scan is skipped.
-      - name: Set PR metadata and prepare files for analysis
+      # the step sets run_analysis=false and subsequent steps are skipped.
+      - name: Set PR metadata and prepare for analysis
+        id: metadata
         env:
           COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
           REPO_NAME: ${{ github.event.repository.full_name }}
@@ -165,6 +166,9 @@ jobs:
           first_coverage=$(find . -name "coverage-*.xml" -type f | head -1)
           if [ -f "$first_coverage" ]; then
             PR_NUMBER=$(grep -m 1 '<!-- PR' "$first_coverage" | awk '{print $3}' || echo "")
+            if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+              PR_NUMBER=""
+            fi
           else
             PR_NUMBER=""
           fi
@@ -182,9 +186,17 @@ jobs:
           fi
 
           # Get PR metadata from GitHub API
-          PR_DATA=$(gh api "repos/$REPO_NAME/pulls/$PR_NUMBER")
-          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
-          PR_HEAD=$(echo "$PR_DATA" | jq -r '.head.ref')
+          if ! PR_DATA=$(gh api "repos/$REPO_NAME/pulls/$PR_NUMBER" 2>&1); then
+            echo "::error::Failed to fetch PR #$PR_NUMBER metadata from repos/$REPO_NAME/pulls/$PR_NUMBER"
+            echo "::error::gh api output: $PR_DATA"
+            exit 1
+          fi
+          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref // empty')
+          PR_HEAD=$(echo "$PR_DATA" | jq -r '.head.ref // empty')
+          if [ -z "$PR_BASE" ] || [ -z "$PR_HEAD" ]; then
+            echo "::error::Could not extract base/head branch from PR #$PR_NUMBER (base='$PR_BASE', head='$PR_HEAD')"
+            exit 1
+          fi
 
           # Verify the PR base branch is in SONAR_BRANCHES before proceeding
           base_allowed=false
@@ -203,8 +215,11 @@ jobs:
           if [ "$base_allowed" = "false" ]; then
             echo "⏭️ PR base branch '$PR_BASE' does not match any pattern in SONAR_BRANCHES: $SONAR_BRANCHES"
             echo "⏭️ Skipping SonarCloud analysis for this PR."
+            echo "run_analysis=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          echo "run_analysis=true" >> "$GITHUB_OUTPUT"
 
           # Print summary
           echo "🔍 SonarCloud Analysis Decision Summary"
@@ -220,61 +235,40 @@ jobs:
           echo "PR_BASE=$PR_BASE" >> $GITHUB_ENV
           echo "PR_HEAD=$PR_HEAD" >> $GITHUB_ENV
           echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+
+          echo "└── Result: ✅ Running full codebase SonarCloud analysis"
+
+      - name: Extract repo owner and name
+        if: steps.metadata.outputs.run_analysis == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event.repository.fork }}" = "true" ]; then
+            PARENT_REPO_SLUG=$(gh api repos/${{ github.repository }} | jq -r '.parent.full_name // empty')
+            if [ -z "$PARENT_REPO_SLUG" ]; then
+              echo "::error::Failed to resolve parent repository for fork ${{ github.repository }}"
+              exit 1
+            fi
+            IFS="/" read -r REPO_OWNER REPO_NAME <<< "$PARENT_REPO_SLUG"
+          else
+            IFS="/" read -r REPO_OWNER REPO_NAME <<< "${GITHUB_REPOSITORY}"
+          fi
+          if [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ]; then
+            echo "::error::Failed to parse repo owner/name (owner='$REPO_OWNER', name='$REPO_NAME')"
+            exit 1
+          fi
+          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
 
-          # Get all changed files from PR (with error handling)
-          files=""
-          if [ -n "$PR_NUMBER" ]; then
-            if gh api --paginate repos/$REPO_NAME/pulls/$PR_NUMBER/files --jq '.[].filename' > /tmp/pr_files.txt 2>/tmp/pr_error.txt; then
-              files=$(cat /tmp/pr_files.txt)
-            else
-              echo "├── Changed Files: ⚠️  Could not fetch (likely test repo or PR not found)"
-              if [ -f coverage.xml ] && [ -s coverage.xml ]; then
-                echo "├── Coverage Data: ✅ Available"
-              else
-                echo "├── Coverage Data: ⚠️  Not available"
-              fi
-              echo "└── Result: ✅ Running SonarCloud analysis (full scan)"
-              # No files = no inclusions filter = full scan
-              exit 0
-            fi
-          else
-            echo "├── PR Number: ⚠️  Not available"
-            if [ -f coverage.xml ] && [ -s coverage.xml ]; then
-              echo "├── Coverage Data: ✅ Available"
-            else
-              echo "├── Coverage Data: ⚠️  Not available"
-            fi
-            echo "└── Result: ✅ Running SonarCloud analysis (full scan)"
-            exit 0
-          fi
-
-          # Get file extensions and count for summary
-          extensions=$(echo "$files" | sed 's/.*\.//' | sort | uniq | tr '\n' ',' | sed 's/,$//')
-          file_count=$(echo "$files" | wc -l)
-          echo "├── Changed Files: $file_count file(s) (.${extensions})"
-
-          # Check if coverage.xml exists and has content
-          if [ -f coverage.xml ] && [ -s coverage.xml ]; then
-            echo "├── Coverage Data: ✅ Available"
-          else
-            echo "├── Coverage Data: ⚠️  Not available (analysis will proceed without coverage)"
-          fi
-
-          # Prepare file list for Sonar
-          echo "All changed files in PR:"
-          echo "$files"
-
-          # Convert to comma-separated list for sonar.inclusions
-          if [ -n "$files" ]; then
-            inclusions=$(echo "$files" | tr '\n' ',' | sed 's/,$//')
-            echo "SONAR_INCLUSIONS=$inclusions" >> $GITHUB_ENV
-            echo "└── Result: ✅ Will scan these files: $inclusions"
-          else
-            echo "└── Result: ✅ Running SonarCloud analysis"
-          fi
+      - name: Verify SONAR_TOKEN is set
+        if: steps.metadata.outputs.run_analysis == 'true'
+        run: test -n "$SONAR_TOKEN" || { echo "SONAR_TOKEN is empty — check vars.SONAR_TOKEN_SECRET_NAME"; exit 1; }
+        env:
+          SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
 
       - name: SonarCloud Scan
+        if: steps.metadata.outputs.run_analysis == 'true'
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -283,12 +277,14 @@ jobs:
           LANG: en_US.UTF-8
         with:
           args: >
+            -Dsonar.projectKey=${{ env.REPO_OWNER }}_${{ env.REPO_NAME }}
+            -Dsonar.organization=${{ env.REPO_OWNER }}
             -Dsonar.scm.revision=${{ env.COMMIT_SHA }}
             -Dsonar.pullrequest.key=${{ env.PR_NUMBER }}
             -Dsonar.pullrequest.branch=${{ env.PR_HEAD }}
             -Dsonar.pullrequest.base=${{ env.PR_BASE }}
             -Dsonar.python.coverage.reportPaths=${{ env.COVERAGE_PATHS }}
-            ${{ env.SONAR_INCLUSIONS && format('-Dsonar.inclusions={0}', env.SONAR_INCLUSIONS) || '' }}
+            -Dsonar.qualitygate.wait=true
 
   sonar-branch-analysis:
     name: SonarCloud Branch Analysis
@@ -339,6 +335,33 @@ jobs:
           echo "├── Python Changes: ➖ N/A (Full codebase scan)"
           echo "└── Result: ✅ Proceed - \"Running SonarCloud analysis\""
 
+      - name: Extract repo owner and name
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event.repository.fork }}" = "true" ]; then
+            PARENT_REPO_SLUG=$(gh api repos/${{ github.repository }} | jq -r '.parent.full_name // empty')
+            if [ -z "$PARENT_REPO_SLUG" ]; then
+              echo "::error::Failed to resolve parent repository for fork ${{ github.repository }}"
+              exit 1
+            fi
+            IFS="/" read -r REPO_OWNER REPO_NAME <<< "$PARENT_REPO_SLUG"
+          else
+            IFS="/" read -r REPO_OWNER REPO_NAME <<< "${GITHUB_REPOSITORY}"
+          fi
+          if [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ]; then
+            echo "::error::Failed to parse repo owner/name (owner='$REPO_OWNER', name='$REPO_NAME')"
+            exit 1
+          fi
+          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+
+      - name: Verify SONAR_TOKEN is set
+        run: test -n "$SONAR_TOKEN" || { echo "SONAR_TOKEN is empty — check vars.SONAR_TOKEN_SECRET_NAME"; exit 1; }
+        env:
+          SONAR_TOKEN: ${{ secrets[format('{0}', vars.SONAR_TOKEN_SECRET_NAME)] }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
@@ -351,6 +374,8 @@ jobs:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
         with:
           args: >
+            -Dsonar.projectKey=${{ env.REPO_OWNER }}_${{ env.REPO_NAME }}
+            -Dsonar.organization=${{ env.REPO_OWNER }}
             -Dsonar.scm.revision=${{ env.SCM_REVISION }}
             -Dsonar.branch.name=${{ env.BRANCH_NAME }}
             ${{ env.COVERAGE_PATHS && format('-Dsonar.python.coverage.reportPaths={0}', env.COVERAGE_PATHS) || '' }}
