@@ -33,6 +33,8 @@
 #
 # JOB 3: sonar-branch-analysis (for long-lived branches)
 # - Runs when: Unit Tests finished after a push to a matched branch
+# - Skips: merge_group events (PR analysis already ran; merge queue branches
+#          compare against devel and flag pre-existing issues as "new")
 # - Steps: Download coverage → Run SonarCloud branch analysis
 # - Scans: Full codebase
 # - Quality gate: Focuses on overall project health
@@ -78,11 +80,23 @@ jobs:
           EVENT_TYPE: ${{ github.event.workflow_run.event }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ "$EVENT_TYPE" = "pull_request" ] || [ "$EVENT_TYPE" = "merge_group" ]; then
+          if [ "$EVENT_TYPE" = "merge_group" ]; then
+            # Merge queue branches are ephemeral (gh-readonly-queue/<base>/<sha>).
+            # SonarCloud branch analysis compares against sonar.newCode.referenceBranch
+            # (devel), but the merge queue branch diverges from a stable-* branch, so
+            # the diff is massive and flags dozens of pre-existing issues as "new".
+            # The PR already passed SonarCloud PR analysis before entering the queue,
+            # so skipping here avoids false quality-gate failures.
+            echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "⏭️ merge_group event — skipping SonarCloud (PR analysis already ran)"
+            exit 0
+          fi
+
+          if [ "$EVENT_TYPE" = "pull_request" ]; then
             # workflow_run doesn't expose the PR base branch, so we can't check it here.
-            # Allow PRs and merge_group events through the gate; the PR analysis job
-            # resolves the base branch via the GitHub API and rechecks it against
-            # SONAR_BRANCHES before scanning. Merge group events run a branch analysis.
+            # Allow PRs through the gate; the PR analysis job resolves the base branch
+            # via the GitHub API and rechecks it against SONAR_BRANCHES before scanning.
             echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
             echo "allowed=true" >> "$GITHUB_OUTPUT"
             echo "✅ $EVENT_TYPE event — allowing through gate"
@@ -295,12 +309,12 @@ jobs:
       actions: read
     if: |
       needs.gate.outputs.allowed == 'true' &&
-      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'merge_group')
+      github.event.workflow_run.event == 'push'
     steps:
       # Pin to the exact commit that the Unit Tests workflow ran against,
       # since workflow_run context defaults to the repo's default branch.
       #
-      # SONAR githubactions:S7631 - safe: this job only runs for push events (see the 'if' above), which come from repo collaborators, never from forks
+      # SONAR githubactions:S7631 - safe: this job only runs for push events, which come from repo collaborators, never from forks
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
