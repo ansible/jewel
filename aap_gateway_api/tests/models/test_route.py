@@ -7,7 +7,7 @@ from aap_gateway_api.models.service_node import ServiceNode
 
 
 class TestRoute:
-    @pytest.mark.django_db()
+    @pytest.mark.django_db
     def test_xds_login_logout_missing_models(self):
         route = ServiceAPIRoute()
         # First fail because of the missing service cluster
