@@ -39,6 +39,7 @@ class TestServiceClusterSerializer:
             'health_check_healthy_threshold',
             'healthy_panic_threshold',
             'effective_health_check_timeout_seconds',
+            'effective_health_check_interval_seconds',
         ]
         for field in expected_fields:
             assert field in ServiceClusterSerializer.Meta.fields, f"Field {field} missing from Meta.fields"
@@ -258,3 +259,41 @@ class TestServiceClusterSerializer:
             # queries; if this fires, the code regressed to the fallback.
             aggregate_queries = [q for q in ctx.captured_queries if 'MAX' in q['sql'].upper()]
             assert aggregate_queries == [], f"Annotation should prevent aggregate queries, but got: {aggregate_queries}"
+
+    def test_effective_health_check_interval_in_serializer_fields(self):
+        assert 'effective_health_check_interval_seconds' in ServiceClusterSerializer.Meta.fields
+
+    @pytest.mark.parametrize(
+        "health_check_interval,health_check_timeout,route_timeout,preference_timeout,expected",
+        [
+            (10, 5, None, 30, 30),
+            (60, 5, None, 30, 60),
+            (10, 5, 600, 30, 600),
+        ],
+        ids=["interval_below_effective_timeout", "interval_above_effective_timeout", "route_timeout_raises_floor"],
+    )
+    def test_effective_health_check_interval_seconds(
+        self, service_type, health_check_interval, health_check_timeout, route_timeout, preference_timeout, expected, preference_manager
+    ):
+        cluster = ServiceCluster.objects.create(
+            name='Effective Interval Cluster',
+            service_type=service_type,
+            health_check_timeout_seconds=health_check_timeout,
+            health_check_interval_seconds=health_check_interval,
+        )
+        http_port = HTTPPort.objects.create(name="effective-interval-port", number=9995)
+
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            if route_timeout is not None:
+                AdditionalRoute.objects.create(
+                    name="effective-interval-route",
+                    http_port=http_port,
+                    is_service_https=False,
+                    service_cluster=cluster,
+                    service_port=8080,
+                    service_path="/path",
+                    gateway_path="/effective-interval-test/",
+                    request_timeout_seconds=route_timeout,
+                )
+            serializer = ServiceClusterSerializer(instance=cluster, context={'request': Mock(query_params={})})
+            assert serializer.data['effective_health_check_interval_seconds'] == expected
