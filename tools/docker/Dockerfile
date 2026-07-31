@@ -3,8 +3,8 @@ ARG PYTHON=python3.12
 FROM quay.io/centos/centos:stream9 AS builder
 ARG PYTHON
 
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
 
 ARG DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
 ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
@@ -86,6 +86,8 @@ RUN for dir in \
 # to be compatible with protobuf 3.21+. This should be removed
 # once a new version of xds-protos is available
 ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+ENV DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+ENV PYTHONUNBUFFERED=1
 
 COPY aap_gateway_api /opt/aap_gateway/src/aap_gateway_api/
 ENV PATH=/opt/aap_gateway/venv/bin:$PATH

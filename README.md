@@ -19,26 +19,21 @@ Jewel provides the source code for the Gateway that connects Ansible services an
 
 ## Container Image
 
-A pre-built container image is published to the GitHub Container Registry on every push to the `devel` branch. The published image does **not** include the platform UI.
+A pre-built container image is published to the GitHub Container Registry on every push to the `devel` branch. The published image ships the Jewel API server without the platform UI.
 
 ```bash
 docker pull ghcr.io/ansible/jewel:latest
-docker run -p 8000:8000 ghcr.io/ansible/jewel:latest
 ```
 
-Available tags:
+> **Note:** Jewel requires PostgreSQL, Redis, and configuration to run. A standalone `docker run` won't work out of the box. Use `make docker-compose` for a full working environment — see the development setup below.
+
+There are currently no versioned releases. The `latest` tag always points to the most recent `devel` build. Per-commit SHA tags are available for pinning:
 
 | Tag | Description |
 |---|---|
 | `latest` | Most recent build from `devel` |
 | `sha-<short>` | Pinned to a specific commit (short SHA) |
 | `sha-<full>` | Pinned to a specific commit (full SHA) |
-
-To build locally with the platform UI included:
-
-```bash
-docker build --target jewel-ui -f tools/docker/Dockerfile .
-```
 
 ## Communication
 
