@@ -1,7 +1,7 @@
 ---
 - name: Generate the docker-compose.yml file for gateway
   hosts: localhost
-  connection: localhost
+  connection: local
   gather_facts: False
   tasks:
     - name: Generate configs
