@@ -1,7 +1,83 @@
+from unittest.mock import patch
+
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
+from django.db import IntegrityError
 
 from aap_gateway_api.models import Organization
+
+
+class TestOrganizationConcurrentCreate:
+    """Tests for handling race conditions when SSO/LDAP auto-creates organizations
+    concurrently with API creation requests (AAP-25071)."""
+
+    def test_create_returns_existing_org_on_integrity_error(self, admin_api_client):
+        """When an org is concurrently created (e.g. by SSO), the API should
+        return the existing org with 201 instead of raising an error."""
+        # Pre-create the org directly in the DB, simulating SSO auto-creation
+        sso_org = Organization.objects.create(name="SSO-Org")
+
+        # Mock perform_create to simulate the race condition:
+        # serializer.is_valid() passed (org didn't exist yet), but by the time
+        # perform_create runs, the org already exists, causing an IntegrityError.
+        with patch(
+            'aap_gateway_api.views.api.v1.organization.OrganizationViewSet.perform_create',
+            side_effect=IntegrityError('duplicate key value violates unique constraint "aap_gateway_api_organization_name_key"'),
+        ):
+            url = get_relative_url("organization-list")
+            response = admin_api_client.post(url, data={"name": "SSO-Org"})
+
+        assert response.status_code == 201
+        assert response.data["name"] == "SSO-Org"
+        assert response.data["id"] == sso_org.id
+
+    def test_create_returns_existing_org_preserves_description(self, admin_api_client):
+        """The returned org data should reflect the existing org's fields."""
+        Organization.objects.create(name="SSO-Org-Desc", description="Created by SSO")
+
+        with patch(
+            'aap_gateway_api.views.api.v1.organization.OrganizationViewSet.perform_create',
+            side_effect=IntegrityError('duplicate key value violates unique constraint'),
+        ):
+            url = get_relative_url("organization-list")
+            response = admin_api_client.post(url, data={"name": "SSO-Org-Desc"})
+
+        assert response.status_code == 201
+        assert response.data["name"] == "SSO-Org-Desc"
+        assert response.data["description"] == "Created by SSO"
+
+    def test_integrity_error_without_name_reraises(self, admin_api_client):
+        """If the request has no name field, the IntegrityError should propagate
+        to the default exception handler."""
+        with patch(
+            'aap_gateway_api.views.api.v1.organization.OrganizationViewSet.perform_create',
+            side_effect=IntegrityError('some other constraint violation'),
+        ):
+            url = get_relative_url("organization-list")
+            # Send a request without 'name' -- the serializer would normally
+            # catch this, so we also need to bypass validation.
+            with patch(
+                'aap_gateway_api.serializers.organization.OrganizationSerializer.is_valid',
+                return_value=True,
+            ):
+                response = admin_api_client.post(url, data={})
+
+        # The gateway_exception_handler converts IntegrityError to a ParseError (400)
+        assert response.status_code == 400
+
+    def test_integrity_error_org_not_found_reraises(self, admin_api_client):
+        """If IntegrityError occurs but the org can't be found by name,
+        the error should propagate."""
+        with patch(
+            'aap_gateway_api.views.api.v1.organization.OrganizationViewSet.perform_create',
+            side_effect=IntegrityError('some constraint violation'),
+        ):
+            url = get_relative_url("organization-list")
+            # Name that doesn't exist -- IntegrityError is from something else
+            response = admin_api_client.post(url, data={"name": "nonexistent-org-xyz"})
+
+        # The gateway_exception_handler converts IntegrityError to a ParseError (400)
+        assert response.status_code == 400
 
 
 def test_prevent_deletion_of_managed_organization(admin_api_client):
