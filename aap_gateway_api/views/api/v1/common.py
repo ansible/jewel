@@ -1,10 +1,13 @@
+from ansible_base.activitystream import deferred_activity_stream
 from ansible_base.lib.utils.hashing import hash_serializer_data
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
+from ansible_base.rbac.triggers import defer_rbac_computations
 from ansible_base.resource_registry.models import service_id
+from ansible_base.resource_registry.signals.handlers import defer_resource_cleanup
 from django.db import transaction
 from rest_framework import viewsets
 
@@ -89,7 +92,8 @@ class ResourceAPIUpdateMixin(ResourceAllClientMixin):
     @transaction.atomic
     def perform_destroy(self, instance):
         ansible_id = instance.resource.ansible_id
-        super().perform_destroy(instance)  # Covers parent validation (e.g., managed role checks)
+        with deferred_activity_stream(), defer_resource_cleanup(), defer_rbac_computations():
+            super().perform_destroy(instance)  # Covers parent validation (e.g., managed role checks)
         self._resources_client.delete_resource(ansible_id)
 
     @transaction.atomic

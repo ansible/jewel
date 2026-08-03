@@ -245,10 +245,10 @@ class TestOrgDeleteRBACFlushRollback:
     """Verify that RBAC flush failure rolls back the entire org delete.
 
     The call chain is:
-      dispatch() -> defer_rbac_computations [with transaction.atomic]
-        -> perform_destroy() [@transaction.atomic — savepoint]
+      perform_destroy() [@transaction.atomic]
+        -> defer_rbac_computations context manager
           -> instance.delete() -> signals fire, work deferred
-        -> defer_rbac_computations.__exit__ -> _flush_rbac()
+          -> defer_rbac_computations.__exit__ -> _flush_rbac()
 
     If the flush raises, transaction.atomic must roll back the delete
     so the org and all RBAC data remain intact.
@@ -263,15 +263,9 @@ class TestOrgDeleteRBACFlushRollback:
 
         url = get_relative_url("organization-detail", kwargs={"pk": organization.pk})
 
-        with (
-            patch(
-                "ansible_base.rbac.triggers.compute_team_member_roles",
-                side_effect=RuntimeError("Simulated RBAC flush failure"),
-            ),
-            patch(
-                "ansible_base.rbac.triggers.compute_object_role_permissions",
-                side_effect=RuntimeError("Simulated RBAC flush failure"),
-            ),
+        with patch(
+            "ansible_base.rbac.triggers.compute_team_member_roles",
+            side_effect=RuntimeError("Simulated RBAC flush failure"),
         ):
             try:
                 response = admin_api_client.delete(url)
