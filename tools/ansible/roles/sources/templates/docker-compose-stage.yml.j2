@@ -11,7 +11,7 @@ services:
       dockerfile: tools/generated/Dockerfile
     command:
       - /usr/bin/launch-gateway
-    container_name: aap_gw_{{ container_id }}
+    container_name: aap-gw-{{ container_id }}
     hostname: gateway{{ container_id }}
     depends_on:
       - db
@@ -82,7 +82,7 @@ services:
         hard: 4096
 
   redis_sidecar{{ container_id }}:
-    container_name: aap_gw_redis_sidecar_{{ container_id }}
+    container_name: aap-gw-redis-sidecar-{{ container_id }}
     hostname: redis_sidecar{{ container_id }}
     image: {{ redis_container_image }}:{{ redis_container_version }}
     entrypoint: ["sh", "-c", "chmod 777 /var/run/redis && exec redis-server /usr/local/etc/redis/redis-sidecar.conf"]
@@ -196,7 +196,7 @@ services:
 {% endif %}
 
   db:
-    container_name: aap_gw_db_pgsql_1
+    container_name: aap-gw-db-pgsql-1
     command: run-postgresql -c log_destination=stderr -c log_min_messages=info
     environment:
       - POSTGRESQL_DATABASE=gateway
@@ -215,7 +215,7 @@ services:
 {% if not enabled_containers['haproxy']|bool %}
 {# If we are not enabling haproxy then we will just run with 1 envoy server #}
   proxy1:
-    container_name: aap_gw_proxy1
+    container_name: aap-gw-proxy1
     hostname: proxy1
     image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
@@ -252,7 +252,7 @@ services:
   {% set exposed_port = 9079 + container_id | int %}
   {% set exposed_admin_port = 18999 + container_id | int %}
   proxy{{ container_id }}:
-    container_name: aap_gw_proxy_{{ container_id }}
+    container_name: aap-gw-proxy-{{ container_id }}
     hostname: proxy{{ container_id }}
     image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
@@ -286,7 +286,7 @@ services:
 {% if enabled_containers['haproxy']|bool %}
   haproxy:
     image: haproxy:{{ proxy_container_version }}
-    container_name: aap_gw_haproxy_1
+    container_name: aap-gw-haproxy-1
     hostname: haproxy
     user: "${UID}"
     ports:
@@ -309,7 +309,7 @@ services:
 {% if enabled_containers['keycloak']|bool %}
   keycloak:
     image: {{ keycloak_image }}:{{ keycloak_image_version }}
-    container_name: aap_gw_keycloak_1
+    container_name: aap-gw-keycloak-1
     hostname: keycloak
     user: "${UID:-1000}"
     ports:
@@ -332,7 +332,7 @@ services:
 {% if enabled_containers['ldap'] | bool %}
   ldap:
     image: bitnamilegacy/openldap:{{ ldap_image_version }}
-    container_name: aap_gw_ldap_1
+    container_name: aap-gw-ldap-1
     hostname: ldap
     user: "${UID:-1000}"
     ports:
@@ -359,7 +359,7 @@ services:
 {% if enabled_containers['tacacs'] | bool %}
   tacacs:
     image: dchidell/docker-tacacs:{{ tacacs_container_version }}
-    container_name: aap_gw_tacacs_1
+    container_name: aap-gw-tacacs-1
     hostname: tacacs
     ports:
       - "{{ tacacs_exposed_tacacs_port }}:49"
@@ -370,7 +370,7 @@ services:
 {% if enabled_containers['radius'] | bool %}
   radius:
     image: {{ radius_image }}:{{ radius_image_version }}
-    container_name: aap_gw_radius_1
+    container_name: aap-gw-radius-1
     hostname: radius
     command: ['-f', '-x', '-l', 'stdout']
     volumes:

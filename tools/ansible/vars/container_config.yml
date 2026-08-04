@@ -15,7 +15,7 @@ container_engine: docker
 gateway_image: 'quay.io/ansible/jewel:devel' # placeholder until public image available
 gateway_host_address: host-gateway
 gateway_services: "{{ enabled_services | default([], true) }}"
-gateway_container_name: aap_gw_1
+gateway_container_name: aap-gw-1
 
 ddt_enabled: "{{ enable_django_debug_toolbar | default(False) }}"
 
@@ -44,7 +44,7 @@ redis_sentinel_sentinel_nodes: 3
 redis_mode: "{{ redis_type | default(redis_mode_options[0]) }}"
 redis_node_count: "{{ redis_node_topology_count[redis_mode] | default(1) }}"
 redis_uses_tls: "{{ redis_tls_enabled | default(True) }}"
-redis_node_prefix: 'aap_gw_redis_'
+redis_node_prefix: 'aap-gw-redis-'
 cache_key_prefix: 'gateway'
 
 # Keycloak settings

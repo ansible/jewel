@@ -10,7 +10,7 @@ services:
       dockerfile: tools/generated/Dockerfile
     command:
       - /usr/bin/launch-gateway
-    container_name: aap_gw_{{ container_id }}
+    container_name: aap-gw-{{ container_id }}
     hostname: gateway{{ container_id }}
     depends_on:
       - db
@@ -95,7 +95,7 @@ services:
         hard: 4096
 
   redis_sidecar{{ container_id }}:
-    container_name: aap_gw_redis_sidecar_{{ container_id }}
+    container_name: aap-gw-redis-sidecar-{{ container_id }}
     hostname: redis_sidecar{{ container_id }}
     image: {{ redis_container_image }}:{{ redis_container_version }}
     entrypoint: ["sh", "-c", "chmod 777 /var/run/redis && exec redis-server /usr/local/etc/redis/redis-sidecar.conf"]
@@ -209,7 +209,7 @@ services:
 {% endif %}
 
   db:
-    container_name: aap_gw_db_pgsql_1
+    container_name: aap-gw-db-pgsql-1
     command: run-postgresql -c log_destination=stderr -c log_min_messages=info
     environment:
       - POSTGRESQL_DATABASE=gateway
@@ -228,7 +228,7 @@ services:
 {% if not enabled_containers['haproxy']|bool %}
 {# If we are not enabling haproxy then we will just run with 1 envoy server #}
   proxy1:
-    container_name: aap_gw_proxy1
+    container_name: aap-gw-proxy1
     hostname: proxy1
     image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
@@ -265,7 +265,7 @@ services:
   {% set exposed_port = 9079 + container_id | int %}
   {% set exposed_admin_port = 18999 + container_id | int %}
   proxy{{ container_id }}:
-    container_name: aap_gw_proxy_{{ container_id }}
+    container_name: aap-gw-proxy-{{ container_id }}
     hostname: proxy{{ container_id }}
     image: {{ envoy_proxy_image }}:{{ envoy_proxy_version }}
     entrypoint: /usr/local/bin/envoy
@@ -299,7 +299,7 @@ services:
 {% if enabled_containers['haproxy']|bool %}
   haproxy:
     image: mirror.gcr.io/haproxy:{{ proxy_container_version }}
-    container_name: aap_gw_haproxy_1
+    container_name: aap-gw-haproxy-1
     hostname: haproxy
     user: "${UID}"
     ports:
@@ -322,7 +322,7 @@ services:
 {% if enabled_containers['keycloak']|bool %}
   keycloak:
     image: {{ keycloak_image }}:{{ keycloak_image_version }}
-    container_name: aap_gw_keycloak_1
+    container_name: aap-gw-keycloak-1
     hostname: keycloak
     user: "${UID:-1000}"
     ports:
@@ -358,7 +358,7 @@ services:
 {% if enabled_containers['ldap'] | bool %}
   ldap:
     image: mirror.gcr.io/bitnamilegacy/openldap:{{ ldap_image_version }}
-    container_name: aap_gw_ldap_1
+    container_name: aap-gw-ldap-1
     hostname: ldap
     user: "${UID:-1000}"
     ports:
@@ -385,7 +385,7 @@ services:
 {% if enabled_containers['tacacs'] | bool %}
   tacacs:
     image: mirror.gcr.io/dchidell/docker-tacacs:{{ tacacs_container_version }}
-    container_name: aap_gw_tacacs_1
+    container_name: aap-gw-tacacs-1
     hostname: tacacs
     ports:
       - "{{ tacacs_exposed_tacacs_port }}:49"
@@ -396,7 +396,7 @@ services:
 {% if enabled_containers['radius'] | bool %}
   radius:
     image: {{ radius_image }}:{{ radius_image_version }}
-    container_name: aap_gw_radius_1
+    container_name: aap-gw-radius-1
     hostname: radius
     command: ['-f', '-x', '-l', 'stdout']
     volumes:
@@ -409,7 +409,7 @@ services:
 {% if enabled_containers['otel_collector'] | bool %}
   otel_collector:
     image: {{ otel_collector_image }}:{{ otel_collector_image_version }}
-    container_name: aap_gw_otel_collector_1
+    container_name: aap-gw-otel-collector-1
     hostname: otel-collector
     command: ["--config=/etc/otel/otel-collector-config.yml"]
     ports:
@@ -432,7 +432,7 @@ services:
 {% if enabled_containers['loki'] | bool %}
   loki:
     image: {{ loki_image }}:{{ loki_image_version }}
-    container_name: aap_gw_loki_1
+    container_name: aap-gw-loki-1
     hostname: loki
     command: ["-config.file=/etc/loki/loki-config.yml"]
     ports:
@@ -447,7 +447,7 @@ services:
 {% if enabled_containers['tempo'] | bool %}
   tempo:
     image: {{ tempo_image }}:{{ tempo_image_version }}
-    container_name: aap_gw_tempo_1
+    container_name: aap-gw-tempo-1
     hostname: tempo
     command: ["-config.file=/etc/tempo/tempo-config.yml"]
     ports:
@@ -462,7 +462,7 @@ services:
 {% if enabled_containers['grafana'] | bool %}
   grafana:
     image: {{ grafana_image }}:{{ grafana_image_version }}
-    container_name: aap_gw_grafana_1
+    container_name: aap-gw-grafana-1
     hostname: grafana
     ports:
       - "{{ grafana_http_port }}:{{ grafana_http_port }}"

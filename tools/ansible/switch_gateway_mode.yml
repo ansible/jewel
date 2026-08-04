@@ -25,12 +25,12 @@
     - name: Ensure the container is running
       community.docker.docker_container_info:
         docker_host: "{{ docker_host | default(omit) }}"
-        name: aap_gw_1
+        name: aap-gw-1
       register: gateway_container_status
 
     - name: Fail if the container is not running
       ansible.builtin.fail:
-        msg: "The aap_gw_1 container is not running"
+        msg: "The aap-gw-1 container is not running"
       when: gateway_container_status.container['State']['Status'] != 'running'
 
     - name: Determine services and port
@@ -47,7 +47,7 @@
     - name: "Stop process {{ stop_process }}"
       community.docker.docker_container_exec:
         docker_host: "{{ docker_host | default(omit) }}"
-        container: aap_gw_1
+        container: aap-gw-1
         command: "supervisorctl stop {{ stop_process }}"
       register: stop_output
       changed_when: "'ERROR' not in stop_output.stdout"
@@ -55,7 +55,7 @@
     - name: "Start process {{ start_process }}"
       community.docker.docker_container_exec:
         docker_host: "{{ docker_host | default(omit) }}"
-        container: aap_gw_1
+        container: aap-gw-1
         command: "supervisorctl start {{ start_process }}"
       register: start_output
       changed_when: "'ERROR' not in start_output.stdout"

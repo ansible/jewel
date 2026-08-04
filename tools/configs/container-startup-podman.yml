@@ -10,7 +10,7 @@ container_engine: podman
 gateway_image: 'quay.io/ansible/jewel:devel' # placeholder until public image available
 gateway_host_address: host.containers.internal
 gateway_services: ['hub','controller','eda']
-gateway_container_name: aap_gw_1
+gateway_container_name: aap-gw-1
 
 ### Redis
 ### Note: If you change the redis settings, please remove tools/generated/redis_cluster and let it rebuild
