@@ -14,6 +14,7 @@ logger = logging.getLogger('aap.gateway.views.organization')
 class OrganizationViewSet(ResourceAPIUpdateMixin, RoleModelViewSet):
     """
     API endpoint that allows organizations to be viewed or edited.
+    New comment.
     """
 
     queryset = Organization.objects.select_related("resource").all()
