@@ -266,10 +266,20 @@ class TestOrgDeleteRBACFlushRollback:
         with (
             patch(
                 "ansible_base.rbac.triggers.compute_team_member_roles",
+                create=True,
                 side_effect=RuntimeError("Simulated RBAC flush failure"),
             ),
             patch(
                 "ansible_base.rbac.triggers.compute_object_role_permissions",
+                create=True,
+                side_effect=RuntimeError("Simulated RBAC flush failure"),
+            ),
+            patch(
+                "ansible_base.rbac.caching.compute_team_member_roles",
+                side_effect=RuntimeError("Simulated RBAC flush failure"),
+            ),
+            patch(
+                "ansible_base.rbac.caching.compute_object_role_permissions",
                 side_effect=RuntimeError("Simulated RBAC flush failure"),
             ),
         ):
