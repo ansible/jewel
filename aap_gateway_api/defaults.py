@@ -382,6 +382,7 @@ ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = True
 ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = True
 ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
 ANSIBLE_BASE_ALLOW_TEAM_ORG_ADMIN = False
+ANSIBLE_BASE_ALLOW_TEAM_ORG_MEMBER = True
 # Rely on the remote service's RBAC enforcement instead of local checks.
 # See aap_gateway_api/views/api/v1/role.py for the remote permission validation path.
 ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS = False
