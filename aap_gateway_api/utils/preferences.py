@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from ansible_base.lib.utils.settings import SettingNotSetException, is_aoc_instance
+from cryptography.fernet import InvalidToken
 from django.conf import settings
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
@@ -208,7 +209,7 @@ def initialize_preferences():
     for preference_name in gateway_preference_manager.keys():
         try:
             gateway_preference_manager[preference_name]
-        except Exception:
+        except (InvalidToken, ValueError, TypeError):
             logger.critical(
                 "Failed to initialize preference '%s'. This may indicate a SECRET_KEY mismatch "
                 "or corrupt data. The gateway will continue starting but this preference "

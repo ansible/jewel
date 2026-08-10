@@ -410,8 +410,10 @@ def test_initialize_preferences_continues_on_decrypt_failure(mock_logger, regist
     )
 
     original_getitem = preferences.gateway_preference_manager.__class__.__getitem__
+    accessed_keys = []
 
     def side_effect(self, key):
+        accessed_keys.append(key)
         if key == "general__healthy_pref":
             return original_getitem(self, key)
         raise InvalidToken("simulated SECRET_KEY mismatch")
@@ -421,14 +423,15 @@ def test_initialize_preferences_continues_on_decrypt_failure(mock_logger, regist
         "__getitem__",
         side_effect,
     ):
-        # This must not raise -- previously it would propagate InvalidToken
         preferences.initialize_preferences()
 
-    # Verify that critical log messages were emitted for the failing preferences
+    # Prove continuation: healthy_pref must be accessed after at least one failing key
+    failing_keys = [k for k in accessed_keys if k != "general__healthy_pref"]
+    assert len(failing_keys) > 0, "Expected at least one failing preference before healthy_pref"
+    assert "general__healthy_pref" in accessed_keys, "healthy_pref was never accessed"
+    assert accessed_keys.index("general__healthy_pref") > 0, "healthy_pref should be accessed after a failing key"
+
     assert mock_logger.critical.call_count > 0
-    # Check that at least one critical log message mentions the expected error context
-    log_messages = [str(call) for call in mock_logger.critical.call_args_list]
-    assert any("SECRET_KEY mismatch" in msg for msg in log_messages)
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
@@ -455,11 +458,9 @@ def test_initialize_preferences_logs_preference_name_on_failure(mock_logger, reg
     ):
         preferences.initialize_preferences()
 
-    # The first positional arg to logger.critical is the format string,
-    # the second positional arg is the preference name
     mock_logger.critical.assert_called()
-    args = mock_logger.critical.call_args_list[0][0]
-    assert "Failed to initialize preference" in args[0]
+    logged_pref_names = [call[0][1] for call in mock_logger.critical.call_args_list]
+    assert "general__broken_pref" in logged_pref_names
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
