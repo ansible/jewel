@@ -284,8 +284,9 @@ jobs:
                   isInternal = true;
                   core.info(`${pr.user.login} is a member of the ansible org`);
                 } else if (resp.status === 302) {
-                  isInternal = true;
-                  core.info(`${pr.user.login} is a member of the ansible org (requester is not org member)`);
+                  core.warning(`Org membership check returned 302 — ORG_TOKEN owner is not an ansible org member; cannot determine membership for ${pr.user.login}`);
+                } else if (resp.status !== 404) {
+                  core.warning(`Unexpected status ${resp.status} checking org membership for ${pr.user.login}`);
                 }
               } catch (e) {
                 core.warning(`Failed to check org membership for ${pr.user.login}: ${e.message}`);
