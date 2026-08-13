@@ -11,16 +11,30 @@ from django.db import transaction
 
 class ResourceMigrationMixin:
     def _is_service_already_synced(self) -> bool:
-        """Check if all resource types for the current service have already been migrated."""
-        for resource_type_name in self.resource_types_to_migrate:
-            filters = {
+        """Check if all migratable resource types for the current service have already been migrated."""
+        response = self.client.list_resources(
+            filters={
                 "service_id": self.upstream_service_id,
                 "is_partially_migrated": "false",
-                "content_type__resource_type__name": resource_type_name,
+                "content_type__resource_type__name__in": ",".join(self.resource_types_to_migrate),
             }
-            data = self.client.list_resources(filters=filters).json()
-            if data["count"] > 0:
+        ).json()
+
+        if response["count"] > 0:
+            results = response.get("results", [])
+            if settings.SYSTEM_USERNAME:
+                results = [r for r in results if r.get("resource_type") != SHARED_USER_RESOURCE_TYPE or r.get("name") != settings.SYSTEM_USERNAME]
+            if results or response["count"] > len(response.get("results", [])):
                 return False
+
+        has_resources = self.client.list_resources(filters={"service_id": self.upstream_service_id}).json()
+        if has_resources["count"] == 0:
+            self._log(
+                "Upstream resource registry is empty — will attempt migration (registry may not be populated yet).",
+                logging.WARNING,
+            )
+            return False
+
         return True
 
     def update_resource_data(self, resource_type_name: str, original_resource_data: Any) -> Optional[Dict[str, Any]]:
