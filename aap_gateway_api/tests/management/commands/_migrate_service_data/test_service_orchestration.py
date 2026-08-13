@@ -338,6 +338,53 @@ def test_migration_skips_when_only_system_user_unmigrated(admin_user, capsys, se
 
 
 @pytest.mark.django_db(transaction=True)
+def test_migration_proceeds_when_paginated_results_exceed_page(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """When count > len(results), more unmigrated resources exist on later pages — migration must proceed."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    # Page has only the system user, but count indicates more on later pages
+                    resp.json.return_value = {
+                        "count": 3,
+                        "results": [{"name": settings.SYSTEM_USERNAME, "ansible_id": "sys-user-id", "resource_type": "shared.user"}],
+                    }
+                elif "service_id" in filters:
+                    resp.json.return_value = {"count": 10, "results": []}
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
+            setup_empty_assignment_mocks(mock_client)
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        with pytest.raises(CommandError):
+            call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "already synchronized" not in captured.out
+        assert "Migrating data for" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
 def test_migration_proceeds_when_org_shares_system_username(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
     """An organization whose name matches SYSTEM_USERNAME must not be filtered out by the guard."""
 
