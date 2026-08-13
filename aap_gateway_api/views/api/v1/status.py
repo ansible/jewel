@@ -249,6 +249,7 @@ def services_to_dict(services: List[Dict]) -> Dict:
         serializers=[StatusSerializer, ServiceKeysStatusSerializer],
         resource_type_field_name=None,
     ),
+    extensions={'x-ai-description': 'Returns the current Gateway platform status, including service health and version.'},
 )
 class StatusView(AnsibleBaseView):
     """API endpoint that shows status of platform services."""
