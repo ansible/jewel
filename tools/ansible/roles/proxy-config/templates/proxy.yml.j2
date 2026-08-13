@@ -94,14 +94,14 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
 {% elif service == 'controller' %}
     # It configures proxy requests
     # - from https://<gateway url>:9080/api/controller/...
-    # - to https://localhost:8043/api/...  # localhost is taken from service node "Controller Node"
+    # - to https://localhost:8043/api/controller/...  # localhost is taken from service node "Controller Node"
   - name: Controller API
     description: Proxy to the Controller
     http_port: API Port
     api_slug: controller
     service_cluster: controller
     is_service_https: true
-    service_path: '/api/'
+    service_path: '/api/controller/'
     service_port: 8043
     order: 2
 
