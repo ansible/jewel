@@ -276,23 +276,20 @@ jobs:
 
             if (!isInternal) {
               try {
-                const { Octokit } = require('@octokit/rest');
-                const orgOctokit = new Octokit({ auth: process.env.ORG_TOKEN });
-                const { status } = await orgOctokit.orgs.checkMembershipForUser({
-                  org: 'ansible',
-                  username: pr.user.login,
-                });
-                if (status === 204) {
+                const resp = await fetch(
+                  `https://api.github.com/orgs/ansible/members/${pr.user.login}`,
+                  { headers: { Authorization: `token ${process.env.ORG_TOKEN}`, Accept: 'application/vnd.github+json' }, redirect: 'manual' }
+                );
+                if (resp.status === 204) {
                   isInternal = true;
                   core.info(`${pr.user.login} is a member of the ansible org`);
+                } else if (resp.status === 302) {
+                  core.warning(`Org membership check returned 302 — ORG_TOKEN owner is not an ansible org member; cannot determine membership for ${pr.user.login}`);
+                } else if (resp.status !== 404) {
+                  core.warning(`Unexpected status ${resp.status} checking org membership for ${pr.user.login}`);
                 }
               } catch (e) {
-                if (e.status === 302) {
-                  isInternal = true;
-                  core.info(`${pr.user.login} is a member of the ansible org (requester is not org member)`);
-                } else if (e.status !== 404) {
-                  core.warning(`Failed to check org membership for ${pr.user.login}: ${e.message}`);
-                }
+                core.warning(`Failed to check org membership for ${pr.user.login}: ${e.message}`);
               }
             }
 
