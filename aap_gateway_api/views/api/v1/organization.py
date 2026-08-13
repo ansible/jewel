@@ -28,3 +28,20 @@ class OrganizationViewSet(ResourceAPIUpdateMixin, RoleModelViewSet):
             return Response(status=status.HTTP_400_BAD_REQUEST, data={"details": _("Managed organizations cannot be deleted.")})
         else:
             return super().destroy(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        team_pks = list(instance.teams.values_list('pk', flat=True))
+        super().perform_destroy(instance)
+        if team_pks:
+            self._cleanup_team_rbac_assignments(team_pks)
+
+    @staticmethod
+    def _cleanup_team_rbac_assignments(team_pks):
+        from ansible_base.rbac.models import DABContentType, RoleTeamAssignment, RoleUserAssignment
+
+        from aap_gateway_api.models import Team
+
+        team_ct = DABContentType.objects.get_for_model(Team)
+        str_pks = [str(pk) for pk in team_pks]
+        RoleUserAssignment.objects.filter(object_id__in=str_pks, content_type=team_ct).delete()
+        RoleTeamAssignment.objects.filter(object_id__in=str_pks, content_type=team_ct).delete()
