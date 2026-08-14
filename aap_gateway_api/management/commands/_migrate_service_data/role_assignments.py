@@ -142,6 +142,14 @@ class RoleAssignmentsMixin:
             return None
         actor_pk = actor_resource.object_id
 
+        if assignment_type == 'user' and getattr(actor_resource.content_object, 'is_superuser', False):
+            self._log(
+                f"Skipping assignment for superuser '{actor_resource.content_object.username}': "
+                f"superusers bypass RBAC, role assignments are unnecessary",
+                logging.INFO,
+            )
+            return None
+
         object_ansible_id = item.get('object_ansible_id')
         object_id = item.get('object_id')
 
