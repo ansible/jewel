@@ -589,6 +589,77 @@ def test_initialize_resource_sync_payloads():
     assert service_resource == {"new_service_id": "gw-service-id-42"}
 
 
+def test_is_service_already_synced_without_system_username_filter():
+    """When SYSTEM_USERNAME is unset, unmigrated shared.user resources are not filtered out."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = "upstream-svc"
+    cmd.resource_types_to_migrate = ["shared.user", "shared.organization"]
+
+    mock_client = Mock()
+
+    def list_resources_side_effect(filters=None):
+        resp = Mock()
+        filters = filters or {}
+        if filters.get("is_partially_migrated") == "false":
+            resp.json.return_value = {
+                "count": 1,
+                "results": [{"name": "_system", "resource_type": "shared.user", "ansible_id": "sys-id"}],
+            }
+        else:
+            resp.json.return_value = {"count": 10, "results": []}
+        return resp
+
+    mock_client.list_resources.side_effect = list_resources_side_effect
+    cmd.client = mock_client
+
+    with patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.settings") as mock_settings:
+        mock_settings.SYSTEM_USERNAME = ""
+        assert cmd._is_service_already_synced() is False
+
+
+def test_is_service_already_synced_empty_registry():
+    """An empty upstream registry is not treated as already synchronized."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = "upstream-svc"
+    cmd.resource_types_to_migrate = ["shared.organization"]
+
+    mock_client = Mock()
+    mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
+    cmd.client = mock_client
+
+    assert cmd._is_service_already_synced() is False
+    assert "empty" in cmd.stderr.getvalue().lower()
+
+
+def test_is_service_already_synced_all_migrated():
+    """When no unmigrated resources remain and the registry is populated, return True."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = "upstream-svc"
+    cmd.resource_types_to_migrate = ["shared.organization"]
+
+    mock_client = Mock()
+
+    def list_resources_side_effect(filters=None):
+        resp = Mock()
+        filters = filters or {}
+        if filters.get("is_partially_migrated") == "false":
+            resp.json.return_value = {"count": 0, "results": []}
+        else:
+            resp.json.return_value = {"count": 5, "results": []}
+        return resp
+
+    mock_client.list_resources.side_effect = list_resources_side_effect
+    cmd.client = mock_client
+
+    assert cmd._is_service_already_synced() is True
+
+
 def test_get_filtered_resources_excludes_system_user():
     """For shared.user resources, the system user (settings.SYSTEM_USERNAME) is excluded."""
     cmd = MigrateCommand()
