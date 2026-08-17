@@ -177,9 +177,7 @@ class RoleAssignmentsMixin:
         if assignment_type == 'user' and actor_resource_map:
             actor_object_ids = {r.object_id for r in actor_resource_map.values()}
             User = get_user_model()
-            superuser_pks = {
-                str(pk) for pk in User.objects.filter(pk__in=actor_object_ids, is_superuser=True).values_list('pk', flat=True)
-            }
+            superuser_pks = {str(pk) for pk in User.objects.filter(pk__in=actor_object_ids, is_superuser=True).values_list('pk', flat=True)}
 
         global_assignments: List[Tuple] = []
         object_assignments: List[Tuple] = []
