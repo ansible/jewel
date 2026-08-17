@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource
+from django.contrib.auth import get_user_model
 from django.db.models import Q
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore
@@ -172,18 +173,34 @@ class RoleAssignmentsMixin:
         actor_resource_map = {str(r.ansible_id): r for r in Resource.objects.filter(ansible_id__in=actor_ansible_ids)} if actor_ansible_ids else {}
         object_resource_map = {str(r.ansible_id): r for r in Resource.objects.filter(ansible_id__in=object_ansible_ids)} if object_ansible_ids else {}
 
+        superuser_pks: set = set()
+        if assignment_type == 'user' and actor_resource_map:
+            actor_object_ids = {r.object_id for r in actor_resource_map.values()}
+            User = get_user_model()
+            superuser_pks = {
+                str(pk) for pk in User.objects.filter(pk__in=actor_object_ids, is_superuser=True).values_list('pk', flat=True)
+            }
+
         global_assignments: List[Tuple] = []
         object_assignments: List[Tuple] = []
+        superusers_skipped = 0
 
         for item in results:
             resolved = self._resolve_single_assignment(item, actor_field, assignment_type, role_map, actor_resource_map, object_resource_map)
             if resolved is None:
                 continue
             kind, assignment_tuple = resolved
+            actor_pk = assignment_tuple[0]
+            if actor_pk in superuser_pks:
+                superusers_skipped += 1
+                continue
             if kind == 'global':
                 global_assignments.append(assignment_tuple)
             else:
                 object_assignments.append(assignment_tuple)
+
+        if superusers_skipped:
+            self._log(f"Skipped {superusers_skipped} role assignments for superuser accounts (superusers bypass RBAC)", logging.INFO)
 
         created = 0
         object_roles_used: set = set()

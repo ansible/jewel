@@ -684,6 +684,105 @@ class TestBulkResolveAndCreatePage:
         assert created2 in {0, 1}
         assert RoleUserAssignment.objects.filter(user__username="bulk-idempotent-user").count() == 1
 
+    def test_superuser_assignments_skipped(self):
+        """Assignments for superuser accounts are skipped entirely."""
+        from aap_gateway_api.models import User
+
+        superuser = User.objects.create(username="bulk-superuser", is_superuser=True)
+        RoleDefinition.objects.get_or_create(name="Test Superuser Skip Role", defaults={"managed": False})
+
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(superuser.resource.ansible_id),
+                "Test Superuser Skip Role",
+                pk=1,
+            )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
+        assert obj_roles == set()
+        assert RoleUserAssignment.objects.filter(user=superuser).count() == 0
+
+    def test_superuser_skipped_non_superuser_created(self):
+        """Superuser assignments are skipped while non-superuser assignments on the same page are created."""
+        from aap_gateway_api.models import User
+
+        superuser = User.objects.create(username="bulk-su-mixed", is_superuser=True)
+        regular_user = User.objects.create(username="bulk-regular-mixed")
+        RoleDefinition.objects.get_or_create(name="Test Mixed SU Role", defaults={"managed": False})
+
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(superuser.resource.ansible_id),
+                "Test Mixed SU Role",
+                pk=1,
+            ),
+            _make_remote_assignment(
+                "user",
+                str(regular_user.resource.ansible_id),
+                "Test Mixed SU Role",
+                pk=2,
+            ),
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 1
+        assert RoleUserAssignment.objects.filter(user=superuser).count() == 0
+        assert RoleUserAssignment.objects.filter(user=regular_user).count() == 1
+
+    def test_superuser_skip_does_not_affect_team_assignments(self):
+        """Superuser filtering only applies to user assignments, not team assignments."""
+        from aap_gateway_api.models import Organization, Team
+
+        org = Organization.objects.create(name="bulk-su-team-org")
+        team = Team.objects.create(name="bulk-su-team", organization=org)
+        RoleDefinition.objects.get_or_create(name="Test SU Team Role", defaults={"managed": False})
+
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "team",
+                str(team.resource.ansible_id),
+                "Test SU Team Role",
+                pk=1,
+            )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "team")
+        assert created == 1
+        assert RoleTeamAssignment.objects.filter(team=team).count() == 1
+
+    def test_superuser_object_scoped_assignments_skipped(self):
+        """Object-scoped assignments for superusers are also skipped."""
+        from ansible_base.rbac.models import DABContentType
+
+        from aap_gateway_api.models import Organization, User
+
+        superuser = User.objects.create(username="bulk-su-obj-scoped", is_superuser=True)
+        org = Organization.objects.create(name="bulk-su-obj-org")
+        ct = DABContentType.objects.get_for_model(org)
+        RoleDefinition.objects.get_or_create(
+            name="Test SU Obj Scoped Role",
+            defaults={"managed": False, "content_type": ct},
+        )
+
+        cmd = self._make_cmd()
+        results = [
+            _make_remote_assignment(
+                "user",
+                str(superuser.resource.ansible_id),
+                "Test SU Obj Scoped Role",
+                pk=1,
+                content_type="shared.organization",
+                object_ansible_id=str(org.resource.ansible_id),
+            )
+        ]
+        created, obj_roles = cmd._bulk_resolve_and_create_page(results, "user")
+        assert created == 0
+        assert RoleUserAssignment.objects.filter(user=superuser).count() == 0
+
 
 # =============================================================================
 # TestCollectUniqueIds
