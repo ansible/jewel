@@ -373,7 +373,8 @@ def test_jsonb_encrypted_field_with_json_wrapped_value(settings):
 
     Simulates the case where psycopg returns a jsonb string value still
     wrapped in JSON quotes (e.g. '"$encrypted$..."' instead of
-    '$encrypted$...').
+    '$encrypted$...').  The normalizer unwraps it before _reencrypt_value
+    processes the plain ciphertext.
     """
     from aap_gateway_api.management.commands.rotate_secret_key import Command
 
@@ -388,49 +389,53 @@ def test_jsonb_encrypted_field_with_json_wrapped_value(settings):
     original_data = {"secret": "my-secret-value"}
     encrypted = encrypt_with_key(original_data, old_key)
 
+    # Simulate what _paginated_reencrypt does: normalise then reencrypt
     json_wrapped = json.dumps(encrypted)
-    result = cmd._reencrypt_value(json_wrapped, label="test-wrapped", is_jsonb=True)
+    normalised = cmd._normalise_if_jsonb_value(json_wrapped)
+    result = cmd._reencrypt_value(normalised, label="test-wrapped")
     assert result is not None
+    assert ENCRYPTED_STRING in result
+    assert decrypt_with_key(result, new_key) == original_data
 
-    inner = json.loads(result)
-    assert ENCRYPTED_STRING in inner
-    assert decrypt_with_key(inner, new_key) == original_data
-
-    result_unwrapped = cmd._reencrypt_value(encrypted, label="test-unwrapped", is_jsonb=True)
-    assert result_unwrapped is not None
-    inner2 = json.loads(result_unwrapped)
-    assert decrypt_with_key(inner2, new_key) == original_data
+    # Already-unwrapped value also works
+    normalised2 = cmd._normalise_if_jsonb_value(encrypted)
+    result2 = cmd._reencrypt_value(normalised2, label="test-unwrapped")
+    assert result2 is not None
+    assert decrypt_with_key(result2, new_key) == original_data
 
 
 @pytest.mark.django_db
-def test_normalise_jsonb_value():
-    """_normalise_jsonb_value correctly unwraps various jsonb representations."""
+def test_normalise_if_jsonb_value():
+    """_normalise_if_jsonb_value correctly unwraps various jsonb representations."""
     from aap_gateway_api.management.commands.rotate_secret_key import Command
 
     encrypted = "$encrypted$UTF8$AESCBC$base64data"
 
-    assert Command._normalise_jsonb_value(encrypted) == encrypted
+    # Already-unwrapped encrypted string passes through
+    assert Command._normalise_if_jsonb_value(encrypted) == encrypted
 
+    # JSON-wrapped encrypted string is unwrapped
     json_wrapped = json.dumps(encrypted)
-    assert Command._normalise_jsonb_value(json_wrapped) == encrypted
+    assert Command._normalise_if_jsonb_value(json_wrapped) == encrypted
 
-    assert Command._normalise_jsonb_value({"key": "value"}) is None
-    assert Command._normalise_jsonb_value([1, 2, 3]) is None
-    assert Command._normalise_jsonb_value(None) is None
+    # Non-string types return None
+    assert Command._normalise_if_jsonb_value({"key": "value"}) is None
+    assert Command._normalise_if_jsonb_value([1, 2, 3]) is None
+    assert Command._normalise_if_jsonb_value(None) is None
 
-    # Non-JSON string that doesn't start with $encrypted$ falls through to return raw
-    assert Command._normalise_jsonb_value("plain-text-not-json") == "plain-text-not-json"
+    # Non-JSON string falls through to return raw
+    assert Command._normalise_if_jsonb_value("plain-text-not-json") == "plain-text-not-json"
 
     # Invalid JSON triggers the except branch and returns raw
-    assert Command._normalise_jsonb_value("{invalid json{{") == "{invalid json{{"
+    assert Command._normalise_if_jsonb_value("{invalid json{{") == "{invalid json{{"
 
     # A JSON-parseable value that isn't a string (e.g. a number) returns raw
-    assert Command._normalise_jsonb_value("42") == "42"
+    assert Command._normalise_if_jsonb_value("42") == "42"
 
 
 @pytest.mark.django_db
-def test_reencrypt_value_jsonb_empty_and_non_string(settings):
-    """_reencrypt_value returns None for empty or non-string jsonb values."""
+def test_reencrypt_value_edge_cases(settings):
+    """_reencrypt_value returns None for empty, non-string, or non-encrypted values."""
     from aap_gateway_api.management.commands.rotate_secret_key import Command
 
     cmd = Command()
@@ -438,15 +443,15 @@ def test_reencrypt_value_jsonb_empty_and_non_string(settings):
     cmd.new_key = "test-coverage-key"
     cmd._skipped_count = 0
 
-    # Empty/None raw value with is_jsonb=True
-    assert cmd._reencrypt_value(None, label="test-none", is_jsonb=True) is None
-    assert cmd._reencrypt_value("", label="test-empty", is_jsonb=True) is None
+    # Empty/None values
+    assert cmd._reencrypt_value(None, label="test-none") is None
+    assert cmd._reencrypt_value("", label="test-empty") is None
 
-    # Non-string jsonb value (dict) that _normalise_jsonb_value returns None for
-    assert cmd._reencrypt_value({"key": "value"}, label="test-dict", is_jsonb=True) is None
+    # Non-string value (normaliser should be called before this, but verify safety)
+    assert cmd._reencrypt_value(42, label="test-int") is None
 
     # Plain string without encrypted marker
-    assert cmd._reencrypt_value("not-encrypted", label="test-plain", is_jsonb=True) is None
+    assert cmd._reencrypt_value("not-encrypted", label="test-plain") is None
 
 
 @pytest.mark.django_db

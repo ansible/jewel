@@ -38,6 +38,7 @@ from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
+from django.db.models import JSONField
 
 from aap_gateway_api.utils.encryption import decrypt_with_key, encrypt_with_key
 
@@ -150,16 +151,9 @@ class Command(BaseCommand):
                 except FieldDoesNotExist:
                     logger.warning("Model %s declares encrypted field %r but has no such DB column", model.__name__, field_name)
                     continue
-                is_jsonb = self._is_json_field(field_obj)
+                is_jsonb = isinstance(field_obj, JSONField)
                 total += self._reencrypt_column(model, field_obj.column, dry_run, is_jsonb=is_jsonb)
         return total
-
-    @staticmethod
-    def _is_json_field(field_obj) -> bool:
-        """Return True if the field stores data as PostgreSQL jsonb."""
-        from django.db.models import JSONField
-
-        return isinstance(field_obj, JSONField)
 
     # ── Authenticator.configuration encrypted sub-fields ─────────────────
 
@@ -359,46 +353,39 @@ class Command(BaseCommand):
                 break
             last_pk = rows[-1][0]
             for pk, raw in rows:
-                new_val = self._reencrypt_value(raw, label=f"{label} pk={pk}", is_jsonb=is_jsonb)
+                normalised = self._normalise_if_jsonb_value(raw)
+                new_val = self._reencrypt_value(normalised, label=f"{label} pk={pk}")
                 if new_val is None:
                     continue
                 if not dry_run:
+                    write_val = json.dumps(new_val) if is_jsonb else new_val
                     with connection.cursor() as ucur:
-                        ucur.execute(update_sql, [new_val, pk])
+                        ucur.execute(update_sql, [write_val, pk])
                 count += 1
         return count
 
-    def _reencrypt_value(self, raw, *, label: str, is_jsonb: bool = False) -> str | None:
+    def _reencrypt_value(self, raw, *, label: str) -> str | None:
         """Decrypt a single value with the old key and re-encrypt with the new key.
 
         Returns the new ciphertext, or ``None`` if the value is not
-        encrypted or cannot be decrypted.
-
-        When *is_jsonb* is ``True``, the raw value may be a Python object
-        (dict, list) rather than a plain string because psycopg
-        automatically deserialises jsonb columns.  In that case we must
-        call ``json.loads()`` on string values that look JSON-wrapped, and
-        wrap the re-encrypted value with ``json.dumps()`` so the UPDATE
-        stores a valid JSON string in the jsonb column.
+        encrypted or cannot be decrypted.  This method is format-agnostic;
+        callers handle input normalization and output serialization.
         """
-        if not raw:
+        if not raw or not isinstance(raw, str) or ENCRYPTED_STRING not in raw:
             return None
 
-        value = self._normalise_jsonb_value(raw) if is_jsonb else raw
-
-        if not isinstance(value, str) or ENCRYPTED_STRING not in value:
-            return None
-
-        clear = self._try_decrypt(value, label=label)
+        clear = self._try_decrypt(raw, label=label)
         if clear is None:
             return None
 
-        new_cipher = encrypt_with_key(clear, self.new_key)
-        return json.dumps(new_cipher) if is_jsonb else new_cipher
+        return encrypt_with_key(clear, self.new_key)
 
     @staticmethod
-    def _normalise_jsonb_value(raw) -> str | None:
-        """Unwrap a value read from a jsonb column into a plain Python string.
+    def _normalise_if_jsonb_value(raw) -> str | None:
+        """Unwrap a value that may be JSON-encoded into a plain Python string.
+
+        Safe to call on non-jsonb values: a plain string that isn't valid
+        JSON is returned as-is.
 
         Depending on the psycopg adapter version and Django configuration,
         a jsonb column storing a JSON string may be returned as:
@@ -406,22 +393,16 @@ class Command(BaseCommand):
         * A Python ``str`` still JSON-encoded with outer quotes
         * A Python ``dict`` or other JSON-parsed type (if the stored value
           was a JSON object rather than a JSON string)
-
-        This method normalises all these cases to a plain string suitable
-        for ``decrypt_with_key()``, or returns ``None`` for non-string
-        JSON types (dicts, lists) which cannot be directly decrypted.
         """
-        if isinstance(raw, str):
-            if raw.startswith(ENCRYPTED_STRING):
-                return raw
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, str):
-                    return parsed
-            except (json.JSONDecodeError, TypeError):
-                pass
-            return raw
-        return None
+        if not isinstance(raw, str):
+            return None
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, str):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return raw
 
     # ── SQL builders ─────────────────────────────────────────────────────
 
