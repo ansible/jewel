@@ -352,16 +352,22 @@ class Command(BaseCommand):
             if not rows:
                 break
             last_pk = rows[-1][0]
-            for pk, raw in rows:
-                normalised = self._normalise_if_jsonb_value(raw)
-                new_val = self._reencrypt_value(normalised, label=f"{label} pk={pk}")
-                if new_val is None:
-                    continue
-                if not dry_run:
-                    write_val = json.dumps(new_val) if is_jsonb else new_val
-                    with connection.cursor() as ucur:
-                        ucur.execute(update_sql, [write_val, pk])
-                count += 1
+            count += self._reencrypt_rows(rows, update_sql, dry_run, label=label, is_jsonb=is_jsonb)
+        return count
+
+    def _reencrypt_rows(self, rows: list, update_sql: str, dry_run: bool, *, label: str, is_jsonb: bool) -> int:
+        """Normalise, re-encrypt, and persist a batch of rows."""
+        count = 0
+        for pk, raw in rows:
+            normalised = self._normalise_if_jsonb_value(raw)
+            new_val = self._reencrypt_value(normalised, label=f"{label} pk={pk}")
+            if new_val is None:
+                continue
+            if not dry_run:
+                write_val = json.dumps(new_val) if is_jsonb else new_val
+                with connection.cursor() as ucur:
+                    ucur.execute(update_sql, [write_val, pk])
+            count += 1
         return count
 
     def _reencrypt_value(self, raw, *, label: str) -> str | None:
