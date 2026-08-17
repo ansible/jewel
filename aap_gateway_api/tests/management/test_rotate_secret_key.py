@@ -337,8 +337,8 @@ def test_jsonb_encrypted_field_rotation(settings):
     with connection.cursor() as cur:
         cur.execute(
             "INSERT INTO dab_authentication_authenticatoruser "
-            "(provider_id, uid, user_id, extra_data, claims, last_login_map_results, access_allowed) "
-            "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)",
+            "(provider_id, uid, user_id, extra_data, claims, last_login_map_results, access_allowed, created, modified) "
+            "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, NOW(), NOW())",
             [authenticator.slug, "jsonb-test-uid", user.pk, json.dumps(encrypted_extra), '{}', '[]', True],
         )
 
