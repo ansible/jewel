@@ -418,6 +418,36 @@ def test_normalise_jsonb_value():
     assert Command._normalise_jsonb_value([1, 2, 3]) is None
     assert Command._normalise_jsonb_value(None) is None
 
+    # Non-JSON string that doesn't start with $encrypted$ falls through to return raw
+    assert Command._normalise_jsonb_value("plain-text-not-json") == "plain-text-not-json"
+
+    # Invalid JSON triggers the except branch and returns raw
+    assert Command._normalise_jsonb_value("{invalid json{{") == "{invalid json{{"
+
+    # A JSON-parseable value that isn't a string (e.g. a number) returns raw
+    assert Command._normalise_jsonb_value("42") == "42"
+
+
+@pytest.mark.django_db
+def test_reencrypt_value_jsonb_empty_and_non_string(settings):
+    """_reencrypt_value returns None for empty or non-string jsonb values."""
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+
+    cmd = Command()
+    cmd.old_key = settings.SECRET_KEY
+    cmd.new_key = "test-coverage-key"
+    cmd._skipped_count = 0
+
+    # Empty/None raw value with is_jsonb=True
+    assert cmd._reencrypt_value(None, label="test-none", is_jsonb=True) is None
+    assert cmd._reencrypt_value("", label="test-empty", is_jsonb=True) is None
+
+    # Non-string jsonb value (dict) that _normalise_jsonb_value returns None for
+    assert cmd._reencrypt_value({"key": "value"}, label="test-dict", is_jsonb=True) is None
+
+    # Plain string without encrypted marker
+    assert cmd._reencrypt_value("not-encrypted", label="test-plain", is_jsonb=True) is None
+
 
 @pytest.mark.django_db
 def test_rotate_encrypted_fields_skips_missing_field(settings, caplog):
