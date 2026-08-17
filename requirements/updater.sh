@@ -1,88 +1,50 @@
 #!/usr/bin/env bash
 set -ue
 
-PYTHON=python3.12
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for FILE in requirements.in requirements.txt ; do
-	if [[ ! -f ${FILE} ]] ; then
-		touch ${FILE}
-	fi
-done
-requirements_in="$(readlink -f ./requirements.in)"
-requirements_txt="$(readlink -f ./requirements.txt)"
-requirements_git="$(readlink -f ./requirements_git.txt)"
-pip_compile="pip-compile --no-header --quiet -r --allow-unsafe"
-
-_cleanup() {
-  cd /
-  [[ "${KEEP_TMP:-0}" = 1 ]] || rm -rf "${_tmp}"
+require_uv() {
+  if ! command -v uv &>/dev/null; then
+    echo "ERROR: uv is required but not found. Install it from https://docs.astral.sh/uv/" >&2
+    exit 1
+  fi
 }
 
-generate_requirements() {
-  venv="`pwd`/venv"
-  echo $venv
-  ${PYTHON} -m venv "${venv}"
-  # shellcheck disable=SC1090
-  source ${venv}/bin/activate
-
-  ${venv}/bin/python -m pip install -U 'pip' pip-tools
-
-  ${pip_compile} "${requirements_in}" "${requirements_git}" --output-file requirements.txt
+compile_requirements() {
+  require_uv
+  local uv_compile="uv pip compile --generate-hashes --python-version=3.12 --no-header"
+  if [[ "${UV_UPGRADE:-}" == "1" ]]; then
+    uv_compile="${uv_compile} --upgrade"
+  fi
+  local output_file="$1"
+  cd "${SCRIPT_DIR}"
+  ${uv_compile} \
+    --no-emit-package django-ansible-base \
+    --output-file "${output_file}" \
+    requirements.in \
+    requirements_git.txt
 }
 
-main() {
-  base_dir=$(pwd)
-
-  _tmp=$(${PYTHON} -c "import tempfile; print(tempfile.mkdtemp(suffix='.aap-gw-requirements', dir='/tmp'))")
-
-  trap _cleanup INT TERM EXIT
-
-  case $1 in
-    "run")
-      NEEDS_HELP=0
-    ;;
-    "upgrade")
-      NEEDS_HELP=0
-      pip_compile="${pip_compile} --upgrade"
-    ;;
-    "help")
-      NEEDS_HELP=1
-    ;;
-    *)
-      echo ""
-      echo "ERROR: Parameter $1 not valid"
-      echo ""
-      NEEDS_HELP=1
-    ;;
-  esac 
-
-  if [[ "$NEEDS_HELP" == "1" ]] ; then
+case "${1:-}" in
+  "run")
+    compile_requirements requirements.txt
+  ;;
+  "upgrade")
+    UV_UPGRADE=1 compile_requirements requirements.txt
+  ;;
+  "check")
+    python3 "${SCRIPT_DIR}/../tools/scripts/check_requirements.py"
+  ;;
+  *)
     echo "This script generates requirements.txt from requirements.in"
     echo ""
-    echo "Usage: $0 [run|upgrade]"
+    echo "Usage: $0 [run|upgrade|check]"
     echo ""
     echo "Commands:"
-    echo "help      Print this message"
-    echo "run       Run the process only upgrading pinned libraries from requirements.in"
-    echo "upgrade   Upgrade all libraries to latest while respecting pinnings"
+    echo "  run       Resolve dependencies, only upgrading where required by pins"
+    echo "  upgrade   Upgrade all packages to latest while respecting pins"
+    echo "  check     Verify requirements.txt is in sync with requirements.in"
     echo ""
-    exit
-  fi
-
-  cp -vf ${requirements_txt} "${_tmp}"
-  cd "${_tmp}"
-
-  generate_requirements
-
-  echo "Changing $base_dir to requirements"
-  # Strip the django-ansible-base git reference from pip-compile output;
-  # it belongs only in requirements_git.txt, but keep its pinned transitives
-  awk '/^django-ansible-base/{skip=1; next} /^[^ #]/{skip=0} !skip' requirements.txt \
-    | sed "s:$base_dir:requirements:" > "${requirements_txt}"
-
-  _cleanup
-}
-
-# set EVAL=1 in case you want to source this script
-[[ "${EVAL:-0}" -eq "1" ]] || main "${1:-}"
-
+    exit 1
+  ;;
+esac
