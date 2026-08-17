@@ -150,8 +150,16 @@ class Command(BaseCommand):
                 except FieldDoesNotExist:
                     logger.warning("Model %s declares encrypted field %r but has no such DB column", model.__name__, field_name)
                     continue
-                total += self._reencrypt_column(model, field_obj.column, dry_run)
+                is_jsonb = self._is_json_field(field_obj)
+                total += self._reencrypt_column(model, field_obj.column, dry_run, is_jsonb=is_jsonb)
         return total
+
+    @staticmethod
+    def _is_json_field(field_obj) -> bool:
+        """Return True if the field stores data as PostgreSQL jsonb."""
+        from django.db.models import JSONField
+
+        return isinstance(field_obj, JSONField)
 
     # ── Authenticator.configuration encrypted sub-fields ─────────────────
 
@@ -331,7 +339,7 @@ class Command(BaseCommand):
             self._skipped_count += 1
             return None
 
-    def _paginated_reencrypt(self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str) -> int:
+    def _paginated_reencrypt(self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str, is_jsonb: bool = False) -> int:
         """Paginate through rows and re-encrypt values.
 
         Used by both ``_reencrypt_column`` and ``_rotate_preferences``
@@ -351,7 +359,7 @@ class Command(BaseCommand):
                 break
             last_pk = rows[-1][0]
             for pk, raw in rows:
-                new_val = self._reencrypt_value(raw, label=f"{label} pk={pk}")
+                new_val = self._reencrypt_value(raw, label=f"{label} pk={pk}", is_jsonb=is_jsonb)
                 if new_val is None:
                     continue
                 if not dry_run:
@@ -360,18 +368,60 @@ class Command(BaseCommand):
                 count += 1
         return count
 
-    def _reencrypt_value(self, raw, *, label: str) -> str | None:
+    def _reencrypt_value(self, raw, *, label: str, is_jsonb: bool = False) -> str | None:
         """Decrypt a single value with the old key and re-encrypt with the new key.
 
         Returns the new ciphertext, or ``None`` if the value is not
         encrypted or cannot be decrypted.
+
+        When *is_jsonb* is ``True``, the raw value may be a Python object
+        (dict, list) rather than a plain string because psycopg
+        automatically deserialises jsonb columns.  In that case we must
+        call ``json.loads()`` on string values that look JSON-wrapped, and
+        wrap the re-encrypted value with ``json.dumps()`` so the UPDATE
+        stores a valid JSON string in the jsonb column.
         """
-        if not raw or ENCRYPTED_STRING not in str(raw):
+        if not raw:
             return None
-        clear = self._try_decrypt(raw, label=label)
+
+        value = self._normalise_jsonb_value(raw) if is_jsonb else raw
+
+        if not isinstance(value, str) or ENCRYPTED_STRING not in value:
+            return None
+
+        clear = self._try_decrypt(value, label=label)
         if clear is None:
             return None
-        return encrypt_with_key(clear, self.new_key)
+
+        new_cipher = encrypt_with_key(clear, self.new_key)
+        return json.dumps(new_cipher) if is_jsonb else new_cipher
+
+    @staticmethod
+    def _normalise_jsonb_value(raw) -> str | None:
+        """Unwrap a value read from a jsonb column into a plain Python string.
+
+        Depending on the psycopg adapter version and Django configuration,
+        a jsonb column storing a JSON string may be returned as:
+        * A Python ``str`` already unwrapped (psycopg2/3 with JSON adapter)
+        * A Python ``str`` still JSON-encoded with outer quotes
+        * A Python ``dict`` or other JSON-parsed type (if the stored value
+          was a JSON object rather than a JSON string)
+
+        This method normalises all these cases to a plain string suitable
+        for ``decrypt_with_key()``, or returns ``None`` for non-string
+        JSON types (dicts, lists) which cannot be directly decrypted.
+        """
+        if isinstance(raw, str):
+            if raw.startswith(ENCRYPTED_STRING):
+                return raw
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, str):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return raw
+        return None
 
     # ── SQL builders ─────────────────────────────────────────────────────
 
@@ -402,22 +452,27 @@ class Command(BaseCommand):
         )
 
     @staticmethod
-    def _build_column_update_sql(model, column_name) -> str:
+    def _build_column_update_sql(model, column_name, *, is_jsonb: bool = False) -> str:
         """Build an UPDATE query for re-encrypting a single row.
+
+        When *is_jsonb* is ``True``, the value parameter is cast to
+        ``jsonb`` so PostgreSQL correctly stores it in a jsonb column.
 
         Safe from SQL injection: all identifiers originate from Django
         model metadata and are quoted via the database backend.
         """
         qn = connection.ops.quote_name
-        return "UPDATE {table} SET {col} = %s WHERE {pk} = %s".format(
+        cast = "::jsonb" if is_jsonb else ""
+        return "UPDATE {table} SET {col} = %s{cast} WHERE {pk} = %s".format(
             table=qn(model._meta.db_table),
             col=qn(column_name),
             pk=qn(model._meta.pk.column),
+            cast=cast,
         )
 
-    def _reencrypt_column(self, model, column_name: str, dry_run: bool) -> int:
+    def _reencrypt_column(self, model, column_name: str, dry_run: bool, *, is_jsonb: bool = False) -> int:
         first_page_sql = self._build_column_select_sql(model, column_name, with_pk_bound=False)
         next_page_sql = self._build_column_select_sql(model, column_name, with_pk_bound=True)
-        update_sql = self._build_column_update_sql(model, column_name)
+        update_sql = self._build_column_update_sql(model, column_name, is_jsonb=is_jsonb)
         label = f"{model.__name__}.{column_name}"
-        return self._paginated_reencrypt(first_page_sql, next_page_sql, update_sql, dry_run, label=label)
+        return self._paginated_reencrypt(first_page_sql, next_page_sql, update_sql, dry_run, label=label, is_jsonb=is_jsonb)
