@@ -26,6 +26,7 @@ def create_preload_data(**kwargs) -> None:
         set_system_user_managed_flag,
         toggle_install_time_flags,
         remove_console_service_type,
+        remove_stale_shared_content_types,
     ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
@@ -180,3 +181,25 @@ def remove_console_service_type() -> bool:
         name="RED_HAT_CONSOLE_URL",
     ).delete()
     return (deleted_st + deleted_pref) > 0
+
+
+def remove_stale_shared_content_types() -> bool:
+    """Remove shared DABContentType rows whose app_label doesn't match any local app.
+
+    The metrics service incorrectly registered its User model in the
+    permission_registry, causing a (shared, core, user) DABContentType to be
+    exported via the role-types endpoint. When gateway imported this via
+    load_types_and_permissions, model_class() failed because the 'core' app
+    doesn't exist locally, resulting in a 500 on the role_definitions endpoint.
+    """
+    from ansible_base.rbac.models import DABContentType
+
+    deleted = False
+    for ct in DABContentType.objects.filter(service='shared'):
+        try:
+            global_apps.get_app_config(ct.app_label)
+        except LookupError:
+            logger.warning('Removing stale shared content type: service=%s, app_label=%s, model=%s', ct.service, ct.app_label, ct.model)
+            ct.delete()
+            deleted = True
+    return deleted
