@@ -2,6 +2,7 @@
 name: Linting
 env:
   LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
+  CI_IMAGE: quay.io/ansible/jewel-ci:${{ github.base_ref || github.ref_name }}
 on:
   pull_request:
   merge_group:
@@ -10,6 +11,8 @@ jobs:
   common-tests:
     name: ${{ matrix.tests.name }}
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
     permissions:
       packages: write
       contents: read
@@ -22,18 +25,7 @@ jobs:
           - name: api-ruff-format
             command: check_ruff_format
     steps:
-      - name: Install make
-        run: sudo apt install make
-
       - uses: actions/checkout@v4
-
-      - name: Install python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: Install requirements
-        run: pip3.12 install -r requirements/requirements_dev.txt
 
       - name: Run check ${{ matrix.tests.name }}
         run: make ${{ matrix.tests.command }}

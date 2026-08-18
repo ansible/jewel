@@ -24,7 +24,8 @@ UNAME_S := $(shell uname -s)
 .PHONY: PYTHON_VERSION clean git_hooks_config \
 	check lint check_ruff check_ruff_format \
 	docker-compose plumb update_django_ansible_base_hash \
-	collection requirements check-requirements
+	collection requirements check-requirements \
+	ci-image ci-image-push
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -264,6 +265,39 @@ cleanup-services: tools/generated/proxy.yml collection
 ## Plumb the sidecar containers
 plumb:
 	ansible-playbook tools/ansible/plumb.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
+
+# CI Image
+# --------------------------------------
+
+CI_IMAGE ?= quay.io/ansible/jewel-ci:$(shell git rev-parse --abbrev-ref HEAD)
+CI_CONTAINERFILE = tools/docker/Containerfile.ci
+CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || echo docker)
+
+## Build the CI container image
+ci-image:
+	$(CONTAINER_ENGINE) build -f $(CI_CONTAINERFILE) -t $(CI_IMAGE) .
+
+## Build and push the CI container image (only from devel or stable-* branches)
+ci-image-push: ci-image
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if [ "$$BRANCH" != "devel" ] && ! echo "$$BRANCH" | grep -qE '^stable-[0-9]+\.[0-9]+$$'; then \
+		echo "Error: CI image can only be pushed from 'devel' or a 'stable-*' branch (current: $$BRANCH)."; \
+		exit 1; \
+	fi; \
+	if [ -n "$(QUAY_USERNAME)" ] && [ -n "$(QUAY_PASSWORD)" ]; then \
+		$(CONTAINER_ENGINE) login quay.io -u "$(QUAY_USERNAME)" -p "$(QUAY_PASSWORD)" || \
+			{ echo "Error: Login to quay.io failed with provided QUAY_USERNAME/QUAY_PASSWORD."; exit 1; }; \
+	fi; \
+	$(CONTAINER_ENGINE) push $(CI_IMAGE) || \
+		{ echo ""; \
+		  echo "Error: Push to quay.io failed. Possible causes:"; \
+		  echo "  - Not logged in: run '$(CONTAINER_ENGINE) login quay.io'"; \
+		  echo "  - Expired credentials: re-run '$(CONTAINER_ENGINE) login quay.io'"; \
+		  echo "  - Repository does not exist: create 'ansible/jewel-ci' at quay.io"; \
+		  echo "  - Insufficient permissions: ensure your account has write access"; \
+		  echo ""; \
+		  echo "Alternatively, export QUAY_USERNAME and QUAY_PASSWORD and re-run."; \
+		  exit 1; }
 
 # Hygiene
 # --------------------------------------

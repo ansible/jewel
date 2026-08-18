@@ -11,20 +11,15 @@ on:
 env:
   # Only upload JUnit xml files if we are this repo:
   TARGET_REPOSITORY: 'ansible/jewel'
+  CI_IMAGE: quay.io/ansible/jewel-ci:${{ github.base_ref || github.ref_name }}
 jobs:
   unit-test:
     name: ${{ matrix.batch.name }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
     env:
-      # Avoid KeyError: 'Gateway' with Docker API 1.52+ (tox-docker expects NetworkSettings.Gateway).
-      # See https://github.com/tox-dev/tox-docker/pull/196 and django-ansible-base PR 938.
       TOX_DOCKER_GATEWAY: "0.0.0.0"
-    # Using ubuntu-24.04 because it has docker engine 28.0.4(first link) that uses docker API version 1.51.
-    # The tox docker plugin needs docker API 1.51 or older, otherwise it will fail because API 1.52 removed the
-    # gateway (networking gateway) IP address from network settings of the container(its in different location).
-    # There is a PR to fix the issue(second link) but until its merged, we need to stick with specific docker version.
-    # https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md#tools
-    # https://github.com/tox-dev/tox-docker/pull/196
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
     services:
       redis:
@@ -78,17 +73,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install build requirements
-        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
-
-      - name: Install python ${{ matrix.batch.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.batch.python-version }}
-
-      - name: Install tox
-        run: pip${{ matrix.batch.python-version }} install tox tox-docker requests
-
       - name: Checkout dependencies
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -102,38 +86,13 @@ jobs:
         run: |
           echo "name=py312" >> "$GITHUB_OUTPUT"
 
-      - name: Create tox environment and run setup
-        # We use --collect-only instead of --notest because:
-        # 1. The tox-reinstall-django-ansible-base.sh script runs as part of tox commands
-        # 2. This script may reinstall DAB with different lxml/xmlsec versions
-        # 3. We need those final versions before rebuilding from source
-        #
-        # Optimizations to make this fast:
-        # -x testenv:$TOX_ENV.docker=  : Override docker config to empty, skipping DB container startup
-        # --collect-only            : pytest only discovers tests, doesn't run them
-        # GATEWAY_TEST_DIRS=""      : Override tox default so only __init__.py is collected
-        # aap_gateway_api/tests/__init__.py : Contains a single placeholder test
+      - name: Create tox environment
         env:
           GATEWAY_TEST_DIRS: ""
         run: |
           tox -e ${{ steps.tox-env.outputs.name }} \
             -x testenv:${{ steps.tox-env.outputs.name }}.docker= \
             -- --collect-only aap_gateway_api/tests/__init__.py
-
-      - name: Rebuild lxml and xmlsec from source
-        # Workaround for https://github.com/xmlsec/python-xmlsec/issues/320
-        # The pip wheels are compiled against a different libxml2 than the system has,
-        # causing "lxml & xmlsec libxml2 library version mismatch" errors.
-        # Using --no-binary forces pip to build from source against system libxml2.
-        run: |
-          TOX_ENV="${{ steps.tox-env.outputs.name }}"
-          XMLSEC_VERSION=$(.tox/${TOX_ENV}/bin/pip freeze | grep xmlsec | sed 's:^.*=::')
-          LXML_VERSION=$(.tox/${TOX_ENV}/bin/pip freeze | grep lxml | sed 's:^.*=::')
-
-          echo "Rebuilding xmlsec==${XMLSEC_VERSION} and lxml==${LXML_VERSION} from source"
-
-          .tox/${TOX_ENV}/bin/pip install --no-cache-dir --no-binary lxml,xmlsec --force-reinstall \
-              lxml==${LXML_VERSION} xmlsec==${XMLSEC_VERSION}
 
       - name: Run tests
         env:
@@ -169,6 +128,8 @@ jobs:
   merge-and-upload:
     name: Merge junit and upload results
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
     needs: unit-test
     # Run even if some jobs failed, but only if at least one job completed
     if: |
@@ -177,11 +138,6 @@ jobs:
       (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
     steps:
       - uses: actions/checkout@v5
-
-      - name: Install python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
 
       - name: Install merge tools
         run: pip install junitparser

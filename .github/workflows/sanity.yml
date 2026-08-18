@@ -16,6 +16,7 @@
 name: Sanity
 env:
   LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
+  CI_IMAGE: quay.io/ansible/jewel-ci:${{ github.base_ref || github.ref_name }}
 on:
   pull_request:
   merge_group:
@@ -23,9 +24,9 @@ jobs:
   tox:
     name: aap_gateway_api - ${{ matrix.tests.env }}
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.CI_IMAGE }}
     env:
-      # Avoid KeyError: 'Gateway' with Docker API 1.52+ (tox-docker expects NetworkSettings.Gateway).
-      # See https://github.com/tox-dev/tox-docker/pull/196 and django-ansible-base PR 938.
       TOX_DOCKER_GATEWAY: "0.0.0.0"
     services:
       redis:
@@ -50,17 +51,6 @@ jobs:
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install build requirements
-        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
-
-      - name: Install python ${{ matrix.tests.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.tests.python-version }}
-
-      - name: Install tox
-        run: pip${{ matrix.tests.python-version }} install tox tox-docker requests
 
       - name: Checkout dependencies
         env:
