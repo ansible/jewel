@@ -89,6 +89,7 @@ See [Reporting Bugs](#reporting-bugs) above.
 ## Development setup
 
 * **Python**: 3.11 or later (3.12 preferred)
+* **[uv](https://docs.astral.sh/uv/)**: Required for regenerating `requirements.txt` (`make requirements`). Install from https://docs.astral.sh/uv/.
 * **Git hooks**: Run `make git_hooks_config` to enable pre-commit linting checks.
 * **Tests**: Always run tests through tox, not pytest directly:
   ```

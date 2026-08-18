@@ -34,7 +34,8 @@ RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
 COPY requirements/requirements.txt /tmp/requirements.txt
 COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
 COPY requirements/requirements_git.txt /tmp/requirements_git.txt
-RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt -r /tmp/requirements_dev.txt
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install --require-hashes -r /tmp/requirements.txt
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_dev.txt
 ARG DJANGO_ANSIBLE_BASE_DEVEL_SHA
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
 
