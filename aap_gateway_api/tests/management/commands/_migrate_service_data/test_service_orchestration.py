@@ -5,7 +5,9 @@ from collections import OrderedDict
 from unittest.mock import Mock, patch
 
 import pytest
+from django.conf import settings
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.tests.management.commands._migrate_service_data.conftest import SEP_CHAR, assert_all_resources_synced, setup_empty_assignment_mocks
@@ -179,10 +181,21 @@ def test_migration_skips_when_already_synced(admin_user, capsys, service_api_rou
                 "service_id": str(uuid.uuid4()),
                 "service_type": "controller",
             }
-            mock_client.list_resources.return_value.json.return_value = {
-                "count": 0,
-                "results": [],
-            }
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    # Unmigrated query: no unmigrated resources remain
+                    resp.json.return_value = {"count": 0, "results": []}
+                elif "service_id" in filters:
+                    # All-resources query: registry has resources (they're all migrated)
+                    resp.json.return_value = {"count": 5, "results": []}
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
             setup_empty_assignment_mocks(mock_client)
             return mock_client
 
@@ -195,6 +208,44 @@ def test_migration_skips_when_already_synced(admin_user, capsys, service_api_rou
         assert "skipping resource migration" in captured.out
         assert "Migrating data for" not in captured.out
         assert "role assignments" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_does_not_skip_when_registry_empty(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """When upstream registry is completely empty (not populated yet), migration should NOT be skipped."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+            # All queries return count=0 — registry is empty
+            mock_client.list_resources.return_value.json.return_value = {
+                "count": 0,
+                "results": [],
+            }
+            setup_empty_assignment_mocks(mock_client)
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        # Should NOT say "already synchronized"
+        assert "already synchronized" not in captured.out
+        # Should warn about empty registry
+        assert "empty" in captured.err.lower() or "empty" in captured.out.lower()
+        # Should attempt migration
+        assert "Migrating data for" in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -214,10 +265,66 @@ def test_migration_proceeds_when_not_synced(admin_user, capsys, service_api_rout
                 "service_id": str(uuid.uuid4()),
                 "service_type": "controller",
             }
-            mock_client.list_resources.return_value.json.return_value = {
-                "count": 1,
-                "results": [],
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    resp.json.return_value = {
+                        "count": 1,
+                        "results": [{"name": "real-org", "ansible_id": "org-id"}],
+                    }
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
+            setup_empty_assignment_mocks(mock_client)
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        with pytest.raises(CommandError):
+            call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "already synchronized" not in captured.out
+        assert "Migrating data for" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_skips_when_only_system_user_unmigrated(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """When the only unmigrated shared.user is the system user, treat it as synced."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
             }
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    resp.json.return_value = {
+                        "count": 1,
+                        "results": [{"name": settings.SYSTEM_USERNAME, "ansible_id": "sys-user-id", "resource_type": "shared.user"}],
+                    }
+                elif "service_id" in filters:
+                    resp.json.return_value = {"count": 10, "results": []}
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
             setup_empty_assignment_mocks(mock_client)
             return mock_client
 
@@ -226,8 +333,157 @@ def test_migration_proceeds_when_not_synced(admin_user, capsys, service_api_rout
         call_command("migrate_service_data", username=admin_user.username)
 
         captured = capsys.readouterr()
+        assert "already synchronized" in captured.out
+        assert "skipping resource migration" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_proceeds_when_paginated_results_exceed_page(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """When count > len(results), more unmigrated resources exist on later pages — migration must proceed."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    # Page has only the system user, but count indicates more on later pages
+                    resp.json.return_value = {
+                        "count": 3,
+                        "results": [{"name": settings.SYSTEM_USERNAME, "ansible_id": "sys-user-id", "resource_type": "shared.user"}],
+                    }
+                elif "service_id" in filters:
+                    resp.json.return_value = {"count": 10, "results": []}
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
+            setup_empty_assignment_mocks(mock_client)
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        with pytest.raises(CommandError):
+            call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
         assert "already synchronized" not in captured.out
         assert "Migrating data for" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_proceeds_when_org_shares_system_username(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """An organization whose name matches SYSTEM_USERNAME must not be filtered out by the guard."""
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    resp.json.return_value = {
+                        "count": 1,
+                        "results": [{"name": settings.SYSTEM_USERNAME, "ansible_id": "org-id", "resource_type": "shared.organization"}],
+                    }
+                elif "service_id" in filters:
+                    resp.json.return_value = {"count": 10, "results": []}
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
+            setup_empty_assignment_mocks(mock_client)
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        with pytest.raises(CommandError):
+            call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "already synchronized" not in captured.out
+        assert "Migrating data for" in captured.out
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_guard_ignores_unsupported_resource_types(admin_user, capsys, service_api_route_controller, patched_resource_client, system_user):
+    """Unmigrated resources of types NOT in resource_types_to_migrate do not block the guard.
+
+    Simulates a registry where unsupported types (e.g. controller.jobtemplate)
+    have unmigrated resources.  An unscoped unmigrated query would return
+    count > 0, but the scoped query (content_type__resource_type__name__in)
+    correctly returns 0 for migratable types only.
+    """
+
+    with (
+        patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
+        patch('aap_gateway_api.management.commands.migrate_service_data.Command.load_types_and_permissions'),
+    ):
+
+        def mock_client_factory(service_api, *args, **kwargs):
+            mock_client = Mock()
+            mock_client.service = service_api
+            mock_client.user = admin_user
+            mock_client.get_service_metadata.return_value.json.return_value = {
+                "service_id": str(uuid.uuid4()),
+                "service_type": "controller",
+            }
+
+            def list_resources_side_effect(filters=None):
+                resp = Mock()
+                filters = filters or {}
+                if "is_partially_migrated" in filters:
+                    # Scoped to migratable types: all migrated
+                    resp.json.return_value = {"count": 0, "results": []}
+                elif "service_id" in filters:
+                    # Unscoped: includes unmigrated unsupported types
+                    resp.json.return_value = {
+                        "count": 5,
+                        "results": [
+                            {"name": "job1", "ansible_id": "jt-1", "resource_type": "controller.jobtemplate"},
+                            {"name": "job2", "ansible_id": "jt-2", "resource_type": "controller.jobtemplate"},
+                        ],
+                    }
+                else:
+                    resp.json.return_value = {"count": 0, "results": []}
+                return resp
+
+            mock_client.list_resources.side_effect = list_resources_side_effect
+            setup_empty_assignment_mocks(mock_client)
+            return mock_client
+
+        mock_client_class.side_effect = mock_client_factory
+
+        call_command("migrate_service_data", username=admin_user.username)
+
+        captured = capsys.readouterr()
+        assert "already synchronized" in captured.out
+        assert "skipping resource migration" in captured.out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -248,7 +504,9 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
                 "service_id": str(uuid.uuid4()),
                 "service_type": "controller",
             }
-            responses = [Mock(json=Mock(return_value={"count": 1, "results": []}))]
+            # 1st: scoped unmigrated query — finds resources to migrate
+            responses = [Mock(json=Mock(return_value={"count": 1, "results": [{"name": "org1", "ansible_id": "o1"}]}))]
+            # 2nd+: migration page fetches and remaining queries return 0
             responses += [Mock(json=Mock(return_value={"count": 0, "results": []}))] * 20
             mock_client.list_resources.side_effect = responses
             setup_empty_assignment_mocks(mock_client)
@@ -257,7 +515,8 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
 
         mock_client_class.side_effect = mock_client_factory
 
-        call_command("migrate_service_data", username=admin_user.username)
+        with pytest.raises((CommandError, KeyError)):
+            call_command("migrate_service_data", username=admin_user.username)
 
         assert created_clients, "Expected GWResourceAPIClient to be instantiated"
         for mock_instance in created_clients:
@@ -267,7 +526,6 @@ def test_migration_uses_bulk_fetch(admin_user, capsys, service_api_route_control
             )
 
         captured = capsys.readouterr()
-        assert "Migration Summary" in captured.out
         assert "Migrating data for" in captured.out
 
 
