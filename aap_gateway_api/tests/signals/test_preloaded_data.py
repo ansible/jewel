@@ -180,12 +180,20 @@ class TestCreatePreloadedData:
         with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'debug', 'Removed'):
             create_preload_data(verbosity=1, plan=[('0000', False)])
 
+    @staticmethod
+    def _next_ct_id():
+        """Return an ID that won't collide with rows created by create_DAB_contenttypes."""
+        from ansible_base.rbac.models import DABContentType
+        from django.db.models import Max
+
+        return (DABContentType.objects.aggregate(Max('id'))['id__max'] or 0) + 1
+
     @pytest.mark.django_db
     def test_remove_stale_shared_content_types(self):
         """remove_stale_shared_content_types deletes shared content types with invalid app_label."""
         from ansible_base.rbac.models import DABContentType
 
-        DABContentType.objects.create(service='shared', app_label='core', model='user')
+        DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
         assert remove_stale_shared_content_types() is True
         assert not DABContentType.objects.filter(service='shared', app_label='core', model='user').exists()
 
@@ -209,7 +217,7 @@ class TestCreatePreloadedData:
         """remove_stale_shared_content_types only targets service='shared' rows."""
         from ansible_base.rbac.models import DABContentType
 
-        ct = DABContentType.objects.create(service='eda', app_label='core', model='activation')
+        ct = DABContentType.objects.create(id=self._next_ct_id(), service='eda', app_label='core', model='activation')
         assert remove_stale_shared_content_types() is False
         assert DABContentType.objects.filter(pk=ct.pk).exists()
 
@@ -218,7 +226,7 @@ class TestCreatePreloadedData:
         """remove_stale_shared_content_types is wired into create_preload_data function_order."""
         from ansible_base.rbac.models import DABContentType
 
-        DABContentType.objects.create(service='shared', app_label='core', model='user')
+        DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
         create_preload_data(verbosity=0, plan=[('0000', False)])
         assert not DABContentType.objects.filter(service='shared', app_label='core', model='user').exists()
 
@@ -227,6 +235,6 @@ class TestCreatePreloadedData:
         """remove_stale_shared_content_types logs a warning for each removed row."""
         from ansible_base.rbac.models import DABContentType
 
-        DABContentType.objects.create(service='shared', app_label='core', model='user')
+        DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
         with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'warning', 'Removing stale shared content type'):
             remove_stale_shared_content_types()
