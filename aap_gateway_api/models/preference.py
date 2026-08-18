@@ -39,8 +39,7 @@ class Preference(models.BasePreferenceModel, AuditableModel):
             except InvalidToken:
                 logger.critical(
                     "Failed to decrypt Preference(section=%r, name=%r): the SECRET_KEY may have changed. "
-                    "Run 'gateway-manage rotate_secret_key' to re-encrypt all secrets with the current key. "
-                    # TODO: add KB article URL for recovery steps
+                    "Restore the original SECRET_KEY that encrypted this database, then restart. "
                     "Re-raising to prevent startup with corrupted preferences.",
                     instance.section,
                     instance.name,
