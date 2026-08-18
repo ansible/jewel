@@ -1,0 +1,70 @@
+---
+name: Build CI Image
+on:
+  push:
+    branches:
+      - devel
+      - stable-*
+    paths:
+      - 'requirements/requirements.txt'
+      - 'requirements/requirements_test.txt'
+      - 'requirements/requirements_dev.txt'
+      - 'tools/docker/Containerfile.ci'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: quay.io/ansible/jewel-ci
+
+jobs:
+  build-and-push:
+    name: Build and push CI image
+    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'ansible/jewel' &&
+      (github.ref_name == 'devel' || startsWith(github.ref_name, 'stable-'))
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Determine branch tag
+        id: branch
+        run: |
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          echo "name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Generate image tags
+        id: tags
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "date_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build CI image
+        run: make ci-image CI_IMAGE=${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }} CONTAINER_ENGINE=docker
+
+      - name: Tag additional versions
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }} \
+            ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.short_sha }}
+          docker tag ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }} \
+            ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.date_tag }}
+
+      - name: Push all tags
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.short_sha }}
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.date_tag }}
