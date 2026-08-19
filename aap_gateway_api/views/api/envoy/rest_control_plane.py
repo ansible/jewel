@@ -69,11 +69,6 @@ class XDSView(APIView):
     authentication_classes = []
     permission_classes = []
 
-    def is_filtered(self, request):
-        """Return True if the request specifies a resource_names filter (not wildcard)."""
-        names = request.POST.get("resource_names")
-        return bool(names) and not (len(names) == 1 and names[0] == "*")
-
     def get_qs(self, request, ModelClass, name_field):
         # DISTINCT ON is PostgreSQL-specific; it gives us one row per unique
         # value of name_field (e.g. one Route per envoy_cluster_name).
@@ -105,12 +100,10 @@ class ClusterDiscoverServiceView(XDSView):
     """CDS -- returns an Envoy Cluster definition for every Route."""
 
     def post(self, request, format=None):
-        filtered = self.is_filtered(request)
-        if not filtered:
-            cached = cache.get(XDS_CACHE_KEY_CDS)
-            if cached is not None:
-                logger.debug("CDS cache hit")
-                return Response(cached)
+        cached = cache.get(XDS_CACHE_KEY_CDS)
+        if cached is not None:
+            logger.debug("CDS cache hit")
+            return Response(cached)
 
         routes = list(
             self.get_qs(request, Route, "envoy_cluster_name")
@@ -130,8 +123,7 @@ class ClusterDiscoverServiceView(XDSView):
 
         clusters = [x.get_xds_cluster_config() for x in routes]
         response_data = self.get_xds_response(Cluster, clusters)
-        if not filtered:
-            cache.set(XDS_CACHE_KEY_CDS, response_data)
+        cache.set(XDS_CACHE_KEY_CDS, response_data)
         return Response(response_data)
 
 
@@ -142,11 +134,9 @@ class ListenerDiscoverServiceView(XDSView):
     permission_classes = []
 
     def post(self, request, format=None):
-        filtered = self.is_filtered(request)
-        if not filtered:
-            cached = cache.get(XDS_CACHE_KEY_LDS)
-            if cached is not None:
-                return Response(cached)
+        cached = cache.get(XDS_CACHE_KEY_LDS)
+        if cached is not None:
+            return Response(cached)
 
         ports = self.get_qs(request, HTTPPort, "envoy_listener_name").prefetch_related(
             Prefetch('routes', queryset=Route.objects.select_related('service_cluster__service_type').order_by('order')),
@@ -163,8 +153,7 @@ class ListenerDiscoverServiceView(XDSView):
         listeners = [x.get_xds_listener_config(gateway_cluster_name=gw_cluster_name) for x in ports]
 
         response_data = self.get_xds_response(Listener, listeners)
-        if not filtered:
-            cache.set(XDS_CACHE_KEY_LDS, response_data)
+        cache.set(XDS_CACHE_KEY_LDS, response_data)
         return Response(response_data)
 
 
