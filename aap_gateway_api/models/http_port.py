@@ -73,7 +73,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }
         routes.append(up_route)
-        for route in self.routes.all():
+        for route in self.routes.order_by('order'):
             routes.extend(route.get_xds_route_config(**kwargs))
 
         cfg = {

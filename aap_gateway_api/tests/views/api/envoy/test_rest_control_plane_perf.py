@@ -186,7 +186,7 @@ def _assert_cache_invalidated(client, cds=True, lds=True):
         assert len(ctx.captured_queries) > 0, "LDS cache should have been invalidated"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_route_save(unauthenticated_api_client):
     """Modifying a base Route should invalidate both CDS and LDS caches."""
     _populate_and_warm_cds_lds(unauthenticated_api_client)
@@ -196,7 +196,7 @@ def test_cache_invalidated_on_route_save(unauthenticated_api_client):
     _assert_cache_invalidated(unauthenticated_api_client)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_additional_route_save(unauthenticated_api_client):
     """Saving an AdditionalRoute should invalidate CDS and LDS caches."""
     port, clusters = _populate_and_warm_cds_lds(unauthenticated_api_client)
@@ -212,7 +212,7 @@ def test_cache_invalidated_on_additional_route_save(unauthenticated_api_client):
     _assert_cache_invalidated(unauthenticated_api_client)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_service_api_route_save(unauthenticated_api_client):
     """Saving a ServiceAPIRoute should invalidate CDS and LDS caches."""
     port, clusters = _populate_and_warm_cds_lds(unauthenticated_api_client)
@@ -232,7 +232,7 @@ def test_cache_invalidated_on_service_api_route_save(unauthenticated_api_client)
     _assert_cache_invalidated(unauthenticated_api_client)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_ui_plugin_route_save(unauthenticated_api_client):
     """Saving a UIPluginRoute should invalidate CDS and LDS caches."""
     port, clusters = _populate_and_warm_cds_lds(unauthenticated_api_client)
@@ -249,7 +249,7 @@ def test_cache_invalidated_on_ui_plugin_route_save(unauthenticated_api_client):
     _assert_cache_invalidated(unauthenticated_api_client)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_service_node_save(unauthenticated_api_client):
     """Saving a ServiceNode should invalidate CDS cache."""
     port, clusters = _populate_and_warm_cds_lds(unauthenticated_api_client)
@@ -261,7 +261,7 @@ def test_cache_invalidated_on_service_node_save(unauthenticated_api_client):
     _assert_cache_invalidated(unauthenticated_api_client, cds=True, lds=False)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_service_cluster_save(unauthenticated_api_client):
     """Saving a ServiceCluster should invalidate CDS and LDS caches."""
     _populate_and_warm_cds_lds(unauthenticated_api_client)
@@ -271,7 +271,7 @@ def test_cache_invalidated_on_service_cluster_save(unauthenticated_api_client):
     _assert_cache_invalidated(unauthenticated_api_client)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cache_invalidated_on_ca_certificate_save(unauthenticated_api_client):
     """Saving a CACertificate should invalidate SDS cache."""
     from aap_gateway_api.models.ca_certificate import CACertificate

@@ -45,6 +45,7 @@ def test_xds_cluster_discover_service_outlier_detection(outlier_detection_enable
     assert bool("outlierDetection" in response.data['resources'][0]) == outlier_detection_enabled
 
 
+@pytest.mark.django_db(transaction=True)
 def test_xds_cluster_discover_service_sni(admin_api_client, full_service_hierarchy_controller):
     cds_url = reverse("cds")
 
@@ -169,6 +170,7 @@ def test_xds_health_check_interval_floor(admin_api_client, full_service_hierarch
         assert health_checks['timeout'] == '30s'
 
 
+@pytest.mark.django_db(transaction=True)
 def test_xds_cluster_discover_service_route_tags(admin_api_client, full_service_hierarchy_controller, http_port_factory, randname):
     route = full_service_hierarchy_controller.route
 
@@ -284,6 +286,7 @@ def get_cds_clusters(admin_api_client):
     return clusters
 
 
+@pytest.mark.django_db(transaction=True)
 def test_xds_cluster_names(admin_api_client, service_cluster_eda, http_api_port_factory, randname):
     port = http_api_port_factory()
     service_port = "8000"

@@ -144,13 +144,11 @@ class ListenerDiscoverServiceView(XDSView):
         )
 
         gw_cluster_name = None
-        try:
-            sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
-            if sc:
-                gw_route = Route.objects.get(service_cluster=sc)
+        sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
+        if sc:
+            gw_route = Route.objects.filter(service_cluster=sc).first()
+            if gw_route:
                 gw_cluster_name = gw_route.envoy_cluster_name
-        except Route.DoesNotExist:
-            pass
 
         listeners = [x.get_xds_listener_config(gateway_cluster_name=gw_cluster_name) for x in ports]
 

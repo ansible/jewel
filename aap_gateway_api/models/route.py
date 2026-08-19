@@ -336,14 +336,13 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             return returned_routes
 
         if gateway_cluster_name is _UNSET:
-            try:
-                sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
-                gw_route = Route.objects.get(service_cluster=sc)
-                gateway_cluster_name = gw_route.envoy_cluster_name
-            except ServiceCluster.DoesNotExist:
+            sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
+            if sc is None:
                 return returned_routes
-            except Route.DoesNotExist:
+            gw_route = Route.objects.filter(service_cluster=sc).first()
+            if gw_route is None:
                 return returned_routes
+            gateway_cluster_name = gw_route.envoy_cluster_name
 
         envoy_cluster_name = gateway_cluster_name
         if envoy_cluster_name is None:
