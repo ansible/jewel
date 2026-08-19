@@ -196,17 +196,20 @@ def register(
 
 def initialize_preferences():
     # This method is called from apps.py to initialize all preferences in the database
-    # This seems like a really weird function let me explain...
     # When a preference is accessed the library code will:
     #    check the cache if available
     #    check the db
     #    create in the db if needed
-    # So we are going to loop over the preferences and ask for them one by one
-    # This will force the values to be written to the DB if needed.
-    # Which we need because on initial startup without this all of the preferences categories will just be blank
-    # The global_preferences object looks like a dict, so the keys will be the preference names
-    # Then we ask the global_preferences for the value of the key and it will take the actions above and populate our DB for us
-    for preference_name in gateway_preference_manager.keys():
+    # So we loop over the preferences and ask for them one by one.
+    # This forces values to be written to the DB if needed.
+    # Without this, all preferences categories will be blank on initial startup.
+    #
+    # We iterate from the registry (in-memory) rather than gateway_preference_manager.keys()
+    # because keys() calls all() which materializes the full queryset through
+    # Preference.from_db() — triggering decryption on every row. A single corrupt
+    # row would crash the entire iteration before our per-item try/except fires.
+    for preference in gateway_preference_registry.preferences():
+        preference_name = preference.identifier()
         try:
             gateway_preference_manager[preference_name]
         except (InvalidToken, ValueError, TypeError):
