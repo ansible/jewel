@@ -1,0 +1,36 @@
+---
+name: Requirements check
+on:
+  pull_request:
+    paths:
+      - 'requirements/**'
+  merge_group:
+    paths:
+      - 'requirements/**'
+jobs:
+  check-requirements:
+    name: requirements.txt satisfies constraints
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: pip3.12 install packaging requests
+
+      - name: Clone DAB
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base'
+
+      - name: Check requirements
+        run: make check-requirements

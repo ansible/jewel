@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleUserAssignment
+from ansible_base.rbac.permission_registry import permission_registry
 
 from aap_gateway_api.models import Organization, Team
 
@@ -222,7 +223,25 @@ def test_managed_organization_field_manual(admin_api_client):
 class TestOrgDeleteCleansUpRBAC:
     """Verify that a successful org delete removes all RBAC data consistently."""
 
+    @staticmethod
+    def _invalidate_permission_registry_ct_cache():
+        """Invalidate stale cached_property values on permission_registry.
+
+        transaction=True tests truncate and reload all tables, which can
+        reassign ContentType PKs.  permission_registry caches team_ct_id
+        and org_ct_id as @cached_property so they survive across tests
+        within the same xdist worker, leading to stale lookups in the
+        RBAC flush path (AAP-88508).
+        """
+        for attr in ('team_ct_id', 'org_ct_id'):
+            try:
+                delattr(permission_registry, attr)
+            except AttributeError:
+                pass
+
     def test_successful_delete_cleans_up_everything(self, admin_api_client, organization, team, user):
+        self._invalidate_permission_registry_ct_cache()
+
         RoleDefinition.objects.managed.org_member.give_permission(user, organization)
         RoleDefinition.objects.managed.team_member.give_permission(user, team)
 
