@@ -11,12 +11,14 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
+from rest_framework import status as http_status
 from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
 from aap_gateway_api.models import ServiceAPIRoute
+from aap_gateway_api.utils.preferences import PreferenceCorruptError
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
 from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
 from aap_gateway_api.views.api.v1.app_url import AppUrlViewSet  # noqa: F401
@@ -54,6 +56,8 @@ def gateway_exception_handler(exc, context):
     """
     Override default API exception handler to catch IntegrityError exceptions.
     """
+    if isinstance(exc, PreferenceCorruptError):
+        return Response({"detail": str(exc)}, status=http_status.HTTP_503_SERVICE_UNAVAILABLE)
     if isinstance(exc, IntegrityError):
         logger.warning("IntegrityError in API request", exc_info=exc)
         exc = ParseError("A resource with these values already exists.")

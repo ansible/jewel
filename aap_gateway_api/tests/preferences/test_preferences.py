@@ -324,6 +324,104 @@ def test_get_default_value_by_preference(register_preference, is_encrypted):
     assert preferences.get_default_value_by_preference(preference, is_encrypted) == ENCRYPTED_STRING if is_encrypted else 'iam_default'
 
 
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_preference_value_raises_on_invalid_token(mock_logger, register_preference):
+    """When a preference triggers InvalidToken, get_preference_value should
+    log critical and raise PreferenceCorruptError."""
+    from cryptography.fernet import InvalidToken
+
+    register_preference(
+        section="general",
+        preference_name="corrupt_pref",
+        default="safe_default",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_pref" in key:
+            raise InvalidToken("bad token")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        with pytest.raises(preferences.PreferenceCorruptError) as exc_info:
+            preferences.get_preference_value("general", "corrupt_pref")
+
+    assert "general__corrupt_pref" in str(exc_info.value)
+    assert "rotate_secret_key" in str(exc_info.value)
+    assert mock_logger.critical.call_count > 0
+    assert any("Failed to read preference" in str(call) for call in mock_logger.critical.call_args_list)
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_preference_value_raises_on_serialization_error(mock_logger, register_preference):
+    """When a preference triggers SerializationError, get_preference_value should
+    log critical and raise PreferenceCorruptError."""
+    register_preference(
+        section="general",
+        preference_name="corrupt_int_pref",
+        default=42,
+        encrypted=False,
+        preference_type="int",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_int_pref" in key:
+            raise SerializationError("Value cannot be converted to int")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        with pytest.raises(preferences.PreferenceCorruptError) as exc_info:
+            preferences.get_preference_value("general", "corrupt_int_pref")
+
+    assert "general__corrupt_int_pref" in str(exc_info.value)
+    assert mock_logger.critical.call_count > 0
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_setting_raises_on_corrupt_preference(mock_logger, register_preference):
+    """get_setting() delegates to get_preference_value(), which should raise PreferenceCorruptError."""
+    register_preference(
+        section="general",
+        preference_name="corrupt_setting",
+        default="fallback",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_setting" in key:
+            raise SerializationError("corrupt")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        with pytest.raises(preferences.PreferenceCorruptError):
+            preferences.get_setting("corrupt_setting")
+
+    assert mock_logger.critical.call_count > 0
+
+
 def test_absolute_path_or_url_preference(register_preference, preference_manager):
     register_preference(
         section="general",

@@ -4,6 +4,7 @@ import pytest
 from django.core.exceptions import FieldError
 from django.db import IntegrityError
 
+from aap_gateway_api.utils.preferences import PreferenceCorruptError
 from aap_gateway_api.views import gateway_exception_handler
 
 
@@ -19,6 +20,14 @@ def test_exception_handler_does_not_leak_db_details(exc_class, raw_message, expe
     response = gateway_exception_handler(exc, context={"view": None, "request": None})
     assert raw_message not in str(response.data)
     assert response.data["detail"] == expected_message
+
+
+def test_exception_handler_returns_503_on_preference_corrupt_error():
+    exc = PreferenceCorruptError("Preference 'proxy__jwt_private_key' has corrupt data.")
+    response = gateway_exception_handler(exc, context={"view": None, "request": None})
+    assert response.status_code == 503
+    assert "proxy__jwt_private_key" in response.data["detail"]
+    assert "corrupt" in response.data["detail"]
 
 
 def test_exception_handler_does_not_catch_other_exceptions():

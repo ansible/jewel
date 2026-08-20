@@ -36,6 +36,10 @@ class TooManyPreferencesException(Exception):
     """Raised when multiple preferences match a single setting name lookup."""
 
 
+class PreferenceCorruptError(Exception):
+    """Raised when a preference cannot be read due to corrupt or undecryptable data."""
+
+
 def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
     if validate:
         preference = gateway_preference_registry.get(name, section)
@@ -76,15 +80,27 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
         raise ValueError(_("A settings_bound preference can not have a None value"))
 
     preference_name = get_preference_key(section, name)
-    value = gateway_preference_registry.manager().get(preference_name)
 
-    if (preference := gateway_preference_registry.get(name, section)).encrypted:
-        if encrypted:
-            return get_encrypted_string_for_preference(preference)
-        # Note: values can be retrieved from cache instead of the DB.
-        # However, decrypt_string() can identify encrypted values and decrypt them,
-        # returning the non encrypted values unchanged.
-        value = ansible_encryption.decrypt_string(value)
+    try:
+        value = gateway_preference_registry.manager().get(preference_name)
+
+        if (preference := gateway_preference_registry.get(name, section)).encrypted:
+            if encrypted:
+                return get_encrypted_string_for_preference(preference)
+            value = ansible_encryption.decrypt_string(value)
+    except (InvalidToken, SerializationError, ValueError, TypeError):
+        logger.critical(
+            "Failed to read preference '%s'. This may indicate a SECRET_KEY mismatch "
+            "or corrupt data. "
+            "Consider running 'gateway-manage rotate_secret_key' to re-encrypt preferences.",
+            preference_name,
+            exc_info=True,
+        )
+        raise PreferenceCorruptError(
+            f"Preference '{preference_name}' has corrupt or undecryptable data. "
+            f"An administrator must resolve this before the gateway can function normally. "
+            f"Consider running 'gateway-manage rotate_secret_key' to re-encrypt preferences."
+        )
 
     return value
 
