@@ -8,6 +8,7 @@ from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -18,6 +19,9 @@ from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPI
 logger = logging.getLogger(__name__)
 
 
+@extend_schema_view(
+    retrieve=extend_schema(extensions={'x-ai-description': 'Returns the current state of all feature flags on the Gateway platform.'}),
+)
 class AAPFlagViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     """API endpoint that allows feature flags to be viewed or edited."""
 

@@ -174,25 +174,27 @@ def test_all_services_client_with_service_filter(
 
 
 @pytest.mark.django_db
-def test_all_services_client_timeout_handling(
+def test_all_services_client_async_returns_immediately(
     simulated_controller_resource_api,
     simmulated_hub_resource_api,
     simulated_eda_resource_api,
     admin_user,
 ):
-    """Test that timeout exceptions are handled when wait_for_response=False"""
+    """wait_for_response=False returns empty dict immediately without waiting."""
     client = PatchedAllServicesClient(user=admin_user, wait_for_response=False)
 
-    # Mock requests.request to raise a Timeout
-    with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
-        mock_request.side_effect = Timeout("Request timed out")
-
+    mock_executor = MagicMock()
+    with patch('aap_gateway_api.utils.resources_client._get_executor', return_value=mock_executor):
         responses = client._make_request("GET", "/test/")
 
-        # Should return None for all services that timed out
-        assert all(response is None for response in responses.values())
-        # Should have attempted all services
-        assert len(responses) == ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway").count()
+    assert responses == {}
+    expected_count = (
+        ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway")
+        .exclude(service_cluster__service_type__service_index_path__isnull=True)
+        .exclude(service_cluster__service_type__service_index_path='')
+        .count()
+    )
+    assert mock_executor.submit.call_count == expected_count
 
 
 @pytest.mark.django_db
@@ -202,27 +204,25 @@ def test_all_services_client_timeout_raises_when_wait_for_response_true(
     simulated_eda_resource_api,
     admin_user,
 ):
-    """Test that timeout exceptions are raised when wait_for_response=True"""
+    """Timeout exceptions are raised when wait_for_response=True."""
     client = PatchedAllServicesClient(user=admin_user, wait_for_response=True)
 
-    # Mock both JWT property and requests.request to isolate the timeout behavior
     with patch.object(type(client), 'jwt', new_callable=lambda: MagicMock(return_value="fake-jwt-token")):
         with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
             mock_request.side_effect = Timeout("Request timed out")
 
-            # Should raise the Timeout exception
             with pytest.raises(Timeout):
                 client._make_request("GET", "/test/")
 
 
 @pytest.mark.django_db
-def test_all_services_client_with_callback(
+def test_all_services_client_sync_callback(
     simulated_controller_resource_api,
     simmulated_hub_resource_api,
     simulated_eda_resource_api,
     admin_user,
 ):
-    """Test that callback is invoked for each service response"""
+    """Callback is invoked for each service response in the synchronous path."""
     callback_calls = []
 
     def test_callback(service, response):
@@ -230,44 +230,45 @@ def test_all_services_client_with_callback(
 
     client = PatchedAllServicesClient(user=admin_user).with_callback(test_callback)
 
-    # Mock the actual request execution
     with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
         mock_response = MagicMock(status_code=200)
         mock_request.return_value = mock_response
 
         responses = client._make_request("GET", "/test/")
 
-        # Callback should have been called for each service
-        expected_count = ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway").count()
+        expected_count = (
+            ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway")
+            .exclude(service_cluster__service_type__service_index_path__isnull=True)
+            .exclude(service_cluster__service_type__service_index_path='')
+            .count()
+        )
         assert len(callback_calls) == expected_count
-        # Each callback should have received the service and response from the responses dict
-        # This matches the serial version behavior: callback(service, responses[service.pk])
-        # Some callbacks may receive None if the service request failed (which is expected behavior)
         for service_pk, response in callback_calls:
-            # Verify the callback response matches what's in the responses dict
-            assert response == responses[service_pk], f"Callback response doesn't match stored response for service {service_pk}"
-            # Only check status_code if response is not None
+            assert response == responses[service_pk]
             if response is not None:
                 assert response.status_code == 200
 
 
 @pytest.mark.django_db
-def test_all_services_client_exception_handling(
+def test_all_services_client_sync_exception_handling(
     simulated_controller_resource_api,
     simmulated_hub_resource_api,
     simulated_eda_resource_api,
     admin_user,
 ):
-    """Test that exceptions in thread pool are caught and logged"""
+    """Exceptions in synchronous path are caught and logged, responses set to None."""
     client = PatchedAllServicesClient(user=admin_user)
 
-    # Mock requests.request to raise a generic exception
     with patch('aap_gateway_api.utils.resources_client.requests.request') as mock_request:
         mock_request.side_effect = Exception("Something went wrong")
 
         responses = client._make_request("GET", "/test/")
 
-        # Should return None for all services that raised exceptions
         assert all(response is None for response in responses.values())
-        # Should have attempted all services
-        assert len(responses) == ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway").count()
+        expected_count = (
+            ServiceAPIRoute.objects.exclude(service_cluster__service_type__name="gateway")
+            .exclude(service_cluster__service_type__service_index_path__isnull=True)
+            .exclude(service_cluster__service_type__service_index_path='')
+            .count()
+        )
+        assert len(responses) == expected_count

@@ -11,16 +11,22 @@ grpcio
 grpcio-tools
 protobuf>=5.29.5  # CVE-2025-4565
 psycopg
-pyjwt>=2.12.0
+pyjwt>=2.13.0  # AAP-78775
 requests
 sqlparse>=0.5.2 
 uwsgi
 xds-protos>=1.58
 PyYAML
 # Not directly imported but pinned per dependabot alerts
+jwcrypto>=1.5.8  # CVE-2026-39373 - Memory exhaustion via crafted compressed JWE tokens (transitive dep from DAB)
+pyasn1>=0.6.4    # CVE-2026-59886 - DoS via crafted ASN.1 REAL values (transitive dep from DAB's python-ldap)
+# DAB transitive deps pinned to prevent version drift during container lockfile regeneration
+django-redis>=7.0.0
+python-ldap>=3.4.7
+redis>=8.0.1,<9  # 8.0.0 broke Unix socket connections (redis/redis-py#4086), fixed in 8.0.1
 urllib3>=2.7.0   # CVE-2026-44431 / CVE-2026-44432
 argon2-cffi
-dynaconf>=3.2.13,<4.0.0  # CVE-2026-33154
+dynaconf>=3.2.13,<4.0.0  # CVE-2026-33154; <4.0.0 because 4.x is expected to have breaking changes
 referencing<0.37.0  # consistent with DAB pin from jsonschema-path
 jsonschema<4.26  # 4.26+ requires rpds-py>=0.25, incompatible with hermeto
 rpds-py<0.25  # hermeto does not support rpds-py>=0.25

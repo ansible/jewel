@@ -17,6 +17,24 @@ Jewel provides the source code for the Gateway that connects Ansible services an
 > The project name, Jewel, refers to a precious stone known as the Eye of the Sea from the same novel that originated the word Ansible, Ursula K. Le Guin's *Rocannon's World*.
 > Ansible communicates across distance; Jewel is what everything converges on.
 
+## Container Image
+
+A pre-built container image is published to the GitHub Container Registry on every push to the `devel` branch. The published image ships the Jewel API server without the platform UI.
+
+```bash
+docker pull ghcr.io/ansible/jewel:latest
+```
+
+> **Note:** Jewel requires PostgreSQL, Redis, and configuration to run. A standalone `docker run` won't work out of the box. Use `make docker-compose` for a full working environment — see the development setup below.
+
+There are currently no versioned releases. The `latest` tag always points to the most recent `devel` build. Per-commit SHA tags are available for pinning:
+
+| Tag | Description |
+|---|---|
+| `latest` | Most recent build from `devel` |
+| `sha-<short>` | Pinned to a specific commit (short SHA) |
+| `sha-<full>` | Pinned to a specific commit (full SHA) |
+
 ## Communication
 
 Join the Ansible forum:

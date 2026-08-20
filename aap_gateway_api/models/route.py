@@ -6,7 +6,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
-from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE, EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE, LUA_PER_ROUTE, UPSTREAM_TLS_CONTEXT
 from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
@@ -67,6 +67,13 @@ class Route(UniqueNamedCommonModel, AuditableModel):
     is_internal_route = models.BooleanField(
         default=False, help_text=_("If true, the gateway will only allow other Ansible services to access this route. Requires gateway auth to be enabled.")
     )
+    reject_failed_basic_auth = models.BooleanField(
+        default=False,
+        help_text=_(
+            "If true, requests with invalid Basic credentials will receive a 401 instead of being passed to the back end."
+            " Requests without credentials continue to be passed through anonymously."
+        ),
+    )
 
     # Our setup here is a little bit weird. In the envoy model, ports are configured on the cluster object
     # but in this case we're configuring them on the route since all of the ports should be the same for every
@@ -116,8 +123,16 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         ),
     )
 
+    @property
+    def is_eda_service(self):
+        """True if this route targets the EDA service."""
+        return self.service_cluster.service_type.is_eda_service
+
     def is_internal_route_string(self):
         return "t" if self.is_internal_route else "f"
+
+    def reject_failed_basic_auth_string(self):
+        return "t" if self.reject_failed_basic_auth else "f"
 
     def node_tags_list(self):
         return [tag.strip() for tag in self.node_tags.split(",")] if self.node_tags else []
@@ -191,10 +206,11 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         if self.service_cluster.health_checks_enabled:
             effective_health_check_timeout = self.service_cluster.get_effective_health_check_timeout_seconds()
+            effective_health_check_interval = self.service_cluster.get_effective_health_check_interval_seconds(effective_health_check_timeout)
             cfg["health_checks"] = [
                 {
                     "timeout": f"{effective_health_check_timeout}s",
-                    "interval": f"{self.service_cluster.health_check_interval_seconds}s",
+                    "interval": f"{effective_health_check_interval}s",
                     "unhealthy_threshold": self.service_cluster.health_check_unhealthy_threshold,
                     "healthy_threshold": self.service_cluster.health_check_healthy_threshold,
                     "http_health_check": {
@@ -272,10 +288,28 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             }
 
         if not self.enable_gateway_auth:
-            cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
-                TYPE_KEY: EXT_AUTH_PER_ROUTE,
-                "disabled": not self.enable_gateway_auth,
-            }
+            if self.is_eda_service:
+                # EDA webhooks handle their own auth but need X-Trusted-Proxy
+                # to verify requests originated from the gateway (CVE fix)
+                cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                    TYPE_KEY: EXT_AUTH_PER_ROUTE,
+                    "check_settings": {
+                        "context_extensions": {
+                            "is_internal_route": self.is_internal_route_string(),
+                            "service_type": self.service_cluster.service_type.name,
+                            "auth_type": AUTH_TYPE_NONE,
+                        },
+                    },
+                }
+            else:
+                # All other services: completely disable ext_auth to restore
+                # pre-CVE-fix behavior. This avoids X-Trusted-Proxy being added
+                # (which causes 403 on gateway config writes) and prevents
+                # unnecessary gRPC calls (which causes 401 in proxy environments).
+                cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
+                    TYPE_KEY: EXT_AUTH_PER_ROUTE,
+                    "disabled": True,
+                }
         else:
             cfg["typed_per_filter_config"][EXT_AUTH_FILTER] = {
                 TYPE_KEY: EXT_AUTH_PER_ROUTE,
@@ -283,6 +317,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     # map<string, string> to be sent to auth server per route
                     "context_extensions": {
                         "is_internal_route": self.is_internal_route_string(),
+                        "reject_failed_basic_auth": self.reject_failed_basic_auth_string(),
                         "service_type": self.service_cluster.service_type.name,
                         "auth_type": self.service_cluster.auth_type,
                     },

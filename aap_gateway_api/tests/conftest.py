@@ -100,6 +100,23 @@ def ensure_settings_bound_preferences():
         setattr(settings, 'RUNTIME_FEATURE_FLAGS', True)
 
 
+@pytest.fixture(autouse=True)
+def _clear_system_user_cache():
+    """Clear the cached system user between tests.
+
+    DAB's get_system_user() caches the result in Redis (via django.core.cache).
+    Tests run inside transactions that are rolled back after each test. Without
+    clearing the cache, a stale User reference from a previous test survives the
+    rollback, causing ForeignKey violations when the next test's fixtures
+    reference a user pk that no longer exists in the DB.
+    """
+    from ansible_base.lib.utils.models import clear_system_user_cache
+
+    clear_system_user_cache()
+    yield
+    clear_system_user_cache()
+
+
 def pytest_configure():
     """
     macOS uses 'spawn' by default (unlike Linux, which uses 'fork'). This causes issues with Django's app registry in subprocesses,
@@ -111,6 +128,12 @@ def pytest_configure():
     except RuntimeError:
         # Ignore if already set
         pass
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        if "_perf" in item.module.__name__:
+            item.add_marker(pytest.mark.perf)
 
 
 # set_preference fixture has been REMOVED!
@@ -471,6 +494,7 @@ _service_index_paths = {
     DefaultServiceType.CONTROLLER.value: "/v2/service-index/",
     DefaultServiceType.HUB.value: "/service-index/",
     DefaultServiceType.EDA.value: "/v1/service-index/",
+    DefaultServiceType.METRICS.value: "/v1/service-index/",
 }
 
 for name in [x.value for x in DefaultServiceType]:
@@ -531,6 +555,7 @@ for name in [x.value for x in DefaultServiceType]:
             DefaultServiceType.EDA: 2,
             DefaultServiceType.HUB: 3,
             DefaultServiceType.GATEWAY: 4,
+            DefaultServiceType.METRICS: 5,
         }
 
         port_prefix = port_prefixes[service_cluster.service_type.name]
@@ -570,6 +595,7 @@ for name in [x.value for x in DefaultServiceType]:
             DefaultServiceType.EDA: 2,
             DefaultServiceType.HUB: 3,
             DefaultServiceType.GATEWAY: 4,
+            DefaultServiceType.METRICS: 5,
         }
 
         port_prefix = port_prefixes[service_cluster.service_type.name]

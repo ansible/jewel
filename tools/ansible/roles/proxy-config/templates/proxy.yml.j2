@@ -10,7 +10,6 @@ gateway_service_types:  # Service types
   - name: controller
   - name: hub
   - name: eda
-  - name: console
   - name: lightspeed
     ping_url: "/api/v1/health/"
     service_index_path: "/v1/service-index/"
@@ -29,15 +28,6 @@ gateway_service_clusters:  # Service clusters (1 per type)
 {% if 'eda' in gateway_services %}
   - name: eda
     service_type: eda
-{% endif %}
-{% if 'console' in gateway_services %}
-  - name: console
-    service_type: console
-    health_checks_enabled: False
-    auth_type: BASIC
-    upstream_hostname: console.redhat.com
-    dns_discovery_type: LOGICAL_DNS
-    dns_lookup_family: V4_ONLY
 {% endif %}
 {% if 'lightspeed' in gateway_services %}
   - name: lightspeed
@@ -65,11 +55,6 @@ gateway_service_nodes:   # Nodes of service clusters
   - name: EDA Node
     service_cluster: eda
     address: "{{ gateway_host_address }}"
-{% endif %}
-{% if 'console' in gateway_services %}
-  - name: console
-    service_cluster: console
-    address: "console.redhat.com"
 {% endif %}
 {% if 'lightspeed' in gateway_services %}
   - name: lightspeed
@@ -109,14 +94,14 @@ gateway_services:    # API Services (Hub/EDA/Controller/gateway)
 {% elif service == 'controller' %}
     # It configures proxy requests
     # - from https://<gateway url>:9080/api/controller/...
-    # - to https://localhost:8043/api/...  # localhost is taken from service node "Controller Node"
+    # - to https://localhost:8043/api/controller/...  # localhost is taken from service node "Controller Node"
   - name: Controller API
     description: Proxy to the Controller
     http_port: API Port
     api_slug: controller
     service_cluster: controller
     is_service_https: true
-    service_path: '/api/'
+    service_path: '/api/controller/'
     service_port: 8043
     order: 2
 
@@ -216,14 +201,3 @@ gateway_routes:
     enable_gateway_auth: true
 {% endif %}
 
-{% if 'console' in gateway_services %}
-  - name: Red Hat Hybrid Cloud Console
-    http_port: API Port
-    service_cluster: console
-    service_port: 443
-    is_service_https: true
-    service_path: '/api/'
-    gateway_path: '/external-proxy/crc/'
-    description: 'console.redhat.com'
-    enable_gateway_auth: true
-{% endif %}

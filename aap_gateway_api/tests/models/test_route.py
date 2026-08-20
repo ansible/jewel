@@ -1,12 +1,13 @@
 import pytest
 from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE
 from aap_gateway_api.models import AdditionalRoute, DefaultServiceType, HTTPPort, ServiceAPIRoute, ServiceCluster, ServiceType, UIPluginRoute
 from aap_gateway_api.models.service_node import ServiceNode
 
 
 class TestRoute:
-    @pytest.mark.django_db()
+    @pytest.mark.django_db
     def test_xds_login_logout_missing_models(self):
         route = ServiceAPIRoute()
         # First fail because of the missing service cluster
@@ -123,13 +124,107 @@ class TestRoute:
         assert routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]["check_settings"]["context_extensions"]["is_internal_route"] == "t"
 
     @pytest.mark.django_db
-    def test_xds_route_config_disable_gateway_auth(self, service_cluster_eda):
+    def test_xds_route_config_disable_gateway_auth_for_eda(self, service_cluster_eda):
+        """
+        Test that EDA routes with enable_gateway_auth=False use AUTH_TYPE_NONE.
+        This allows EDA webhooks to handle their own auth while still getting X-Trusted-Proxy.
+        """
         route = ServiceAPIRoute(
             gateway_path='/', service_path='/path', envoy_cluster_name='testing', enable_gateway_auth=False, service_cluster=service_cluster_eda
         )
         routes = route.get_xds_route_config()
         assert len(routes) == 1
         assert 'envoy.filters.http.ext_authz' in routes[0]["typed_per_filter_config"]
+
+        # Verify the new structure: uses check_settings with auth_type=NONE instead of disabled=True
+        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'disabled' not in ext_authz_config, "EDA routes should NOT disable ext_auth completely"
+        assert 'check_settings' in ext_authz_config
+        assert 'context_extensions' in ext_authz_config["check_settings"]
+
+        context_extensions = ext_authz_config["check_settings"]["context_extensions"]
+        assert context_extensions["auth_type"] == AUTH_TYPE_NONE
+        assert context_extensions["service_type"] == service_cluster_eda.service_type.name
+        assert context_extensions["is_internal_route"] == "f"  # ServiceAPIRoute defaults to is_internal_route=False
+
+    @pytest.mark.django_db
+    def test_eda_event_stream_route_gets_trusted_proxy_config(self, service_cluster_eda):
+        """
+        Simulate an EDA event stream webhook route (enable_gateway_auth=False).
+        Verify the xDS config enables ext_auth with AUTH_TYPE_NONE so the control
+        plane adds X-Trusted-Proxy, allowing EDA to verify the request came through
+        the gateway. This is the core CVE fix behavior (AAP-79215/79216).
+        """
+        route = ServiceAPIRoute(
+            gateway_path='/api/eda/v1/external-event-stream/',
+            service_path='/api/eda/v1/external-event-stream/',
+            envoy_cluster_name='eda-cluster',
+            enable_gateway_auth=False,
+            service_cluster=service_cluster_eda,
+        )
+        routes = route.get_xds_route_config()
+        assert len(routes) == 1
+
+        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'disabled' not in ext_authz_config, "EDA event stream routes must NOT disable ext_auth"
+        assert ext_authz_config["check_settings"]["context_extensions"]["auth_type"] == AUTH_TYPE_NONE
+        assert ext_authz_config["check_settings"]["context_extensions"]["service_type"] == "eda"
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("service_type_fixture", ["service_cluster_hub", "service_cluster_controller"])
+    def test_non_eda_services_disable_ext_auth(self, service_type_fixture, request):
+        """
+        Verify that non-EDA services (hub, controller) with enable_gateway_auth=False
+        completely disable ext_auth, preventing gRPC calls that could be misrouted
+        through corporate proxies in restricted network environments (AAP-83727).
+        """
+        service_cluster = request.getfixturevalue(service_type_fixture)
+        route = ServiceAPIRoute(
+            gateway_path='/',
+            service_path='/path',
+            envoy_cluster_name='testing',
+            enable_gateway_auth=False,
+            service_cluster=service_cluster,
+        )
+        routes = route.get_xds_route_config()
+        assert len(routes) == 1
+
+        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert ext_authz_config.get('disabled') is True, f"{service_cluster.service_type.name} routes must disable ext_auth"
+        assert 'check_settings' not in ext_authz_config
+
+    @pytest.mark.django_db
+    def test_service_type_is_eda_service(self, service_cluster_gateway, service_cluster_eda):
+        """Verify ServiceType.is_eda_service cached_property identifies EDA vs non-EDA."""
+        assert service_cluster_eda.service_type.is_eda_service is True
+        assert service_cluster_gateway.service_type.is_eda_service is False
+
+    @pytest.mark.django_db
+    def test_is_eda_service_property(self, service_cluster_gateway, service_cluster_eda):
+        """Verify the Route.is_eda_service property delegates correctly to ServiceType."""
+        gw_route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_gateway)
+        eda_route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        assert gw_route.is_eda_service is False
+        assert eda_route.is_eda_service is True
+
+    @pytest.mark.django_db
+    def test_xds_route_config_disable_gateway_auth_for_non_eda(self, service_cluster_gateway):
+        """
+        Test that non-EDA routes with enable_gateway_auth=False completely disable ext_auth.
+        Only EDA needs AUTH_TYPE_NONE for X-Trusted-Proxy; all other services restore
+        pre-CVE-fix behavior to avoid 403s and gRPC misrouting in proxy environments.
+        """
+        route = ServiceAPIRoute(
+            gateway_path='/', service_path='/path', envoy_cluster_name='testing', enable_gateway_auth=False, service_cluster=service_cluster_gateway
+        )
+        routes = route.get_xds_route_config()
+        assert len(routes) == 1
+        assert 'envoy.filters.http.ext_authz' in routes[0]["typed_per_filter_config"]
+
+        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        assert 'disabled' in ext_authz_config, "Non-EDA routes MUST disable ext_auth completely"
+        assert ext_authz_config['disabled'] is True
+        assert 'check_settings' not in ext_authz_config, "Non-EDA routes should not have check_settings"
 
     @pytest.mark.parametrize(
         "service,expected_route_len",
@@ -688,3 +783,86 @@ class TestRouteRequestTimeout:
             route.node_tags = "eda"
             cluster_cfg = route.get_xds_cluster_config()
             assert cluster_cfg["health_checks"][0]["timeout"] == "600s"
+
+    @pytest.mark.parametrize(
+        "health_check_interval,health_check_timeout,route_timeout,preference_timeout,expected_interval",
+        [
+            (0, 5, None, 30, 30),
+            (10, 5, None, 30, 30),
+            (30, 5, None, 30, 30),
+            (60, 5, None, 30, 60),
+            (10, 5, 600, 30, 600),
+            (700, 5, 600, 30, 700),
+        ],
+        ids=[
+            "zero_interval_uses_effective_timeout",
+            "interval_below_effective_timeout_uses_effective_timeout",
+            "interval_equals_effective_timeout",
+            "interval_above_effective_timeout_preserved",
+            "interval_below_route_timeout_uses_route_timeout",
+            "interval_above_route_timeout_preserved",
+        ],
+    )
+    @pytest.mark.django_db
+    def test_effective_health_check_interval(
+        self,
+        health_check_interval,
+        health_check_timeout,
+        route_timeout,
+        preference_timeout,
+        expected_interval,
+        service_cluster_eda,
+        http_port,
+        preference_manager,
+    ):
+        service_cluster_eda.health_check_timeout_seconds = health_check_timeout
+        service_cluster_eda.health_check_interval_seconds = health_check_interval
+        service_cluster_eda.save()
+
+        with preference_manager.set("proxy", "request_timeout", preference_timeout):
+            AdditionalRoute.objects.create(
+                name="test-interval-route",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path",
+                gateway_path="/test-interval/",
+                request_timeout_seconds=route_timeout,
+            )
+            assert service_cluster_eda.get_effective_health_check_interval_seconds() == expected_interval
+
+    @pytest.mark.django_db
+    def test_xds_cluster_config_uses_effective_health_check_interval(self, service_cluster_eda, http_port, preference_manager):
+        service_cluster_eda.health_checks_enabled = True
+        service_cluster_eda.health_check_timeout_seconds = 5
+        service_cluster_eda.health_check_interval_seconds = 10
+        service_cluster_eda.save()
+        service_cluster_eda.nodes.set(
+            [
+                ServiceNode.objects.create(
+                    name="node-for-interval-test",
+                    service_cluster=service_cluster_eda,
+                    address="10.0.0.1",
+                    tags="eda",
+                )
+            ]
+        )
+
+        seed_feature_flags()
+
+        with preference_manager.set("proxy", "request_timeout", 30):
+            route = AdditionalRoute.objects.create(
+                name="interval-xds-test-route",
+                http_port=http_port,
+                is_service_https=False,
+                service_cluster=service_cluster_eda,
+                service_port=8080,
+                service_path="/path",
+                gateway_path="/xds-interval-test/",
+                request_timeout_seconds=600,
+            )
+            route.node_tags = "eda"
+            cluster_cfg = route.get_xds_cluster_config()
+            assert cluster_cfg["health_checks"][0]["timeout"] == "600s"
+            assert cluster_cfg["health_checks"][0]["interval"] == "600s"

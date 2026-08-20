@@ -2,6 +2,7 @@ import copy
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 from typing import Callable
 
 import requests
@@ -22,6 +23,25 @@ ResourceRequestBody = DABResourceRequestBody
 
 logger = logging.getLogger('aap.gateway.utils.resource_api_client')
 
+# Lazily-initialized executor for fire-and-forget resource sync.
+# Created post-fork (on first use) to avoid sharing threads across uWSGI workers.
+_fire_and_forget_executor: ThreadPoolExecutor | None = None
+_executor_lock = Lock()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _fire_and_forget_executor
+
+    if _fire_and_forget_executor is None:
+        with _executor_lock:
+            if _fire_and_forget_executor is None:
+                _fire_and_forget_executor = ThreadPoolExecutor(
+                    max_workers=10,
+                    thread_name_prefix="resource-sync",
+                )
+
+    return _fire_and_forget_executor
+
 
 class GWResourceAPIClient(DABResourceAPIClient):
     def get_default_user(self):
@@ -34,6 +54,15 @@ class GWResourceAPIClient(DABResourceAPIClient):
         if user is None:
             return get_user_model().objects.first()
         return user
+
+    def bulk_update_resources(self, items: list[dict]):
+        """
+        Bulk-update multiple resources in a single HTTP request.
+
+        Each item must contain 'ansible_id' and one or more fields to update:
+        service_id, new_ansible_id, is_partially_migrated, resource_data.
+        """
+        return self._make_request("post", "resources/bulk-update/", data={"items": items})
 
     def get_url_for_service(self, service):
         http_port = service.http_port
@@ -136,41 +165,46 @@ class AllServicesClient(GWResourceAPIClient):
                 raise
             return service.pk, None
 
-    # Executes requests in parallel using ThreadPoolExecutor to improve performance when
-    # making requests to multiple services simultaneously.
-    def _make_request(
-        self,
-        method: str,
-        path: str,
-        data: dict = None,
-        params: dict = None,
-    ) -> dict[int, Response | None]:
-        from aap_gateway_api.models import ServiceAPIRoute
+    def _make_async_request(self, services, method, path, data, params, jwt_token):
+        """Submit requests to the shared executor and return immediately.
 
+        Each request runs in a background thread. Errors are logged via
+        add_done_callback so they are never silently swallowed.
+        The 15-minute reverse sync in each service catches any delivery failures.
+        """
+        executor = _get_executor()
+        callback = self.callback
+        for svc in services:
+            future = executor.submit(self._async_worker, svc, method, path, data, params, jwt_token, callback)
+            future.add_done_callback(self._log_async_result)
+        return {}
+
+    @staticmethod
+    def _log_async_result(future):
+        """Log any unhandled exception from a fire-and-forget future."""
+        exc = future.exception()
+        if exc is not None:
+            logger.exception(f"Unhandled error in async resource sync: {exc}", exc_info=exc)
+
+    def _async_worker(self, service, method, path, data, params, jwt, callback):
+        """Execute a single service request in a background thread."""
+        try:
+            _, response = self._make_service_request(service, method, path, data, params, jwt)
+        except Timeout:
+            logger.error(f"Resource client request timeout for service {service.pk}")  # NOSONAR
+            response = None
+        except Exception as e:
+            logger.exception(f"Error in async request for service {service.pk}: {e}")
+            response = None
+        if callback:
+            try:
+                callback(service, response)
+            except Exception:
+                logger.exception(f"Callback failed for service {service.pk}")
+
+    def _make_synchronous_request(self, services, method, path, data, params, jwt_token):
+        """Execute requests in parallel and wait for all responses."""
         responses = {}
-        # Exclude gateway (not a downstream service) and services without a
-        # service-index endpoint (e.g. metrics) to avoid AttributeError in
-        # get_url_for_service when service_index_path is None or empty.
-        svc_qs = (
-            ServiceAPIRoute.objects.exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
-            .exclude(service_cluster__service_type__service_index_path__isnull=True)
-            .exclude(service_cluster__service_type__service_index_path='')
-        )
-        if self.service_filter:
-            svc_qs = svc_qs.filter(**self.service_filter)
-
-        # Evaluate queryset once to avoid lazy evaluation issues in threads
-        services = list(svc_qs)
-
-        # Early return if no services to process
-        if not services:
-            return responses
-
-        # Prefetch JWT to avoid race conditions with multiple threads calling refresh_jwt()
-        jwt_token = self.jwt
-
-        # Execute all service requests in parallel
-        # Cap max_workers to avoid excessive thread creation
         max_workers = min(len(services), 10)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(self._make_service_request, svc, method, path, data, params, jwt_token): svc for svc in services}
@@ -180,19 +214,48 @@ class AllServicesClient(GWResourceAPIClient):
                 try:
                     _, response = future.result()
                     responses[service.pk] = response
-                except Timeout as e:
-                    # Re-raise timeout if we're supposed to wait for responses
-                    if self.wait_for_response:
-                        raise
-                    logger.error(f"Resource client request timeout for service {service.pk}: {type(e).__name__}")  # NOSONAR
-                    responses[service.pk] = None
+                except Timeout:
+                    raise
                 except Exception as e:
-                    # Log the error but continue processing other services
                     logger.exception(f"Error processing request for service {service.pk}: {e}")
                     responses[service.pk] = None
 
-                # Call callback after storing response, even if there was an exception
                 if self.callback:
                     self.callback(service, responses[service.pk])
 
         return responses
+
+    def _get_services(self):
+        """Return the list of downstream services to sync with.
+
+        Uses select_related to eagerly load related objects so that
+        background threads in _async_worker don't need DB access.
+        """
+        from aap_gateway_api.models import ServiceAPIRoute
+
+        svc_qs = (
+            ServiceAPIRoute.objects.select_related('http_port', 'service_cluster__service_type')
+            .exclude(service_cluster__service_type__name=DefaultServiceType.GATEWAY.value)
+            .exclude(service_cluster__service_type__service_index_path__isnull=True)
+            .exclude(service_cluster__service_type__service_index_path='')
+        )
+        if self.service_filter:
+            svc_qs = svc_qs.filter(**self.service_filter)
+        return list(svc_qs)
+
+    def _make_request(
+        self,
+        method: str,
+        path: str,
+        data: dict = None,
+        params: dict = None,
+    ) -> dict[int, Response | None]:
+        services = self._get_services()
+        if not services:
+            return {}
+
+        jwt_token = self.jwt
+
+        if self.wait_for_response:
+            return self._make_synchronous_request(services, method, path, data, params, jwt_token)
+        return self._make_async_request(services, method, path, data, params, jwt_token)

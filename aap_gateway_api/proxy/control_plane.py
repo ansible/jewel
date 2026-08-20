@@ -27,10 +27,8 @@ from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
 from aap_gateway_api.common.authentication import SERVICE_TOKEN_AUTH_STRING
-from aap_gateway_api.models import ServiceCluster
+from aap_gateway_api.common.envoy import AUTH_TYPE_NONE
 from aap_gateway_api.utils import JWTSessionCache, create_signed_jwt, get_jwt_rsa_key, get_preference_value
-
-from .service_auth import ServiceAuthHelper
 
 MIDDLEWARE = [SessionMiddleware, AuthenticatorBackendMiddleware, AuthenticationMiddleware, LogRequestMiddleware]
 
@@ -86,6 +84,9 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
 class _ExternalAuth:
     def is_route_internal(self, request) -> bool:
         return request.attributes.context_extensions["is_internal_route"] == "t"
+
+    def should_reject_failed_basic_auth(self, request) -> bool:
+        return request.attributes.context_extensions.get("reject_failed_basic_auth") == "t"
 
     def _get_ms_delta(self, start_time):
         delta_ms = (time.time() - start_time) * 1000
@@ -236,14 +237,18 @@ class _ExternalAuth:
         try:
             user = self.drf_request.user
         except AuthenticationFailed:
-            # Rest framework will raise this exception if the user/pass combo is invalid.
-            # If this is the case we want to fall though and _return_not_authenticated so that the Authorization header will be sent to the backend.
+            # Reject immediately for container registry requests with invalid credentials,
+            # otherwise the token endpoint silently issues an anonymous token and podman reports login success.
+            auth_header = self.drf_request.META.get("HTTP_AUTHORIZATION", "")
+            if self.reject_failed_basic_auth and auth_header[:6].lower() == "basic ":
+                return self._return_no_auth_with_reason("Invalid credentials.", http_status_code=401, code=16)
+
             user = None
 
         if self.is_internal_route:
             if self.drf_request.auth != SERVICE_TOKEN_AUTH_STRING:
                 return self._return_no_auth_with_reason("User is not authorized to reach internal route", code=16, http_status_code=401)
-            elif self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/'):
+            elif self.request_path.startswith(('/api/gateway/', '/static/')):
                 return self._return_no_authentication_required()
 
         if not user or not user.pk:
@@ -252,17 +257,8 @@ class _ExternalAuth:
         if scope_denied_response := self._check_oauth2_scope_permission(user):
             return scope_denied_response
 
-        match self.auth_type:
-            case ServiceCluster.ServiceAuthType.JWT_AUTH:
-                header_name = get_preference_value('proxy', 'gateway_token_name')
-                header_val = self.get_jwt_for_user(user)
-            case _:
-                # Not JWT
-                try:
-                    (header_name, header_val) = ServiceAuthHelper.get_auth_header(self.service_type, self.auth_type)
-                except (NameError, RuntimeError) as e:
-                    logger.exception(e)
-                    raise
+        header_name = get_preference_value('proxy', 'gateway_token_name')
+        header_val = self.get_jwt_for_user(user)
 
         self.headers.append(HeaderValueOption(header=HeaderValue(key=header_name, value=header_val)))
         return self._return_authenticated(user.username)
@@ -299,6 +295,14 @@ class _ExternalAuth:
 
         self.request_path = request.attributes.request.http.path
         self.is_internal_route = self.is_route_internal(request)
+        self.reject_failed_basic_auth = self.should_reject_failed_basic_auth(request)
+
+        # Routes with auth_type=NONE (enable_gateway_auth=false) skip authentication
+        # but still get the X-Trusted-Proxy header to verify they came through the gateway.
+        # This is useful for services like EDA that handle their own authentication.
+        if self.auth_type == AUTH_TYPE_NONE:
+            logger.debug(f"Auth type is NONE for {self.request_id} {self.request_path} - adding trusted proxy header without authentication")
+            return self._return_no_authentication_required()
 
         # OIDC/OAuth2 flow endpoints handle their own authentication via DOT.
         # This check runs before internal/external branching so it works regardless
@@ -308,7 +312,7 @@ class _ExternalAuth:
 
         # /static endpoints and gateway API requests do not require proxy-level authentication.
         # This should never trigger if enable_gateway_auth is set to False on the gateway service.
-        if not self.is_internal_route and (self.request_path.startswith('/api/gateway/') or self.request_path.startswith('/static/')):
+        if not self.is_internal_route and self.request_path.startswith(('/api/gateway/', '/static/')):
             return self._return_no_authentication_required()
 
         # Try to authenticate request: The try block should either return a CheckResponse or raise an error to be handled here.

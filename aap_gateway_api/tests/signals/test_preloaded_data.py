@@ -1,11 +1,16 @@
 from unittest import mock
 
 import pytest
-from ansible_base.feature_flags.models import AAPFlag
-from ansible_base.feature_flags.utils import create_initial_data as seed_feature_flags
 
-from aap_gateway_api.models import Organization, ServiceType
-from aap_gateway_api.signals.preloaded_data import add_console_service_type, create_default_organization, create_preload_data, set_system_user_password
+from aap_gateway_api.models import Organization, Preference, ServiceType
+from aap_gateway_api.signals.preloaded_data import (
+    create_default_organization,
+    create_preload_data,
+    remove_console_service_type,
+    remove_stale_shared_content_types,
+    set_system_user_managed_flag,
+    set_system_user_password,
+)
 
 
 class TestCreatePreloadedData:
@@ -32,6 +37,16 @@ class TestCreatePreloadedData:
     def test_default_org_created_by_default(self):
         org = Organization.objects.filter(name='Default')
         assert org
+
+    @pytest.mark.django_db
+    def test_set_system_user_managed_flag(self):
+        from ansible_base.lib.utils.models import get_system_user
+
+        system_user = get_system_user()
+        system_user.managed = False
+        system_user.save()
+        assert set_system_user_managed_flag() is True, "Should set managed=True when unset"
+        assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
 
     @pytest.mark.django_db
     def test_immediate_return_if_no_plan(self):
@@ -71,33 +86,155 @@ class TestCreatePreloadedData:
                 create_preload_data(verbosity=verbosity, plan=[('0000', False)])
 
     @pytest.mark.django_db
-    @pytest.mark.parametrize(
-        "flag_value",
-        [
-            'True',
-            'False',
-        ],
-    )
-    def test_console_st(self, flag_value, settings_override_mutable, settings):
-        with pytest.raises(ServiceType.DoesNotExist):
-            ServiceType.objects.get(name="console")
-        AAPFlag.objects.all().delete()
-        setattr(settings, "FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED", flag_value)
-        seed_feature_flags()
+    def test_remove_console_service_type(self):
+        """remove_console_service_type deletes console ServiceType and RED_HAT_CONSOLE_URL preference."""
+        ServiceType.objects.get_or_create(name="console")
+        Preference.objects.bulk_create(
+            [Preference(section="analytics", name="RED_HAT_CONSOLE_URL", raw_value="https://console.redhat.com")],
+            ignore_conflicts=True,
+        )
 
-        if flag_value == 'False':
-            assert add_console_service_type() is False
-            with pytest.raises(ServiceType.DoesNotExist):
-                ServiceType.objects.get(name="console")
-        else:
-            assert add_console_service_type() is True
-            # Second call should return False (already exists)
-            assert add_console_service_type() is False
+        assert remove_console_service_type() is True, "Should delete existing records"
+        assert not ServiceType.objects.filter(name="console").exists()
+        assert not Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").exists()
 
-            console_type = ServiceType.objects.get(name="console")
+    @pytest.mark.django_db
+    def test_remove_console_service_type_idempotent(self):
+        """remove_console_service_type is a no-op when records don't exist."""
+        ServiceType.objects.filter(name="console").delete()
+        Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").delete()
 
-            assert console_type.name == "console"
-            assert console_type.ping_url is None
-            assert console_type.service_index_path is None
-            assert console_type.login_path is None
-            assert console_type.logout_path is None
+        assert remove_console_service_type() is False, "Should return False when nothing to delete"
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_only_service_type(self):
+        """remove_console_service_type handles case where only ServiceType exists."""
+        Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").delete()
+        ServiceType.objects.get_or_create(name="console")
+
+        assert remove_console_service_type() is True
+        assert not ServiceType.objects.filter(name="console").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_only_preference(self):
+        """remove_console_service_type handles case where only Preference exists."""
+        ServiceType.objects.filter(name="console").delete()
+        Preference.objects.bulk_create(
+            [Preference(section="analytics", name="RED_HAT_CONSOLE_URL", raw_value="https://console.redhat.com")],
+            ignore_conflicts=True,
+        )
+
+        assert remove_console_service_type() is True
+        assert not Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_via_preload_data(self):
+        """remove_console_service_type is wired into create_preload_data function_order."""
+        ServiceType.objects.get_or_create(name="console")
+        Preference.objects.bulk_create(
+            [Preference(section="analytics", name="RED_HAT_CONSOLE_URL", raw_value="https://console.redhat.com")],
+            ignore_conflicts=True,
+        )
+
+        create_preload_data(verbosity=0, plan=[('0000', False)])
+
+        assert not ServiceType.objects.filter(name="console").exists()
+        assert not Preference.objects.filter(section="analytics", name="RED_HAT_CONSOLE_URL").exists()
+
+    def test_remove_console_service_type_lookup_error(self):
+        """remove_console_service_type returns False when models are not available."""
+        with mock.patch('aap_gateway_api.signals.preloaded_data.global_apps.get_model', side_effect=LookupError):
+            assert remove_console_service_type() is False
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_cascade_warning(self, expected_log):
+        """remove_console_service_type logs warning when ServiceClusters will be cascade-deleted."""
+        from aap_gateway_api.models import ServiceCluster
+
+        st, _ = ServiceType.objects.get_or_create(name="console")
+        ServiceCluster.objects.create(name="test-console-cluster", service_type=st)
+
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'warning', 'Cascade-deleting'):
+            assert remove_console_service_type() is True
+        assert not ServiceType.objects.filter(name="console").exists()
+        assert not ServiceCluster.objects.filter(name="test-console-cluster").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_cascade_check_exception(self):
+        """remove_console_service_type handles cascade check failures gracefully."""
+        ServiceType.objects.get_or_create(name="console")
+
+        with mock.patch.object(
+            ServiceType.objects.filter(name="console").__class__,
+            'values_list',
+            side_effect=Exception("query error"),
+        ):
+            assert remove_console_service_type() is True
+        assert not ServiceType.objects.filter(name="console").exists()
+
+    @pytest.mark.django_db
+    def test_remove_console_service_type_logs_removed_action(self, expected_log):
+        """create_preload_data logs 'Removed' action for remove_ functions."""
+        ServiceType.objects.get_or_create(name="console")
+
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'debug', 'Removed'):
+            create_preload_data(verbosity=1, plan=[('0000', False)])
+
+    @staticmethod
+    def _next_ct_id():
+        """Return an ID that won't collide with rows created by create_DAB_contenttypes."""
+        from ansible_base.rbac.models import DABContentType
+        from django.db.models import Max
+
+        return (DABContentType.objects.aggregate(Max('id'))['id__max'] or 0) + 1
+
+    @pytest.mark.django_db
+    def test_remove_stale_shared_content_types(self):
+        """remove_stale_shared_content_types deletes shared content types with invalid app_label."""
+        from ansible_base.rbac.models import DABContentType
+
+        DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
+        assert remove_stale_shared_content_types() is True
+        assert not DABContentType.objects.filter(service='shared', app_label='core', model='user').exists()
+
+    @pytest.mark.django_db
+    def test_remove_stale_shared_content_types_preserves_valid(self):
+        """remove_stale_shared_content_types does not delete content types with valid app_label."""
+        from ansible_base.rbac.models import DABContentType
+
+        valid_ct = DABContentType.objects.get(service='shared', model='organization')
+        assert valid_ct.app_label == 'aap_gateway_api'
+        assert remove_stale_shared_content_types() is False
+        assert DABContentType.objects.filter(pk=valid_ct.pk).exists()
+
+    @pytest.mark.django_db
+    def test_remove_stale_shared_content_types_idempotent(self):
+        """remove_stale_shared_content_types is a no-op when no stale records exist."""
+        assert remove_stale_shared_content_types() is False
+
+    @pytest.mark.django_db
+    def test_remove_stale_shared_content_types_ignores_non_shared(self):
+        """remove_stale_shared_content_types only targets service='shared' rows."""
+        from ansible_base.rbac.models import DABContentType
+
+        ct = DABContentType.objects.create(id=self._next_ct_id(), service='eda', app_label='core', model='activation')
+        assert remove_stale_shared_content_types() is False
+        assert DABContentType.objects.filter(pk=ct.pk).exists()
+
+    @pytest.mark.django_db
+    def test_remove_stale_shared_content_types_via_preload_data(self):
+        """remove_stale_shared_content_types is wired into create_preload_data function_order."""
+        from ansible_base.rbac.models import DABContentType
+
+        DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
+        create_preload_data(verbosity=0, plan=[('0000', False)])
+        assert not DABContentType.objects.filter(service='shared', app_label='core', model='user').exists()
+
+    @pytest.mark.django_db
+    def test_remove_stale_shared_content_types_logs_warning(self, expected_log):
+        """remove_stale_shared_content_types logs a warning for each removed row."""
+        from ansible_base.rbac.models import DABContentType
+
+        DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'warning', 'Removing stale shared content type'):
+            remove_stale_shared_content_types()

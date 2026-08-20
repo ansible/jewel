@@ -9,7 +9,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import ServiceKey
+from aap_gateway_api.models import ServiceCluster, ServiceKey
 
 
 def _create_jwt(user, key, additional_payload=None, service=None, expiration=60):
@@ -299,6 +299,182 @@ def test_validate_methods(allowed_methods, call_method, expected_result):
 
     with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', side_effect=['/resource_api', '/junk']):
         assert token_auth.is_user_authorized(request, None, None, None) == expected_result
+
+
+def test_jwt_claims_path_authorized():
+    """Test that service tokens are authorized for JWT claims endpoints."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+
+    request = mock.Mock()
+    request.path = '/api/gateway/v1/jwt_claims/some-ansible-id'
+    request.method = 'GET'
+
+    user = mock.Mock(spec=[])
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        result = token_auth.is_user_authorized(request, user, None, None)
+
+    assert result is True
+    assert user.resource_api_actions == ['retrieve']
+
+
+def test_jwt_claims_path_preserves_existing_actions():
+    """Test that JWT claims path does not overwrite existing resource_api_actions."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+
+    request = mock.Mock()
+    request.path = '/api/gateway/v1/jwt_claims/some-ansible-id'
+    request.method = 'GET'
+
+    user = mock.Mock()
+    user.resource_api_actions = ['list', 'retrieve', 'create']
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        result = token_auth.is_user_authorized(request, user, None, None)
+
+    assert result is True
+    assert user.resource_api_actions == ['list', 'retrieve', 'create']
+
+
+def test_jwt_claims_path_rejects_non_get():
+    """Test that JWT claims path only allows GET requests."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+
+    request = mock.Mock()
+    request.path = '/api/gateway/v1/jwt_claims/some-ansible-id'
+    request.method = 'POST'
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        result = token_auth.is_user_authorized(request, mock.Mock(spec=[]), None, None)
+
+    assert result is False
+
+
+@pytest.mark.django_db
+def test_migration_not_complete_blocks_auth(service_cluster_gateway, user):
+    """Test that service auth is blocked when migration has not completed."""
+    from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan
+
+    key = _set_up_service_key(service_cluster_gateway, service_id())
+    token = _create_jwt(user, key)
+
+    MigrateServiceDataHasRan.mark_migration_not_completed()
+
+    try:
+        client = _get_client(token)
+        url = get_relative_url("resource-list")
+        resp = client.get(url)
+        assert resp.status_code == 423
+    finally:
+        MigrateServiceDataHasRan.mark_migration_completed()
+
+
+@pytest.mark.parametrize(
+    "auth_backend,expected",
+    [
+        (None, None),
+        ("django.contrib.auth.backends.ModelBackend", "local"),
+        ("ansible_base.authentication.backends.PrefixedUserAuthBackend", "local"),
+        ("ansible_base.authentication.backends.LDAPBackend", "ldap"),
+        ("ansible_base.authentication.backends.RADIUSBackend", "radius"),
+        ("ansible_base.authentication.backends.TACACSPlusBackend", "tacacs+"),
+        ("some.unknown.backend", "some.unknown.backend"),
+    ],
+)
+def test_classify_backend(auth_backend, expected):
+    """classify_backend maps known auth backend strings to canonical type names."""
+    from aap_gateway_api.utils.service_token import classify_backend
+
+    assert classify_backend(auth_backend) == expected
+
+
+@pytest.mark.django_db
+def test_validate_service_token_required_type_mismatch(service_jwt_token):
+    """validate_service_token raises ValidationError when required_type does not match the token."""
+    from django.core.exceptions import ValidationError
+
+    from aap_gateway_api.utils.service_token import validate_service_token
+
+    with pytest.raises(ValidationError, match="Expected token of type"):
+        validate_service_token(service_jwt_token, required_type="expected_type")
+
+
+@pytest.mark.django_db
+def test_verify_token_signature_iss_mismatch(service_cluster_gateway, user, service_jwt_token):
+    """_verify_token_signature raises ValidationError when the verified iss differs from unverified."""
+    from django.core.exceptions import ValidationError
+
+    from aap_gateway_api.utils.service_token import _verify_token_signature
+
+    tampered_payload = {"iss": str(uuid.uuid4()), "exp": 9999999999, "sub": "anything"}
+    with mock.patch("aap_gateway_api.utils.service_token.jwt.api_jwt.decode_complete") as mock_dec:
+        mock_dec.return_value = {"payload": tampered_payload, "header": {}, "signature": b""}
+        with pytest.raises(ValidationError, match="Verified token data does not match unverified data"):
+            _verify_token_signature(service_jwt_token, service_cluster_gateway, "original-issuer-uuid")
+
+
+# ---------------------------------------------------------------------------
+# Auto-populate service_id fallback in validate_service_token
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_auto_populate_succeeds_allows_auth(service_cluster_controller, user):
+    """When service_id is null, auto-populate finds the cluster and auth succeeds."""
+    from aap_gateway_api.utils.service_token import validate_service_token
+
+    target_id = str(uuid.uuid4())
+    key = service_cluster_controller.generate_key()
+    token = _create_jwt(user, key, service=target_id)
+
+    def _populate_and_set(uid):
+        ServiceCluster.objects.filter(pk=service_cluster_controller.pk).update(service_id=uid)
+        service_cluster_controller.service_id = uid
+        return service_cluster_controller
+
+    with mock.patch("aap_gateway_api.utils.service_token.populate_service_id", side_effect=_populate_and_set):
+        result = validate_service_token(token)
+
+    assert result["service_cluster"].pk == service_cluster_controller.pk
+    assert result["user"] == user
+
+
+@pytest.mark.django_db
+def test_auto_populate_fails_raises_validation_error(service_cluster_controller, user):
+    """When service_id is null and auto-populate fails, a ValidationError is raised."""
+    from django.core.exceptions import ValidationError
+
+    from aap_gateway_api.utils.service_token import validate_service_token
+
+    target_id = str(uuid.uuid4())
+    key = service_cluster_controller.generate_key()
+    token = _create_jwt(user, key, service=target_id)
+
+    with mock.patch("aap_gateway_api.utils.service_token.populate_service_id", return_value=None):
+        with pytest.raises(ValidationError, match="does not exist"):
+            validate_service_token(token)
+
+
+@pytest.mark.django_db
+def test_auto_populate_not_called_when_service_id_set(service_cluster_gateway, user, service_jwt_token):
+    """populate_service_id is never called when the cluster already has a service_id."""
+    client = APIClient(headers={"X-ANSIBLE-SERVICE-AUTH": service_jwt_token})
+    url = get_relative_url("resource-list")
+
+    with mock.patch("aap_gateway_api.utils.service_token.populate_service_id") as mock_pop:
+        resp = client.get(url)
+
+    mock_pop.assert_not_called()
+    assert resp.status_code == 200
 
 
 def test_ca_certificate_with_service_token_auth(service_jwt_client, ca_certificate):

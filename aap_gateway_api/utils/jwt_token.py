@@ -89,7 +89,12 @@ def create_signed_jwt(user, resource_api_actions=None):
     if resource_api_actions:
         payload["resource_api_actions"] = resource_api_actions
 
-    token = jwt.encode(payload, get_jwt_rsa_key(public=False), algorithm='RS256')
+    private_key = get_jwt_rsa_key(public=False)
+    try:
+        token = jwt.encode(payload, private_key, algorithm='RS256')
+    except jwt.exceptions.InvalidKeyError:
+        _diagnose_key(private_key, public=False)
+        raise
     return token
 
 
@@ -107,7 +112,44 @@ def get_user_object_roles(user: Model) -> list[tuple[str, str, int]]:
 
 
 def decode_signed_jwt(token):
-    return jwt.decode(token, get_jwt_rsa_key(public=True), algorithms=['RS256'], audience='ansible-services')
+    public_key = get_jwt_rsa_key(public=True)
+    try:
+        return jwt.decode(token, public_key, algorithms=['RS256'], audience='ansible-services')
+    except jwt.exceptions.InvalidKeyError:
+        _diagnose_key(public_key, public=True)
+        raise
+
+
+def _diagnose_key(key_material, public=True):
+    """Re-validate a rejected key with cryptography to log the exact reason."""
+    key_type = "public" if public else "private"
+    if not key_material:
+        logger.error("JWT %s key is empty or None. Regenerate the JWT keypair.", key_type)  # NOSONAR
+        return
+    if not isinstance(key_material, (str, bytes)):
+        logger.error("JWT %s key is not a string (got %s). Check the stored preference value.", key_type, type(key_material).__name__)  # NOSONAR
+        return
+    raw = key_material.encode("UTF-8") if isinstance(key_material, str) else key_material
+    try:
+        if public:
+            serialization.load_pem_public_key(raw)
+        else:
+            serialization.load_pem_private_key(raw, password=None)
+    except Exception as diag_exc:
+        logger.error("JWT %s key failed cryptography validation: %s", key_type, diag_exc)  # NOSONAR
+    else:
+        try:
+            from jwt.algorithms import RSAAlgorithm
+
+            RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(key_material)
+        except Exception as pyjwt_exc:
+            logger.error("JWT %s key passes cryptography validation but PyJWT rejects it: %s", key_type, pyjwt_exc)  # NOSONAR
+        else:
+            logger.error(  # NOSONAR
+                "JWT %s key passes both cryptography and PyJWT prepare_key validation "
+                "but was still rejected during encode/decode. Check for algorithm mismatch.",
+                key_type,
+            )
 
 
 def get_jwt_rsa_key(public=False):

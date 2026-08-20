@@ -1,4 +1,5 @@
 from enum import Enum
+from functools import cached_property
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
@@ -12,6 +13,11 @@ class ServiceType(UniqueNamedCommonModel, AuditableModel):
     """
 
     router_basename = 'service_type'
+
+    @cached_property
+    def is_eda_service(self):
+        """True if this is the EDA service type."""
+        return self.name == DefaultServiceType.EDA
 
     ping_url = models.CharField(max_length=255, blank=False, null=True, help_text=_("URL to the ping/status page of the service, ex. /pulp/api/v3/status/"))
 
@@ -36,6 +42,7 @@ class DefaultServiceType(str, Enum):
     CONTROLLER = "controller"
     EDA = "eda"
     HUB = "hub"
+    METRICS = "metrics"
 
     @staticmethod
     def is_default(name: str) -> bool:

@@ -14,6 +14,7 @@ class ServiceAPIRouteSerializer(BaseRouteSerializer):
             'service_port',
             'is_service_https',
             'is_internal_route',
+            'reject_failed_basic_auth',
             'service_path',
             'gateway_path',
             'description',

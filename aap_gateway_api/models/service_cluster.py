@@ -1,5 +1,6 @@
+import logging
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
@@ -11,6 +12,8 @@ from django.utils.translation import gettext as _
 
 from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
+
+logger = logging.getLogger(__name__)
 
 
 class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
@@ -75,7 +78,7 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
     )
 
     health_check_interval_seconds = models.PositiveIntegerField(
-        default=10,
+        default=30,
         help_text=_("The time between health check requests."),
     )
 
@@ -213,8 +216,21 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
             get_preference_value('proxy', 'request_timeout'),
         )
 
+    def get_effective_health_check_interval_seconds(self, effective_timeout=None):
+        if effective_timeout is None:
+            effective_timeout = self.get_effective_health_check_timeout_seconds()
+        effective_interval = max(self.health_check_interval_seconds, effective_timeout)
+        if effective_interval != self.health_check_interval_seconds:
+            logger.debug(
+                "Health check interval for cluster %s floored from %ds to %ds (effective timeout)",
+                self.name,
+                self.health_check_interval_seconds,
+                effective_interval,
+            )
+        return effective_interval
+
     @staticmethod
-    def get_cluster_by_type(service_type: Union[ServiceType, str]):
+    def get_cluster_by_type(service_type: ServiceType | str):
         if isinstance(service_type, ServiceType):
             return ServiceCluster.objects.filter(service_type=service_type).first()
         return ServiceCluster.objects.filter(service_type__name=service_type).first()

@@ -3,8 +3,8 @@ ARG PYTHON=python3.12
 FROM quay.io/centos/centos:stream9 AS builder
 ARG PYTHON
 
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
 
 ARG DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
 ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
@@ -40,7 +40,7 @@ COPY requirements/requirements_git.txt /tmp/requirements_git.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
 
-FROM quay.io/centos/centos:stream9
+FROM quay.io/centos/centos:stream9 AS jewel
 ARG PYTHON
 
 RUN dnf module install -y nginx:1.22/common && \
@@ -86,16 +86,28 @@ RUN for dir in \
 # to be compatible with protobuf 3.21+. This should be removed
 # once a new version of xds-protos is available
 ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+ENV DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+ENV PYTHONUNBUFFERED=1
 
 COPY aap_gateway_api /opt/aap_gateway/src/aap_gateway_api/
 ENV PATH=/opt/aap_gateway/venv/bin:$PATH
 ENV PYTHONPATH=/opt/aap_gateway/src
 
-# Pull in the platform-ui, this can change frequently so it should be one of the last things we try and do
-COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
+# The platform UI is optional. The "jewel" target ships without it (used by CI
+# for the GHCR image). The "jewel-ui" target extends this stage with the UI.
+RUN mkdir -p /opt/aap_gateway/platform_ui && \
+    printf '%s\n' \
+      '<!DOCTYPE html><html><head><title>Jewel API</title></head><body>' \
+      '<h1>Jewel API Server</h1>' \
+      '<p>This image was built without the platform UI.</p>' \
+      '<p>Build with <code>--target jewel-ui</code> to include it.</p>' \
+      '</body></html>' > /opt/aap_gateway/platform_ui/index.html
 
 USER 1000
 EXPOSE 8000
 
 WORKDIR /opt
 CMD ["/usr/bin/launch-gateway"]
+
+FROM jewel AS jewel-ui
+COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui

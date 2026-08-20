@@ -3,7 +3,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleUserAssignment
 from django.urls import reverse
 
-from aap_gateway_api.models import Organization, User
+from aap_gateway_api.models import Organization, Team, User
 from aap_gateway_api.tests.views.api.v1.conftest import api_get_and_assert
 
 
@@ -30,24 +30,25 @@ def _visible_teams(teams, organizations, org_admins_can_see_all=True):
     """
     Based on associate_logged_user()
     When ORG_ADMINS_CAN_SEE_ALL_USERS=True (default): Org Admins can see ALL teams
-    When ORG_ADMINS_CAN_SEE_ALL_USERS=False: Org Admins can only see teams from their own organization
-    Team Members and Team Admins can always see their teams
+    When ORG_ADMINS_CAN_SEE_ALL_USERS=False: falls through to DAB access_qs, so
+      visibility comes from RBAC permissions - team member/admin see their teams,
+      org member sees all teams in their org, org admin sees all teams in their org.
     """
     if org_admins_can_see_all:
-        # User is org admin, so they can see ALL teams when ORG_ADMINS_CAN_SEE_ALL_USERS=True (default)
         all_teams = []
         for org in organizations:
             all_teams.extend(teams[org])
         return sorted(all_teams, key=lambda t: t.id)
     else:
-        # When False: org admin can only see teams from their own org (organizations[4])
-        # Plus teams where they're team member/admin (orgs 0, 1, 2)
-        return [
+        visible = [
             teams[organizations[0]][0],  # Team member
             teams[organizations[1]][0],  # Team admin
             teams[organizations[2]][0],  # Team member
             teams[organizations[2]][1],  # Team admin
-        ] + teams[organizations[4]]  # All teams from org where user is org admin
+        ]
+        visible += teams[organizations[3]]  # All teams from org where user is org member
+        visible += teams[organizations[4]]  # All teams from org where user is org admin
+        return visible
 
 
 def _editable_teams(teams, organizations):
@@ -396,6 +397,43 @@ class TestTeamOptions:
         response = admin_api_client.options(url)
         assert response.status_code == 200
         assert response.data.get('actions', {}).get('PUT', None) is not None, "PUT action should be available for superuser"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('org_admins_can_see_all', [True, False], ids=['see_all=True', 'see_all=False'])
+def test_pure_org_member_can_see_teams_in_org(user_api_client, user, org_member_rd, preference_manager, org_admins_can_see_all):
+    """Regression test for AAP-79673.
+
+    A user who is ONLY an org member (no org admin role anywhere) should see
+    teams in their organization via the team list API.  Before the fix,
+    can_view_all_users() returned False for such users, so the view fell
+    through to access_qs which did not grant view_team to org members.
+
+    Parametrized on ORG_ADMINS_CAN_SEE_ALL_USERS because a pure org member
+    (no org admin role) should behave identically regardless of this setting.
+    """
+    org = Organization.objects.create(name='OrgMember-Only Org')
+    other_org = Organization.objects.create(name='Other Org')
+    team_in_org = Team.objects.create(name='Visible Team', organization=org)
+    hidden_team = Team.objects.create(name='Hidden Team', organization=other_org)
+
+    org_member_rd.give_permission(user, org)
+
+    with preference_manager.set('configuration', 'ORG_ADMINS_CAN_SEE_ALL_USERS', org_admins_can_see_all):
+        url = get_relative_url("team-list")
+        response = user_api_client.get(url)
+        assert response.status_code == 200
+        team_ids = {t['id'] for t in response.data['results']}
+        assert team_in_org.pk in team_ids, "Org member should see teams in their org"
+        assert response.data['count'] == 1, "Org member should only see teams from their own org"
+
+        detail_url = get_relative_url("team-detail", kwargs={'pk': team_in_org.pk})
+        response = user_api_client.get(detail_url)
+        assert response.status_code == 200, "Org member should access team detail in their org"
+
+        hidden_detail_url = get_relative_url("team-detail", kwargs={'pk': hidden_team.pk})
+        response = user_api_client.get(hidden_detail_url)
+        assert response.status_code == 404, "Org member should NOT access teams in other orgs"
 
 
 @pytest.mark.django_db

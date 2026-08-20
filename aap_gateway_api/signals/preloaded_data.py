@@ -5,9 +5,7 @@ from ansible_base.rbac.management import create_dab_permissions
 from ansible_base.rbac.permission_registry import permission_registry
 from django.apps import apps as global_apps
 from django.conf import settings
-from flags.state import flag_enabled, get_flags
-
-from aap_gateway_api.models import ServiceType
+from flags.state import get_flags
 
 logger = logging.getLogger('aap.gateway.signals.preloaded_data')
 
@@ -27,7 +25,8 @@ def create_preload_data(**kwargs) -> None:
         set_system_user_password,
         set_system_user_managed_flag,
         toggle_install_time_flags,
-        add_console_service_type,
+        remove_console_service_type,
+        remove_stale_shared_content_types,
     ]
 
     # Verbosity comes from the signal see https://docs.djangoproject.com/en/5.0/ref/signals/#post-migrate
@@ -58,6 +57,8 @@ def create_preload_data(**kwargs) -> None:
                 action = 'Created'
                 if name.startswith('set'):
                     action = 'Set'
+                elif name.startswith('remove'):
+                    action = 'Removed'
                 logger.debug(f"{action} {' '.join(name.split('_')[1:])}")
         except Exception as e:
             if verbosity in [0, 1]:
@@ -91,8 +92,11 @@ def create_default_organization() -> bool:
 def create_managed_roles() -> None:
     # Permissions and types must be created before creating managed roles
     create_dab_permissions(global_apps.get_app_config('dab_rbac'))
-    # Create the managed=True entries of RoleDefinition model
-    permission_registry.create_managed_roles(global_apps)
+    # Create the managed=True entries of RoleDefinition model.
+    # update_perms=True ensures existing managed roles stay in sync with
+    # their code-defined permissions (e.g. when DAB adds view_team to
+    # OrganizationMember).
+    permission_registry.create_managed_roles(global_apps, update_perms=True)
 
 
 def set_system_user_password() -> bool:
@@ -113,14 +117,6 @@ def set_system_user_managed_flag() -> bool:
     system_user.managed = True
     system_user.save()
     return True
-
-
-def add_console_service_type() -> bool:
-    if flag_enabled("FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED"):
-        # Add console.redhat.com service type
-        _obj, created = ServiceType.objects.get_or_create(name="console")
-        return created
-    return False
 
 
 def toggle_install_time_flags() -> None:
@@ -152,3 +148,58 @@ def toggle_install_time_flags() -> None:
             existing_flag.value = state
             existing_flag.full_clean()
             existing_flag.save()
+
+
+def remove_console_service_type() -> bool:
+    """Remove legacy console service type and associated preference.
+
+    The console ServiceType was gated behind FEATURE_GATEWAY_CREATE_CRC_SERVICE_TYPE_ENABLED
+    and is no longer supported (AAP-74714). This replaces the operations previously in
+    migration 0023 (now 0023_merge_0021_0022.py) with an idempotent signal-based cleanup
+    to avoid migration dependency chain issues on stable branches.
+    """
+    try:
+        ServiceType = global_apps.get_model('aap_gateway_api', 'ServiceType')
+        Preference = global_apps.get_model('aap_gateway_api', 'Preference')
+    except LookupError:
+        return False
+
+    try:
+        console_clusters = ServiceType.objects.filter(name="console").values_list('clusters__name', flat=True)
+        cluster_names = [n for n in console_clusters if n is not None]
+        if cluster_names:
+            logger.warning("Cascade-deleting ServiceCluster(s) for console ServiceType: %s", cluster_names)
+    except Exception:
+        pass
+
+    deleted_st, st_details = ServiceType.objects.filter(name="console").delete()
+    if deleted_st:
+        logger.info("Console ServiceType delete details: %s", st_details)
+
+    deleted_pref, _ = Preference.objects.filter(
+        section="analytics",
+        name="RED_HAT_CONSOLE_URL",
+    ).delete()
+    return (deleted_st + deleted_pref) > 0
+
+
+def remove_stale_shared_content_types() -> bool:
+    """Remove shared DABContentType rows whose app_label doesn't match any local app.
+
+    The metrics service incorrectly registered its User model in the
+    permission_registry, causing a (shared, core, user) DABContentType to be
+    exported via the role-types endpoint. When gateway imported this via
+    load_types_and_permissions, model_class() failed because the 'core' app
+    doesn't exist locally, resulting in a 500 on the role_definitions endpoint.
+    """
+    from ansible_base.rbac.models import DABContentType
+
+    deleted = False
+    for ct in DABContentType.objects.filter(service='shared'):
+        try:
+            global_apps.get_app_config(ct.app_label)
+        except LookupError:
+            logger.warning('Removing stale shared content type: service=%s, app_label=%s, model=%s', ct.service, ct.app_label, ct.model)
+            ct.delete()
+            deleted = True
+    return deleted

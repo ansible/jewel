@@ -83,6 +83,7 @@ DJANGO_SETTINGS_MODULE = "aap_gateway_api.tests.settings_overrides"
 addopts = "--strict-markers --reuse-db --create-db --migrations -s -vvv"
 pythonpath = ". aap_gateway_api"
 markers = [
+    "perf: performance and scaling tests (query counts, memory bounds, O-complexity)",
 ]
 
 [tool.tox]
@@ -165,11 +166,7 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-        psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check
@@ -182,11 +179,7 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-         psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api makemigrations --check
@@ -199,11 +192,7 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    deps =
-        -r{toxinidir}/requirements/requirements.txt
-        -r{toxinidir}/requirements/requirements_git.txt
-        -r{toxinidir}/requirements/requirements_test.txt
-        psycopg[binary]
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
         python3 -m aap_gateway_api check --deploy --tag oauth2_permissions

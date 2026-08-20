@@ -8,7 +8,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("aap_gateway_api", "0021_remove_runtime_feature_flags_ui_preference"),
+        ("aap_gateway_api", "0017_add_fallback_authentication_to_local_authenticators"),
         ("sessions", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

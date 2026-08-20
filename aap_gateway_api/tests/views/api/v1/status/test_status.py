@@ -8,7 +8,6 @@ from ansible_base.lib.utils.response import get_relative_url
 from django.test import override_settings
 
 from aap_gateway_api.models import HTTPPort, Route, ServiceCluster, ServiceNode, ServiceType
-from aap_gateway_api.views.api.v1.status import check_console
 
 _REDIS_GOOD = {'mode': 'testing', 'status': STATUS_GOOD}
 _REDIS_FAILED = {'mode': 'testing', 'status': STATUS_FAILED}
@@ -409,69 +408,6 @@ def test_that_get_requests_are_async(get, admin_api_client, full_service_hierarc
         # We have 3 nodes will all take 3 seconds but they should run all at the same time.
         # So we want to make sure that we took > 3 second but < 9 (3 node * 3 seconds)
         assert total_time > 3 and total_time < 9, f"Total time was {total_time} and should have been < 9\n{response.data}"
-
-
-@pytest.mark.parametrize(
-    "console_return, side_effect, expected_status",
-    [
-        (mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "operational"}]}), None, STATUS_GOOD),
-        (mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "failed"}]}), None, STATUS_FAILED),
-        (mock.Mock(status_code=200, json=lambda: {"components": [{"name": "random", "status": "operational"}]}), None, STATUS_FAILED),
-        (mock.Mock(status_code=200, json=lambda: {}), None, STATUS_FAILED),
-        (None, Exception('Something went wrong'), STATUS_FAILED),
-        (mock.Mock(status_code=400, json=lambda: {"status": "Bad request"}), None, STATUS_FAILED),
-    ],
-)
-@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
-def test_console_status(get, console_return, side_effect, expected_status):
-    get.return_value = console_return
-    get.side_effect = side_effect
-
-    resp = check_console()
-
-    assert resp["status"] == expected_status
-
-    if isinstance(side_effect, Exception):
-        assert resp["exception"] == str(side_effect)
-    else:
-        assert resp["status"] == expected_status
-        assert resp["response_code"] == console_return.status_code
-
-
-@mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
-def test_status_includes_console(get, admin_api_client, settings_override_mutable, settings):
-    get.return_value = mock.Mock(status_code=200, json=lambda: {"components": [{"name": "console.redhat.com", "status": "operational"}]})
-    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get_or_create(name="console")[0])
-    ServiceNode.objects.create(name="Console", service_cluster=sc)
-    port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
-    Route.objects.create(name="Console", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")
-
-    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
-        url = get_relative_url("status-view")
-        response = admin_api_client.get(url)
-
-        status = get_service_by_name(response.data, "Console")
-        assert status is not None
-        assert status["status"] == STATUS_GOOD
-
-
-@override_settings()
-def test_missing_console_url(admin_api_client, settings_override_mutable, settings):
-    del settings.CRC_STATUS_URL
-
-    sc = ServiceCluster.objects.create(name="Console", service_type=ServiceType.objects.get_or_create(name="console")[0])
-    ServiceNode.objects.create(name="Console", service_cluster=sc)
-    port = HTTPPort.objects.create(name="API Port", is_api_port=True, number=443)
-    Route.objects.create(name="Console", http_port=port, service_cluster=sc, service_port=443, is_service_https=True, service_path="/", gateway_path="/")
-
-    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
-        url = get_relative_url("status-view")
-
-        response = admin_api_client.get(url)
-        status = get_service_by_name(response.data, "Console")
-        assert 'nodes' in status
-        node = next(iter(status['nodes'].values()))
-        assert 'CRC_STATUS_URL not set' in node['body']
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")
