@@ -472,3 +472,39 @@ def test_initialize_preferences_succeeds_without_errors(mock_logger):
 
     # No critical log messages should be emitted in the happy path
     mock_logger.critical.assert_not_called()
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_continues_on_serialization_error(mock_logger, register_preference):
+    """
+    Test that initialize_preferences() catches SerializationError. This occurs when
+    a non-string preference (e.g., IntPreference) has its raw_value corrupted with an
+    encrypted-looking string that the type serializer cannot deserialize.
+    """
+    from dynamic_preferences.serializers import SerializationError
+
+    register_preference(
+        section="general",
+        preference_name="healthy_pref",
+        default="working",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_getitem = preferences.gateway_preference_manager.__class__.__getitem__
+
+    def side_effect(self, key):
+        if key == "general__healthy_pref":
+            return original_getitem(self, key)
+        raise SerializationError("Value $encrypted$... cannot be converted to int")
+
+    with patch.object(
+        preferences.gateway_preference_manager.__class__,
+        "__getitem__",
+        side_effect,
+    ):
+        preferences.initialize_preferences()
+
+    assert mock_logger.critical.call_count > 0
+    log_messages = [str(call) for call in mock_logger.critical.call_args_list]
+    assert any("Failed to initialize preference" in msg for msg in log_messages)

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
+from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.fields.serializers import JSONListField
@@ -212,7 +213,7 @@ def initialize_preferences():
         preference_name = preference.identifier()
         try:
             gateway_preference_manager[preference_name]
-        except (InvalidToken, ValueError, TypeError):
+        except (InvalidToken, ValueError, TypeError, SerializationError):
             logger.critical(
                 "Failed to initialize preference '%s'. This may indicate a SECRET_KEY mismatch "
                 "or corrupt data. The gateway will continue starting but this preference "
