@@ -536,9 +536,9 @@ def test_auditor_gateway_settings_options_request(platform_auditor_api_client, c
 
 
 @pytest.mark.django_db
-def test_get_single_preference_returns_503_on_invalid_token(admin_api_client, register_preference):
+def test_get_single_preference_returns_500_on_invalid_token(admin_api_client, register_preference):
     """When Preference.objects.get() triggers InvalidToken due to corrupt data,
-    the view should return 503 with a meaningful error message."""
+    the view should return 500 with a meaningful error message."""
     register_preference(
         section="general",
         preference_name="corrupt_single",
@@ -552,15 +552,15 @@ def test_get_single_preference_returns_503_on_invalid_token(admin_api_client, re
     with mock.patch.object(Preference.objects, "get", side_effect=InvalidToken("bad token")):
         response = admin_api_client.get(url)
 
-    assert response.status_code == 503
+    assert response.status_code == 500
     assert "corrupt or undecryptable data" in response.data["detail"]
     assert "corrupt_single" in response.data["detail"]
 
 
 @pytest.mark.django_db
-def test_get_single_preference_returns_503_on_serialization_error(admin_api_client, register_preference):
+def test_get_single_preference_returns_500_on_serialization_error(admin_api_client, register_preference):
     """When Preference.objects.get() triggers SerializationError due to corrupt data,
-    the view should return 503 with a meaningful error message."""
+    the view should return 500 with a meaningful error message."""
     register_preference(
         section="general",
         preference_name="corrupt_serial",
@@ -574,6 +574,6 @@ def test_get_single_preference_returns_503_on_serialization_error(admin_api_clie
     with mock.patch.object(Preference.objects, "get", side_effect=SerializationError("cannot convert")):
         response = admin_api_client.get(url)
 
-    assert response.status_code == 503
+    assert response.status_code == 500
     assert "corrupt or undecryptable data" in response.data["detail"]
     assert "corrupt_serial" in response.data["detail"]

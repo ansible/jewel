@@ -15,6 +15,7 @@ coverage:
     project:
       default:
         target: auto
+        threshold: 0.05%
         flag_coverage_not_uploaded_behavior: include  # Org has: exclude
     patch:
       default:

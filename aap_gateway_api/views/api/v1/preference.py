@@ -186,7 +186,7 @@ class SettingPreferenceView(AnsibleBaseView):
                 "Preference '%(preference_name)s' in category '%(category_slug)s' has corrupt or undecryptable data. "
                 "An administrator must resolve this before the value can be read."
             ) % {"preference_name": preference_name, "category_slug": category_slug}
-            return Response({"detail": message}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response({"detail": message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         serializer = SettingPreferenceSerializer(preference)
         return Response(serializer.data, status=status.HTTP_200_OK)

@@ -22,10 +22,10 @@ def test_exception_handler_does_not_leak_db_details(exc_class, raw_message, expe
     assert response.data["detail"] == expected_message
 
 
-def test_exception_handler_returns_503_on_preference_corrupt_error():
+def test_exception_handler_returns_500_on_preference_corrupt_error():
     exc = PreferenceCorruptError("Preference 'proxy__jwt_private_key' has corrupt data.")
     response = gateway_exception_handler(exc, context={"view": None, "request": None})
-    assert response.status_code == 503
+    assert response.status_code == 500
     assert "proxy__jwt_private_key" in response.data["detail"]
     assert "corrupt" in response.data["detail"]
 

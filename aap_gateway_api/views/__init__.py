@@ -57,7 +57,7 @@ def gateway_exception_handler(exc, context):
     Override default API exception handler to catch IntegrityError exceptions.
     """
     if isinstance(exc, PreferenceCorruptError):
-        return Response({"detail": str(exc)}, status=http_status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({"detail": str(exc)}, status=http_status.HTTP_500_INTERNAL_SERVER_ERROR)
     if isinstance(exc, IntegrityError):
         logger.warning("IntegrityError in API request", exc_info=exc)
         exc = ParseError("A resource with these values already exists.")
