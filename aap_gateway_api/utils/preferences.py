@@ -3,10 +3,12 @@ from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from ansible_base.lib.utils.settings import SettingNotSetException, is_aoc_instance
+from cryptography.fernet import InvalidToken
 from django.conf import settings
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
+from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.fields.serializers import JSONListField
@@ -29,9 +31,16 @@ separator = getattr(settings, 'DYNAMIC_PREFERENCES', {}).get('SECTION_KEY_SEPARA
 
 logger = logging.getLogger("aap.gateway.utils.preferences")
 
+_degraded_preferences: set[str] = set()
+
 
 class TooManyPreferencesException(Exception):
     """Raised when multiple preferences match a single setting name lookup."""
+
+
+def get_degraded_preferences() -> set[str]:
+    """Return the set of preference keys that failed to load due to corrupt data."""
+    return _degraded_preferences.copy()
 
 
 def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
@@ -39,6 +48,8 @@ def update_preference_value(section: str, name: str, value: str, validate: bool 
         preference = gateway_preference_registry.get(name, section)
         preference.validate(value)
     gateway_preference_registry.manager().update_db_pref(section, name, value)
+    preference_key = get_preference_key(section, name)
+    _degraded_preferences.discard(preference_key)
 
 
 def get_preference_value_by_preference(preference: object, encrypted: bool = True) -> str:
@@ -74,16 +85,28 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
         raise ValueError(_("A settings_bound preference can not have a None value"))
 
     preference_name = get_preference_key(section, name)
-    value = gateway_preference_registry.manager().get(preference_name)
 
-    if (preference := gateway_preference_registry.get(name, section)).encrypted:
-        if encrypted:
-            return get_encrypted_string_for_preference(preference)
-        # Note: values can be retrieved from cache instead of the DB.
-        # However, decrypt_string() can identify encrypted values and decrypt them,
-        # returning the non encrypted values unchanged.
-        value = ansible_encryption.decrypt_string(value)
+    try:
+        value = gateway_preference_registry.manager().get(preference_name)
 
+        if (preference := gateway_preference_registry.get(name, section)).encrypted:
+            if encrypted:
+                return get_encrypted_string_for_preference(preference)
+            value = ansible_encryption.decrypt_string(value)
+    except (InvalidToken, SerializationError, ValueError, TypeError):
+        _degraded_preferences.add(preference_name)
+        preference = gateway_preference_registry.get(name, section)
+        logger.critical(
+            "Failed to read preference '%s'. This may indicate a SECRET_KEY mismatch "
+            "or corrupt data. Returning the default value. The preference will remain "
+            "degraded until the issue is resolved. "
+            "Consider running 'gateway-manage rotate_secret_key' to re-encrypt preferences.",
+            preference_name,
+            exc_info=True,
+        )
+        return getattr(preference, 'default', None)
+
+    _degraded_preferences.discard(preference_name)
     return value
 
 

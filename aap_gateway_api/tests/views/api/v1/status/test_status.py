@@ -507,5 +507,38 @@ class TestCheckRedisUnixSocket:
         assert 'Socket not found' in result['exception']
 
 
+def test_status_includes_degraded_preferences(admin_api_client):
+    """When preferences are degraded, the status endpoint should include them."""
+    from aap_gateway_api.utils import preferences
+
+    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
+        preferences._degraded_preferences.add("proxy__request_timeout")
+        preferences._degraded_preferences.add("proxy__jwt_private_key")
+        try:
+            url = get_relative_url("status-view")
+            response = admin_api_client.get(url)
+            assert response.status_code == 200
+            assert "degraded_preferences" in response.data
+            assert sorted(response.data["degraded_preferences"]) == [
+                "proxy__jwt_private_key",
+                "proxy__request_timeout",
+            ]
+        finally:
+            preferences._degraded_preferences.discard("proxy__request_timeout")
+            preferences._degraded_preferences.discard("proxy__jwt_private_key")
+
+
+def test_status_omits_degraded_preferences_when_empty(admin_api_client):
+    """When no preferences are degraded, the status response should not include the field."""
+    from aap_gateway_api.utils import preferences
+
+    with mock.patch('aap_gateway_api.views.api.v1.status.get_redis_status', return_value=_REDIS_GOOD):
+        preferences._degraded_preferences.clear()
+        url = get_relative_url("status-view")
+        response = admin_api_client.get(url)
+        assert response.status_code == 200
+        assert "degraded_preferences" not in response.data
+
+
 def get_service_by_name(data: List, name: str):
     return next((s for s in data["services"] if s["service_name"] == name), None)

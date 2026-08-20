@@ -19,7 +19,7 @@ from rest_framework.response import Response
 
 from aap_gateway_api.models import Route, ServiceNode
 from aap_gateway_api.serializers.status import ServiceKeysStatusSerializer, StatusSerializer
-from aap_gateway_api.utils.preferences import get_preference_value
+from aap_gateway_api.utils.preferences import get_degraded_preferences, get_preference_value
 from aap_gateway_api.views.api.v1.common import AnsibleBaseView
 
 logger = logging.getLogger('aap.gateway.views.api.v1.status')
@@ -285,6 +285,10 @@ class StatusView(AnsibleBaseView):
             results = executor.map(check_node, processes)
 
         response = create_response(results)
+
+        degraded = get_degraded_preferences()
+        if degraded:
+            response['degraded_preferences'] = sorted(degraded)
 
         if services_format_with_keys:
             new_services = services_to_dict(response['services'])

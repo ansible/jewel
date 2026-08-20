@@ -324,6 +324,159 @@ def test_get_default_value_by_preference(register_preference, is_encrypted):
     assert preferences.get_default_value_by_preference(preference, is_encrypted) == ENCRYPTED_STRING if is_encrypted else 'iam_default'
 
 
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_preference_value_returns_default_on_invalid_token(mock_logger, register_preference):
+    """When a preference's stored value triggers InvalidToken during decryption,
+    get_preference_value should return the registry default and log critical."""
+    from cryptography.fernet import InvalidToken
+
+    register_preference(
+        section="general",
+        preference_name="corrupt_pref",
+        default="safe_default",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_pref" in key:
+            raise InvalidToken("bad token")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        value = preferences.get_preference_value("general", "corrupt_pref")
+
+    assert value == "safe_default"
+    assert mock_logger.critical.call_count > 0
+    assert any("Failed to read preference" in str(call) for call in mock_logger.critical.call_args_list)
+    assert "general__corrupt_pref" in preferences._degraded_preferences
+
+    preferences._degraded_preferences.discard("general__corrupt_pref")
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_preference_value_returns_default_on_serialization_error(mock_logger, register_preference):
+    """When a preference's stored value triggers SerializationError,
+    get_preference_value should return the registry default and log critical."""
+    register_preference(
+        section="general",
+        preference_name="corrupt_int_pref",
+        default=42,
+        encrypted=False,
+        preference_type="int",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_int_pref" in key:
+            raise SerializationError("Value cannot be converted to int")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        value = preferences.get_preference_value("general", "corrupt_int_pref")
+
+    assert value == 42
+    assert mock_logger.critical.call_count > 0
+    assert "general__corrupt_int_pref" in preferences._degraded_preferences
+
+    preferences._degraded_preferences.discard("general__corrupt_int_pref")
+
+
+@pytest.mark.django_db
+def test_get_preference_value_clears_degraded_on_success(register_preference):
+    """After a preference recovers (successful read), it should be removed from the degraded set."""
+    register_preference(
+        section="general",
+        preference_name="recovering_pref",
+        default="default_val",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    preferences._degraded_preferences.add("general__recovering_pref")
+    assert "general__recovering_pref" in preferences._degraded_preferences
+
+    value = preferences.get_preference_value("general", "recovering_pref")
+    assert value == "default_val"
+    assert "general__recovering_pref" not in preferences._degraded_preferences
+
+
+@pytest.mark.django_db
+def test_get_degraded_preferences_returns_copy(register_preference):
+    """get_degraded_preferences() should return a copy, not the internal set."""
+    preferences._degraded_preferences.add("test__key")
+    result = preferences.get_degraded_preferences()
+    assert "test__key" in result
+
+    result.add("extra_key")
+    assert "extra_key" not in preferences._degraded_preferences
+
+    preferences._degraded_preferences.discard("test__key")
+
+
+@pytest.mark.django_db
+def test_update_preference_value_clears_degraded(register_preference):
+    """Updating a preference should remove it from the degraded set."""
+    register_preference(
+        section="general",
+        preference_name="fixable_pref",
+        default="old_default",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    preferences._degraded_preferences.add("general__fixable_pref")
+    assert "general__fixable_pref" in preferences._degraded_preferences
+
+    preferences.update_preference_value("general", "fixable_pref", "new_value")
+    assert "general__fixable_pref" not in preferences._degraded_preferences
+
+
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_setting_returns_default_on_corrupt_preference(mock_logger, register_preference):
+    """get_setting() delegates to get_preference_value(), which should catch corruption."""
+    register_preference(
+        section="general",
+        preference_name="corrupt_setting",
+        default="fallback",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_setting" in key:
+            raise SerializationError("corrupt")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        value = preferences.get_setting("corrupt_setting")
+
+    assert value == "fallback"
+    assert mock_logger.critical.call_count > 0
+
+    preferences._degraded_preferences.discard("general__corrupt_setting")
+
+
 def test_absolute_path_or_url_preference(register_preference, preference_manager):
     register_preference(
         section="general",

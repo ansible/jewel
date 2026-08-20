@@ -1,9 +1,12 @@
 from http import HTTPStatus
 from types import NoneType
+from unittest import mock
 
 import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
+from cryptography.fernet import InvalidToken
+from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
@@ -530,3 +533,47 @@ def test_auditor_gateway_settings_options_request(platform_auditor_api_client, c
 
     # Additional verification that GET action has the expected structure
     assert response.data['actions']['GET'] is not None
+
+
+@pytest.mark.django_db
+def test_get_single_preference_returns_503_on_invalid_token(admin_api_client, register_preference):
+    """When Preference.objects.get() triggers InvalidToken due to corrupt data,
+    the view should return 503 with a meaningful error message."""
+    register_preference(
+        section="general",
+        preference_name="corrupt_single",
+        default="safe",
+        encrypted=True,
+        preference_type="string",
+    )
+
+    url = get_relative_url("setting-detail", kwargs={"category_slug": "general", "preference_name": "corrupt_single"})
+
+    with mock.patch.object(Preference.objects, "get", side_effect=InvalidToken("bad token")):
+        response = admin_api_client.get(url)
+
+    assert response.status_code == 503
+    assert "corrupt or undecryptable data" in response.data["detail"]
+    assert "corrupt_single" in response.data["detail"]
+
+
+@pytest.mark.django_db
+def test_get_single_preference_returns_503_on_serialization_error(admin_api_client, register_preference):
+    """When Preference.objects.get() triggers SerializationError due to corrupt data,
+    the view should return 503 with a meaningful error message."""
+    register_preference(
+        section="general",
+        preference_name="corrupt_serial",
+        default=42,
+        encrypted=False,
+        preference_type="int",
+    )
+
+    url = get_relative_url("setting-detail", kwargs={"category_slug": "general", "preference_name": "corrupt_serial"})
+
+    with mock.patch.object(Preference.objects, "get", side_effect=SerializationError("cannot convert")):
+        response = admin_api_client.get(url)
+
+    assert response.status_code == 503
+    assert "corrupt or undecryptable data" in response.data["detail"]
+    assert "corrupt_serial" in response.data["detail"]

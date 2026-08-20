@@ -4,9 +4,11 @@ import logging
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
+from cryptography.fernet import InvalidToken
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from dynamic_preferences.exceptions import NotFoundInRegistry
+from dynamic_preferences.serializers import SerializationError
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -172,6 +174,19 @@ class SettingPreferenceView(AnsibleBaseView):
         except Preference.DoesNotExist:
             message = format_err_message(category_slug, preference_name, err_detail="not_found")
             return Response({"detail": message}, status=status.HTTP_404_NOT_FOUND)
+        except (InvalidToken, SerializationError):
+            logger.critical(
+                "Preference '%s' in category '%s' has corrupt data and cannot be decrypted. "
+                "Consider running 'gateway-manage rotate_secret_key' to re-encrypt preferences.",
+                preference_name,
+                category_slug,
+                exc_info=True,
+            )
+            message = _(
+                "Preference '%(preference_name)s' in category '%(category_slug)s' has corrupt or undecryptable data. "
+                "An administrator must resolve this before the value can be read."
+            ) % {"preference_name": preference_name, "category_slug": category_slug}
+            return Response({"detail": message}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         serializer = SettingPreferenceSerializer(preference)
         return Response(serializer.data, status=status.HTTP_200_OK)
