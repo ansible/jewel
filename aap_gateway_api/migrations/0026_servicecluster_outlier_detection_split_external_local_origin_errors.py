@@ -25,7 +25,7 @@ def unset_split_external_local_origin_errors(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('aap_gateway_api', '0022_usersessionmembership'),
+        ('aap_gateway_api', '0025_servicecluster_health_check_interval_default'),
     ]
 
     operations = [
