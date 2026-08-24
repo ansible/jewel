@@ -16,10 +16,15 @@ from aap_gateway_api.models import Organization, Team, User
 
 
 def _create_org_with_teams(name_prefix, num_teams, users_per_team):
-    """Create an org with teams and user role assignments."""
+    """Create an org with teams and user role assignments.
+
+    Use RoleDefinition.objects.managed (get_or_create) rather than .get() by
+    name. TransactionTestCase flush wipes data-migration RoleDefinitions, and
+    create_preload_data skips recreation when post_migrate has no plan.
+    """
     org = Organization.objects.create(name=f"{name_prefix}-org")
-    team_member_rd = RoleDefinition.objects.get(name="Team Member")
-    org_member_rd = RoleDefinition.objects.get(name="Organization Member")
+    team_member_rd = RoleDefinition.objects.managed.team_member
+    org_member_rd = RoleDefinition.objects.managed.org_member
 
     users = []
     for i in range(num_teams):
@@ -44,6 +49,25 @@ def _time_api_delete(client, org):
     elapsed = time.monotonic() - start
     assert response.status_code == 204, f"Delete failed with {response.status_code}"
     return elapsed
+
+
+@pytest.mark.django_db(transaction=True)
+def test_create_org_with_teams_after_managed_roles_missing(local_authenticator):
+    """Setup must work after TransactionTestCase flush wipes managed roles.
+
+    transaction=True tests flush data-migration RoleDefinitions. create_preload_data
+    skips recreation when post_migrate has no plan, which is what flush sends.
+    The helper must recreate Team Member / Organization Member instead of assuming
+    those rows still exist.
+    """
+    RoleDefinition.objects.filter(name__in=["Team Member", "Organization Member"]).delete()
+
+    org, users = _create_org_with_teams("missing-roles", num_teams=1, users_per_team=1)
+
+    assert org.pk
+    assert len(users) == 1
+    assert RoleDefinition.objects.filter(name="Team Member").exists()
+    assert RoleDefinition.objects.filter(name="Organization Member").exists()
 
 
 @pytest.mark.django_db(transaction=True)
