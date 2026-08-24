@@ -146,6 +146,40 @@ def test_xds_outlier_detection_split_external_local_origin_errors_default(admin_
     assert outlier_det['splitExternalLocalOriginErrors'] is True
 
 
+def test_xds_outlier_detection_consecutive_local_origin_failure_default(admin_api_client, full_service_hierarchy_controller):
+    """Verify that consecutive local-origin ejection is disabled by default."""
+    url = reverse("cds")
+    response = admin_api_client.post(url, data={})
+    assert response.status_code == 200
+
+    outlier_det = response.data['resources'][0]['outlierDetection']
+    assert outlier_det.get('consecutiveLocalOriginFailure', 0) == 0
+    # enforcing default is 100; 0 is the disable signal that always serializes.
+    assert outlier_det.get('enforcingConsecutiveLocalOriginFailure') == 0
+
+
+@pytest.mark.parametrize("threshold", [0, 50])
+def test_xds_outlier_detection_consecutive_local_origin_failure(threshold, admin_api_client, full_service_hierarchy_controller):
+    """Verify that consecutiveLocalOriginFailure is always present in CDS, including explicit 0."""
+    url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})
+    response = admin_api_client.patch(
+        url,
+        {"outlier_detection_consecutive_local_origin_failure": threshold},
+    )
+    assert response.status_code == 200
+
+    url = reverse("cds")
+    response = admin_api_client.post(url, data={})
+    assert response.status_code == 200
+
+    outlier_det = response.data['resources'][0]['outlierDetection']
+    assert outlier_det.get('consecutiveLocalOriginFailure', 0) == threshold
+    if threshold == 0:
+        assert outlier_det.get('enforcingConsecutiveLocalOriginFailure') == 0
+    else:
+        assert 'enforcingConsecutiveLocalOriginFailure' not in outlier_det
+
+
 @pytest.mark.parametrize("health_checks_enabled", [True, False])
 def test_xds_cluster_discover_service_health_checks_enabled(health_checks_enabled, admin_api_client, full_service_hierarchy_controller):
     url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})

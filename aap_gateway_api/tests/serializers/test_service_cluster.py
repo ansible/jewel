@@ -32,6 +32,7 @@ class TestServiceClusterSerializer:
             'outlier_detection_interval_seconds',
             'outlier_detection_base_ejection_time_seconds',
             'outlier_detection_max_ejection_percent',
+            'outlier_detection_consecutive_local_origin_failure',
             'health_checks_enabled',
             'health_check_timeout_seconds',
             'health_check_interval_seconds',
@@ -93,6 +94,7 @@ class TestServiceClusterSerializer:
             'outlier_detection_interval_seconds': 30,
             'outlier_detection_base_ejection_time_seconds': 60,
             'outlier_detection_max_ejection_percent': 50,
+            'outlier_detection_consecutive_local_origin_failure': 0,
         }
         serializer = ServiceClusterSerializer(data=data, context={'request': Mock(query_params={})})
         assert serializer.is_valid(), serializer.errors
@@ -102,6 +104,7 @@ class TestServiceClusterSerializer:
         assert cluster.outlier_detection_interval_seconds == 30
         assert cluster.outlier_detection_base_ejection_time_seconds == 60
         assert cluster.outlier_detection_max_ejection_percent == 50
+        assert cluster.outlier_detection_consecutive_local_origin_failure == 0
 
     def test_create_service_cluster_with_dns_settings(self, service_type):
         """Test creating a service cluster with DNS discovery settings."""
