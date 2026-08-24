@@ -62,8 +62,17 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
         default=True,
         help_text=_(
             "If true, locally-originated errors (e.g. upstream connection resets from WebSocket teardowns) "
-            "are tracked separately from externally-originated 5xx responses. This prevents WebSocket connection "
-            "resets from counting toward the consecutive gateway failure threshold and causing cluster ejections."
+            "are tracked separately from externally-originated 5xx responses via consecutive_local_origin_failure "
+            "instead of consecutive_5xx."
+        ),
+    )
+
+    outlier_detection_consecutive_local_origin_failure = models.PositiveIntegerField(
+        default=0,
+        help_text=_(
+            "Number of consecutive locally originated failures (connect timeout, TCP reset/UC) before Envoy ejects "
+            "the host. Set to 0 to disable. Takes effect only when split_external_local_origin_errors is true. "
+            "Defaults to 0 so WebSocket teardowns do not eject the cluster."
         ),
     )
 
