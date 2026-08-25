@@ -470,7 +470,7 @@ jobs:
             '
             ($title | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;")) as $safe_title
             | "Ready to merge: <" + $url + "|" + $safe_title + ">"
-              + "\nAssignees: " + $assignees
+              + "\nAssignee: " + $assignees
               + (if $reviewers == "" then "" else "\nReviewers: " + $reviewers end)
             ')
           PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL" --arg text "$MESSAGE" \
