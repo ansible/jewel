@@ -357,7 +357,7 @@ def test_get_preference_value_raises_on_invalid_token(mock_logger, register_pref
     assert "general__corrupt_pref" in str(exc_info.value)
     assert "rotate_secret_key" in str(exc_info.value)
     assert mock_logger.critical.call_count > 0
-    assert any("Failed to read preference" in str(call) for call in mock_logger.critical.call_args_list)
+    assert any("has corrupt or undecryptable data" in str(call) for call in mock_logger.critical.call_args_list)
 
 
 @pytest.mark.django_db
@@ -490,12 +490,11 @@ def test_preference_from_db_invalid_token_logs_and_reraises(register_preference,
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_initialize_preferences_continues_on_decrypt_failure(mock_logger, register_preference):
+def test_initialize_preferences_exits_on_decrypt_failure(mock_logger, register_preference):
     """
-    Test that initialize_preferences() continues processing remaining preferences
-    when one preference fails to load (e.g., due to a SECRET_KEY mismatch causing
-    a decryption error). Previously, a single undecryptable preference would abort
-    the entire initialization, blocking gateway startup.
+    Test that initialize_preferences() collects all corrupt preferences and then
+    raises SystemExit with a clear diagnostic message listing what is broken and
+    how to fix it.
     """
     from cryptography.fernet import InvalidToken
 
@@ -521,21 +520,28 @@ def test_initialize_preferences_continues_on_decrypt_failure(mock_logger, regist
         "__getitem__",
         side_effect,
     ):
-        preferences.initialize_preferences()
+        with pytest.raises(SystemExit) as exc_info:
+            preferences.initialize_preferences()
 
-    # Prove continuation: healthy_pref must be accessed even though other prefs raised
+    # All preferences were iterated before exit (collection, not early abort)
     failing_keys = [k for k in accessed_keys if k != "general__healthy_pref"]
     assert len(failing_keys) > 0, "Expected at least one failing preference"
     assert "general__healthy_pref" in accessed_keys, "healthy_pref was never accessed — iteration stopped early"
+
+    # SystemExit message includes the corrupt preference names and remediation
+    exit_message = str(exc_info.value)
+    for key in failing_keys:
+        assert key in exit_message
+    assert "rotate_secret_key" in exit_message
 
     assert mock_logger.critical.call_count > 0
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_initialize_preferences_logs_preference_name_on_failure(mock_logger, register_preference):
+def test_initialize_preferences_exit_message_lists_preference_name(mock_logger, register_preference):
     """
-    Test that when a preference fails to initialize, the log message identifies
-    the specific preference that failed.
+    Test that when preferences fail to initialize, the exit message identifies
+    the specific preferences that failed.
     """
     register_preference(
         section="general",
@@ -553,11 +559,12 @@ def test_initialize_preferences_logs_preference_name_on_failure(mock_logger, reg
         "__getitem__",
         side_effect,
     ):
-        preferences.initialize_preferences()
+        with pytest.raises(SystemExit) as exc_info:
+            preferences.initialize_preferences()
 
-    mock_logger.critical.assert_called()
-    logged_pref_names = [call[0][1] for call in mock_logger.critical.call_args_list]
-    assert "general__broken_pref" in logged_pref_names
+    exit_message = str(exc_info.value)
+    assert "general__broken_pref" in exit_message
+    assert "rotate_secret_key" in exit_message
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
@@ -573,9 +580,9 @@ def test_initialize_preferences_succeeds_without_errors(mock_logger):
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_initialize_preferences_continues_on_serialization_error(mock_logger, register_preference):
+def test_initialize_preferences_exits_on_serialization_error(mock_logger, register_preference):
     """
-    Test that initialize_preferences() catches SerializationError. This occurs when
+    Test that initialize_preferences() exits on SerializationError. This occurs when
     a non-string preference (e.g., IntPreference) has its raw_value corrupted with an
     encrypted-looking string that the type serializer cannot deserialize.
     """
@@ -601,8 +608,12 @@ def test_initialize_preferences_continues_on_serialization_error(mock_logger, re
         "__getitem__",
         side_effect,
     ):
-        preferences.initialize_preferences()
+        with pytest.raises(SystemExit) as exc_info:
+            preferences.initialize_preferences()
 
+    exit_message = str(exc_info.value)
+    assert "corrupt or undecryptable" in exit_message
+    assert "rotate_secret_key" in exit_message
     assert mock_logger.critical.call_count > 0
     log_messages = [str(call) for call in mock_logger.critical.call_args_list]
-    assert any("Failed to initialize preference" in msg for msg in log_messages)
+    assert any("has corrupt or undecryptable data" in msg for msg in log_messages)
