@@ -1,1 +1,1 @@
-django-ansible-base[activitystream,api-documentation,authentication,redis-client,rest-filters,rbac,oauth2-provider,feature-flags,observability] @ git+https://github.com/ansible/django-ansible-base@devel
+django-ansible-base[activitystream,api-documentation,authentication,redis-client,rest-filters,rbac,oauth2-provider,feature-flags,observability] @ git+https://github.com/ansible/django-ansible-base@AAP-84465-AAP-78689-AAP-85266-cleantextmixin
