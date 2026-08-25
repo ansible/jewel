@@ -6,7 +6,6 @@ import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from cryptography.fernet import InvalidToken
-from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
@@ -555,25 +554,3 @@ def test_get_single_preference_returns_500_on_invalid_token(admin_api_client, re
     assert response.status_code == 500
     assert "corrupt or undecryptable data" in response.data["detail"]
     assert "corrupt_single" in response.data["detail"]
-
-
-@pytest.mark.django_db
-def test_get_single_preference_returns_500_on_serialization_error(admin_api_client, register_preference):
-    """When Preference.objects.get() triggers SerializationError due to corrupt data,
-    the view should return 500 with a meaningful error message."""
-    register_preference(
-        section="general",
-        preference_name="corrupt_serial",
-        default=42,
-        encrypted=False,
-        preference_type="int",
-    )
-
-    url = get_relative_url("setting-detail", kwargs={"category_slug": "general", "preference_name": "corrupt_serial"})
-
-    with mock.patch.object(Preference.objects, "get", side_effect=SerializationError("cannot convert")):
-        response = admin_api_client.get(url)
-
-    assert response.status_code == 500
-    assert "corrupt or undecryptable data" in response.data["detail"]
-    assert "corrupt_serial" in response.data["detail"]

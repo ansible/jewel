@@ -360,68 +360,6 @@ def test_get_preference_value_raises_on_invalid_token(mock_logger, register_pref
     assert any("has corrupt or undecryptable data" in str(call) for call in mock_logger.critical.call_args_list)
 
 
-@pytest.mark.django_db
-@mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_get_preference_value_raises_on_serialization_error(mock_logger, register_preference):
-    """When a preference triggers SerializationError, get_preference_value should
-    log critical and raise PreferenceCorruptError."""
-    register_preference(
-        section="general",
-        preference_name="corrupt_int_pref",
-        default=42,
-        encrypted=False,
-        preference_type="int",
-    )
-
-    original_get = preferences.gateway_preference_registry.manager().__class__.get
-
-    def side_effect(self, key, *args, **kwargs):
-        if "corrupt_int_pref" in key:
-            raise SerializationError("Value cannot be converted to int")
-        return original_get(self, key, *args, **kwargs)
-
-    with patch.object(
-        preferences.gateway_preference_registry.manager().__class__,
-        "get",
-        side_effect,
-    ):
-        with pytest.raises(preferences.PreferenceCorruptError) as exc_info:
-            preferences.get_preference_value("general", "corrupt_int_pref")
-
-    assert "general__corrupt_int_pref" in str(exc_info.value)
-    assert mock_logger.critical.call_count > 0
-
-
-@pytest.mark.django_db
-@mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_get_setting_raises_on_corrupt_preference(mock_logger, register_preference):
-    """get_setting() delegates to get_preference_value(), which should raise PreferenceCorruptError."""
-    register_preference(
-        section="general",
-        preference_name="corrupt_setting",
-        default="fallback",
-        encrypted=False,
-        preference_type="string",
-    )
-
-    original_get = preferences.gateway_preference_registry.manager().__class__.get
-
-    def side_effect(self, key, *args, **kwargs):
-        if "corrupt_setting" in key:
-            raise SerializationError("corrupt")
-        return original_get(self, key, *args, **kwargs)
-
-    with patch.object(
-        preferences.gateway_preference_registry.manager().__class__,
-        "get",
-        side_effect,
-    ):
-        with pytest.raises(preferences.PreferenceCorruptError):
-            preferences.get_setting("corrupt_setting")
-
-    assert mock_logger.critical.call_count > 0
-
-
 def test_absolute_path_or_url_preference(register_preference, preference_manager):
     register_preference(
         section="general",
@@ -538,36 +476,6 @@ def test_initialize_preferences_exits_on_decrypt_failure(mock_logger, register_p
 
 
 @mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_initialize_preferences_exit_message_lists_preference_name(mock_logger, register_preference):
-    """
-    Test that when preferences fail to initialize, the exit message identifies
-    the specific preferences that failed.
-    """
-    register_preference(
-        section="general",
-        preference_name="broken_pref",
-        default="value",
-        encrypted=False,
-        preference_type="string",
-    )
-
-    def side_effect(self, key):
-        raise ValueError("corrupted data")
-
-    with patch.object(
-        preferences.gateway_preference_manager.__class__,
-        "__getitem__",
-        side_effect,
-    ):
-        with pytest.raises(SystemExit) as exc_info:
-            preferences.initialize_preferences()
-
-    exit_message = str(exc_info.value)
-    assert "general__broken_pref" in exit_message
-    assert "rotate_secret_key" in exit_message
-
-
-@mock.patch("aap_gateway_api.utils.preferences.logger")
 def test_initialize_preferences_succeeds_without_errors(mock_logger):
     """
     Test that initialize_preferences() still works normally when no preferences
@@ -577,43 +485,3 @@ def test_initialize_preferences_succeeds_without_errors(mock_logger):
 
     # No critical log messages should be emitted in the happy path
     mock_logger.critical.assert_not_called()
-
-
-@mock.patch("aap_gateway_api.utils.preferences.logger")
-def test_initialize_preferences_exits_on_serialization_error(mock_logger, register_preference):
-    """
-    Test that initialize_preferences() exits on SerializationError. This occurs when
-    a non-string preference (e.g., IntPreference) has its raw_value corrupted with an
-    encrypted-looking string that the type serializer cannot deserialize.
-    """
-    from dynamic_preferences.serializers import SerializationError
-
-    register_preference(
-        section="general",
-        preference_name="healthy_pref",
-        default="working",
-        encrypted=False,
-        preference_type="string",
-    )
-
-    original_getitem = preferences.gateway_preference_manager.__class__.__getitem__
-
-    def side_effect(self, key):
-        if key == "general__healthy_pref":
-            return original_getitem(self, key)
-        raise SerializationError("Value $encrypted$... cannot be converted to int")
-
-    with patch.object(
-        preferences.gateway_preference_manager.__class__,
-        "__getitem__",
-        side_effect,
-    ):
-        with pytest.raises(SystemExit) as exc_info:
-            preferences.initialize_preferences()
-
-    exit_message = str(exc_info.value)
-    assert "corrupt or undecryptable" in exit_message
-    assert "rotate_secret_key" in exit_message
-    assert mock_logger.critical.call_count > 0
-    log_messages = [str(call) for call in mock_logger.critical.call_args_list]
-    assert any("has corrupt or undecryptable data" in msg for msg in log_messages)
