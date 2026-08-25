@@ -38,7 +38,8 @@ jobs:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         id: labeler
         env:
-          USERNAME_MAPPING: ${{ vars.USERNAME_MAPPING || secrets.USERNAME_MAPPING }}
+          USERNAME_MAPPING: ${{ vars.USERNAME_MAPPING }}
+          USERNAME_MAPPING_SECRET: ${{ secrets.USERNAME_MAPPING }}
           ORG_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           script: |
@@ -231,15 +232,26 @@ jobs:
             }
 
             // --- Parse username mapping (repo variable, secret fallback) ---
-            let usernameMapping = {};
-            const mappingRaw = process.env.USERNAME_MAPPING;
-            if (mappingRaw) {
+            const parseUsernameMapping = (raw) => {
+              if (!raw) {
+                return null;
+              }
               try {
-                usernameMapping = JSON.parse(mappingRaw);
-                core.info(`Username mapping loaded (${Object.keys(usernameMapping).length} entries)`);
+                const parsed = JSON.parse(raw);
+                if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                  return parsed;
+                }
+                core.warning('USERNAME_MAPPING must be a JSON object');
               } catch (e) {
                 core.warning(`Failed to parse USERNAME_MAPPING: ${e.message}`);
               }
+              return null;
+            };
+            const usernameMapping = parseUsernameMapping(process.env.USERNAME_MAPPING)
+              || parseUsernameMapping(process.env.USERNAME_MAPPING_SECRET)
+              || {};
+            if (Object.keys(usernameMapping).length > 0) {
+              core.info(`Username mapping loaded (${Object.keys(usernameMapping).length} entries)`);
             }
 
             // --- Auto-assign author ---
