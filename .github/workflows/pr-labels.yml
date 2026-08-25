@@ -418,15 +418,15 @@ jobs:
                       break;
                     }
                   }
-                  if (!mention) {
-                    mention = pr.user.login;
-                  }
                 }
 
                 core.setOutput('notify', 'true');
                 core.setOutput('slack_mention', mention);
                 core.setOutput('pr_url', pr.html_url);
-                const safeTitle = pr.title.replace(/[^\x20-\x7E]/g, '').slice(0, 200);
+                core.setOutput('pr_repo', `${owner}/${repo}`);
+                core.setOutput('pr_number', String(pr.number));
+                core.setOutput('pr_author', pr.user.login);
+                const safeTitle = pr.title.replace(/[^\x20-\x7E]/g, '').replace(/\|/g, '/').slice(0, 200);
                 core.setOutput('pr_title', safeTitle);
               }
             } else {
@@ -442,13 +442,28 @@ jobs:
           SLACK_MENTION: ${{ steps.labeler.outputs.slack_mention }}
           PR_URL: ${{ steps.labeler.outputs.pr_url }}
           PR_TITLE: ${{ steps.labeler.outputs.pr_title }}
+          PR_REPO: ${{ steps.labeler.outputs.pr_repo }}
+          PR_NUMBER: ${{ steps.labeler.outputs.pr_number }}
+          PR_AUTHOR: ${{ steps.labeler.outputs.pr_author }}
         run: |
           if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL" ]; then
             echo "Slack secrets not configured — skipping notification"
             exit 0
           fi
-          SAFE_TITLE=$(echo "$PR_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-          MESSAGE="${SLACK_MENTION} your PR is ready to merge: <${PR_URL}|${SAFE_TITLE}>"
+          MESSAGE=$(jq -n -r \
+            --arg mention "$SLACK_MENTION" \
+            --arg repo "$PR_REPO" \
+            --arg number "$PR_NUMBER" \
+            --arg author "$PR_AUTHOR" \
+            --arg url "$PR_URL" \
+            --arg title "$PR_TITLE" \
+            '
+            ($title | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;")) as $safe_title
+            | (if $mention == "" then "" else $mention + " " end)
+              + $repo + "#" + $number
+              + " by " + $author
+              + " is ready to merge: <" + $url + "|" + $safe_title + ">"
+            ')
           PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL" --arg text "$MESSAGE" \
             '{channel: $channel, text: $text, unfurl_links: false}')
           curl -sf -X POST https://slack.com/api/chat.postMessage \
