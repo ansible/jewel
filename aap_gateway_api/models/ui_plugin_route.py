@@ -30,13 +30,11 @@ class UIPluginRoute(Route, AuditableModel):
 
         return super().save(*args, **kwargs)
 
-    def get_xds_login_logout_routes(self) -> list:
-        # UI plugins don't need their own login/logout routes
-        # Authentication is handled by the parent service
+    def get_xds_login_logout_routes(self, **kwargs) -> list:
         return []
 
-    def get_xds_route_config(self):
+    def get_xds_route_config(self, **kwargs):
         self.service_path = self.ui_plugin_path
-        routes = super().get_xds_route_config()
+        routes = super().get_xds_route_config(**kwargs)
 
         return routes
