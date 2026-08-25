@@ -38,7 +38,7 @@ jobs:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         id: labeler
         env:
-          USERNAME_MAPPING: ${{ secrets.USERNAME_MAPPING }}
+          USERNAME_MAPPING: ${{ vars.USERNAME_MAPPING || secrets.USERNAME_MAPPING }}
           ORG_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           script: |
@@ -230,7 +230,7 @@ jobs:
               }
             }
 
-            // --- Parse username mapping from secret (if available) ---
+            // --- Parse username mapping (repo variable, secret fallback) ---
             let usernameMapping = {};
             const mappingRaw = process.env.USERNAME_MAPPING;
             if (mappingRaw) {
@@ -238,7 +238,7 @@ jobs:
                 usernameMapping = JSON.parse(mappingRaw);
                 core.info(`Username mapping loaded (${Object.keys(usernameMapping).length} entries)`);
               } catch (e) {
-                core.warning(`Failed to parse USERNAME_MAPPING secret: ${e.message}`);
+                core.warning(`Failed to parse USERNAME_MAPPING: ${e.message}`);
               }
             }
 
@@ -299,7 +299,7 @@ jobs:
               );
               if (normalizedMapping[pr.user.login.toLowerCase()]) {
                 isInternal = true;
-                core.info(`${pr.user.login} found in USERNAME_MAPPING secret`);
+                core.info(`${pr.user.login} found in USERNAME_MAPPING`);
               }
             }
 
