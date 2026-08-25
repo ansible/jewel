@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from django.utils.translation import gettext as _
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
@@ -10,7 +11,7 @@ from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.utils.urls import remove_multiple_slashes_from_path
 
 
-class BaseRouteSerializer(NamedCommonModelSerializer):
+class BaseRouteSerializer(CleanTextMixin, NamedCommonModelSerializer):
     """
     Base serializer for route models.
 
