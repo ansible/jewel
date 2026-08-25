@@ -1,10 +1,11 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from rest_framework import serializers
 
 from aap_gateway_api.models import ServiceCluster
 
 
-class ServiceClusterSerializer(NamedCommonModelSerializer):
+class ServiceClusterSerializer(CleanTextMixin, NamedCommonModelSerializer):
     effective_health_check_timeout_seconds = serializers.SerializerMethodField(
         help_text="The effective health check timeout Envoy will use, computed as the maximum of the cluster's "
         "health_check_timeout_seconds, the highest route request_timeout_seconds, and the global request_timeout preference."

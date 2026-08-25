@@ -5,6 +5,7 @@ from ansible_base.authentication.authenticator_plugins.utils import get_authenti
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.authentication.utils.user import can_user_change_password
 from ansible_base.lib.serializers.common import CommonUserSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.policies import can_change_user
@@ -38,7 +39,7 @@ class _AssociatedAuthenticatorsField(serializers.JSONField):
 @extend_schema_serializer(
     deprecate_fields=["authenticators", "authenticator_uid"],
 )
-class UserSerializer(CommonUserSerializer):
+class UserSerializer(CleanTextMixin, CommonUserSerializer):
     password = serializers.CharField(required=False, max_length=128, allow_blank=True)
     authenticators = MultipleChoiceFieldWithoutEmptyEnum(
         # If we load the authenticators here we end up with a static list of authenticators.
