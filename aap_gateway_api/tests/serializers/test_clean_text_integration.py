@@ -8,18 +8,12 @@ use @override_settings to enable it.
 """
 
 import pytest
-from django.test import override_settings
-from rest_framework.exceptions import ValidationError
-
-from aap_gateway_api.models import AdditionalRoute, Organization, ServiceCluster, ServiceNode, Team
-from aap_gateway_api.serializers import (
-    AdditionalRouteSerializer,
-    ServiceClusterSerializer,
-    ServiceKeySerializer,
-    ServiceNodeSerializer,
-)
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleDefinition
+from django.test import override_settings
+
+from aap_gateway_api.models import AdditionalRoute, Organization, ServiceCluster, ServiceNode, Team
+from aap_gateway_api.serializers import AdditionalRouteSerializer, ServiceClusterSerializer, ServiceKeySerializer, ServiceNodeSerializer
 
 DANGEROUS_NAME = '<script>alert(1)</script>'
 DANGEROUS_TEXT = '$(rm -rf /)'
@@ -68,11 +62,7 @@ class TestOrganizationCleanText:
 
         # PATCH without changing the name - should succeed
         detail_url = get_relative_url('organization-detail', kwargs={'pk': org_id})
-        response = admin_api_client.patch(
-            detail_url,
-            data={'name': 'name;semicolon', 'description': 'Updated description'},
-            format='json'
-        )
+        response = admin_api_client.patch(detail_url, data={'name': 'name;semicolon', 'description': 'Updated description'}, format='json')
         assert response.status_code == 200
 
     def test_rejects_changed_invalid_name_on_update(self, admin_api_client, organization):
@@ -106,11 +96,7 @@ class TestTeamCleanText:
     def test_rejects_invalid_description_on_create(self, admin_api_client, organization):
         """POST with dangerous description should return HTTP 400."""
         url = get_relative_url('team-list')
-        data = {
-            'name': VALID_NAME,
-            'organization': organization.id,
-            'description': DANGEROUS_TEXT
-        }
+        data = {'name': VALID_NAME, 'organization': organization.id, 'description': DANGEROUS_TEXT}
         response = admin_api_client.post(url, data=data, format='json')
         assert response.status_code == 400
         assert 'description' in response.data
@@ -118,11 +104,7 @@ class TestTeamCleanText:
     def test_grandfather_unchanged_name_on_update(self, admin_api_client, organization):
         """PATCH that doesn't change invalid name should succeed."""
         url = get_relative_url('team-list')
-        response = admin_api_client.post(
-            url,
-            data={'name': 'Temp Team', 'organization': organization.id},
-            format='json'
-        )
+        response = admin_api_client.post(url, data={'name': 'Temp Team', 'organization': organization.id}, format='json')
         assert response.status_code == 201
         team_id = response.data['id']
 
@@ -131,11 +113,7 @@ class TestTeamCleanText:
 
         # PATCH without changing name - should succeed
         detail_url = get_relative_url('team-detail', kwargs={'pk': team_id})
-        response = admin_api_client.patch(
-            detail_url,
-            data={'name': 'team<invalid>', 'description': 'Updated'},
-            format='json'
-        )
+        response = admin_api_client.patch(detail_url, data={'name': 'team<invalid>', 'description': 'Updated'}, format='json')
         assert response.status_code == 200
 
 
@@ -230,7 +208,7 @@ class TestGatewayRoleDefinitionCleanText:
                 'permissions': ['shared.view_organization'],
                 'content_type': 'shared.organization',
             },
-            format='json'
+            format='json',
         )
         assert response.status_code == 201
         rd_id = response.data['id']
@@ -240,11 +218,7 @@ class TestGatewayRoleDefinitionCleanText:
 
         # PATCH without changing name - should succeed
         detail_url = get_relative_url('roledefinition-detail', kwargs={'pk': rd_id})
-        response = admin_api_client.patch(
-            detail_url,
-            data={'name': 'role$invalid', 'description': 'Updated'},
-            format='json'
-        )
+        response = admin_api_client.patch(detail_url, data={'name': 'role$invalid', 'description': 'Updated'}, format='json')
         assert response.status_code == 200
 
 
@@ -261,10 +235,12 @@ class TestServiceClusterCleanText:
 
     def test_accepts_valid_name_at_serializer_level(self):
         """Serializer-level validation should accept valid name."""
-        serializer = ServiceClusterSerializer(data={
-            'name': VALID_NAME,
-            'service_type': 'gateway',
-        })
+        serializer = ServiceClusterSerializer(
+            data={
+                'name': VALID_NAME,
+                'service_type': 'gateway',
+            }
+        )
         # May have other validation errors, but name should not be one
         serializer.is_valid()
         assert 'name' not in serializer.errors
@@ -272,21 +248,14 @@ class TestServiceClusterCleanText:
     def test_grandfather_unchanged_name_on_update(self):
         """Update that doesn't change invalid name should succeed."""
         # Create with valid name
-        cluster = ServiceCluster.objects.create(
-            name='valid-cluster',
-            service_type='gateway'
-        )
+        cluster = ServiceCluster.objects.create(name='valid-cluster', service_type='gateway')
 
         # Manually update to invalid name
         ServiceCluster.objects.filter(pk=cluster.pk).update(name='cluster;invalid')
         cluster.refresh_from_db()
 
         # Serialize update without changing name - should succeed
-        serializer = ServiceClusterSerializer(
-            instance=cluster,
-            data={'name': 'cluster;invalid', 'service_type': 'gateway'},
-            partial=True
-        )
+        serializer = ServiceClusterSerializer(instance=cluster, data={'name': 'cluster;invalid', 'service_type': 'gateway'}, partial=True)
         assert serializer.is_valid()
 
 
@@ -297,24 +266,28 @@ class TestRouteSerializersCleanText:
 
     def test_additional_route_rejects_invalid_name(self, http_port, service_cluster_gateway):
         """AdditionalRouteSerializer should reject invalid name."""
-        serializer = AdditionalRouteSerializer(data={
-            'name': DANGEROUS_NAME,
-            'http_port': http_port.id,
-            'service_cluster': service_cluster_gateway.id,
-            'gateway_path': '/test/',
-        })
+        serializer = AdditionalRouteSerializer(
+            data={
+                'name': DANGEROUS_NAME,
+                'http_port': http_port.id,
+                'service_cluster': service_cluster_gateway.id,
+                'gateway_path': '/test/',
+            }
+        )
         assert not serializer.is_valid()
         assert 'name' in serializer.errors
 
     def test_additional_route_rejects_invalid_description(self, http_port, service_cluster_gateway):
         """AdditionalRouteSerializer should reject dangerous description."""
-        serializer = AdditionalRouteSerializer(data={
-            'name': VALID_NAME,
-            'description': DANGEROUS_TEXT,
-            'http_port': http_port.id,
-            'service_cluster': service_cluster_gateway.id,
-            'gateway_path': '/test/',
-        })
+        serializer = AdditionalRouteSerializer(
+            data={
+                'name': VALID_NAME,
+                'description': DANGEROUS_TEXT,
+                'http_port': http_port.id,
+                'service_cluster': service_cluster_gateway.id,
+                'gateway_path': '/test/',
+            }
+        )
         assert not serializer.is_valid()
         assert 'description' in serializer.errors
 
@@ -331,11 +304,7 @@ class TestRouteSerializersCleanText:
         AdditionalRoute.objects.filter(pk=route.pk).update(name='route<invalid>')
         route.refresh_from_db()
 
-        serializer = AdditionalRouteSerializer(
-            instance=route,
-            data={'name': 'route<invalid>'},
-            partial=True
-        )
+        serializer = AdditionalRouteSerializer(instance=route, data={'name': 'route<invalid>'}, partial=True)
         assert serializer.is_valid()
 
 
@@ -346,21 +315,25 @@ class TestServiceNodeCleanText:
 
     def test_rejects_invalid_name_at_serializer_level(self, service_cluster_gateway):
         """Serializer should reject invalid name."""
-        serializer = ServiceNodeSerializer(data={
-            'name': DANGEROUS_NAME,
-            'address': '192.168.1.1',
-            'service_cluster': service_cluster_gateway.id,
-        })
+        serializer = ServiceNodeSerializer(
+            data={
+                'name': DANGEROUS_NAME,
+                'address': '192.168.1.1',
+                'service_cluster': service_cluster_gateway.id,
+            }
+        )
         assert not serializer.is_valid()
         assert 'name' in serializer.errors
 
     def test_accepts_valid_name(self, service_cluster_gateway):
         """Serializer should accept valid name."""
-        serializer = ServiceNodeSerializer(data={
-            'name': VALID_NAME,
-            'address': '192.168.1.1',
-            'service_cluster': service_cluster_gateway.id,
-        })
+        serializer = ServiceNodeSerializer(
+            data={
+                'name': VALID_NAME,
+                'address': '192.168.1.1',
+                'service_cluster': service_cluster_gateway.id,
+            }
+        )
         assert serializer.is_valid()
 
     def test_grandfather_unchanged_name_on_update(self, service_cluster_gateway):
@@ -374,11 +347,7 @@ class TestServiceNodeCleanText:
         ServiceNode.objects.filter(pk=node.pk).update(name='node`invalid')
         node.refresh_from_db()
 
-        serializer = ServiceNodeSerializer(
-            instance=node,
-            data={'name': 'node`invalid'},
-            partial=True
-        )
+        serializer = ServiceNodeSerializer(instance=node, data={'name': 'node`invalid'}, partial=True)
         assert serializer.is_valid()
 
 
@@ -393,21 +362,25 @@ class TestServiceKeyCleanText:
 
     def test_rejects_invalid_name_at_serializer_level(self, service_cluster_gateway):
         """Serializer should reject invalid name."""
-        serializer = ServiceKeySerializer(data={
-            'name': DANGEROUS_NAME,
-            'service_cluster': service_cluster_gateway.id,
-            'mark_previous_inactive': False,
-        })
+        serializer = ServiceKeySerializer(
+            data={
+                'name': DANGEROUS_NAME,
+                'service_cluster': service_cluster_gateway.id,
+                'mark_previous_inactive': False,
+            }
+        )
         assert not serializer.is_valid()
         assert 'name' in serializer.errors
 
     def test_accepts_valid_name(self, service_cluster_gateway):
         """Serializer should accept valid name."""
-        serializer = ServiceKeySerializer(data={
-            'name': VALID_NAME,
-            'service_cluster': service_cluster_gateway.id,
-            'mark_previous_inactive': False,
-        })
+        serializer = ServiceKeySerializer(
+            data={
+                'name': VALID_NAME,
+                'service_cluster': service_cluster_gateway.id,
+                'mark_previous_inactive': False,
+            }
+        )
         # May have other validation, but name should not error
         serializer.is_valid()
         assert 'name' not in serializer.errors
