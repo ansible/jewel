@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import os
 import re
@@ -142,7 +143,6 @@ def test_preference_rotation(settings):
 @pytest.mark.django_db(transaction=True)
 def test_authenticator_config_rotation(settings):
     """Authenticator.configuration encrypted sub-fields are re-encrypted."""
-    import json
 
     from ansible_base.authentication.models import Authenticator
 
@@ -302,6 +302,156 @@ def test_parse_config_malformed_json():
     assert Command._parse_config(42) is None
     assert Command._parse_config({"key": "val"}) == {"key": "val"}
     assert Command._parse_config('{"key": "val"}') == {"key": "val"}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_jsonb_encrypted_field_rotation(settings):
+    """Encrypted fields stored in jsonb columns are correctly rotated.
+
+    This covers AuthenticatorUser.extra_data and similar JSONField-backed
+    encrypted fields. The encrypted ciphertext is stored as a JSON string
+    inside the jsonb column, which psycopg may return already-unwrapped
+    (as a Python str) or still JSON-encoded (with outer quotes).
+    """
+    from ansible_base.authentication.models import Authenticator
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+
+    old_key = settings.SECRET_KEY
+    new_key = "new-jsonb-rotation-key"
+
+    authenticator = Authenticator.objects.create(
+        name="Test LDAP for jsonb",
+        enabled=True,
+        create_objects=True,
+        type="ansible_base.authentication.authenticator_plugins.ldap",
+        configuration={},
+    )
+
+    user = User.objects.create_user(username="jsonb-test-user", password="test")
+
+    extra_data = {"sub": "user123", "groups": ["admin", "dev"], "token": "secret-token-value"}
+    encrypted_extra = encrypt_with_key(extra_data, old_key)
+
+    with connection.cursor() as cur:
+        cur.execute(
+            "INSERT INTO dab_authentication_authenticatoruser "
+            "(provider_id, uid, user_id, extra_data, claims, last_login_map_results, access_allowed, created, modified) "
+            "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, NOW(), NOW())",
+            [authenticator.slug, "jsonb-test-uid", user.pk, json.dumps(encrypted_extra), '{}', '[]', True],
+        )
+
+    with connection.cursor() as cur:
+        cur.execute("SELECT extra_data FROM dab_authentication_authenticatoruser WHERE uid = %s", ["jsonb-test-uid"])
+        raw_before = cur.fetchone()[0]
+
+    assert ENCRYPTED_STRING in str(raw_before)
+
+    out = io.StringIO()
+    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
+        call_command("rotate_secret_key", use_custom_key=True, stdout=out)
+
+    assert "re-encrypted" in out.getvalue()
+
+    with connection.cursor() as cur:
+        cur.execute("SELECT extra_data FROM dab_authentication_authenticatoruser WHERE uid = %s", ["jsonb-test-uid"])
+        raw_after = cur.fetchone()[0]
+
+    raw_after_str = raw_after if isinstance(raw_after, str) else json.dumps(raw_after)
+    if raw_after_str.startswith('"'):
+        raw_after_str = json.loads(raw_after_str)
+
+    assert ENCRYPTED_STRING in raw_after_str
+    assert raw_after_str != encrypted_extra
+    assert decrypt_with_key(raw_after_str, new_key) == extra_data
+
+
+@pytest.mark.django_db(transaction=True)
+def test_jsonb_encrypted_field_with_json_wrapped_value(settings):
+    """Rotation handles jsonb values returned with JSON string wrapping.
+
+    Simulates the case where psycopg returns a jsonb string value still
+    wrapped in JSON quotes (e.g. '"$encrypted$..."' instead of
+    '$encrypted$...').  The normalizer unwraps it before _reencrypt_value
+    processes the plain ciphertext.
+    """
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+
+    old_key = settings.SECRET_KEY
+    new_key = "new-jsonb-wrapped-key"
+
+    cmd = Command()
+    cmd.old_key = old_key
+    cmd.new_key = new_key
+    cmd._skipped_count = 0
+
+    original_data = {"secret": "my-secret-value"}
+    encrypted = encrypt_with_key(original_data, old_key)
+
+    # Simulate what _paginated_reencrypt does: normalise then reencrypt
+    json_wrapped = json.dumps(encrypted)
+    normalised = cmd._normalise_if_jsonb_value(json_wrapped)
+    result = cmd._reencrypt_value(normalised, label="test-wrapped")
+    assert result is not None
+    assert ENCRYPTED_STRING in result
+    assert decrypt_with_key(result, new_key) == original_data
+
+    # Already-unwrapped value also works
+    normalised2 = cmd._normalise_if_jsonb_value(encrypted)
+    result2 = cmd._reencrypt_value(normalised2, label="test-unwrapped")
+    assert result2 is not None
+    assert decrypt_with_key(result2, new_key) == original_data
+
+
+@pytest.mark.django_db
+def test_normalise_if_jsonb_value():
+    """_normalise_if_jsonb_value correctly unwraps various jsonb representations."""
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+
+    encrypted = "$encrypted$UTF8$AESCBC$base64data"
+
+    # Already-unwrapped encrypted string passes through
+    assert Command._normalise_if_jsonb_value(encrypted) == encrypted
+
+    # JSON-wrapped encrypted string is unwrapped
+    json_wrapped = json.dumps(encrypted)
+    assert Command._normalise_if_jsonb_value(json_wrapped) == encrypted
+
+    # Non-string types return None
+    assert Command._normalise_if_jsonb_value({"key": "value"}) is None
+    assert Command._normalise_if_jsonb_value([1, 2, 3]) is None
+    assert Command._normalise_if_jsonb_value(None) is None
+
+    # Non-JSON string falls through to return raw
+    assert Command._normalise_if_jsonb_value("plain-text-not-json") == "plain-text-not-json"
+
+    # Invalid JSON triggers the except branch and returns raw
+    assert Command._normalise_if_jsonb_value("{invalid json{{") == "{invalid json{{"
+
+    # A JSON-parseable value that isn't a string (e.g. a number) returns raw
+    assert Command._normalise_if_jsonb_value("42") == "42"
+
+
+@pytest.mark.django_db
+def test_reencrypt_value_edge_cases(settings):
+    """_reencrypt_value returns None for empty, non-string, or non-encrypted values."""
+    from aap_gateway_api.management.commands.rotate_secret_key import Command
+
+    cmd = Command()
+    cmd.old_key = settings.SECRET_KEY
+    cmd.new_key = "test-coverage-key"
+    cmd._skipped_count = 0
+
+    # Empty/None values
+    assert cmd._reencrypt_value(None, label="test-none") is None
+    assert cmd._reencrypt_value("", label="test-empty") is None
+
+    # Non-string value (normaliser should be called before this, but verify safety)
+    assert cmd._reencrypt_value(42, label="test-int") is None
+
+    # Plain string without encrypted marker
+    assert cmd._reencrypt_value("not-encrypted", label="test-plain") is None
 
 
 @pytest.mark.django_db

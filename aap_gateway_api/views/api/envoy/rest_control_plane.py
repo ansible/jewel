@@ -1,4 +1,7 @@
-from django.db.models import Max
+import logging
+
+from django.core.cache import cache
+from django.db.models import Max, Prefetch
 from envoy.config.cluster.v3.cluster_pb2 import Cluster
 from envoy.config.listener.v3.listener_pb2 import Listener
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryResponse
@@ -10,6 +13,7 @@ from rest_framework.views import APIView
 
 from aap_gateway_api.models import HTTPPort, Route
 from aap_gateway_api.models.service_cluster import ServiceCluster
+from aap_gateway_api.models.service_type import DefaultServiceType
 
 # These modules must be imported so their protobuf message types get registered
 # with symbol_database.Default().pool.  Without this, ParseDict() will fail to
@@ -29,6 +33,11 @@ from drf_spectacular.utils import extend_schema
 
 # isort: on
 
+logger = logging.getLogger("aap_gateway_api.views.api.envoy.rest_control_plane")
+
+XDS_CACHE_KEY_CDS = "xds:cds"
+XDS_CACHE_KEY_LDS = "xds:lds"
+XDS_CACHE_KEY_SDS = "xds:sds"
 
 # ---------------------------------------------------------------------------
 # Envoy xDS REST control plane views
@@ -43,7 +52,16 @@ from drf_spectacular.utils import extend_schema
 #
 # None of these endpoints require authentication because they are only
 # reachable from Envoy on the loopback interface.
+#
+# Responses are cached and invalidated by model signals (see
+# aap_gateway_api/signals/xds_cache.py) so that the ~5-second Envoy
+# polling interval does not trigger full DB rebuilds every time.
 # ---------------------------------------------------------------------------
+
+
+def invalidate_xds_cache(*keys):
+    """Delete one or more xDS cache keys."""
+    cache.delete_many(keys)
 
 
 @extend_schema(exclude=True)
@@ -82,7 +100,16 @@ class ClusterDiscoverServiceView(XDSView):
     """CDS -- returns an Envoy Cluster definition for every Route."""
 
     def post(self, request, format=None):
-        routes = list(self.get_qs(request, Route, "envoy_cluster_name").select_related('service_cluster'))
+        cached = cache.get(XDS_CACHE_KEY_CDS)
+        if cached is not None:
+            logger.debug("CDS cache hit")
+            return Response(cached)
+
+        routes = list(
+            self.get_qs(request, Route, "envoy_cluster_name")
+            .select_related('service_cluster')
+            .prefetch_related('service_cluster__nodes', 'service_cluster__service_type')
+        )
 
         # Pre-compute the maximum per-route request_timeout_seconds for each
         # ServiceCluster in a single query.  We stash the result as the
@@ -95,7 +122,9 @@ class ClusterDiscoverServiceView(XDSView):
             route.service_cluster._max_route_timeout = max_timeouts.get(route.service_cluster_id)
 
         clusters = [x.get_xds_cluster_config() for x in routes]
-        return Response(self.get_xds_response(Cluster, clusters))
+        response_data = self.get_xds_response(Cluster, clusters)
+        cache.set(XDS_CACHE_KEY_CDS, response_data)
+        return Response(response_data)
 
 
 class ListenerDiscoverServiceView(XDSView):
@@ -105,9 +134,27 @@ class ListenerDiscoverServiceView(XDSView):
     permission_classes = []
 
     def post(self, request, format=None):
-        listeners = [x.get_xds_listener_config() for x in self.get_qs(request, HTTPPort, "envoy_listener_name")]
+        cached = cache.get(XDS_CACHE_KEY_LDS)
+        if cached is not None:
+            return Response(cached)
 
-        return Response(self.get_xds_response(Listener, listeners))
+        ports = self.get_qs(request, HTTPPort, "envoy_listener_name").prefetch_related(
+            Prefetch('routes', queryset=Route.objects.select_related('service_cluster__service_type').order_by('order')),
+            'routes__service_cluster__nodes',
+        )
+
+        gw_cluster_name = None
+        sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
+        if sc:
+            gw_route = Route.objects.filter(service_cluster=sc).first()
+            if gw_route:
+                gw_cluster_name = gw_route.envoy_cluster_name
+
+        listeners = [x.get_xds_listener_config(gateway_cluster_name=gw_cluster_name) for x in ports]
+
+        response_data = self.get_xds_response(Listener, listeners)
+        cache.set(XDS_CACHE_KEY_LDS, response_data)
+        return Response(response_data)
 
 
 class SecretDiscoverServiceView(XDSView):
@@ -118,8 +165,14 @@ class SecretDiscoverServiceView(XDSView):
     permission_classes = []
 
     def post(self, request, format=None):
+        cached = cache.get(XDS_CACHE_KEY_SDS)
+        if cached is not None:
+            return Response(cached)
+
         secret_resource = self._collect_db_ca_certs()
-        return Response(self.get_xds_response(Secret, [secret_resource]))
+        response_data = self.get_xds_response(Secret, [secret_resource])
+        cache.set(XDS_CACHE_KEY_SDS, response_data)
+        return Response(response_data)
 
     def _collect_db_ca_certs(self) -> dict:
         pem_blocks = [(cert.pem_data or "").strip() for cert in CACertificate.objects.all()]

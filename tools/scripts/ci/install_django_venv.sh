@@ -24,5 +24,7 @@ if ! pip show django-ansible-base > /dev/null 2>&1; then
     GIT_REQUIREMENTS="-r requirements/requirements_git.txt"
 fi
 
-# Install all dependencies from requirements.txt (includes pinned Django version)
-pip install psycopg[binary] -r requirements/requirements.txt ${GIT_REQUIREMENTS} "$@"
+# Install hashed production requirements separately so pip's --require-hashes
+# mode does not conflict with unhashed test/dev dependencies.
+pip install --require-hashes --no-cache-dir -r requirements/requirements.txt
+pip install 'psycopg[binary]' ${GIT_REQUIREMENTS} "$@"

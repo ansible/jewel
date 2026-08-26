@@ -24,7 +24,7 @@ UNAME_S := $(shell uname -s)
 .PHONY: PYTHON_VERSION clean git_hooks_config \
 	check lint check_ruff check_ruff_format \
 	docker-compose plumb update_django_ansible_base_hash \
-	collection
+	collection requirements check-requirements
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -245,11 +245,13 @@ endif
 tools/generated/proxy.yml: $(shell find tools/ansible/roles/proxy-config/templates -type f)
 	ansible-playbook tools/ansible/generate-proxy-configs.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
-## Build the requirements.txt file
-requirements/requirements.txt: requirements/requirements.in
-	cd requirements && \
-	    ./updater.sh run
-	@-cd .. || true
+## Regenerate requirements.txt from requirements.in
+requirements: requirements/requirements.in
+	cd requirements && ./updater.sh run
+
+## Verify requirements.txt is in sync with requirements.in
+check-requirements:
+	cd requirements && ./updater.sh check
 
 ## Register services and ports
 register-services: tools/generated/proxy.yml collection

@@ -55,7 +55,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
         return super().save(*args, **kwargs)
 
-    def get_xds_listener_config(self):
+    def get_xds_listener_config(self, **kwargs):
         """
         Returns the envoy listener configuration for this port.
         """
@@ -73,8 +73,8 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }
         routes.append(up_route)
-        for route in self.routes.all().order_by('order'):
-            routes.extend(route.get_xds_route_config())
+        for route in sorted(self.routes.all(), key=lambda r: r.order):
+            routes.extend(route.get_xds_route_config(**kwargs))
 
         cfg = {
             "name": self.envoy_listener_name,
