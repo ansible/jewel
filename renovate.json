@@ -1,15 +1,14 @@
+// -*- mode: jsonc -*-
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "enabledManagers": ["tekton"],
   "tekton": {
-    "schedule": ["0 * * * *"]
-  },
-  "packageRules": [
-    {
-      "description": "Update aap-ci tekton-catalog pipeline bundles",
-      "matchPackageNames": ["/^quay\\.io\\/aap-ci\\/tekton-catalog\\/pipeline\\/"],
-      "matchManagers": ["tekton"],
-      "automerge": true
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["* 9-17 * * 1-5"],
+    // Disable post upgrade tasks to avoid pipeline-migration-tool failures (not applicable to tekton pipeline bundles)
+    "postUpgradeTasks": {
+      "commands": []
     }
-  ]
+  }
 }
