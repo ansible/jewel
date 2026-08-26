@@ -39,6 +39,10 @@ class TooManyPreferencesException(Exception):
 class PreferenceCorruptError(Exception):
     """Raised when a preference cannot be read due to corrupt or undecryptable data."""
 
+    def __init__(self, message: str):
+        super().__init__(message)
+        logger.critical(message, exc_info=True)
+
 
 def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
     if validate:
@@ -89,11 +93,6 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
                 return get_encrypted_string_for_preference(preference)
             value = ansible_encryption.decrypt_string(value)
     except (InvalidToken, SerializationError, ValueError, TypeError):
-        logger.critical(
-            "Preference '%s' has corrupt or undecryptable data.",
-            preference_name,
-            exc_info=True,
-        )
         raise PreferenceCorruptError(f"Preference '{preference_name}' has corrupt or undecryptable data.")
 
     return value
@@ -224,11 +223,11 @@ def initialize_preferences():
         preference_name = preference.identifier()
         try:
             gateway_preference_manager[preference_name]
-        except (InvalidToken, ValueError, TypeError, SerializationError):
-            corrupt_preferences.append(preference_name)
+        except (InvalidToken, ValueError, TypeError, SerializationError) as exc:
+            corrupt_preferences.append((preference_name, type(exc).__name__))
 
     if corrupt_preferences:
-        pref_list_str = "\n".join(f"  - {name}" for name in corrupt_preferences)
+        pref_list_str = "\n".join(f"  - {name} ({exc_type})" for name, exc_type in corrupt_preferences)
         logger.critical(
             "The gateway cannot start because %d preference(s) have corrupt or undecryptable data:\n%s",
             len(corrupt_preferences),

@@ -466,11 +466,12 @@ def test_initialize_preferences_exits_on_decrypt_failure(mock_logger, register_p
     assert len(failing_keys) > 0, "Expected at least one failing preference"
     assert "general__healthy_pref" in accessed_keys, "healthy_pref was never accessed — iteration stopped early"
 
-    # SystemExit message includes the corrupt preference names
+    # SystemExit message includes the corrupt preference names and exception types
     exit_message = str(exc_info.value)
     for key in failing_keys:
         assert key in exit_message
     assert "corrupt or undecryptable" in exit_message
+    assert "InvalidToken" in exit_message
 
     assert mock_logger.critical.call_count > 0
 
