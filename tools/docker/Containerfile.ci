@@ -57,6 +57,7 @@ RUN pip install --no-cache-dir 'psycopg[binary]'
 
 # Pre-seed the tox py312 virtualenv so CI skips the expensive env creation.
 # At runtime, workflows symlink .tox -> /opt/tox-cache so tox reuses this venv.
+ENV TOX_WORK_DIR=/opt/tox-cache
 RUN mkdir -p ${TOX_WORK_DIR}/py312 && \
     python -m venv ${TOX_WORK_DIR}/py312 && \
     ${TOX_WORK_DIR}/py312/bin/pip install --upgrade pip setuptools wheel && \
