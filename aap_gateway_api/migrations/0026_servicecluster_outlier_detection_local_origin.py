@@ -1,34 +1,36 @@
 from django.db import migrations, models
 
 
-def set_consecutive_local_origin_failure_zero(apps, schema_editor):
+def set_local_origin_outlier_defaults(apps, schema_editor):
     """
-    Disable consecutive local-origin ejection on existing ServiceCluster rows.
-    Envoy treats an explicit 0 as disabled; omitting the field defaults to 5.
+    Apply the WebSocket-teardown-safe defaults on existing ServiceCluster rows
+    so upgrades get the fix without a manual PATCH.
     """
     ServiceCluster = apps.get_model('aap_gateway_api', 'ServiceCluster')
     ServiceCluster.objects.all().update(
+        outlier_detection_split_external_local_origin_errors=True,
         outlier_detection_consecutive_local_origin_failure=0,
     )
 
 
-def unset_consecutive_local_origin_failure(apps, schema_editor):
+def unset_local_origin_outlier_defaults(apps, schema_editor):
     """
-    Reverse: restore Envoy's original default of 5 consecutive local-origin failures.
+    Reverse: restore Envoy's original defaults (split off, threshold 5).
     """
     ServiceCluster = apps.get_model('aap_gateway_api', 'ServiceCluster')
     ServiceCluster.objects.all().update(
+        outlier_detection_split_external_local_origin_errors=False,
         outlier_detection_consecutive_local_origin_failure=5,
     )
 
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('aap_gateway_api', '0026_servicecluster_outlier_detection_split_external_local_origin_errors'),
+        ('aap_gateway_api', '0025_servicecluster_health_check_interval_default'),
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.AddField(
             model_name='servicecluster',
             name='outlier_detection_split_external_local_origin_errors',
             field=models.BooleanField(
@@ -53,7 +55,7 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunPython(
-            set_consecutive_local_origin_failure_zero,
-            unset_consecutive_local_origin_failure,
+            set_local_origin_outlier_defaults,
+            unset_local_origin_outlier_defaults,
         ),
     ]
