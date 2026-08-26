@@ -109,7 +109,7 @@ Tests include coverage reporting. Coverage reports are generated in:
 - XML: `coverage.xml`
 - JSON: `coverage.json`
 
-**Note**: SonarCloud requires 80% code coverage for quality gates.
+**Note**: Codecov requires 90% patch coverage on new code. SonarCloud quality gates also enforce coverage.
 
 ## Pre-commit Hooks
 
@@ -411,11 +411,10 @@ Tests are split into 3 parallel batches in CI:
 Each batch produces separate coverage/JUnit files, final job merges using `junitparser`.
 
 ### Stress Testing
-Use `./run_tox_batch.sh` to run tox 40 times for detecting intermittent threading issues:
+Use `tools/scripts/run_tox_batch.sh` to run tox 40 times for detecting intermittent threading issues:
 
 ```bash
-chmod +x run_tox_batch.sh
-./run_tox_batch.sh
+./tools/scripts/run_tox_batch.sh
 ```
 
 ## Common Threading Issues & Solutions

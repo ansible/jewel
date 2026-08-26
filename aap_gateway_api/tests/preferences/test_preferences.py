@@ -354,3 +354,38 @@ def test_absolute_path_or_url_preference(register_preference, preference_manager
         with preference_manager.set("general", "test_preference", "mailto:test@example.com"):
             pass  # The validation error should occur during setup
     assert "mailto:test@example.com is not a valid URL or absolute path" in str(e.value)
+
+
+@pytest.mark.django_db
+def test_preference_from_db_invalid_token_logs_and_reraises(register_preference, caplog):
+    """Preference.from_db() must log CRITICAL and re-raise InvalidToken when decryption fails.
+
+    This simulates a SECRET_KEY rotation that leaves existing encrypted rows
+    undecryptable -- the canonical trigger for AAP-76852.
+    """
+    from cryptography.fernet import InvalidToken
+
+    register_preference(
+        section="general",
+        preference_name="enc_invalid_token_test",
+        default="secret_value",
+        encrypted=True,
+        preference_type="string",
+    )
+
+    import logging
+
+    with patch("ansible_base.lib.utils.encryption.ansible_encryption.decrypt_string", side_effect=InvalidToken):
+        with caplog.at_level(logging.CRITICAL, logger="aap.gateway.models.preference"):
+            with pytest.raises(InvalidToken):
+                Preference.objects.get(section="general", name="enc_invalid_token_test")
+
+    assert any("SECRET_KEY" in record.message for record in caplog.records if record.levelno == logging.CRITICAL), (
+        "Expected a CRITICAL log message mentioning SECRET_KEY"
+    )
+    assert any("general" in record.message for record in caplog.records if record.levelno == logging.CRITICAL), (
+        "Expected the CRITICAL log to include the preference section"
+    )
+    assert any("enc_invalid_token_test" in record.message for record in caplog.records if record.levelno == logging.CRITICAL), (
+        "Expected the CRITICAL log to include the preference name"
+    )
