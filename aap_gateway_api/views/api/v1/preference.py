@@ -174,20 +174,10 @@ class SettingPreferenceView(AnsibleBaseView):
         except Preference.DoesNotExist:
             message = format_err_message(category_slug, preference_name, err_detail="not_found")
             return Response({"detail": message}, status=status.HTTP_404_NOT_FOUND)
-        except (InvalidToken, SerializationError):
-            logger.critical(
-                "Preference '%s' in category '%s' has corrupt or undecryptable data. "
-                "This typically indicates a SECRET_KEY mismatch or database restore. "
-                "To fix, run: aap-gateway-manage rotate_secret_key --old-key <previous_key>",
-                preference_name,
-                category_slug,
-                exc_info=True,
-            )
-            message = _(
-                "Preference '%(preference_name)s' in category '%(category_slug)s' has corrupt or undecryptable data. "
-                "To fix, run: aap-gateway-manage rotate_secret_key --old-key <previous_key>"
-            ) % {"preference_name": preference_name, "category_slug": category_slug}
-            return Response({"detail": message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except (InvalidToken, SerializationError, ValueError, TypeError):
+            from aap_gateway_api.utils.preferences import PreferenceCorruptError
+
+            raise PreferenceCorruptError(f"Preference '{preference_name}' in category '{category_slug}' has corrupt or undecryptable data.")
 
         serializer = SettingPreferenceSerializer(preference)
         return Response(serializer.data, status=status.HTTP_200_OK)

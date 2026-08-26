@@ -355,7 +355,7 @@ def test_get_preference_value_raises_on_invalid_token(mock_logger, register_pref
             preferences.get_preference_value("general", "corrupt_pref")
 
     assert "general__corrupt_pref" in str(exc_info.value)
-    assert "rotate_secret_key" in str(exc_info.value)
+    assert "corrupt or undecryptable data" in str(exc_info.value)
     assert mock_logger.critical.call_count > 0
     assert any("has corrupt or undecryptable data" in str(call) for call in mock_logger.critical.call_args_list)
 
@@ -466,11 +466,11 @@ def test_initialize_preferences_exits_on_decrypt_failure(mock_logger, register_p
     assert len(failing_keys) > 0, "Expected at least one failing preference"
     assert "general__healthy_pref" in accessed_keys, "healthy_pref was never accessed — iteration stopped early"
 
-    # SystemExit message includes the corrupt preference names and remediation
+    # SystemExit message includes the corrupt preference names
     exit_message = str(exc_info.value)
     for key in failing_keys:
         assert key in exit_message
-    assert "rotate_secret_key" in exit_message
+    assert "corrupt or undecryptable" in exit_message
 
     assert mock_logger.critical.call_count > 0
 

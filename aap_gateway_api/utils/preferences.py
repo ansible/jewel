@@ -90,17 +90,11 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
             value = ansible_encryption.decrypt_string(value)
     except (InvalidToken, SerializationError, ValueError, TypeError):
         logger.critical(
-            "Preference '%s' has corrupt or undecryptable data. "
-            "This typically indicates a SECRET_KEY mismatch or database restore. "
-            "To fix, run: aap-gateway-manage rotate_secret_key --old-key <previous_key>",
+            "Preference '%s' has corrupt or undecryptable data.",
             preference_name,
             exc_info=True,
         )
-        raise PreferenceCorruptError(
-            f"Preference '{preference_name}' has corrupt or undecryptable data. "
-            f"This typically indicates a SECRET_KEY mismatch or database restore. "
-            f"To fix, run: aap-gateway-manage rotate_secret_key --old-key <previous_key>"
-        )
+        raise PreferenceCorruptError(f"Preference '{preference_name}' has corrupt or undecryptable data.")
 
     return value
 
@@ -231,26 +225,20 @@ def initialize_preferences():
         try:
             gateway_preference_manager[preference_name]
         except (InvalidToken, ValueError, TypeError, SerializationError):
-            logger.critical(
-                "Preference '%s' has corrupt or undecryptable data. This typically indicates a SECRET_KEY mismatch or database restore.",
-                preference_name,
-                exc_info=True,
-            )
             corrupt_preferences.append(preference_name)
 
     if corrupt_preferences:
-        pref_list = "\n".join(f"  - {name}" for name in corrupt_preferences)
+        pref_list_str = "\n".join(f"  - {name}" for name in corrupt_preferences)
         logger.critical(
             "The gateway cannot start because %d preference(s) have corrupt or undecryptable data:\n%s",
             len(corrupt_preferences),
-            pref_list,
+            pref_list_str,
         )
         raise SystemExit(
             "\nERROR: The following preference(s) have corrupt or undecryptable data "
             "and must be repaired before the gateway can start:\n\n"
-            f"{pref_list}\n\n"
-            "This typically occurs after a SECRET_KEY change or database restore.\n"
-            "To fix, run: aap-gateway-manage rotate_secret_key --old-key <previous_key>\n"
+            f"{pref_list_str}\n\n"
+            "This typically occurs after a SECRET_KEY change.\n"
         )
 
 
