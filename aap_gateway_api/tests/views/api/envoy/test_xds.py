@@ -154,9 +154,9 @@ def test_xds_outlier_detection_consecutive_local_origin_failure_default(admin_ap
     assert response.status_code == 200
 
     outlier_det = response.data['resources'][0]['outlierDetection']
-    assert outlier_det.get('consecutiveLocalOriginFailure', 0) == 0
+    assert outlier_det['consecutiveLocalOriginFailure'] == 0
     # enforcing default is 100; 0 is the disable signal that always serializes.
-    assert outlier_det.get('enforcingConsecutiveLocalOriginFailure') == 0
+    assert outlier_det['enforcingConsecutiveLocalOriginFailure'] == 0
 
 
 @pytest.mark.parametrize("threshold", [0, 50])
@@ -174,9 +174,9 @@ def test_xds_outlier_detection_consecutive_local_origin_failure(threshold, admin
     assert response.status_code == 200
 
     outlier_det = response.data['resources'][0]['outlierDetection']
-    assert outlier_det.get('consecutiveLocalOriginFailure', 0) == threshold
+    assert outlier_det['consecutiveLocalOriginFailure'] == threshold
     if threshold == 0:
-        assert outlier_det.get('enforcingConsecutiveLocalOriginFailure') == 0
+        assert outlier_det['enforcingConsecutiveLocalOriginFailure'] == 0
     else:
         assert 'enforcingConsecutiveLocalOriginFailure' not in outlier_det
 

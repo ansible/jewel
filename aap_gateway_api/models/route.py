@@ -164,9 +164,9 @@ class Route(UniqueNamedCommonModel, AuditableModel):
             "split_external_local_origin_errors": self.service_cluster.outlier_detection_split_external_local_origin_errors,
             "consecutive_local_origin_failure": consecutive_local_origin_failure,
         }
-        # Envoy's protobuf JSON omits some zero values. enforcing_* defaults to 100, so an
-        # explicit 0 always serializes and disables local-origin ejection even if
-        # consecutive_local_origin_failure=0 is dropped.
+        # Explicit consecutive_local_origin_failure=0 disables and is kept by MessageToDict.
+        # Envoy treats an omitted consecutive value as 5, so also emit
+        # enforcing_consecutive_local_origin_failure=0 (unset enforcing defaults to 100).
         if consecutive_local_origin_failure == 0:
             cfg["enforcing_consecutive_local_origin_failure"] = 0
         return cfg
