@@ -11,7 +11,8 @@ jobs:
     name: "Performance Tests"
     runs-on: ubuntu-latest
     container:
-      image: quay.io/ansible/jewel-ci:${{ github.base_ref || github.ref_name }}
+      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
+      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
     env:
       TOX_DOCKER_GATEWAY: "0.0.0.0"
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
@@ -48,9 +49,6 @@ jobs:
         id: tox-env
         run: |
           echo "name=py312" >> "$GITHUB_OUTPUT"
-
-      - name: Link pre-seeded tox cache
-        run: ln -s /opt/tox-cache .tox
 
       - name: Create tox environment
         env:

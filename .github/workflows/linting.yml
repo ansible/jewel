@@ -14,7 +14,8 @@ jobs:
     name: ${{ matrix.tests.name }}
     runs-on: ubuntu-latest
     container:
-      image: quay.io/ansible/jewel-ci:${{ github.base_ref || github.ref_name }}
+      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
+      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
     permissions:
       packages: write
       contents: read

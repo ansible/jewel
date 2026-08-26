@@ -34,9 +34,9 @@ jobs:
 
       - name: Determine branch tag
         id: branch
-        run: |
-          BRANCH_NAME="${GITHUB_REF_NAME}"
-          echo "name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: echo "name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Quay.io
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
@@ -47,24 +47,37 @@ jobs:
 
       - name: Generate image tags
         id: tags
+        env:
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
           DATE_TAG=$(date -u +%Y-%m-%d)
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "date_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build CI image
-        run: make ci-image CI_IMAGE=${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }} CONTAINER_ENGINE=docker
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}
+          BRANCH_NAME: ${{ steps.branch.outputs.name }}
+        run: make ci-image "CI_IMAGE=${IMAGE_REF}:${BRANCH_NAME}" CONTAINER_ENGINE=docker
 
       - name: Tag additional versions
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}
+          BRANCH_NAME: ${{ steps.branch.outputs.name }}
+          SHORT_SHA: ${{ steps.tags.outputs.short_sha }}
+          DATE_TAG: ${{ steps.tags.outputs.date_tag }}
         run: |
-          docker tag ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }} \
-            ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.short_sha }}
-          docker tag ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }} \
-            ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.date_tag }}
+          docker tag "${IMAGE_REF}:${BRANCH_NAME}" "${IMAGE_REF}:${BRANCH_NAME}-${SHORT_SHA}"
+          docker tag "${IMAGE_REF}:${BRANCH_NAME}" "${IMAGE_REF}:${BRANCH_NAME}-${DATE_TAG}"
 
       - name: Push all tags
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}
+          BRANCH_NAME: ${{ steps.branch.outputs.name }}
+          SHORT_SHA: ${{ steps.tags.outputs.short_sha }}
+          DATE_TAG: ${{ steps.tags.outputs.date_tag }}
         run: |
-          docker push ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}
-          docker push ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.short_sha }}
-          docker push ${{ env.IMAGE_NAME }}:${{ steps.branch.outputs.name }}-${{ steps.tags.outputs.date_tag }}
+          docker push "${IMAGE_REF}:${BRANCH_NAME}"
+          docker push "${IMAGE_REF}:${BRANCH_NAME}-${SHORT_SHA}"
+          docker push "${IMAGE_REF}:${BRANCH_NAME}-${DATE_TAG}"

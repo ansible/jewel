@@ -24,7 +24,8 @@ jobs:
     name: aap_gateway_api - ${{ matrix.tests.env }}
     runs-on: ubuntu-latest
     container:
-      image: quay.io/ansible/jewel-ci:${{ github.base_ref || github.ref_name }}
+      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
+      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
     env:
       TOX_DOCKER_GATEWAY: "0.0.0.0"
     services:
@@ -50,9 +51,6 @@ jobs:
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
-
-      - name: Link pre-seeded tox cache
-        run: ln -s /opt/tox-cache .tox
 
       - name: Checkout dependencies
         env:

@@ -272,7 +272,6 @@ plumb:
 CI_IMAGE_TAG ?= $(shell git rev-parse --abbrev-ref HEAD | tr '/' '-')
 CI_IMAGE ?= quay.io/ansible/jewel-ci:$(CI_IMAGE_TAG)
 CI_CONTAINERFILE = tools/docker/Containerfile.ci
-CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || echo docker)
 
 ## Build the CI container image (amd64 for GitHub Actions runners)
 ci-image:
