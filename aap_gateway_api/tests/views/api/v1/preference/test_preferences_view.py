@@ -6,6 +6,7 @@ import pytest
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from cryptography.fernet import InvalidToken
+from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
 from aap_gateway_api.preferences import gateway_preference_registry
@@ -535,8 +536,18 @@ def test_auditor_gateway_settings_options_request(platform_auditor_api_client, c
 
 
 @pytest.mark.django_db
-def test_get_single_preference_returns_500_on_invalid_token(admin_api_client, register_preference):
-    """When Preference.objects.get() triggers InvalidToken due to corrupt data,
+@pytest.mark.parametrize(
+    "exception_class,exception_args",
+    [
+        (InvalidToken, ("bad token",)),
+        (SerializationError, ("cannot deserialize",)),
+        (ValueError, ("unexpected value",)),
+        (TypeError, ("wrong type",)),
+    ],
+    ids=["InvalidToken", "SerializationError", "ValueError", "TypeError"],
+)
+def test_get_single_preference_returns_500_on_corrupt_data(admin_api_client, register_preference, exception_class, exception_args):
+    """When Preference.objects.get() triggers a corruption-related exception,
     the view should return 500 with a meaningful error message."""
     register_preference(
         section="general",
@@ -548,7 +559,7 @@ def test_get_single_preference_returns_500_on_invalid_token(admin_api_client, re
 
     url = get_relative_url("setting-detail", kwargs={"category_slug": "general", "preference_name": "corrupt_single"})
 
-    with mock.patch.object(Preference.objects, "get", side_effect=InvalidToken("bad token")):
+    with mock.patch.object(Preference.objects, "get", side_effect=exception_class(*exception_args)):
         response = admin_api_client.get(url)
 
     assert response.status_code == 500
