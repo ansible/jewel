@@ -227,17 +227,19 @@ def initialize_preferences():
             corrupt_preferences.append((preference_name, type(exc).__name__))
 
     if corrupt_preferences:
-        pref_list_str = "\n".join(f"  - {name} ({exc_type})" for name, exc_type in corrupt_preferences)
+        max_name_len = max(len(name) for name, _ in corrupt_preferences)
+        pref_list_str = "\n".join(f"  - {name:<{max_name_len}}   [{exc_type}]" for name, exc_type in corrupt_preferences)
         logger.critical(
-            "The gateway cannot start because %d preference(s) have corrupt or undecryptable data:\n%s",
-            len(corrupt_preferences),
+            "AAP Gateway startup aborted — encrypted preference decryption failure\n\n"
+            "The following preference(s) contain data that cannot be decrypted with the\n"
+            "current SECRET_KEY:\n\n%s",
             pref_list_str,
         )
         raise SystemExit(
-            "\nERROR: The following preference(s) have corrupt or undecryptable data "
-            "and must be repaired before the gateway can start:\n\n"
-            f"{pref_list_str}\n\n"
-            "This typically occurs after a SECRET_KEY change.\n"
+            "\nAAP Gateway startup aborted — encrypted preference decryption failure\n\n"
+            "The following preference(s) contain data that cannot be decrypted with the\n"
+            "current SECRET_KEY:\n\n"
+            f"{pref_list_str}\n"
         )
 
 

@@ -470,7 +470,7 @@ def test_initialize_preferences_exits_on_decrypt_failure(mock_logger, register_p
     exit_message = str(exc_info.value)
     for key in failing_keys:
         assert key in exit_message
-    assert "corrupt or undecryptable" in exit_message
+    assert "startup aborted" in exit_message
     assert "InvalidToken" in exit_message
 
     assert mock_logger.critical.call_count > 0
