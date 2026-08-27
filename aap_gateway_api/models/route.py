@@ -154,6 +154,23 @@ class Route(UniqueNamedCommonModel, AuditableModel):
 
         return super().save(*args, **kwargs)
 
+    def _get_xds_outlier_detection_config(self):
+        consecutive_local_origin_failure = self.service_cluster.outlier_detection_consecutive_local_origin_failure
+        cfg = {
+            "consecutive_5xx": self.service_cluster.outlier_detection_consecutive_5xx,
+            "interval": f"{self.service_cluster.outlier_detection_interval_seconds}s",
+            "base_ejection_time": f"{self.service_cluster.outlier_detection_base_ejection_time_seconds}s",
+            "max_ejection_percent": self.service_cluster.outlier_detection_max_ejection_percent,
+            "split_external_local_origin_errors": self.service_cluster.outlier_detection_split_external_local_origin_errors,
+            "consecutive_local_origin_failure": consecutive_local_origin_failure,
+        }
+        # Explicit consecutive_local_origin_failure=0 disables and is kept by MessageToDict.
+        # Envoy treats an omitted consecutive value as 5, so also emit
+        # enforcing_consecutive_local_origin_failure=0 (unset enforcing defaults to 100).
+        if consecutive_local_origin_failure == 0:
+            cfg["enforcing_consecutive_local_origin_failure"] = 0
+        return cfg
+
     def get_xds_cluster_config(self):
         endpoints = []
         for node in self.service_cluster.nodes.all():
@@ -197,12 +214,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         }
 
         if self.service_cluster.outlier_detection_enabled:
-            cfg["outlier_detection"] = {
-                "consecutive_5xx": self.service_cluster.outlier_detection_consecutive_5xx,
-                "interval": f"{self.service_cluster.outlier_detection_interval_seconds}s",
-                "base_ejection_time": f"{self.service_cluster.outlier_detection_base_ejection_time_seconds}s",
-                "max_ejection_percent": self.service_cluster.outlier_detection_max_ejection_percent,
-            }
+            cfg["outlier_detection"] = self._get_xds_outlier_detection_config()
 
         if self.service_cluster.health_checks_enabled:
             effective_health_check_timeout = self.service_cluster.get_effective_health_check_timeout_seconds()
