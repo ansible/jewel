@@ -1,11 +1,12 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 from aap_gateway_api.models import HTTPPort
 
 
-class HTTPPortSerializer(NamedCommonModelSerializer):
+class HTTPPortSerializer(CleanTextMixin, NamedCommonModelSerializer):
     class Meta:
         model = HTTPPort
         fields = NamedCommonModelSerializer.Meta.fields + ['number', 'use_https', 'is_api_port']
