@@ -58,9 +58,32 @@ class ServiceCluster(UniqueNamedCommonModel, AuditableModel):
         help_text=_("The maximum percent of nodes that can be ejected from the cluster."),
     )
 
+    outlier_detection_split_external_local_origin_errors = models.BooleanField(
+        default=True,
+        help_text=_(
+            "If true, locally-originated errors (e.g. upstream connection resets from WebSocket teardowns) "
+            "are tracked separately from externally-originated 5xx responses via consecutive_local_origin_failure "
+            "instead of consecutive_5xx. Setting this to false restores counting those events toward consecutive_5xx."
+        ),
+    )
+
+    outlier_detection_consecutive_local_origin_failure = models.PositiveIntegerField(
+        default=0,
+        help_text=_(
+            "Number of consecutive locally originated failures (connect timeout, TCP reset/UC) before Envoy ejects "
+            "the host. Set to 0 to disable. CDS also emits enforcing_consecutive_local_origin_failure=0 so Envoy does "
+            "not treat an omitted value as its default of 5. Takes effect only when split_external_local_origin_errors "
+            "is true. Defaults to 0 so WebSocket teardowns do not eject the cluster. With this at 0, active health "
+            "checks are the remaining safety net for connect/UC."
+        ),
+    )
+
     health_checks_enabled = models.BooleanField(
         default=True,
-        help_text=_("If true, health checks will be used to determine if a node is healthy."),
+        help_text=_(
+            "If true, health checks will be used to determine if a node is healthy. With local-origin consecutive "
+            "ejection disabled (the default), this is the remaining way to eject a host that fails with connect/UC."
+        ),
     )
 
     health_check_timeout_seconds = models.PositiveIntegerField(
