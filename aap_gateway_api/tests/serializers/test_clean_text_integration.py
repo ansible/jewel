@@ -12,8 +12,16 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleDefinition
 from django.test import override_settings
 
-from aap_gateway_api.models import AdditionalRoute, Organization, ServiceCluster, ServiceNode, Team
-from aap_gateway_api.serializers import AdditionalRouteSerializer, ServiceClusterSerializer, ServiceKeySerializer, ServiceNodeSerializer
+from aap_gateway_api.models import AdditionalRoute, CACertificate, HTTPPort, Organization, ServiceCluster, ServiceNode, ServiceType, Team
+from aap_gateway_api.serializers import (
+    AdditionalRouteSerializer,
+    CACertificateSerializer,
+    HTTPPortSerializer,
+    ServiceClusterSerializer,
+    ServiceKeySerializer,
+    ServiceNodeSerializer,
+    ServiceTypeSerializer,
+)
 
 DANGEROUS_NAME = '<script>alert(1)</script>'
 DANGEROUS_TEXT = '$(rm -rf /)'
@@ -384,3 +392,87 @@ class TestServiceKeyCleanText:
         # May have other validation, but name should not error
         serializer.is_valid()
         assert 'name' not in serializer.errors
+
+
+@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
+@pytest.mark.django_db
+class TestCACertificateCleanText:
+    """Test CleanTextMixin integration with CACertificateSerializer."""
+
+    def test_rejects_invalid_name_at_serializer_level(self):
+        """Serializer-level validation should reject invalid name."""
+        serializer = CACertificateSerializer(data={'name': DANGEROUS_NAME, 'pem_data': 'not-a-cert', 'sha256': 'abc123'})
+        assert not serializer.is_valid()
+        assert 'name' in serializer.errors
+
+    def test_accepts_valid_name_at_serializer_level(self):
+        """Serializer-level validation should accept valid name."""
+        serializer = CACertificateSerializer(data={'name': VALID_NAME, 'pem_data': 'not-a-cert', 'sha256': 'abc123'})
+        # pem_data will fail certificate parsing, but name should not be one of the errors
+        serializer.is_valid()
+        assert 'name' not in serializer.errors
+
+    def test_grandfather_unchanged_name_on_update(self, ca_certificate):
+        """Update that doesn't change invalid name should succeed."""
+        CACertificate.objects.filter(pk=ca_certificate.pk).update(name='cert;invalid')
+        ca_certificate.refresh_from_db()
+
+        serializer = CACertificateSerializer(instance=ca_certificate, data={'name': 'cert;invalid'}, partial=True)
+        assert serializer.is_valid()
+
+
+@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
+@pytest.mark.django_db
+class TestHTTPPortCleanText:
+    """Test CleanTextMixin integration with HTTPPortSerializer."""
+
+    def test_rejects_invalid_name_at_serializer_level(self):
+        """Serializer-level validation should reject invalid name."""
+        serializer = HTTPPortSerializer(data={'name': DANGEROUS_NAME, 'number': 12345})
+        assert not serializer.is_valid()
+        assert 'name' in serializer.errors
+
+    def test_accepts_valid_name_at_serializer_level(self):
+        """Serializer-level validation should accept valid name."""
+        serializer = HTTPPortSerializer(data={'name': VALID_NAME, 'number': 12345})
+        assert serializer.is_valid()
+
+    def test_grandfather_unchanged_name_on_update(self, http_port):
+        """Update that doesn't change invalid name should succeed."""
+        HTTPPort.objects.filter(pk=http_port.pk).update(name='port`invalid')
+        http_port.refresh_from_db()
+
+        serializer = HTTPPortSerializer(instance=http_port, data={'name': 'port`invalid'}, partial=True)
+        assert serializer.is_valid()
+
+
+@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
+@pytest.mark.django_db
+class TestServiceTypeCleanText:
+    """Test CleanTextMixin integration with ServiceTypeSerializer."""
+
+    def test_rejects_invalid_name_at_serializer_level(self):
+        """Serializer-level validation should reject invalid name."""
+        serializer = ServiceTypeSerializer(data={'name': DANGEROUS_NAME})
+        assert not serializer.is_valid()
+        assert 'name' in serializer.errors
+
+    def test_rejects_invalid_login_path(self):
+        """Serializer-level validation should reject dangerous login_path (Tier 2 field)."""
+        serializer = ServiceTypeSerializer(data={'name': 'custom-service', 'login_path': DANGEROUS_TEXT})
+        assert not serializer.is_valid()
+        assert 'login_path' in serializer.errors
+
+    def test_accepts_valid_name_at_serializer_level(self):
+        """Serializer-level validation should accept valid name and login_path."""
+        serializer = ServiceTypeSerializer(data={'name': 'custom-service', 'login_path': '/v1/auth/session/login/'})
+        assert serializer.is_valid()
+
+    def test_grandfather_unchanged_name_on_update(self):
+        """Update that doesn't change invalid name should succeed."""
+        service_type = ServiceType.objects.create(name='custom-service-grandfather')
+        ServiceType.objects.filter(pk=service_type.pk).update(name='type;invalid')
+        service_type.refresh_from_db()
+
+        serializer = ServiceTypeSerializer(instance=service_type, data={'name': 'type;invalid'}, partial=True)
+        assert serializer.is_valid()
