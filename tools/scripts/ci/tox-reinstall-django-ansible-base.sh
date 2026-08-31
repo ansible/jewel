@@ -4,12 +4,13 @@
 # The purpose is to install django-ansible-base deps into the tox environment
 # iff requirements have changed.
 
-# Pass in the tox env name as the (only) argument
-ENV_NAME="$1"
+# Pass in the tox env directory as the (only) argument ({envdir}).
+# Do not use .tox/<envname> — tox honors TOX_WORK_DIR (CI uses /opt/tox-cache).
+ENV_DIR="$1"
 
 DAB_DIR="django-ansible-base"
 REQ_FILE="${DAB_DIR}/requirements/requirements_all.txt"
-TOX_REQ_FILE=".tox/${ENV_NAME}/django_ansible_base_requirements.txt"
+TOX_REQ_FILE="${ENV_DIR}/django_ansible_base_requirements.txt"
 
 # Exit if $DAB_DIR/.git doesn't exist
 # In this case, tox will just install from git anyway.
@@ -28,6 +29,7 @@ if [ "$REQS_CHANGED" -ne 0 ]; then
     OPTIONAL_DEEPS=`grep '^django-ansible-base\[' requirements/requirements_git.txt | sed 's:^django-ansible-base\[::' | sed 's:\] @.*::'`
     pip install "./${DAB_DIR}/"[$OPTIONAL_DEEPS]
     echo "Caching requirements to avoid needlessly reinstalling..."
+    mkdir -p "$ENV_DIR"
     cp "$REQ_FILE" "$TOX_REQ_FILE"
 else
     echo "No changes detected in requirements. Skipping django-ansible-base install."

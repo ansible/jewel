@@ -153,9 +153,9 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         CFLAGS="-Wno-error=incompatible-pointer-types"
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
-        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
         ./tools/scripts/run_tests.sh {posargs}
 
     [testenv:check]
@@ -166,9 +166,9 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
-        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
         python3 -m aap_gateway_api check
 
     [testenv:check-migrations]
@@ -179,9 +179,9 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
-        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
         python3 -m aap_gateway_api makemigrations --check
 
     [testenv:check-oauth2-permissions]
@@ -192,9 +192,9 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
-        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
         python3 -m aap_gateway_api check --deploy --tag oauth2_permissions
 
     [testenv:check-help-text]
@@ -205,9 +205,9 @@ legacy_tox_ini = """
         PYTHONPATH = {toxinidir}:{toxinidir}/django-ansible-base/
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         DATABASE_ENGINE = django.db.backends.dummy
-    install_command = ./tools/scripts/ci/install_django_venv.sh {envname} {opts} {packages}
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
-        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envname}
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
         python3 -m aap_gateway_api help_text_check --applications=aap_gateway_api --ignore-file ./.help_text_check.ignore
 
     [testenv:ruff-check]
