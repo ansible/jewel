@@ -6,10 +6,21 @@ on:
   pull_request:
   merge_group:
   push:
+    branches:
+      - devel
+      - stable-*
 jobs:
+  ci-image-tag:
+    uses: ./.github/workflows/ci-image-tag.yml
+    with:
+      ref: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
+
   common-tests:
     name: ${{ matrix.tests.name }}
+    needs: ci-image-tag
     runs-on: ubuntu-latest
+    container:
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
     permissions:
       packages: write
       contents: read
@@ -22,18 +33,7 @@ jobs:
           - name: api-ruff-format
             command: check_ruff_format
     steps:
-      - name: Install make
-        run: sudo apt install make
-
       - uses: actions/checkout@v4
-
-      - name: Install python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: Install requirements
-        run: pip3.12 install -r requirements/requirements_dev.txt
 
       - name: Run check ${{ matrix.tests.name }}
         run: make ${{ matrix.tests.command }}

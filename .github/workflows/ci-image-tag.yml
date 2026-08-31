@@ -1,0 +1,39 @@
+---
+# Resolve the quay.io/ansible/jewel-ci tag for a workflow run.
+#
+# merge_group.base_ref is refs/heads/<branch>; pull_request github.base_ref
+# and push github.ref_name are already the branch name. GitHub Actions
+# expressions have no replace() function, so the prefix is stripped in bash.
+name: Resolve CI image tag
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to turn into a jewel-ci tag (may include refs/heads/)
+        required: true
+        type: string
+    outputs:
+      tag:
+        description: jewel-ci image tag (branch name without refs/heads/)
+        value: ${{ jobs.resolve.outputs.tag }}
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve jewel-ci tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          TAG="${REF#refs/heads/}"
+          if [ -z "$TAG" ]; then
+            echo "Unable to resolve jewel-ci image tag from ref" >&2
+            exit 1
+          fi
+          printf 'tag=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
