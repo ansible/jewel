@@ -10,12 +10,17 @@ on:
       - devel
       - stable-*
 jobs:
+  ci-image-tag:
+    uses: ./.github/workflows/ci-image-tag.yml
+    with:
+      ref: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
+
   common-tests:
     name: ${{ matrix.tests.name }}
+    needs: ci-image-tag
     runs-on: ubuntu-latest
     container:
-      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
-      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
     permissions:
       packages: write
       contents: read

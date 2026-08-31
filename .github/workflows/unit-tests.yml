@@ -12,12 +12,17 @@ env:
   # Only upload JUnit xml files if we are this repo:
   TARGET_REPOSITORY: 'ansible/jewel'
 jobs:
+  ci-image-tag:
+    uses: ./.github/workflows/ci-image-tag.yml
+    with:
+      ref: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
+
   unit-test:
     name: ${{ matrix.batch.name }}
+    needs: ci-image-tag
     runs-on: ubuntu-latest
     container:
-      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
-      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
     env:
       TOX_DOCKER_GATEWAY: "0.0.0.0"
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
@@ -142,9 +147,8 @@ jobs:
     name: Merge junit and upload results
     runs-on: ubuntu-latest
     container:
-      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
-      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
-    needs: unit-test
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
+    needs: [ci-image-tag, unit-test]
     # Run even if some jobs failed, but only if at least one job completed
     if: |
       always() &&

@@ -10,9 +10,10 @@
 # This ensures the PR is valid before running expensive dev environment tests which require secrets.
 #
 # Jobs:
-# 1. tox - Runs sanity checks (linting, migrations, etc.) - matrix job with 4 test environments
-# 2. create-pr-metadata - Creates PR metadata artifact
-# 3. call-dev-environment - Calls dev-environment.yml reusable workflow with PR number and SHA
+# 1. ci-image-tag - Resolves the quay.io/ansible/jewel-ci tag
+# 2. tox - Runs sanity checks (linting, migrations, etc.) - matrix job with 4 test environments
+# 3. create-pr-metadata - Creates PR metadata artifact
+# 4. call-dev-environment - Calls dev-environment.yml reusable workflow with PR number and SHA
 name: Sanity
 env:
   LC_ALL: "C.UTF-8" # prevent ERROR: Ansible could not initialize the preferred locale: unsupported locale setting
@@ -20,12 +21,17 @@ on:
   pull_request:
   merge_group:
 jobs:
+  ci-image-tag:
+    uses: ./.github/workflows/ci-image-tag.yml
+    with:
+      ref: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
+
   tox:
     name: aap_gateway_api - ${{ matrix.tests.env }}
+    needs: ci-image-tag
     runs-on: ubuntu-latest
     container:
-      # merge_group.base_ref is refs/heads/<branch>; base_ref is unset outside pull_request.
-      image: quay.io/ansible/jewel-ci:${{ replace(github.event.merge_group.base_ref || github.base_ref || github.ref_name, 'refs/heads/', '') }}
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
     env:
       TOX_DOCKER_GATEWAY: "0.0.0.0"
     services:
