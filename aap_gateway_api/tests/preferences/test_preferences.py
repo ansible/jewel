@@ -324,6 +324,42 @@ def test_get_default_value_by_preference(register_preference, is_encrypted):
     assert preferences.get_default_value_by_preference(preference, is_encrypted) == ENCRYPTED_STRING if is_encrypted else 'iam_default'
 
 
+@pytest.mark.django_db
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_get_preference_value_raises_on_invalid_token(mock_logger, register_preference):
+    """When a preference triggers InvalidToken, get_preference_value should
+    log critical and raise PreferenceCorruptError."""
+    from cryptography.fernet import InvalidToken
+
+    register_preference(
+        section="general",
+        preference_name="corrupt_pref",
+        default="safe_default",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_get = preferences.gateway_preference_registry.manager().__class__.get
+
+    def side_effect(self, key, *args, **kwargs):
+        if "corrupt_pref" in key:
+            raise InvalidToken("bad token")
+        return original_get(self, key, *args, **kwargs)
+
+    with patch.object(
+        preferences.gateway_preference_registry.manager().__class__,
+        "get",
+        side_effect,
+    ):
+        with pytest.raises(preferences.PreferenceCorruptError) as exc_info:
+            preferences.get_preference_value("general", "corrupt_pref")
+
+    assert "general__corrupt_pref" in str(exc_info.value)
+    assert "corrupt or undecryptable data" in str(exc_info.value)
+    assert mock_logger.critical.call_count > 0
+    assert any("has corrupt or undecryptable data" in str(call) for call in mock_logger.critical.call_args_list)
+
+
 def test_absolute_path_or_url_preference(register_preference, preference_manager):
     register_preference(
         section="general",
@@ -389,3 +425,141 @@ def test_preference_from_db_invalid_token_logs_and_reraises(register_preference,
     assert any("enc_invalid_token_test" in record.message for record in caplog.records if record.levelno == logging.CRITICAL), (
         "Expected the CRITICAL log to include the preference name"
     )
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_exits_on_decrypt_failure(mock_logger, register_preference):
+    """
+    Test that initialize_preferences() collects all corrupt preferences and then
+    raises SystemExit with a clear diagnostic message listing what is broken and
+    how to fix it.
+    """
+    from cryptography.fernet import InvalidToken
+
+    register_preference(
+        section="general",
+        preference_name="healthy_pref",
+        default="working",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_getitem = preferences.gateway_preference_manager.__class__.__getitem__
+    accessed_keys = []
+
+    def side_effect(self, key):
+        accessed_keys.append(key)
+        if key == "general__healthy_pref":
+            return original_getitem(self, key)
+        raise InvalidToken("simulated SECRET_KEY mismatch")
+
+    with patch.object(
+        preferences.gateway_preference_manager.__class__,
+        "__getitem__",
+        side_effect,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            preferences.initialize_preferences()
+
+    # All preferences were iterated before exit (collection, not early abort)
+    failing_keys = [k for k in accessed_keys if k != "general__healthy_pref"]
+    assert len(failing_keys) > 0, "Expected at least one failing preference"
+    assert "general__healthy_pref" in accessed_keys, "healthy_pref was never accessed — iteration stopped early"
+
+    # SystemExit message includes the corrupt preference names and exception types
+    exit_message = str(exc_info.value)
+    for key in failing_keys:
+        assert key in exit_message
+    assert "startup aborted" in exit_message
+    assert "InvalidToken" in exit_message
+
+    assert mock_logger.critical.call_count > 0
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_succeeds_without_errors(mock_logger):
+    """
+    Test that initialize_preferences() still works normally when no preferences
+    fail to load -- the happy path is unchanged by the error handling.
+    """
+    preferences.initialize_preferences()
+
+    # No critical log messages should be emitted in the happy path
+    mock_logger.critical.assert_not_called()
+
+
+@mock.patch("aap_gateway_api.utils.preferences.logger")
+def test_initialize_preferences_exit_message_includes_serialization_error_type(mock_logger, register_preference):
+    """
+    Test that initialize_preferences() includes the exception type name in the
+    SystemExit message for non-InvalidToken failures (e.g. SerializationError).
+    """
+    register_preference(
+        section="general",
+        preference_name="healthy_pref",
+        default="working",
+        encrypted=False,
+        preference_type="string",
+    )
+
+    original_getitem = preferences.gateway_preference_manager.__class__.__getitem__
+
+    def side_effect(self, key):
+        if "healthy_pref" in key:
+            return original_getitem(self, key)
+        raise SerializationError("cannot deserialize value")
+
+    with patch.object(
+        preferences.gateway_preference_manager.__class__,
+        "__getitem__",
+        side_effect,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            preferences.initialize_preferences()
+
+    exit_message = str(exc_info.value)
+    assert "startup aborted" in exit_message
+    assert "SerializationError" in exit_message
+    assert "InvalidToken" not in exit_message
+
+
+def test_many_from_cache_exercises_decrypt_path(register_preference):
+    """Ensure many_from_cache decryption path is exercised for encrypted preferences.
+
+    This covers both branches in EncryptedPreferencesManager.many_from_cache():
+    the else branch where cached values are decrypted before deserialization,
+    and the CACHE_NONE_VALUE branch where sentinel values are replaced with None.
+    """
+    from dynamic_preferences.settings import preferences_settings as dp_settings
+
+    register_preference(
+        section="general",
+        preference_name="enc_cache_test",
+        default="cached_secret",
+        encrypted=True,
+        preference_type="string",
+    )
+    register_preference(
+        section="general",
+        preference_name="none_cache_test",
+        default="placeholder",
+        required=False,
+        encrypted=False,
+        preference_type="string",
+    )
+
+    manager = preferences.gateway_preference_manager
+    pref_obj = gateway_preference_registry.get("enc_cache_test", "general")
+    pref_none_obj = gateway_preference_registry.get("none_cache_test", "general")
+    db_pref = manager.get_db_pref("general", "enc_cache_test")
+
+    manager.to_cache(db_pref)
+
+    # Directly inject CACHE_NONE_VALUE into cache to guarantee the None branch is hit
+    none_cache_key = manager.get_cache_key("general", "none_cache_test")
+    manager.cache.set(none_cache_key, dp_settings.CACHE_NONE_VALUE)
+
+    result = manager.many_from_cache([pref_obj, pref_none_obj])
+
+    assert result["general__enc_cache_test"] == "cached_secret"
+    assert result["general__none_cache_test"] == ""

@@ -4,9 +4,11 @@ import logging
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
+from cryptography.fernet import InvalidToken
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from dynamic_preferences.exceptions import NotFoundInRegistry
+from dynamic_preferences.serializers import SerializationError
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -172,6 +174,10 @@ class SettingPreferenceView(AnsibleBaseView):
         except Preference.DoesNotExist:
             message = format_err_message(category_slug, preference_name, err_detail="not_found")
             return Response({"detail": message}, status=status.HTTP_404_NOT_FOUND)
+        except (InvalidToken, SerializationError, ValueError, TypeError):
+            from aap_gateway_api.utils.preferences import PreferenceCorruptError
+
+            raise PreferenceCorruptError(f"Preference '{preference_name}' in category '{category_slug}' has corrupt or undecryptable data.")
 
         serializer = SettingPreferenceSerializer(preference)
         return Response(serializer.data, status=status.HTTP_200_OK)
