@@ -3,14 +3,13 @@
 These tests verify that the CleanTextMixin validation (two-tier text validation with
 grandfathering) works correctly on all Gateway serializers that were updated in AAP-78708.
 
-The validation is gated behind ENHANCED_INPUT_VALIDATION_ENABLED, so all test classes
-use @override_settings to enable it.
+The validation is gated behind ENHANCED_INPUT_VALIDATION_ENABLED, so all tests
+use the enable_enhanced_validation fixture to enable it.
 """
 
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleDefinition
-from django.test import override_settings
 
 from aap_gateway_api.models import AdditionalRoute, CACertificate, HTTPPort, Organization, ServiceCluster, ServiceNode, ServiceType, Team
 from aap_gateway_api.serializers import (
@@ -28,7 +27,12 @@ DANGEROUS_TEXT = '$(rm -rf /)'
 VALID_NAME = 'Valid Resource Name'
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
+@pytest.fixture(autouse=True)
+def enable_enhanced_validation(settings):
+    """Enable enhanced input validation for all tests in this module."""
+    settings.ENHANCED_INPUT_VALIDATION_ENABLED = True
+
+
 @pytest.mark.django_db
 class TestOrganizationCleanText:
     """Test CleanTextMixin integration with OrganizationSerializer."""
@@ -81,7 +85,6 @@ class TestOrganizationCleanText:
         assert 'name' in response.data
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestTeamCleanText:
     """Test CleanTextMixin integration with TeamSerializer."""
@@ -125,7 +128,6 @@ class TestTeamCleanText:
         assert response.status_code == 200
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestUserCleanText:
     """Test CleanTextMixin integration with UserSerializer."""
@@ -162,7 +164,6 @@ class TestUserCleanText:
         assert 'last_name' in response.data
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestGatewayRoleDefinitionCleanText:
     """Test CleanTextMixin integration with GatewayRoleDefinitionSerializer."""
@@ -230,7 +231,6 @@ class TestGatewayRoleDefinitionCleanText:
         assert response.status_code == 200
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestServiceClusterCleanText:
     """Test CleanTextMixin integration with ServiceClusterSerializer."""
@@ -267,7 +267,6 @@ class TestServiceClusterCleanText:
         assert serializer.is_valid()
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestRouteSerializersCleanText:
     """Test CleanTextMixin integration with route serializers (via BaseRouteSerializer)."""
@@ -316,7 +315,6 @@ class TestRouteSerializersCleanText:
         assert serializer.is_valid()
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestServiceNodeCleanText:
     """Test CleanTextMixin integration with ServiceNodeSerializer."""
@@ -359,7 +357,6 @@ class TestServiceNodeCleanText:
         assert serializer.is_valid()
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestServiceKeyCleanText:
     """Test CleanTextMixin integration with ServiceKeySerializer.
@@ -394,7 +391,6 @@ class TestServiceKeyCleanText:
         assert 'name' not in serializer.errors
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestCACertificateCleanText:
     """Test CleanTextMixin integration with CACertificateSerializer."""
@@ -421,7 +417,6 @@ class TestCACertificateCleanText:
         assert serializer.is_valid()
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestHTTPPortCleanText:
     """Test CleanTextMixin integration with HTTPPortSerializer."""
@@ -446,7 +441,6 @@ class TestHTTPPortCleanText:
         assert serializer.is_valid()
 
 
-@override_settings(ENHANCED_INPUT_VALIDATION_ENABLED=True)
 @pytest.mark.django_db
 class TestServiceTypeCleanText:
     """Test CleanTextMixin integration with ServiceTypeSerializer."""
