@@ -13,7 +13,7 @@ protobuf>=5.29.5  # CVE-2025-4565
 psycopg
 pyjwt>=2.13.0  # AAP-78775
 requests
-sqlparse>=0.6.0  # CVE-2026-59893
+sqlparse>=0.6.0  # CVE-2026-59893 / CVE-2026-71491 / CVE-2026-54284
 uwsgi
 xds-protos>=1.58
 PyYAML
