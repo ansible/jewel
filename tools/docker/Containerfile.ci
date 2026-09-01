@@ -1,0 +1,70 @@
+ARG PYTHON=python3.12
+
+FROM quay.io/centos/centos:stream9
+ARG PYTHON
+
+LABEL org.opencontainers.image.source="https://github.com/ansible/jewel"
+LABEL org.opencontainers.image.description="CI image for jewel (aap-gateway) with pre-built Python dependencies"
+
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV PYTHONUNBUFFERED=1
+ENV JEWEL_CI_CONTAINER=true
+
+RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/centos.repo && \
+    dnf install -y \
+    diffutils \
+    git \
+    gcc \
+    make \
+    nodejs \
+    "${PYTHON}-devel" \
+    "${PYTHON}" \
+    "${PYTHON}-pip" \
+    libpq \
+    libpq-devel \
+    libtool-ltdl-devel \
+    openldap-devel \
+    openssl-devel \
+    xmlsec1-devel \
+    xmlsec1-openssl \
+    && dnf clean all
+
+RUN mkdir -p /opt/ci-venv && \
+    "/usr/bin/${PYTHON}" -m venv /opt/ci-venv
+
+ENV VIRTUAL_ENV=/opt/ci-venv
+ENV PATH=/opt/ci-venv/bin:$PATH
+
+RUN pip install --upgrade pip setuptools wheel
+
+COPY requirements/requirements.txt /tmp/requirements.txt
+COPY requirements/requirements_test.txt /tmp/requirements_test.txt
+COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
+
+# Install production dependencies (hashed lockfile)
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt
+
+# Install test and dev dependencies (unhashed)
+RUN pip install --no-cache-dir -r /tmp/requirements_test.txt && \
+    pip install --no-cache-dir -r /tmp/requirements_dev.txt
+
+# Install tox ecosystem for running tests
+RUN pip install --no-cache-dir tox tox-docker requests
+
+# psycopg[binary] is needed for test runs connecting to postgres
+RUN pip install --no-cache-dir 'psycopg[binary]'
+
+# Pre-seed the tox py312 virtualenv so CI skips the expensive env creation.
+# Workflows rely on TOX_WORK_DIR so tox uses this cache instead of ./.tox.
+ENV TOX_WORK_DIR=/opt/tox-cache
+RUN mkdir -p ${TOX_WORK_DIR}/py312 && \
+    python -m venv ${TOX_WORK_DIR}/py312 && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --upgrade pip setuptools wheel && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir -r /tmp/requirements_test.txt && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir 'psycopg[binary]'
+
+RUN rm -f /tmp/requirements*.txt
+
+WORKDIR /workspace
