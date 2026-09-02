@@ -246,10 +246,7 @@ def test_feature_flags_detail_patch_auditor_disallowed(platform_auditor_api_clie
     Test that that an auditor is unable to patch feature flags
     """
     feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    created_flag = AAPFlag.objects.get(name=feature_flag)
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
     response = platform_auditor_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -264,10 +261,7 @@ def test_feature_flags_detail_patch_invalid_data(admin_api_client, runtime_featu
     Test that that a 400 is returned if attempting to patch without a boolean
     """
     feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    created_flag = AAPFlag.objects.get(name=feature_flag)
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -295,10 +289,7 @@ def test_feature_flags_detail_patch_install_time_flag(admin_api_client, runtime_
     )
     flag.full_clean()
     flag.save()
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag_name)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag_name}' was not found in the database")
+    created_flag = AAPFlag.objects.get(name=feature_flag_name)
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -318,10 +309,7 @@ def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime
     - Runtime feature flags can only be toggled if they were NOT explicitly set at install time
     """
     feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    created_flag = AAPFlag.objects.get(name=feature_flag)
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
 
@@ -342,10 +330,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
       it reverts to allowing runtime toggles
     """
     feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    created_flag = AAPFlag.objects.get(name=feature_flag)
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
 
@@ -381,10 +366,7 @@ def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enab
     6. PATCH /api/gateway/v1/feature_flags/{id}/ to toggle flag value
     7. Verify flag state change is reflected immediately
     """
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    created_flag = AAPFlag.objects.get(name=feature_flag)
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
 
@@ -535,10 +517,7 @@ def test_install_time_flag_modification_when_runtime_flags_enabled(admin_api_cli
         )
         flag.full_clean()
         flag.save()
-        try:
-            created_flag = AAPFlag.objects.get(name=feature_flag_name)
-        except AAPFlag.DoesNotExist:
-            pytest.fail(f"AAPFlag with name '{feature_flag_name}' was not found in the database")
+        created_flag = AAPFlag.objects.get(name=feature_flag_name)
         url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
         response = admin_api_client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -574,10 +553,7 @@ def test_install_time_value_takes_precedence_for_runtime_flag(admin_api_client):
         )
         flag.full_clean()
         flag.save()
-        try:
-            created_flag = AAPFlag.objects.get(name=feature_flag_name)
-        except AAPFlag.DoesNotExist:
-            pytest.fail(f"AAPFlag with name '{feature_flag_name}' was not found in the database")
+        created_flag = AAPFlag.objects.get(name=feature_flag_name)
         url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
         response = admin_api_client.get(url)
         assert response.status_code == status.HTTP_200_OK
