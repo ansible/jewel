@@ -1,9 +1,10 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 
 from aap_gateway_api.models import ServiceType
 
 
-class ServiceTypeSerializer(NamedCommonModelSerializer):
+class ServiceTypeSerializer(CleanTextMixin, NamedCommonModelSerializer):
     class Meta:
         model = ServiceType
         fields = NamedCommonModelSerializer.Meta.fields + [
