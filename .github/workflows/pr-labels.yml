@@ -38,7 +38,8 @@ jobs:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         id: labeler
         env:
-          USERNAME_MAPPING: ${{ secrets.USERNAME_MAPPING }}
+          USERNAME_MAPPING: ${{ vars.USERNAME_MAPPING }}
+          USERNAME_MAPPING_SECRET: ${{ secrets.USERNAME_MAPPING }}
           ORG_TOKEN: ${{ steps.app-token.outputs.token }}
         with:
           script: |
@@ -230,16 +231,27 @@ jobs:
               }
             }
 
-            // --- Parse username mapping from secret (if available) ---
-            let usernameMapping = {};
-            const mappingRaw = process.env.USERNAME_MAPPING;
-            if (mappingRaw) {
-              try {
-                usernameMapping = JSON.parse(mappingRaw);
-                core.info(`Username mapping loaded (${Object.keys(usernameMapping).length} entries)`);
-              } catch (e) {
-                core.warning(`Failed to parse USERNAME_MAPPING secret: ${e.message}`);
+            // --- Parse username mapping (repo variable, secret fallback) ---
+            const parseUsernameMapping = (raw) => {
+              if (!raw) {
+                return null;
               }
+              try {
+                const parsed = JSON.parse(raw);
+                if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                  return parsed;
+                }
+                core.warning('USERNAME_MAPPING must be a JSON object');
+              } catch (e) {
+                core.warning(`Failed to parse USERNAME_MAPPING: ${e.message}`);
+              }
+              return null;
+            };
+            const usernameMapping = parseUsernameMapping(process.env.USERNAME_MAPPING)
+              || parseUsernameMapping(process.env.USERNAME_MAPPING_SECRET)
+              || {};
+            if (Object.keys(usernameMapping).length > 0) {
+              core.info(`Username mapping loaded (${Object.keys(usernameMapping).length} entries)`);
             }
 
             // --- Auto-assign author ---
@@ -299,7 +311,7 @@ jobs:
               );
               if (normalizedMapping[pr.user.login.toLowerCase()]) {
                 isInternal = true;
-                core.info(`${pr.user.login} found in USERNAME_MAPPING secret`);
+                core.info(`${pr.user.login} found in USERNAME_MAPPING`);
               }
             }
 
@@ -404,29 +416,31 @@ jobs:
                 const normalizedMappingForSlack = Object.fromEntries(
                   Object.entries(usernameMapping).map(([k, v]) => [k.toLowerCase(), v])
                 );
-                let mention = '';
-                const authorSlackId = normalizedMappingForSlack[pr.user.login.toLowerCase()];
-                if (authorSlackId) {
-                  mention = `<@${authorSlackId}>`;
-                } else {
-                  const reviewers = pr.requested_reviewers || [];
-                  for (const reviewer of reviewers) {
-                    const reviewerSlackId = normalizedMappingForSlack[reviewer.login.toLowerCase()];
-                    if (reviewerSlackId) {
-                      mention = `<@${reviewerSlackId}>`;
-                      core.info(`Author not in USERNAME_MAPPING — mentioning reviewer ${reviewer.login}`);
-                      break;
-                    }
-                  }
-                  if (!mention) {
-                    mention = pr.user.login;
+                const slackPerson = (login) => {
+                  const id = normalizedMappingForSlack[login.toLowerCase()];
+                  return id ? `<@${id}>` : login;
+                };
+                const isMapped = (login) => Boolean(
+                  normalizedMappingForSlack[login.toLowerCase()]
+                );
+                const assigneeLogins = (pr.assignees && pr.assignees.length)
+                  ? pr.assignees.map((a) => a.login)
+                  : [pr.user.login];
+                const assigneesText = assigneeLogins.map(slackPerson).join(', ');
+                let reviewersText = '';
+                if (!assigneeLogins.some(isMapped)) {
+                  const reviewerLogins = (pr.requested_reviewers || []).map((r) => r.login);
+                  if (reviewerLogins.length) {
+                    reviewersText = reviewerLogins.map(slackPerson).join(', ');
+                    core.info('No mapped assignee — including Reviewers in Slack notice');
                   }
                 }
 
                 core.setOutput('notify', 'true');
-                core.setOutput('slack_mention', mention);
                 core.setOutput('pr_url', pr.html_url);
-                const safeTitle = pr.title.replace(/[^\x20-\x7E]/g, '').slice(0, 200);
+                core.setOutput('pr_assignees', assigneesText);
+                core.setOutput('pr_reviewers', reviewersText);
+                const safeTitle = pr.title.replace(/[^\x20-\x7E]/g, '').replace(/\|/g, '/').slice(0, 200);
                 core.setOutput('pr_title', safeTitle);
               }
             } else {
@@ -439,16 +453,26 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
-          SLACK_MENTION: ${{ steps.labeler.outputs.slack_mention }}
           PR_URL: ${{ steps.labeler.outputs.pr_url }}
           PR_TITLE: ${{ steps.labeler.outputs.pr_title }}
+          PR_ASSIGNEES: ${{ steps.labeler.outputs.pr_assignees }}
+          PR_REVIEWERS: ${{ steps.labeler.outputs.pr_reviewers }}
         run: |
           if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL" ]; then
             echo "Slack secrets not configured — skipping notification"
             exit 0
           fi
-          SAFE_TITLE=$(echo "$PR_TITLE" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-          MESSAGE="${SLACK_MENTION} your PR is ready to merge: <${PR_URL}|${SAFE_TITLE}>"
+          MESSAGE=$(jq -n -r \
+            --arg assignees "$PR_ASSIGNEES" \
+            --arg reviewers "$PR_REVIEWERS" \
+            --arg url "$PR_URL" \
+            --arg title "$PR_TITLE" \
+            '
+            ($title | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;")) as $safe_title
+            | "Ready to merge: <" + $url + "|" + $safe_title + ">"
+              + "\nAssignee: " + $assignees
+              + (if $reviewers == "" then "" else "\nReviewers: " + $reviewers end)
+            ')
           PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL" --arg text "$MESSAGE" \
             '{channel: $channel, text: $text, unfurl_links: false}')
           curl -sf -X POST https://slack.com/api/chat.postMessage \

@@ -28,6 +28,8 @@ class ServiceClusterSerializer(NamedCommonModelSerializer):
             'outlier_detection_interval_seconds',
             'outlier_detection_base_ejection_time_seconds',
             'outlier_detection_max_ejection_percent',
+            'outlier_detection_split_external_local_origin_errors',
+            'outlier_detection_consecutive_local_origin_failure',
             'health_checks_enabled',
             'health_check_timeout_seconds',
             'health_check_interval_seconds',

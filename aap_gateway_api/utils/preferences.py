@@ -3,10 +3,12 @@ from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING, ansible_encryption
 from ansible_base.lib.utils.settings import SettingNotSetException, is_aoc_instance
+from cryptography.fernet import InvalidToken
 from django.conf import settings
 from django.utils.translation import gettext as _
 from dynamic_preferences import types
 from dynamic_preferences.preferences import Section
+from dynamic_preferences.serializers import SerializationError
 from rest_framework import serializers
 
 from aap_gateway_api.fields.serializers import JSONListField
@@ -32,6 +34,14 @@ logger = logging.getLogger("aap.gateway.utils.preferences")
 
 class TooManyPreferencesException(Exception):
     """Raised when multiple preferences match a single setting name lookup."""
+
+
+class PreferenceCorruptError(Exception):
+    """Raised when a preference cannot be read due to corrupt or undecryptable data."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        logger.critical(message, exc_info=True)
 
 
 def update_preference_value(section: str, name: str, value: str, validate: bool = True) -> None:
@@ -74,15 +84,16 @@ def get_preference_value(section: str, name: str, encrypted: bool = True) -> str
         raise ValueError(_("A settings_bound preference can not have a None value"))
 
     preference_name = get_preference_key(section, name)
-    value = gateway_preference_registry.manager().get(preference_name)
 
-    if (preference := gateway_preference_registry.get(name, section)).encrypted:
-        if encrypted:
-            return get_encrypted_string_for_preference(preference)
-        # Note: values can be retrieved from cache instead of the DB.
-        # However, decrypt_string() can identify encrypted values and decrypt them,
-        # returning the non encrypted values unchanged.
-        value = ansible_encryption.decrypt_string(value)
+    try:
+        value = gateway_preference_registry.manager().get(preference_name)
+
+        if (preference := gateway_preference_registry.get(name, section)).encrypted:
+            if encrypted:
+                return get_encrypted_string_for_preference(preference)
+            value = ansible_encryption.decrypt_string(value)
+    except (InvalidToken, SerializationError, ValueError, TypeError):
+        raise PreferenceCorruptError(f"Preference '{preference_name}' has corrupt or undecryptable data.")
 
     return value
 
@@ -195,18 +206,41 @@ def register(
 
 def initialize_preferences():
     # This method is called from apps.py to initialize all preferences in the database
-    # This seems like a really weird function let me explain...
     # When a preference is accessed the library code will:
     #    check the cache if available
     #    check the db
     #    create in the db if needed
-    # So we are going to loop over the preferences and ask for them one by one
-    # This will force the values to be written to the DB if needed.
-    # Which we need because on initial startup without this all of the preferences categories will just be blank
-    # The global_preferences object looks like a dict, so the keys will be the preference names
-    # Then we ask the global_preferences for the value of the key and it will take the actions above and populate our DB for us
-    for preference_name in gateway_preference_manager.keys():
-        gateway_preference_manager[preference_name]
+    # So we loop over the preferences and ask for them one by one.
+    # This forces values to be written to the DB if needed.
+    # Without this, all preferences categories will be blank on initial startup.
+    #
+    # We iterate from the registry (in-memory) rather than gateway_preference_manager.keys()
+    # because keys() calls all() which materializes the full queryset through
+    # Preference.from_db() — triggering decryption on every row. A single corrupt
+    # row would crash the entire iteration before our per-item try/except fires.
+    corrupt_preferences = []
+    for preference in gateway_preference_registry.preferences():
+        preference_name = preference.identifier()
+        try:
+            gateway_preference_manager[preference_name]
+        except (InvalidToken, ValueError, TypeError, SerializationError) as exc:
+            corrupt_preferences.append((preference_name, type(exc).__name__))
+
+    if corrupt_preferences:
+        max_name_len = max(len(name) for name, _ in corrupt_preferences)
+        pref_list_str = "\n".join(f"  - {name:<{max_name_len}}   [{exc_type}]" for name, exc_type in corrupt_preferences)
+        logger.critical(
+            "AAP Gateway startup aborted — encrypted preference decryption failure\n\n"
+            "The following preference(s) contain data that cannot be decrypted with the\n"
+            "current SECRET_KEY:\n\n%s",
+            pref_list_str,
+        )
+        raise SystemExit(
+            "\nAAP Gateway startup aborted — encrypted preference decryption failure\n\n"
+            "The following preference(s) contain data that cannot be decrypted with the\n"
+            "current SECRET_KEY:\n\n"
+            f"{pref_list_str}\n"
+        )
 
 
 def get_setting(name: str, encrypted: bool = True) -> Any:
