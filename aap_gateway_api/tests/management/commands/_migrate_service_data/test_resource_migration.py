@@ -660,6 +660,40 @@ def test_is_service_already_synced_all_migrated():
     assert cmd._is_service_already_synced() is True
 
 
+def test_is_service_already_synced_after_service_id_rewrite():
+    """After migration rewrites service_id to gateway's, the registry is still populated.
+
+    list_resources(service_id=<old upstream id>) returns 0 because those rows
+    were updated in place. That must not be treated as an empty registry.
+    """
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = "upstream-svc"
+    cmd.resource_types_to_migrate = ["shared.organization"]
+
+    mock_client = Mock()
+
+    def list_resources_side_effect(filters=None):
+        resp = Mock()
+        filters = filters or {}
+        if filters.get("is_partially_migrated") == "false":
+            resp.json.return_value = {"count": 0, "results": []}
+        elif filters.get("service_id") == "upstream-svc":
+            # Ownership rewritten to gateway — nothing left under the old id
+            resp.json.return_value = {"count": 0, "results": []}
+        else:
+            # Unfiltered registry still has the migrated resources
+            resp.json.return_value = {"count": 5, "results": []}
+        return resp
+
+    mock_client.list_resources.side_effect = list_resources_side_effect
+    cmd.client = mock_client
+
+    assert cmd._is_service_already_synced() is True
+    assert "empty" not in cmd.stderr.getvalue().lower()
+
+
 def test_get_filtered_resources_excludes_system_user():
     """For shared.user resources, the system user (settings.SYSTEM_USERNAME) is excluded."""
     cmd = MigrateCommand()
