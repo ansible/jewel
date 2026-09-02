@@ -27,7 +27,10 @@ class ResourceMigrationMixin:
             if results or response["count"] > len(response.get("results", [])):
                 return False
 
-        has_resources = self.client.list_resources(filters={"service_id": self.upstream_service_id}).json()
+        # Do not filter by upstream_service_id: migrate_service_data rewrites
+        # service_id in place to the gateway's ID, so a filter on the old ID
+        # looks empty after a successful migration.
+        has_resources = self.client.list_resources().json()
         if has_resources["count"] == 0:
             self._log(
                 "Upstream resource registry is empty — will attempt migration (registry may not be populated yet).",

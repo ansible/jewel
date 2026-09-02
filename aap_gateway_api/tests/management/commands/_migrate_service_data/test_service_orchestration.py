@@ -188,11 +188,9 @@ def test_migration_skips_when_already_synced(admin_user, capsys, service_api_rou
                 if "is_partially_migrated" in filters:
                     # Unmigrated query: no unmigrated resources remain
                     resp.json.return_value = {"count": 0, "results": []}
-                elif "service_id" in filters:
-                    # All-resources query: registry has resources (they're all migrated)
-                    resp.json.return_value = {"count": 5, "results": []}
                 else:
-                    resp.json.return_value = {"count": 0, "results": []}
+                    # Unfiltered registry query: resources exist (already migrated)
+                    resp.json.return_value = {"count": 5, "results": []}
                 return resp
 
             mock_client.list_resources.side_effect = list_resources_side_effect
@@ -318,10 +316,8 @@ def test_migration_skips_when_only_system_user_unmigrated(admin_user, capsys, se
                         "count": 1,
                         "results": [{"name": settings.SYSTEM_USERNAME, "ansible_id": "sys-user-id", "resource_type": "shared.user"}],
                     }
-                elif "service_id" in filters:
-                    resp.json.return_value = {"count": 10, "results": []}
                 else:
-                    resp.json.return_value = {"count": 0, "results": []}
+                    resp.json.return_value = {"count": 10, "results": []}
                 return resp
 
             mock_client.list_resources.side_effect = list_resources_side_effect
@@ -460,17 +456,9 @@ def test_migration_guard_ignores_unsupported_resource_types(admin_user, capsys, 
                 if "is_partially_migrated" in filters:
                     # Scoped to migratable types: all migrated
                     resp.json.return_value = {"count": 0, "results": []}
-                elif "service_id" in filters:
-                    # Unscoped: includes unmigrated unsupported types
-                    resp.json.return_value = {
-                        "count": 5,
-                        "results": [
-                            {"name": "job1", "ansible_id": "jt-1", "resource_type": "controller.jobtemplate"},
-                            {"name": "job2", "ansible_id": "jt-2", "resource_type": "controller.jobtemplate"},
-                        ],
-                    }
                 else:
-                    resp.json.return_value = {"count": 0, "results": []}
+                    # Unfiltered registry is populated (already migrated / unsupported types).
+                    resp.json.return_value = {"count": 5, "results": []}
                 return resp
 
             mock_client.list_resources.side_effect = list_resources_side_effect
