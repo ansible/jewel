@@ -5,6 +5,7 @@
   "tekton": {
     "enabled": true,
     "automerge": true,
+    "commitMessagePrefix": "NO_JIRA:",
     "schedule": ["* 9-17 * * 1-5"],
     // Disable post upgrade tasks to avoid pipeline-migration-tool failures (not applicable to tekton pipeline bundles)
     "postUpgradeTasks": {
