@@ -40,6 +40,11 @@ class _AssociatedAuthenticatorsField(serializers.JSONField):
     deprecate_fields=["authenticators", "authenticator_uid"],
 )
 class UserSerializer(CleanTextMixin, CommonUserSerializer):
+    # password has its own dedicated policy validation (validate_password /
+    # _perform_password_validation below) and legitimately contains characters
+    # like $, {, }, ( ) that CleanTextMixin's Tier 2 blocklist would reject.
+    excluded_fields = frozenset({'password'})
+
     password = serializers.CharField(required=False, max_length=128, allow_blank=True)
     authenticators = MultipleChoiceFieldWithoutEmptyEnum(
         # If we load the authenticators here we end up with a static list of authenticators.

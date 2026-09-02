@@ -163,6 +163,13 @@ class TestUserCleanText:
         assert response.status_code == 400
         assert 'last_name' in response.data
 
+    def test_accepts_password_with_shell_like_characters(self, admin_api_client):
+        """Password is excluded from CleanTextMixin; $, {, }, ( ) are legitimate password characters."""
+        url = get_relative_url('user-list')
+        data = {'username': 'testuser', 'password': 'Sec${ret}$(99)'}
+        response = admin_api_client.post(url, data=data, format='json')
+        assert response.status_code == 201
+
 
 @pytest.mark.django_db
 class TestGatewayRoleDefinitionCleanText:
