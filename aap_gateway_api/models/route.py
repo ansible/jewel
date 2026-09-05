@@ -11,6 +11,7 @@ from aap_gateway_api.models.http_port import HTTPPort
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.utils.preferences import get_preference_value
+from aap_gateway_api.utils.xds_configs import redirect_route
 
 API_PREFIX = "/api/"
 TYPE_KEY = "@type"
@@ -264,7 +265,10 @@ class Route(UniqueNamedCommonModel, AuditableModel):
         if not self.gateway_path or not self.service_path or not self.envoy_cluster_name:
             return []
 
-        returned_routes = self.get_xds_login_logout_routes(gateway_cluster_name=gateway_cluster_name)
+        returned_routes = []
+        if self.gateway_path.startswith(API_PREFIX) and self.gateway_path.endswith("/"):
+            returned_routes.append(redirect_route(self.gateway_path.rstrip("/"), self.gateway_path))
+        returned_routes.extend(self.get_xds_login_logout_routes(gateway_cluster_name=gateway_cluster_name))
 
         timeout = self.get_effective_timeout_seconds()
         idle_timeout = self.get_effective_idle_timeout_seconds()

@@ -2,6 +2,8 @@ from django.conf import settings
 
 from aap_gateway_api.common.envoy import (
     DOWNSTREAM_TLS_CONTEXT,
+    EXT_AUTH_FILTER,
+    EXT_AUTH_PER_ROUTE,
     EXT_AUTHZ_FILTER,
     HTTP_CONNECTION_MANAGER,
     HTTP_ROUTER,
@@ -46,6 +48,14 @@ def external_auth_filter():
 
 def http_router_filter():
     return {"name": "envoy.filters.http.router", "typed_config": {"@type": HTTP_ROUTER}}
+
+
+def redirect_route(path, redirect_path):
+    return {
+        "match": {"path": path},
+        "redirect": {"path_redirect": redirect_path, "response_code": "MOVED_PERMANENTLY"},
+        "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
+    }
 
 
 def network_manager_filter(http_filters=[], routes=[]):

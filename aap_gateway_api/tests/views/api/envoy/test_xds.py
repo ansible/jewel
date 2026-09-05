@@ -33,6 +33,47 @@ def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_s
         assert route.envoy_cluster_name in listener_routes[0]['route']['cluster']
 
 
+def test_xds_redirects_api_root_and_service_prefixes(
+    unauthenticated_api_client,
+    service_api_route_gateway,
+    service_api_route_controller,
+):
+    response = unauthenticated_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+
+    routes = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    redirects = {route["match"]["path"]: route for route in routes if "redirect" in route}
+
+    assert redirects["/api"]["redirect"] == {"pathRedirect": "/api/"}
+    controller_path = service_api_route_controller.gateway_path.rstrip("/")
+    gateway_path = service_api_route_gateway.gateway_path
+    assert redirects[controller_path]["redirect"] == {"pathRedirect": service_api_route_controller.gateway_path}
+    for redirect in (redirects["/api"], redirects[controller_path]):
+        assert redirect["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
+    gateway_route_index = next(i for i, route in enumerate(routes) if route["match"].get("prefix") == gateway_path)
+    assert routes.index(redirects["/api"]) < gateway_route_index
+
+
+@pytest.mark.parametrize("case", ["non_api_port", "non_api_prefix", "api_path_without_trailing_slash"])
+def test_xds_redirects_are_limited_to_api_boundaries(case, http_port_factory, service_cluster_eda, randname):
+    non_api_port = http_port_factory()
+    if case == "non_api_port":
+        routes = non_api_port.get_xds_listener_config()["filter_chains"][0]["filters"][0]["typed_config"]["route_config"]["virtual_hosts"][0]["routes"]
+        assert not any(route.get("match", {}).get("path") == "/api" for route in routes)
+        return
+
+    gateway_path = "/webhooks/" if case == "non_api_prefix" else "/api/my-service"
+    route = AdditionalRoute(
+        gateway_path=gateway_path,
+        service_path="/",
+        envoy_cluster_name=randname("envoy cluster"),
+        service_cluster=service_cluster_eda,
+    )
+    routes = route.get_xds_route_config()
+
+    assert not any("redirect" in route for route in routes)
+
+
 @pytest.mark.parametrize("outlier_detection_enabled", [True, False])
 def test_xds_cluster_discover_service_outlier_detection(outlier_detection_enabled, admin_api_client, full_service_hierarchy_controller):
     url = reverse("service_cluster-detail", kwargs={"pk": full_service_hierarchy_controller.service_cluster.pk})
@@ -333,10 +374,14 @@ def get_lds_routes(admin_api_client):
     assert response.status_code == 200
     filter = response.data['resources'][0]["filterChains"][0]["filters"][0]
     for route in filter["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]:
-        if route["match"]["prefix"] == "/up":
+        match = route.get("match", {})
+        if "prefix" not in match or "cluster" not in route.get("route", {}):
+            # Ignore exact-path redirects and other non-cluster routes.
+            continue
+        if match["prefix"] == "/up":
             # Avoid envoy self-hosted /up route
             continue
-        routes[route["match"]["prefix"]] = route["route"]["cluster"]
+        routes[match["prefix"]] = route["route"]["cluster"]
     return routes
 
 

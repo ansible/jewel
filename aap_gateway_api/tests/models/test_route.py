@@ -163,9 +163,9 @@ class TestRoute:
             service_cluster=service_cluster_eda,
         )
         routes = route.get_xds_route_config()
-        assert len(routes) == 1
+        assert len(routes) == 2
 
-        ext_authz_config = routes[0]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
+        ext_authz_config = routes[-1]["typed_per_filter_config"]["envoy.filters.http.ext_authz"]
         assert 'disabled' not in ext_authz_config, "EDA event stream routes must NOT disable ext_auth"
         assert ext_authz_config["check_settings"]["context_extensions"]["auth_type"] == AUTH_TYPE_NONE
         assert ext_authz_config["check_settings"]["context_extensions"]["service_type"] == "eda"
@@ -229,10 +229,10 @@ class TestRoute:
     @pytest.mark.parametrize(
         "service,expected_route_len",
         [
-            ('controller', 3),
-            ('eda', 3),
-            ('hub', 3),
-            ('gateway', 1),
+            ('controller', 4),
+            ('eda', 4),
+            ('hub', 4),
+            ('gateway', 2),
         ],
     )
     @pytest.mark.django_db
@@ -493,9 +493,9 @@ class TestRoute:
             )
 
             routes = route.get_xds_route_config()
-            assert len(routes) == 1
-            assert routes[0]["route"]["timeout"] == "30s"
-            assert routes[0]["route"]["idle_timeout"] == "15s"
+            assert len(routes) == 2
+            assert routes[-1]["route"]["timeout"] == "30s"
+            assert routes[-1]["route"]["idle_timeout"] == "15s"
 
     @pytest.mark.django_db
     def test_xds_route_config_enable_mtls(self, service_cluster_eda):
