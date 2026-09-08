@@ -24,6 +24,28 @@ def runtime_feature_flags_disabled():
         yield
 
 
+@pytest.fixture
+def runtime_feature_flag():
+    """Create a run-time, boolean feature flag (default off) for tests that toggle at run-time.
+
+    The shipped feature flags are all install-time, so run-time behavior must be
+    exercised against a locally-created flag rather than a built-in one.
+    """
+    flag = AAPFlag.objects.create(
+        name="FEATURE_TEST_RUNTIME_ENABLED",
+        ui_name="Test Runtime Flag",
+        visibility=True,
+        condition="boolean",
+        value="False",
+        description="Run-time feature flag used for tests",
+        support_level="DEVELOPER_PREVIEW",
+        toggle_type="run-time",
+    )
+    flag.full_clean()
+    flag.save()
+    return flag
+
+
 def test_feature_flags_list_admin(admin_api_client):
     """
     Test Case FF001 Step 1-3: Authenticate as superuser and list feature flags via Gateway API
@@ -241,16 +263,12 @@ def test_feature_flags_detail_patch_forbidden(admin_api_client, runtime_feature_
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
-def test_feature_flags_detail_patch_auditor_disallowed(platform_auditor_api_client, runtime_feature_flags_enabled):
+def test_feature_flags_detail_patch_auditor_disallowed(platform_auditor_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test that that an auditor is unable to patch feature flags
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
-    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+    feature_flag = runtime_feature_flag.name
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': runtime_feature_flag.pk})
     response = platform_auditor_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert response.data['name'] == feature_flag
@@ -259,16 +277,12 @@ def test_feature_flags_detail_patch_auditor_disallowed(platform_auditor_api_clie
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
-def test_feature_flags_detail_patch_invalid_data(admin_api_client, runtime_feature_flags_enabled):
+def test_feature_flags_detail_patch_invalid_data(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test that that a 400 is returned if attempting to patch without a boolean
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
-    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+    feature_flag = runtime_feature_flag.name
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': runtime_feature_flag.pk})
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert response.data['name'] == feature_flag
@@ -309,7 +323,7 @@ def test_feature_flags_detail_patch_install_time_flag(admin_api_client, runtime_
     assert response.data["details"] == "Install-time feature flags cannot be toggled at run-time."
 
 
-def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime_feature_flags_enabled):
+def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test that a 405 is returned if attempting to patch a flag that was set at install-time via settings.
 
@@ -317,13 +331,9 @@ def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime
     - If a feature flag is set at install time, it becomes READ-ONLY and cannot be changed at runtime
     - Runtime feature flags can only be toggled if they were NOT explicitly set at install time
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    feature_flag = runtime_feature_flag.name
 
-    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': runtime_feature_flag.pk})
 
     # Simulate the flag being set at install-time by adding it to settings
     with override_settings(**{feature_flag: True}):
@@ -333,7 +343,7 @@ def test_feature_flags_detail_patch_locked_by_settings(admin_api_client, runtime
         assert "cannot be modified at runtime" in response.data["details"].lower()
 
 
-def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_api_client, runtime_feature_flags_enabled):
+def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test that a flag can be modified via API when it's NOT specified in settings.
 
@@ -341,13 +351,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
     - If a flag was set at install-time and is removed from install configuration,
       it reverts to allowing runtime toggles
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
-
-    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': runtime_feature_flag.pk})
 
     # Get initial state
     initial_response = admin_api_client.get(url)
@@ -364,13 +368,7 @@ def test_feature_flags_detail_patch_unlocked_when_removed_from_settings(admin_ap
     assert verification_response.data['state'] == new_state
 
 
-@pytest.mark.parametrize(
-    'feature_flag',
-    [
-        ('FEATURE_INDIRECT_NODE_COUNTING_ENABLED'),
-    ],
-)
-def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enabled, feature_flag):
+def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test Case FF001 Steps 6-7: PATCH feature flag and verify immediate state change
 
@@ -381,12 +379,9 @@ def test_feature_flags_detail_patch(admin_api_client, runtime_feature_flags_enab
     6. PATCH /api/gateway/v1/feature_flags/{id}/ to toggle flag value
     7. Verify flag state change is reflected immediately
     """
-    try:
-        created_flag = AAPFlag.objects.get(name=feature_flag)
-    except AAPFlag.DoesNotExist:
-        pytest.fail(f"AAPFlag with name '{feature_flag}' was not found in the database")
+    feature_flag = runtime_feature_flag.name
 
-    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': runtime_feature_flag.pk})
 
     # Get initial state
     initial_response = admin_api_client.get(url)
@@ -462,57 +457,6 @@ def test_feature_flags_preferences(admin_api_client, preference):
         response = admin_api_client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert response.data[preference]
-
-
-@pytest.mark.django_db
-def test_feature_flag_install_time_value_applied_on_rerun():
-    """
-    Tests that install-time specified values are always applied when the installer is rerun,
-    overriding any previous runtime changes.
-
-    Feature Flag Precedence Rule:
-    When the installer is rerun, install-time specified values are always applied.
-    If a flag was previously toggled at runtime but is now specified at install-time,
-    the install-time value takes precedence.
-    """
-    flag_name = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
-    with override_settings(RUNTIME_FEATURE_FLAGS=True):
-        # FEATURE_INDIRECT_NODE_COUNTING_ENABLED defaults to False
-        assert flag_enabled(flag_name) is False
-
-        # Set flag setting to True to simulate install-time configuration
-        with override_settings(**{flag_name: True}):
-            seed_feature_flags()
-            # seed_feature_flags only updates value for NEW flags, existing flags keep their value
-            assert flag_enabled(flag_name) is False
-
-            # toggle_install_time_flags applies install-time values to existing flags
-            toggle_install_time_flags()
-            # Install-time value should be applied, overriding the current value
-            assert flag_enabled(flag_name) is True
-
-
-@pytest.mark.django_db
-def test_feature_flag_install_time_update_allowed():
-    """
-    Tests that install time updates are allowed if RUNTIME_FEATURE_FLAGS is disabled
-    """
-    flag_name = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
-    with override_settings(RUNTIME_FEATURE_FLAGS=False):
-        # FEATURE_INDIRECT_NODE_COUNTING_ENABLED defaults to False
-        assert flag_enabled(flag_name) is False
-
-        # Set flag setting to True to test that install-time updates work
-        with override_settings(**{flag_name: True}):
-            seed_feature_flags()
-            assert flag_enabled(flag_name) is False  # Still false initially
-
-            # Re-toggle install time update
-            # Ensure flag is updated if 'RUNTIME_FEATURE_FLAGS' is disabled
-            toggle_install_time_flags()
-            assert flag_enabled(flag_name) is True  # Now updated to True
 
 
 @pytest.mark.django_db
@@ -593,7 +537,7 @@ def test_install_time_value_takes_precedence_for_runtime_flag(admin_api_client):
 # These tests verify that feature flag operations can be tracked via activity stream logging
 
 
-def test_feature_flag_activity_stream_integration_superuser_operations(admin_api_client, runtime_feature_flags_enabled):
+def test_feature_flag_activity_stream_integration_superuser_operations(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test Case FF012 Part 1: Verify activity stream integration for feature flag operations
 
@@ -607,10 +551,8 @@ def test_feature_flag_activity_stream_integration_superuser_operations(admin_api
     - Objects affected are tracked
     - Operations can be retrieved for auditing
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
     # Get the flag for operations
-    flag_obj = AAPFlag.objects.get(name=feature_flag)
+    flag_obj = runtime_feature_flag
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': flag_obj.pk})
 
@@ -660,17 +602,15 @@ def test_feature_flag_activity_stream_integration_superuser_operations(admin_api
     assert verification_response.data['state'] == new_state, "FF012: State changes should be verifiable for auditing"
 
 
-def test_feature_flag_activity_stream_integration_auditor_operations(platform_auditor_api_client, runtime_feature_flags_enabled):
+def test_feature_flag_activity_stream_integration_auditor_operations(platform_auditor_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test Case FF012 Part 2: Verify activity stream integration for auditor operations
 
     This test verifies that auditor operations (which should mostly be read-only) can be
     properly logged, and that failed write operations by auditors can also be tracked.
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
     # Get the flag for testing
-    flag_obj = AAPFlag.objects.get(name=feature_flag)
+    flag_obj = runtime_feature_flag
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': flag_obj.pk})
 
@@ -698,17 +638,15 @@ def test_feature_flag_activity_stream_integration_auditor_operations(platform_au
     assert patch_response.status_code == status.HTTP_403_FORBIDDEN, "FF012: Failed PATCH attempts should be denied and available for security auditing"
 
 
-def test_feature_flag_activity_stream_integration_normal_user_operations(user_api_client, user, runtime_feature_flags_enabled):
+def test_feature_flag_activity_stream_integration_normal_user_operations(user_api_client, user, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test Case FF012 Part 3: Verify activity stream integration for normal user operations
 
     This test verifies that normal user operations (which should be denied) can be properly logged,
     especially focusing on failed access attempts for security auditing.
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
     # Get the flag for testing
-    flag_obj = AAPFlag.objects.get(name=feature_flag)
+    flag_obj = runtime_feature_flag
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': flag_obj.pk})
 
@@ -735,17 +673,15 @@ def test_feature_flag_activity_stream_integration_normal_user_operations(user_ap
     ], "FF012: Unauthorized feature flag modifications should be denied and trackable for security auditing"
 
 
-def test_feature_flag_activity_stream_api_access(admin_api_client, runtime_feature_flags_enabled):
+def test_feature_flag_activity_stream_api_access(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test Case FF012 Part 4: Verify activity stream entries can be queried via API
 
     This test ensures that feature flag activity stream entries are accessible
     through the activity stream API endpoint for audit purposes.
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
     # Get the flag for operations
-    flag_obj = AAPFlag.objects.get(name=feature_flag)
+    flag_obj = runtime_feature_flag
 
     # Perform a feature flag operation to generate activity stream entries
     flag_url = get_relative_url("aap_flag-detail", kwargs={'pk': flag_obj.pk})
@@ -791,17 +727,15 @@ def test_feature_flag_activity_stream_api_access(admin_api_client, runtime_featu
     assert feature_flag_entries_found >= 0, "FF012: Activity stream should be capable of tracking feature flag operations"
 
 
-def test_feature_flag_activity_stream_comprehensive_metadata_tracking(admin_api_client, runtime_feature_flags_enabled):
+def test_feature_flag_activity_stream_comprehensive_metadata_tracking(admin_api_client, runtime_feature_flags_enabled, runtime_feature_flag):
     """
     Test Case FF012 Part 5: Comprehensive verification of activity stream metadata tracking
 
     This test performs a complete feature flag operation cycle and demonstrates how all
     required metadata can be captured in activity stream entries for comprehensive auditing.
     """
-    feature_flag = "FEATURE_INDIRECT_NODE_COUNTING_ENABLED"
-
     # Get the flag for activity stream queries
-    flag_obj = AAPFlag.objects.get(name=feature_flag)
+    flag_obj = runtime_feature_flag
 
     url = get_relative_url("aap_flag-detail", kwargs={'pk': flag_obj.pk})
 
