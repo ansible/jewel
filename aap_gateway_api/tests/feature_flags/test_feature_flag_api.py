@@ -247,14 +247,12 @@ def test_feature_flag_detail_and_metadata(admin_api_client):
     assert isinstance(flag['labels'], list), "labels should be array per test plan"
 
 
-def test_feature_flags_detail_patch_forbidden(admin_api_client, runtime_feature_flags_disabled):
+def test_feature_flags_detail_patch_forbidden(admin_api_client, runtime_feature_flags_disabled, runtime_feature_flag):
     """
     Test that that a 403 is returned if RUNTIME_FEATURE_FLAGS is unset or False
     """
-    created_flag = AAPFlag.objects.filter(value='False', toggle_type='run-time').first()
-    assert created_flag is not None, "At least one run-time AAPFlag with value='False' must exist"
-    feature_flag = created_flag.name
-    url = get_relative_url("aap_flag-detail", kwargs={'pk': created_flag.pk})
+    feature_flag = runtime_feature_flag.name
+    url = get_relative_url("aap_flag-detail", kwargs={'pk': runtime_feature_flag.pk})
     response = admin_api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
     assert response.data['name'] == feature_flag
