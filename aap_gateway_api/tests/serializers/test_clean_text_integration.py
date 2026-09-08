@@ -175,6 +175,7 @@ class TestUserCleanText:
 class TestGatewayRoleDefinitionCleanText:
     """Test CleanTextMixin integration with GatewayRoleDefinitionSerializer."""
 
+    @pytest.mark.xfail(reason="Blocked on DAB PR #1118 - CleanTextMixin not yet on upstream RoleDefinitionSerializer", strict=True)
     def test_rejects_invalid_name_on_create(self, admin_api_client):
         """POST with dangerous name should return HTTP 400."""
         url = get_relative_url('roledefinition-list')
@@ -188,6 +189,7 @@ class TestGatewayRoleDefinitionCleanText:
         assert response.status_code == 400
         assert 'name' in response.data
 
+    @pytest.mark.xfail(reason="Blocked on DAB PR #1118 - CleanTextMixin not yet on upstream RoleDefinitionSerializer", strict=True)
     def test_rejects_invalid_description_on_create(self, admin_api_client):
         """POST with dangerous description should return HTTP 400."""
         url = get_relative_url('roledefinition-list')
@@ -242,35 +244,35 @@ class TestGatewayRoleDefinitionCleanText:
 class TestServiceClusterCleanText:
     """Test CleanTextMixin integration with ServiceClusterSerializer."""
 
-    def test_rejects_invalid_name_at_serializer_level(self):
+    def test_rejects_invalid_name_at_serializer_level(self, service_type_gateway):
         """Serializer-level validation should reject invalid name."""
-        serializer = ServiceClusterSerializer(data={'name': DANGEROUS_NAME})
+        serializer = ServiceClusterSerializer(data={'name': DANGEROUS_NAME, 'service_type': service_type_gateway.pk})
         assert not serializer.is_valid()
         assert 'name' in serializer.errors
 
-    def test_accepts_valid_name_at_serializer_level(self):
+    def test_accepts_valid_name_at_serializer_level(self, service_type_gateway):
         """Serializer-level validation should accept valid name."""
         serializer = ServiceClusterSerializer(
             data={
                 'name': VALID_NAME,
-                'service_type': 'gateway',
+                'service_type': service_type_gateway.pk,
             }
         )
         # May have other validation errors, but name should not be one
         serializer.is_valid()
         assert 'name' not in serializer.errors
 
-    def test_grandfather_unchanged_name_on_update(self):
+    def test_grandfather_unchanged_name_on_update(self, service_type_gateway):
         """Update that doesn't change invalid name should succeed."""
         # Create with valid name
-        cluster = ServiceCluster.objects.create(name='valid-cluster', service_type='gateway')
+        cluster = ServiceCluster.objects.create(name='valid-cluster', service_type=service_type_gateway)
 
         # Manually update to invalid name
         ServiceCluster.objects.filter(pk=cluster.pk).update(name='cluster;invalid')
         cluster.refresh_from_db()
 
         # Serialize update without changing name - should succeed
-        serializer = ServiceClusterSerializer(instance=cluster, data={'name': 'cluster;invalid', 'service_type': 'gateway'}, partial=True)
+        serializer = ServiceClusterSerializer(instance=cluster, data={'name': 'cluster;invalid', 'service_type': service_type_gateway.pk}, partial=True)
         assert serializer.is_valid()
 
 
@@ -285,6 +287,9 @@ class TestRouteSerializersCleanText:
                 'name': DANGEROUS_NAME,
                 'http_port': http_port.id,
                 'service_cluster': service_cluster_gateway.id,
+                'service_port': 8080,
+                'is_service_https': False,
+                'service_path': '/service/',
                 'gateway_path': '/test/',
             }
         )
@@ -299,6 +304,9 @@ class TestRouteSerializersCleanText:
                 'description': DANGEROUS_TEXT,
                 'http_port': http_port.id,
                 'service_cluster': service_cluster_gateway.id,
+                'service_port': 8080,
+                'is_service_https': False,
+                'service_path': '/service/',
                 'gateway_path': '/test/',
             }
         )
@@ -311,6 +319,9 @@ class TestRouteSerializersCleanText:
             name='valid-route',
             http_port=http_port,
             service_cluster=service_cluster_gateway,
+            service_port=8080,
+            is_service_https=False,
+            service_path='/service/',
             gateway_path='/test/',
         )
 
@@ -402,9 +413,14 @@ class TestServiceKeyCleanText:
 class TestCACertificateCleanText:
     """Test CleanTextMixin integration with CACertificateSerializer."""
 
-    def test_rejects_invalid_name_at_serializer_level(self):
-        """Serializer-level validation should reject invalid name."""
-        serializer = CACertificateSerializer(data={'name': DANGEROUS_NAME, 'pem_data': 'not-a-cert', 'sha256': 'abc123'})
+    def test_rejects_invalid_name_at_serializer_level(self, ca_certificate):
+        """Serializer-level validation should reject invalid name.
+
+        Uses a partial update against an existing instance so pem_data (which
+        has its own format validation) isn't required in the payload and
+        can't preempt CleanTextMixin's object-level validate() from running.
+        """
+        serializer = CACertificateSerializer(instance=ca_certificate, data={'name': DANGEROUS_NAME}, partial=True)
         assert not serializer.is_valid()
         assert 'name' in serializer.errors
 
