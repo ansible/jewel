@@ -164,6 +164,8 @@ class BaseRouteSerializer(CleanTextMixin, NamedCommonModelSerializer):
         Raises:
             ValidationError: If validation fails
         """
+        attrs = super().validate(attrs)
+
         # For PATCH updates, merge incoming data with instance values
         if self.instance:
             enable_gateway_auth = attrs.get('enable_gateway_auth', self.instance.enable_gateway_auth)
