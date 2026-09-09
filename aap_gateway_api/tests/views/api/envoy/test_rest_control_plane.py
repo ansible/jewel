@@ -69,6 +69,34 @@ def test_lds_no_gateway_cluster(unauthenticated_api_client, full_service_hierarc
     assert response.status_code == 200
 
 
+@pytest.mark.django_db
+def test_cds_empty_response_not_cached_during_bootstrap(unauthenticated_api_client):
+    """CDS does not cache empty responses during bootstrap (before routes exist)."""
+    from django.core.cache import cache
+
+    cache.clear()
+    url = reverse("cds")
+    # First call with no routes in DB
+    first = unauthenticated_api_client.post(url, data={})
+    assert first.status_code == 200
+    # Cache should be empty since there are no routes
+    assert cache.get(XDS_CACHE_KEY_CDS) is None
+
+
+@pytest.mark.django_db
+def test_lds_empty_response_not_cached_during_bootstrap(unauthenticated_api_client):
+    """LDS does not cache empty responses during bootstrap (before HTTPPorts exist)."""
+    from django.core.cache import cache
+
+    cache.clear()
+    url = reverse("lds")
+    # First call with no HTTPPorts in DB
+    first = unauthenticated_api_client.post(url, data={})
+    assert first.status_code == 200
+    # Cache should be empty since there are no ports
+    assert cache.get(XDS_CACHE_KEY_LDS) is None
+
+
 @pytest.mark.parametrize(
     "setup_certs",
     [
