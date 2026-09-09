@@ -102,8 +102,10 @@ def test_cds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     """CDS bootstrap → recovery: empty initially, then populated after resources created."""
     from django.core.cache import cache
 
-    # Clear all resources and cache to simulate bootstrap
-    from aap_gateway_api.models import Route
+    from aap_gateway_api.models import HTTPPort, Route
+    from aap_gateway_api.models.service_cluster import ServiceCluster
+    from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType
+
     Route.objects.all().delete()
     cache.clear()
 
@@ -117,12 +119,18 @@ def test_cds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     assert "resources" not in empty_response.data or len(empty_response.data.get("resources", [])) == 0
 
     # Step 2: Create resources (operator reconciles)
-    from aap_gateway_api.models.service_cluster import ServiceCluster
-    from aap_gateway_api.models.service_type import DefaultServiceType
-    sc = ServiceCluster.objects.create(name="test-cluster", service_type=DefaultServiceType.get_or_create_controller_type())
+
+    st, _ = ServiceType.objects.get_or_create(name=DefaultServiceType.CONTROLLER.value)
+    sc = ServiceCluster.objects.create(name="test-cluster", service_type=st)
+    http_port = HTTPPort.objects.create(name="test-port-8001", number=8001)
     Route.objects.create(
-        envoy_cluster_name="test-route",
+        name="test-route",
+        http_port=http_port,
         service_cluster=sc,
+        service_port=8888,
+        gateway_path="/",
+        service_path="/",
+        is_service_https=False,
     )
 
     # Step 3: Poll again (recovery phase) — should now get non-empty response and cache it
@@ -142,8 +150,10 @@ def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     """LDS bootstrap → recovery: empty initially, then populated after resources created."""
     from django.core.cache import cache
 
-    # Clear all resources and cache to simulate bootstrap
-    from aap_gateway_api.models import HTTPPort
+    from aap_gateway_api.models import HTTPPort, Route
+    from aap_gateway_api.models.service_cluster import ServiceCluster
+    from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType
+
     HTTPPort.objects.all().delete()
     cache.clear()
 
@@ -157,17 +167,21 @@ def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     assert "resources" not in empty_response.data or len(empty_response.data.get("resources", [])) == 0
 
     # Step 2: Create resources (operator reconciles)
-    from aap_gateway_api.models.service_cluster import ServiceCluster
-    from aap_gateway_api.models.service_type import DefaultServiceType
-    sc = ServiceCluster.objects.create(name="test-gw-cluster", service_type=DefaultServiceType.get_or_create_gateway_type())
-    HTTPPort.objects.create(
+    st, _ = ServiceType.objects.get_or_create(name=DefaultServiceType.GATEWAY.value)
+    sc = ServiceCluster.objects.create(name="test-gw-cluster", service_type=st)
+    http_port = HTTPPort.objects.create(
         name="port-8000",
-        port=8000,
+        number=8000,
     )
-    from aap_gateway_api.models import Route
+
     Route.objects.create(
-        envoy_cluster_name="test-gw-route",
+        name="test-gw-route",
+        http_port=http_port,
         service_cluster=sc,
+        service_port=8888,
+        gateway_path="/",
+        service_path="/",
+        is_service_https=False,
     )
 
     # Step 3: Poll again (recovery phase) — should now get non-empty response and cache it
