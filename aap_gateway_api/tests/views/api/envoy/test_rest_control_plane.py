@@ -97,6 +97,91 @@ def test_lds_empty_response_not_cached_during_bootstrap(unauthenticated_api_clie
     assert cache.get(XDS_CACHE_KEY_LDS) is None
 
 
+@pytest.mark.django_db
+def test_cds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hierarchy_controller):
+    """CDS bootstrap → recovery: empty initially, then populated after resources created."""
+    from django.core.cache import cache
+
+    # Clear all resources and cache to simulate bootstrap
+    from aap_gateway_api.models import Route
+    Route.objects.all().delete()
+    cache.clear()
+
+    url = reverse("cds")
+
+    # Step 1: Poll with empty DB (bootstrap phase)
+    empty_response = unauthenticated_api_client.post(url, data={})
+    assert empty_response.status_code == 200
+    assert cache.get(XDS_CACHE_KEY_CDS) is None  # Empty response NOT cached
+    # Verify response is truly empty (no resources)
+    assert "resources" not in empty_response.data or len(empty_response.data.get("resources", [])) == 0
+
+    # Step 2: Create resources (operator reconciles)
+    from aap_gateway_api.models.service_cluster import ServiceCluster
+    from aap_gateway_api.models.service_type import DefaultServiceType
+    sc = ServiceCluster.objects.create(name="test-cluster", service_type=DefaultServiceType.get_or_create_controller_type())
+    Route.objects.create(
+        envoy_cluster_name="test-route",
+        service_cluster=sc,
+    )
+
+    # Step 3: Poll again (recovery phase) — should now get non-empty response and cache it
+    populated_response = unauthenticated_api_client.post(url, data={})
+    assert populated_response.status_code == 200
+    # Response now has resources
+    assert "resources" in populated_response.data
+    assert len(populated_response.data.get("resources", [])) > 0
+    # Cache should now be populated
+    cached = cache.get(XDS_CACHE_KEY_CDS)
+    assert cached is not None
+    assert cached == populated_response.data
+
+
+@pytest.mark.django_db
+def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hierarchy_controller):
+    """LDS bootstrap → recovery: empty initially, then populated after resources created."""
+    from django.core.cache import cache
+
+    # Clear all resources and cache to simulate bootstrap
+    from aap_gateway_api.models import HTTPPort
+    HTTPPort.objects.all().delete()
+    cache.clear()
+
+    url = reverse("lds")
+
+    # Step 1: Poll with empty DB (bootstrap phase)
+    empty_response = unauthenticated_api_client.post(url, data={})
+    assert empty_response.status_code == 200
+    assert cache.get(XDS_CACHE_KEY_LDS) is None  # Empty response NOT cached
+    # Verify response is truly empty (no resources)
+    assert "resources" not in empty_response.data or len(empty_response.data.get("resources", [])) == 0
+
+    # Step 2: Create resources (operator reconciles)
+    from aap_gateway_api.models.service_cluster import ServiceCluster
+    from aap_gateway_api.models.service_type import DefaultServiceType
+    sc = ServiceCluster.objects.create(name="test-gw-cluster", service_type=DefaultServiceType.get_or_create_gateway_type())
+    HTTPPort.objects.create(
+        name="port-8000",
+        port=8000,
+    )
+    from aap_gateway_api.models import Route
+    Route.objects.create(
+        envoy_cluster_name="test-gw-route",
+        service_cluster=sc,
+    )
+
+    # Step 3: Poll again (recovery phase) — should now get non-empty response and cache it
+    populated_response = unauthenticated_api_client.post(url, data={})
+    assert populated_response.status_code == 200
+    # Response now has resources
+    assert "resources" in populated_response.data
+    assert len(populated_response.data.get("resources", [])) > 0
+    # Cache should now be populated
+    cached = cache.get(XDS_CACHE_KEY_LDS)
+    assert cached is not None
+    assert cached == populated_response.data
+
+
 @pytest.mark.parametrize(
     "setup_certs",
     [
