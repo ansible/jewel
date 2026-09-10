@@ -53,6 +53,10 @@ def http_router_filter():
 def redirect_route(path, redirect_path):
     """Build an unauthenticated permanent Envoy path redirect.
 
+    Redirects bypass external authentication to normalize request paths before
+    authentication and routing. This follows the same pattern as the /up health
+    check route.
+
     Args:
         path: Request path to match.
         redirect_path: Destination path for the redirect.
