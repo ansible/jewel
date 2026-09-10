@@ -3,6 +3,8 @@ from django.urls import reverse
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceNode
 
+API_PORT_NAME = "port-9080"
+
 
 def test_xds_listener_discover_service_httpport_count(unauthenticated_api_client):
     """
@@ -30,7 +32,7 @@ def test_xds_api_port_redirects_bare_paths_to_slash(admin_api_client, service_ap
     response = admin_api_client.post(reverse("lds"), data={})
     assert response.status_code == 200
 
-    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
     routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
     redirect = next(route for route in routes if route["match"] == {"path": bare_path})
 
@@ -57,7 +59,7 @@ def test_xds_service_route_without_trailing_slash_no_redirect(admin_api_client, 
     service_api_route_controller.save()
 
     response = admin_api_client.post(reverse("lds"), data={})
-    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
     routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
     redirects = [route for route in routes if "redirect" in route and route["match"].get("path") == "/api/custom"]
 
@@ -67,7 +69,7 @@ def test_xds_service_route_without_trailing_slash_no_redirect(admin_api_client, 
 def test_xds_api_port_redirects_each_service_route(admin_api_client, service_api_route_controller, service_api_route_hub):
     """Each service route should get its own trailing-slash redirect."""
     response = admin_api_client.post(reverse("lds"), data={})
-    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
     routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
     redirects = {route["match"]["path"]: route["redirect"]["pathRedirect"] for route in routes if "redirect" in route}
 
@@ -82,7 +84,7 @@ def test_xds_api_port_deduplicates_api_redirect(admin_api_client, service_api_ro
     response = admin_api_client.post(reverse("lds"), data={})
     assert response.status_code == 200
 
-    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
     routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
     api_redirects = [route for route in routes if route["match"] == {"path": "/api"}]
 
@@ -96,7 +98,7 @@ def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_s
     assert response.status_code == 200
 
     listener_routes = response.data['resources'][0]['filterChains'][0]['filters'][0]['typedConfig']['routeConfig']['virtualHosts'][0]['routes']
-    listener_routes = [route for route in listener_routes if route["match"] != {"prefix": "/up"} and "redirect" not in route]
+    listener_routes = [route for route in listener_routes if "directResponse" not in route and "redirect" not in route]
     sc_routes = full_service_hierarchy_controller.service_cluster.routes.all()
     assert sc_routes.count() > 0
     assert len(listener_routes) == sc_routes.count()
@@ -405,8 +407,7 @@ def get_lds_routes(admin_api_client):
     assert response.status_code == 200
     filter = response.data['resources'][0]["filterChains"][0]["filters"][0]
     for route in filter["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]:
-        if route["match"]["prefix"] == "/up":
-            # Avoid envoy self-hosted /up route
+        if "directResponse" in route or "redirect" in route:
             continue
         routes[route["match"]["prefix"]] = route["route"]["cluster"]
     return routes
