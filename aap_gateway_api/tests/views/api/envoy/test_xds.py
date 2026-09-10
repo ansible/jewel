@@ -40,6 +40,41 @@ def test_xds_api_port_redirects_bare_paths_to_slash(admin_api_client, service_ap
     assert redirect["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
 
 
+def test_xds_non_api_port_has_no_redirects(admin_api_client, http_port_factory):
+    """Non-API ports should not generate API redirects."""
+    non_api_port = http_port_factory()
+
+    response = admin_api_client.post(reverse("lds"), data={})
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == f"port-{non_api_port.number}")
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+
+    assert not [route for route in routes if "redirect" in route]
+
+
+def test_xds_service_route_without_trailing_slash_no_redirect(admin_api_client, service_api_route_controller):
+    """Service routes without trailing slashes should not generate redirects."""
+    service_api_route_controller.gateway_path = "/api/custom"
+    service_api_route_controller.save()
+
+    response = admin_api_client.post(reverse("lds"), data={})
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    redirects = [route for route in routes if "redirect" in route and route["match"].get("path") == "/api/custom"]
+
+    assert not redirects
+
+
+def test_xds_api_port_redirects_each_service_route(admin_api_client, service_api_route_controller, service_api_route_hub):
+    """Each service route should get its own trailing-slash redirect."""
+    response = admin_api_client.post(reverse("lds"), data={})
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    redirects = {route["match"]["path"]: route["redirect"]["pathRedirect"] for route in routes if "redirect" in route}
+
+    assert redirects[service_api_route_controller.gateway_path.rstrip("/")] == service_api_route_controller.gateway_path
+    assert redirects[service_api_route_hub.gateway_path.rstrip("/")] == service_api_route_hub.gateway_path
+
+
 def test_xds_api_port_deduplicates_api_redirect(admin_api_client, service_api_route_controller):
     """A service route at /api/ must not duplicate the bare API redirect."""
     ServiceAPIRoute.objects.filter(pk=service_api_route_controller.pk).update(gateway_path="/api/")
