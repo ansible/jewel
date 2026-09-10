@@ -1,16 +1,18 @@
 from typing import Dict, List, Optional
 
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from django.utils.translation import gettext as _
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 
+from aap_gateway_api.models.route import Route
 from aap_gateway_api.utils.formatting import normalize_comma_separated_list
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.utils.urls import remove_multiple_slashes_from_path
 
 
-class BaseRouteSerializer(NamedCommonModelSerializer):
+class BaseRouteSerializer(CleanTextMixin, NamedCommonModelSerializer):
     """
     Base serializer for route models.
 
@@ -26,6 +28,12 @@ class BaseRouteSerializer(NamedCommonModelSerializer):
     """
 
     class Meta(NamedCommonModelSerializer.Meta):
+        # AdditionalRoute and ServiceAPIRoute both extend Route (multi-table
+        # inheritance) and override this with their own concrete model.
+        # Set here too since CleanTextMixin.validate() reads self.Meta.model
+        # unconditionally, even when instantiated directly (e.g. in unit
+        # tests of the shared validation logic without a concrete subclass).
+        model = Route
         fields = NamedCommonModelSerializer.Meta.fields + [
             'request_timeout_seconds',
             'idle_timeout_seconds',
@@ -163,6 +171,8 @@ class BaseRouteSerializer(NamedCommonModelSerializer):
         Raises:
             ValidationError: If validation fails
         """
+        attrs = super().validate(attrs)
+
         # For PATCH updates, merge incoming data with instance values
         if self.instance:
             enable_gateway_auth = attrs.get('enable_gateway_auth', self.instance.enable_gateway_auth)

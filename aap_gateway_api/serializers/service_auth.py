@@ -1,10 +1,11 @@
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from rest_framework import serializers
 
 from aap_gateway_api.models import ServiceKey
 
 
-class ServiceKeySerializer(NamedCommonModelSerializer):
+class ServiceKeySerializer(CleanTextMixin, NamedCommonModelSerializer):
     secret_length = serializers.IntegerField(min_value=64, max_value=512, default=64, write_only=True)
     mark_previous_inactive = serializers.BooleanField(write_only=True, required=True)
     algorithm = serializers.ChoiceField(
