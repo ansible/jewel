@@ -89,10 +89,13 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         }
         routes.append(up_route)
         if self.is_api_port:
-            routes.append(redirect_route("/api", "/api/"))
-            for svc_route in configured_routes:
-                if svc_route.gateway_path.startswith("/api/") and svc_route.gateway_path.endswith("/"):
-                    routes.append(redirect_route(svc_route.gateway_path.rstrip("/"), svc_route.gateway_path))
+            redirects = {"/api": "/api/"}
+            redirects.update(
+                (svc_route.gateway_path.rstrip("/"), svc_route.gateway_path)
+                for svc_route in configured_routes
+                if svc_route.gateway_path.startswith("/api/") and svc_route.gateway_path.endswith("/")
+            )
+            routes.extend(redirect_route(path, target) for path, target in redirects.items())
         for route in configured_routes:
             routes.extend(route.get_xds_route_config(**kwargs))
 

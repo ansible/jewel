@@ -40,6 +40,20 @@ def test_xds_api_port_redirects_bare_paths_to_slash(admin_api_client, service_ap
     assert redirect["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
 
 
+def test_xds_api_port_deduplicates_api_redirect(admin_api_client, service_api_route_controller):
+    """A service route at /api/ must not duplicate the bare API redirect."""
+    ServiceAPIRoute.objects.filter(pk=service_api_route_controller.pk).update(gateway_path="/api/")
+
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    api_redirects = [route for route in routes if route["match"] == {"path": "/api"}]
+
+    assert len(api_redirects) == 1
+
+
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
     """Verify that configured service routes are included in the listener."""
     url = reverse("lds")
