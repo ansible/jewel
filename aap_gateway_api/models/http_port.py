@@ -64,7 +64,14 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
     def get_xds_listener_config(self, **kwargs):
         """
-        Returns the envoy listener configuration for this port.
+        Return the Envoy listener configuration for this port.
+
+        API ports also redirect bare ``/api`` and service API paths to their
+        trailing-slash forms without invoking external authorization.
+
+        Args:
+            **kwargs: Keyword arguments forwarded to each route's XDS
+                configuration builder.
         """
         http_filters = [
             path_rewrite_filter(),

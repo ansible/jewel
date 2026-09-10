@@ -20,6 +20,7 @@ def test_xds_listener_discover_service_httpport_count(unauthenticated_api_client
 
 @pytest.mark.parametrize("redirect_type", ["api", "service"])
 def test_xds_api_port_redirects_bare_paths_to_slash(admin_api_client, service_api_route_controller, redirect_type):
+    """Verify that bare API and service paths redirect to trailing slashes."""
     if redirect_type == "api":
         bare_path, redirect_path = "/api", "/api/"
     else:
@@ -40,6 +41,7 @@ def test_xds_api_port_redirects_bare_paths_to_slash(admin_api_client, service_ap
 
 
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
+    """Verify that configured service routes are included in the listener."""
     url = reverse("lds")
     response = unauthenticated_api_client.post(url, data={})
     assert response.status_code == 200

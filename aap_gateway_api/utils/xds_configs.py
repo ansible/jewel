@@ -51,6 +51,12 @@ def http_router_filter():
 
 
 def redirect_route(path, redirect_path):
+    """Build an unauthenticated permanent Envoy path redirect.
+
+    Args:
+        path: Request path to match.
+        redirect_path: Destination path for the redirect.
+    """
     return {
         "match": {"path": path},
         "redirect": {"path_redirect": redirect_path, "response_code": "MOVED_PERMANENTLY"},
