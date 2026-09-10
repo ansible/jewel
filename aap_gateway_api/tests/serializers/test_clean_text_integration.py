@@ -375,11 +375,7 @@ class TestServiceNodeCleanText:
 
 @pytest.mark.django_db
 class TestServiceKeyCleanText:
-    """Test CleanTextMixin integration with ServiceKeySerializer.
-
-    Note: ServiceKeySerializer has custom create() logic, so we test
-    validation at the serializer level rather than via API endpoints.
-    """
+    """Test CleanTextMixin integration with ServiceKeySerializer."""
 
     def test_rejects_invalid_name_at_serializer_level(self, service_cluster_gateway):
         """Serializer should reject invalid name."""
