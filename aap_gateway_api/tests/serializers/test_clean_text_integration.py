@@ -17,7 +17,7 @@ from aap_gateway_api.serializers import (
     CACertificateSerializer,
     HTTPPortSerializer,
     ServiceClusterSerializer,
-    ServiceKeySerializer,
+    ServiceKeySerializerRead,
     ServiceNodeSerializer,
     ServiceTypeSerializer,
 )
@@ -375,15 +375,11 @@ class TestServiceNodeCleanText:
 
 @pytest.mark.django_db
 class TestServiceKeyCleanText:
-    """Test CleanTextMixin integration with ServiceKeySerializer.
-
-    Note: ServiceKeySerializer has custom create() logic, so we test
-    validation at the serializer level rather than via API endpoints.
-    """
+    """Test CleanTextMixin integration with ServiceKeySerializerRead."""
 
     def test_rejects_invalid_name_at_serializer_level(self, service_cluster_gateway):
         """Serializer should reject invalid name."""
-        serializer = ServiceKeySerializer(
+        serializer = ServiceKeySerializerRead(
             data={
                 'name': DANGEROUS_NAME,
                 'service_cluster': service_cluster_gateway.id,
@@ -395,7 +391,7 @@ class TestServiceKeyCleanText:
 
     def test_accepts_valid_name(self, service_cluster_gateway):
         """Serializer should accept valid name."""
-        serializer = ServiceKeySerializer(
+        serializer = ServiceKeySerializerRead(
             data={
                 'name': VALID_NAME,
                 'service_cluster': service_cluster_gateway.id,
