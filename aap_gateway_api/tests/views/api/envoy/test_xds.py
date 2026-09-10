@@ -18,6 +18,22 @@ def test_xds_listener_discover_service_httpport_count(unauthenticated_api_client
     assert len(response.data['resources']) == HTTPPort.objects.all().count()
 
 
+def test_xds_api_port_redirects_bare_api_to_api_slash(admin_api_client, http_api_port_factory):
+    http_api_port_factory()
+
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    redirect = next(route for route in routes if route["match"] == {"path": "/api"})
+
+    assert redirect["redirect"]["pathRedirect"] == "/api/"
+    # Envoy omits MOVED_PERMANENTLY because it is the protobuf default.
+    assert redirect["redirect"].get("responseCode", "MOVED_PERMANENTLY") == "MOVED_PERMANENTLY"
+    assert redirect["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
+
+
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
     url = reverse("lds")
     response = unauthenticated_api_client.post(url, data={})

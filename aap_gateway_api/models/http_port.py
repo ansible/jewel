@@ -9,7 +9,14 @@ from django.db import models
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
-from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
+from aap_gateway_api.utils.xds_configs import (
+    external_auth_filter,
+    http_router_filter,
+    network_manager_filter,
+    path_rewrite_filter,
+    redirect_route,
+    transport_socket,
+)
 
 logger = logging.getLogger("aap_gateway_api.models.http_port")
 
@@ -73,6 +80,8 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }
         routes.append(up_route)
+        if self.is_api_port:
+            routes.append(redirect_route("/api", "/api/"))
         for route in sorted(self.routes.all(), key=lambda r: r.order):
             routes.extend(route.get_xds_route_config(**kwargs))
 
