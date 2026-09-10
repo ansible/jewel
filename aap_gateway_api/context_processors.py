@@ -74,8 +74,11 @@ def version(request):
             deprecated = True
             deprecated_message = _get_deprecation_message(view, deprecated_fields)
 
+    deprecated_message_html_safe = deprecated and bool(getattr(view, 'deprecated_message_html_safe', False))
+
     return {
         'gateway_version': get_api_version() if get_api_version() != 'development' else uuid.uuid4(),
         'deprecated': deprecated,
         'deprecated_message': deprecated_message,
+        'deprecated_message_html_safe': deprecated_message_html_safe,
     }
