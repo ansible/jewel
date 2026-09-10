@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
+from ansible_base.lib.serializers.mixins import CleanTextMixin
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from rest_framework import serializers
@@ -30,7 +31,7 @@ class CertificateChainPemField(serializers.CharField):
         return data
 
 
-class CACertificateSerializer(NamedCommonModelSerializer):
+class CACertificateSerializer(CleanTextMixin, NamedCommonModelSerializer):
     pem_data = CertificateChainPemField(required=True)
     sha256 = serializers.CharField(required=True)
 
