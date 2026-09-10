@@ -175,7 +175,6 @@ class TestUserCleanText:
 class TestGatewayRoleDefinitionCleanText:
     """Test CleanTextMixin integration with GatewayRoleDefinitionSerializer."""
 
-    @pytest.mark.xfail(reason="Blocked on DAB PR #1118 - CleanTextMixin not yet on upstream RoleDefinitionSerializer", strict=True)
     def test_rejects_invalid_name_on_create(self, admin_api_client):
         """POST with dangerous name should return HTTP 400."""
         url = get_relative_url('roledefinition-list')
@@ -189,7 +188,6 @@ class TestGatewayRoleDefinitionCleanText:
         assert response.status_code == 400
         assert 'name' in response.data
 
-    @pytest.mark.xfail(reason="Blocked on DAB PR #1118 - CleanTextMixin not yet on upstream RoleDefinitionSerializer", strict=True)
     def test_rejects_invalid_description_on_create(self, admin_api_client):
         """POST with dangerous description should return HTTP 400."""
         url = get_relative_url('roledefinition-list')
