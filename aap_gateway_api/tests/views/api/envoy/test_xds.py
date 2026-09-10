@@ -34,14 +34,29 @@ def test_xds_api_port_redirects_bare_api_to_api_slash(admin_api_client, http_api
     assert redirect["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
 
 
+def test_xds_api_port_redirects_bare_service_prefixes_to_slash(admin_api_client, service_api_route_controller):
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == "port-9080")
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    bare_path = service_api_route_controller.gateway_path.rstrip("/")
+    redirect = next(route for route in routes if route["match"] == {"path": bare_path})
+
+    assert redirect["redirect"]["pathRedirect"] == service_api_route_controller.gateway_path
+    # Envoy omits MOVED_PERMANENTLY because it is the protobuf default.
+    assert redirect["redirect"].get("responseCode", "MOVED_PERMANENTLY") == "MOVED_PERMANENTLY"
+    assert redirect["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
+
+
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
     url = reverse("lds")
     response = unauthenticated_api_client.post(url, data={})
     assert response.status_code == 200
 
     listener_routes = response.data['resources'][0]['filterChains'][0]['filters'][0]['typedConfig']['routeConfig']['virtualHosts'][0]['routes']
+    listener_routes = [route for route in listener_routes if route["match"] != {"prefix": "/up"} and "redirect" not in route]
     sc_routes = full_service_hierarchy_controller.service_cluster.routes.all()
-    listener_routes.pop(0)  # Discard /up static route
     assert sc_routes.count() > 0
     assert len(listener_routes) == sc_routes.count()
 
