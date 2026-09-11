@@ -37,7 +37,7 @@ class ServiceKey(UniqueNamedCommonModel):
 
     service_cluster = models.ForeignKey(
         "ServiceCluster",
-        editable=False,  # A key should not be allowed to be applied to a difference service cluster.
+        editable=False,  # A key should not be allowed to be applied to a different service cluster
         on_delete=models.CASCADE,
         related_name="service_keys",
         help_text=_("The service cluster this key is for"),

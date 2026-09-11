@@ -16,15 +16,22 @@ class ServiceKeySerializer(CleanTextMixin, NamedCommonModelSerializer):
             "secret",
         ]
 
+    def validate(self, attrs):
+        if self.instance is None:
+            raise ValidationError("Service keys cannot be created through this serializer. Use ServiceCluster.generate_key().")
+
+        return super().validate(attrs)
+
     def validate_is_active(self, value):
         # You can always disable a key
         if value is False:
             return value
 
-        if not self.instance:
-            raise ValidationError("Internal error: we should have had an instance object to validate against.")
+        # If we're not changing the field we can return the existing value.
+        if value == self.instance.is_active:
+            return value
 
-        active_keys = ServiceKey.objects.filter(service_cluster=self.instance.service_cluster, is_active=True).count()
+        active_keys = ServiceKey.objects.filter(service_cluster=self.instance.service_cluster, is_active=True).exclude(pk=self.instance.pk).count()
 
         if active_keys >= settings.MAX_ACTIVE_KEYS_PER_SERVICE:
             raise ValidationError("Cannot activate this key, maximum number of active keys reached for this service cluster.")

@@ -35,3 +35,26 @@ class TestServiceKeySerializer:
         with override_settings(MAX_ACTIVE_KEYS_PER_SERVICE=3):
             serializer = ServiceKeySerializer(instance=key2, data={"is_active": True}, partial=True)
             serializer.is_valid(raise_exception=True)
+
+    def test_validate_rejects_creation(self):
+        serializer = ServiceKeySerializer(data={"name": "attempted-key"}, partial=True)
+
+        with pytest.raises(ValidationError, match="Service keys cannot be created through this serializer"):
+            serializer.is_valid(raise_exception=True)
+
+    @pytest.mark.parametrize(
+        ("initial_is_active", "requested_is_active"),
+        [
+            (True, True),
+            (True, False),
+        ],
+    )
+    def test_validate_is_active_allows_noop_and_deactivation(self, service_key_factory, service_cluster_eda, initial_is_active, requested_is_active):
+        key = service_key_factory(service_cluster_eda)
+        key.is_active = initial_is_active
+        key.save()
+
+        serializer = ServiceKeySerializer(instance=key, data={"is_active": requested_is_active}, partial=True)
+
+        serializer.is_valid(raise_exception=True)
+        assert serializer.validated_data["is_active"] is requested_is_active
