@@ -123,7 +123,9 @@ class ClusterDiscoverServiceView(XDSView):
 
         clusters = [x.get_xds_cluster_config() for x in routes]
         response_data = self.get_xds_response(Cluster, clusters)
-        cache.set(XDS_CACHE_KEY_CDS, response_data)
+        # Only cache if we have resources; empty responses during bootstrap should not be cached
+        if clusters:
+            cache.set(XDS_CACHE_KEY_CDS, response_data)
         return Response(response_data)
 
 
@@ -153,7 +155,9 @@ class ListenerDiscoverServiceView(XDSView):
         listeners = [x.get_xds_listener_config(gateway_cluster_name=gw_cluster_name) for x in ports]
 
         response_data = self.get_xds_response(Listener, listeners)
-        cache.set(XDS_CACHE_KEY_LDS, response_data)
+        # Only cache if we have resources; empty responses during bootstrap should not be cached
+        if listeners:
+            cache.set(XDS_CACHE_KEY_LDS, response_data)
         return Response(response_data)
 
 
