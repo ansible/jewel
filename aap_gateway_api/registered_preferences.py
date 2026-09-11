@@ -181,7 +181,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Minimum number of characters in local password'),
+    label=_('Minimum Number of Characters in Local Password'),
 )
 
 register(
@@ -194,7 +194,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Minimum number of numerical digits in local password'),
+    label=_('Minimum Number of Numerical Digits in Local Password'),
 )
 
 register(
@@ -207,7 +207,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Minimum number of uppercase characters in local password'),
+    label=_('Minimum Number of Uppercase Characters in Local Password'),
 )
 
 register(
@@ -220,7 +220,7 @@ register(
     encrypted=False,
     min_value=0,
     max_value=100,
-    label=_('Minimum number of special characters in local password'),
+    label=_('Minimum Number of Special Characters in Local Password'),
 )
 
 register(
@@ -242,7 +242,7 @@ register(
     preference_type="bool",
     help_text=_("Enabling this setting will tell social auth to use the full email as username instead of the full name."),
     encrypted=False,
-    label=_('Use Email address for usernames'),
+    label=_('Use Email Address for Usernames'),
 )
 
 register(
@@ -253,7 +253,7 @@ register(
     preference_type="absolute_path_or_url",
     help_text=_("The URL or absolute path to which unauthorized users will be redirected to log in. If blank, users will be sent to the login page."),
     encrypted=False,
-    label=_('Login redirect override URL'),
+    label=_('Login Redirect Override URL'),
 )
 
 register(
@@ -275,6 +275,7 @@ register(
     preference_type="image",
     help_text=_("Provide an image file for setting up a custom logo (must be a data URL with a base64-encoded GIF, PNG or JPEG image)."),
     encrypted=False,
+    label=_('Custom Logo'),
 )
 
 register(
@@ -408,7 +409,7 @@ register(
     preference_type="bool",
     help_text=_("Enables the service to gather data on automation and send it to Automation Analytics."),
     encrypted=False,
-    label=_('Gather Insights data for Automation Analytics'),
+    label=_('Gather Insights Data for Automation Analytics'),
 )
 
 register(
@@ -428,7 +429,7 @@ register(
     default="",
     required=False,
     preference_type="string",
-    help_text=_("This password is used to send data to Automation Analytics.'"),
+    help_text=_("This password is used to send data to Automation Analytics."),
     encrypted=True,
     label=_('Red Hat Hybrid Cloud Console Password'),
 )
@@ -450,7 +451,7 @@ register(
     default="",
     required=False,
     preference_type="string",
-    help_text=_("This password is used to retrieve subscription and content information.'"),
+    help_text=_("This password is used to retrieve subscription and content information."),
     encrypted=True,
     label=_('Subscriptions Password'),
 )
@@ -464,7 +465,7 @@ register(
     # There was no max value specified in AWX but our validator max is 100 by default so we need one
     max_value=30000000000,  # approx 1,000 years
     preference_type="int_range",
-    help_text=_("The maximum number of items allowed on a list page"),
+    help_text=_("The interval (in seconds) between Automation Analytics data gathering runs."),
     encrypted=False,
     label=_('Automation Analytics Gather Interval'),
 )
