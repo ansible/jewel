@@ -101,15 +101,15 @@ def test_jwt_token_encode_decode(admin_user, preference_manager, rsa_keypair, or
 def test_jwt_token_update_jwt_public_key_private_key_exception(expected_log):
     expected_log = partial(expected_log, "aap_gateway_api.utils.jwt_token.logger")
     with expected_log("exception", "Unable to load private key from JWT key"):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             update_jwt_public_key('junk')
 
 
 def test_jwt_token_update_jwt_public_key_public_key_exception(expected_log, rsa_keypair):
     expected_log = partial(expected_log, "aap_gateway_api.utils.jwt_token.logger")
-    with mock.patch('aap_gateway_api.utils.jwt_token.update_preference_value', side_effect=Exception("Failing on purpose")):
+    with mock.patch('aap_gateway_api.utils.jwt_token.update_preference_value', side_effect=RuntimeError("Failing on purpose")):
         with expected_log("exception", "Unable to export public key from JWT key"):
-            with pytest.raises(Exception):
+            with pytest.raises(RuntimeError):
                 update_jwt_public_key(rsa_keypair.private)
 
 
