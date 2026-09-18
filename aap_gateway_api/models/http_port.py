@@ -9,7 +9,14 @@ from django.db import models
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
-from aap_gateway_api.utils.xds_configs import external_auth_filter, http_router_filter, network_manager_filter, path_rewrite_filter, transport_socket
+from aap_gateway_api.utils.xds_configs import (
+    external_auth_filter,
+    http_router_filter,
+    network_manager_filter,
+    path_rewrite_filter,
+    redirect_route,
+    transport_socket,
+)
 
 logger = logging.getLogger("aap_gateway_api.models.http_port")
 
@@ -57,7 +64,14 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
     def get_xds_listener_config(self, **kwargs):
         """
-        Returns the envoy listener configuration for this port.
+        Return the Envoy listener configuration for this port.
+
+        API ports also redirect bare ``/api`` and service API paths to their
+        trailing-slash forms without invoking external authorization.
+
+        Args:
+            **kwargs: Keyword arguments forwarded to each route's XDS
+                configuration builder.
         """
         http_filters = [
             path_rewrite_filter(),
@@ -66,6 +80,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         ]
 
         routes = []
+        configured_routes = sorted(self.routes.all(), key=lambda r: r.order)
         # Allow envoy to respond to /up itself without auth
         up_route = {
             "match": {"prefix": "/up"},
@@ -73,7 +88,15 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }
         routes.append(up_route)
-        for route in sorted(self.routes.all(), key=lambda r: r.order):
+        if self.is_api_port:
+            redirects = {"/api": "/api/"}
+            redirects.update(
+                (svc_route.gateway_path.rstrip("/"), svc_route.gateway_path)
+                for svc_route in configured_routes
+                if svc_route.gateway_path.startswith("/api/") and svc_route.gateway_path.endswith("/")
+            )
+            routes.extend(redirect_route(path, target) for path, target in redirects.items())
+        for route in configured_routes:
             routes.extend(route.get_xds_route_config(**kwargs))
 
         cfg = {
