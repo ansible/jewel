@@ -14,11 +14,12 @@ COMPOSE_UP_OPTS ?=
 ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
 GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
+COMMUNITY_DOCKER_COLLECTION_STAMP := tools/generated/.community-docker-collection-installed
 
 .PHONY: PYTHON_VERSION clean git_hooks_config \
 	check lint check_ruff check_ruff_format \
 	docker-compose plumb update_django_ansible_base_hash \
-	collection requirements check-requirements \
+	collection community-docker-collection requirements check-requirements \
 	ci-image ci-image-push
 
 ## Get the version of python we are working with
@@ -133,7 +134,7 @@ docker-compose: docker-compose-detached register-services plumb
 	fi
 
 ## Start the docker container in detached mode, wait for finish
-docker-compose-detached: tools/generated/sources docker-compose-build git_hooks_config
+docker-compose-detached: tools/generated/sources docker-compose-build git_hooks_config community-docker-collection
 	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
@@ -161,11 +162,17 @@ container-startup.yml: tools/configs/container-startup.yml
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
 ## Generate all files from generate-source playbook
-tools/generated/sources: collection tools/ansible/roles/sources/templates/Containerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
-	ansible-galaxy install --force -r requirements/requirements.yml
+tools/generated/sources: tools/ansible/roles/sources/templates/Containerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
+
+## Install the Ansible collection used by Docker-specific container setup
+community-docker-collection: $(COMMUNITY_DOCKER_COLLECTION_STAMP)
+
+$(COMMUNITY_DOCKER_COLLECTION_STAMP): requirements/requirements.yml
+	ansible-galaxy collection install --force -r requirements/requirements.yml
+	touch $@
 
 collection:
 	@if [ -d ansible.platform ]; then \
