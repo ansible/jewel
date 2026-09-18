@@ -46,7 +46,6 @@
     mode: '0666'
   loop:
     - docker-compose.yml
-    - docker-compose-stage.yml
     - haproxy.cfg
 
 - name: Initialize Redis

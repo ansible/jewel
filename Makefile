@@ -107,13 +107,13 @@ help/generate:
 # --------------------------------------
 
 ## prepare docker-compose-stage source files
-docker-compose-stage-sources: tools/ansible/roles/sources/templates/docker-compose-stage.yml.j2 tools/generated/sources tools/generated/proxy.yml tools/generated/gateway.crt
+docker-compose-stage-sources: tools/generated/sources tools/generated/proxy.yml tools/generated/gateway.crt
 ## start docker-compose-stage pods
 docker-compose-stage: docker-compose-stage-sources
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose-stage.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) &
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) &
 ## remove docker-compose-stage pods
 docker-compose-stage-cleanup:
-	if [ -f tools/generated/docker-compose-stage.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose-stage.yml down -v ; fi
+	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 ## Fetch service key
 fetch-service-key:
 	ansible-playbook tools/ansible/fetch-service-key.yml -e @container-startup.yml
