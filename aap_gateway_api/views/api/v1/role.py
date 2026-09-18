@@ -1,16 +1,28 @@
 # django-ansible-base, RBAC and resource_registry highly involved here
+from ansible_base.lib.utils.settings import get_setting
 from ansible_base.rbac.api.serializers import RoleDefinitionSerializer, RoleTeamAssignmentSerializer
-from ansible_base.rbac.api.views import BaseAssignmentViewSet, RoleDefinitionViewSet, RoleTeamAssignmentViewSet, RoleUserAssignmentViewSet
+from ansible_base.rbac.api.views import (
+    BaseAssignmentViewSet,
+    RoleDefinitionViewSet,
+    RoleTeamAssignmentViewSet,
+    RoleUserAssignmentViewSet,
+    TeamAccessAssignmentViewSet,
+    TeamAccessViewSet,
+    UserAccessAssignmentViewSet,
+    UserAccessViewSet,
+)
 from ansible_base.rbac.policies import can_view_all_users
+from ansible_base.rbac.remote import RemoteObject
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from requests.exceptions import HTTPError
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 
 from aap_gateway_api.models import ServiceAPIRoute
 
 # aap-gateway imports
 from aap_gateway_api.models.service_type import service_type_to_api_slug
+from aap_gateway_api.utils.rbac import get_remote_object_filter_from_request, user_can_view_remote_rbac_object
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 from .common import ResourceAllClientMixin, ResourceAPIUpdateMixin
@@ -165,24 +177,103 @@ class AssignmentSyncMixin(ResourceAllClientMixin):
 
 
 class BypassVisibleItemsForPrivilegedUsersMixin:
-    """Bypasses BaseAssignmentViewSet's visible_items filter for callers who
-    can view all users (superusers and org admins when
-    ORG_ADMINS_CAN_SEE_ALL_USERS is enabled).
+    """Bypass ``BaseAssignmentViewSet.visible_items`` for remote objects.
 
-    The gateway does not enforce remote object permissions
-    (ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS=False), so the
-    RoleEvaluation cache that visible_items relies on is incomplete for
-    remote objects (e.g. AWX job templates).  That causes visible_items
-    to hide assignments the privileged user should see.
+    WORKAROUND for incomplete RoleEvaluation data (AAP-91996, AAP-70503).
 
-    DRF filter backends still apply query-param filtering (object_id,
-    content_type, etc.).
+    DAB's ``visible_items`` filters assignments by checking whether the user
+    has *any* ``RoleEvaluation`` row for the same ``(content_type, object_id)``.
+    For remote objects this is incomplete because ``ObjectRole.parent_reference``
+    is never populated through the public/service API, preventing org-level
+    evaluations from propagating to child objects.
+
+    When the request targets a specific remote object (``object_id`` +
+    content-type query params), this mixin delegates to
+    ``user_can_view_remote_rbac_object`` which re-derives visibility from
+    locally available data.  DRF filter backends still narrow the queryset by
+    the same query params, so the bypass does not expose unrelated assignments.
+
+    See ``aap_gateway_api.utils.rbac.user_can_view_remote_rbac_object`` for
+    the full list of checks and their rationale.
     """
 
-    def filter_queryset(self, qs):
+    def _bypass_visible_items(self):
         if can_view_all_users(self.request.user):
+            return True
+        object_id, content_type = get_remote_object_filter_from_request(self.request)
+        if object_id and content_type:
+            return user_can_view_remote_rbac_object(self.request.user, content_type, object_id)
+        return False
+
+    def filter_queryset(self, qs):
+        if self._bypass_visible_items():
             return super(BaseAssignmentViewSet, self).filter_queryset(qs)
         return super().filter_queryset(qs)
+
+
+class GatewayAccessURLMixin:
+    """Override permission gate and queryset for remote object access lists.
+
+    WORKAROUND for incomplete RoleEvaluation data (AAP-91996).
+
+    DAB's access-list views rely on two evaluation-based paths:
+    1. ``check_permission_to_object`` — gates entry via ``has_obj_perm``
+    2. ``get_queryset`` — builds the result set from ``RoleEvaluation`` rows
+
+    Both fail for remote objects when ``parent_reference`` is missing on the
+    ``ObjectRole`` (see ``user_can_view_remote_rbac_object`` docstring for root
+    cause).  This mixin overrides both: the gate uses the gateway workaround
+    check, and ``get_queryset`` falls back to a direct assignment lookup when
+    the evaluation-based queryset is empty for remote objects.
+    """
+
+    def check_permission_to_object(self, obj):
+        if isinstance(obj, RemoteObject) and not get_setting('ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS', True):
+            if user_can_view_remote_rbac_object(self.request.user, obj.content_type, obj.object_id):
+                return
+            raise NotFound
+        return super().check_permission_to_object(obj)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if qs.exists():
+            return qs
+
+        if not hasattr(self, 'related_object') or not isinstance(self.related_object, RemoteObject):
+            return qs
+        if get_setting('ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS', True):
+            return qs
+
+        from ansible_base.rbac.models import RoleTeamAssignment, RoleUserAssignment
+
+        obj = self.related_object
+        ct = self.content_type
+        actor_cls = self.get_actor_model()
+        actor_field = 'user_id' if actor_cls._meta.model_name == 'user' else 'team_id'
+        assignment_cls = RoleUserAssignment if actor_cls._meta.model_name == 'user' else RoleTeamAssignment
+
+        actor_ids = assignment_cls.objects.filter(
+            content_type=ct,
+            object_id=str(obj.pk),
+        ).values_list(actor_field, flat=True)
+
+        return actor_cls.objects.filter(pk__in=actor_ids)
+
+
+class GatewayUserAccessViewSet(GatewayAccessURLMixin, UserAccessViewSet):
+    pass
+
+
+class GatewayTeamAccessViewSet(GatewayAccessURLMixin, TeamAccessViewSet):
+    pass
+
+
+class GatewayUserAccessAssignmentViewSet(GatewayAccessURLMixin, UserAccessAssignmentViewSet):
+    pass
+
+
+class GatewayTeamAccessAssignmentViewSet(GatewayAccessURLMixin, TeamAccessAssignmentViewSet):
+    pass
 
 
 class GatewayRoleUserAssignmentViewSet(BypassVisibleItemsForPrivilegedUsersMixin, AssignmentSyncMixin, RoleUserAssignmentViewSet):

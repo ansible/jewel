@@ -2,7 +2,7 @@ import logging
 
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
 from ansible_base.lib.utils.converters import IntOrUUIDConverter
-from ansible_base.rbac.api.views import RoleMetadataView, TeamAccessAssignmentViewSet, TeamAccessViewSet, UserAccessAssignmentViewSet, UserAccessViewSet
+from ansible_base.rbac.api.views import RoleMetadataView
 from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from django.conf import settings
@@ -13,15 +13,21 @@ from flags.urls import flagged_path
 from aap_gateway_api import views
 from aap_gateway_api.router import router
 from aap_gateway_api.views.api.envoy.rest_control_plane import ClusterDiscoverServiceView, ListenerDiscoverServiceView, SecretDiscoverServiceView
+from aap_gateway_api.views.api.v1.role import (
+    GatewayTeamAccessAssignmentViewSet,
+    GatewayTeamAccessViewSet,
+    GatewayUserAccessAssignmentViewSet,
+    GatewayUserAccessViewSet,
+)
 
 logger = logging.getLogger('aap.gateway.urls')
 
 API_GATEWAY_V1_PREFIX = "api/gateway/v1/"
 
-user_access_view = UserAccessViewSet.as_view({'get': 'list'})
-team_access_view = TeamAccessViewSet.as_view({'get': 'list'})
-user_access_assignment_view = UserAccessAssignmentViewSet.as_view({'get': 'list'})
-team_access_assignment_view = TeamAccessAssignmentViewSet.as_view({'get': 'list'})
+user_access_view = GatewayUserAccessViewSet.as_view({'get': 'list'})
+team_access_view = GatewayTeamAccessViewSet.as_view({'get': 'list'})
+user_access_assignment_view = GatewayUserAccessAssignmentViewSet.as_view({'get': 'list'})
+team_access_assignment_view = GatewayTeamAccessAssignmentViewSet.as_view({'get': 'list'})
 
 register_converter(IntOrUUIDConverter, "int_or_uuid")
 
