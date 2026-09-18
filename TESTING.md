@@ -77,7 +77,7 @@ tox -e py312 -- -k "test_csrf_trusted_origins_type" -v
 
 - **Python Version**: 3.12
 - **Test Framework**: pytest (via tox)
-- **Database**: PostgreSQL (managed by Docker via tox)
+- **Database**: PostgreSQL (managed by Podman via tox)
 - **Django Settings**: Configured automatically by tox environment
 
 ## django-ansible-base Testing
@@ -169,7 +169,7 @@ for i in {1..5}; do tox -e py312 -- -k "test_name" -v; done
 
 ### Database Issues
 - **Problem**: Database connection or migration errors
-- **Solution**: tox manages the test database automatically via Docker
+- **Solution**: tox manages the test database automatically via Podman
 
 ### Import Errors
 - **Problem**: Module import failures

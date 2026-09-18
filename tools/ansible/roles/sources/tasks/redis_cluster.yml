@@ -17,7 +17,7 @@
 - block:
     - name: Start redis containers
       shell:
-        cmd: "{{ compose_cmd }} up -d --wait {{ ' '.join(nodes_to_start) }}"
+        cmd: "{{ compose_cmd }} up --detach {{ ' '.join(nodes_to_start) }}"
         chdir: '../../'
 
     - name: Wait for port to open

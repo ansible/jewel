@@ -6,7 +6,7 @@ CHECK_SYNTAX_FILES ?= aap_gateway_api/
 RM ?= /bin/rm
 UID := $(shell id -u)
 TOX_ARGS ?= ""
-CONTAINER_ENGINE ?= docker
+CONTAINER_ENGINE ?= podman
 PODMAN_COMPOSE ?= podman-compose --in-pod false
 
 COMPOSE_OPTS ?=
@@ -14,15 +14,19 @@ COMPOSE_UP_OPTS ?=
 ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
 GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
-COMMUNITY_DOCKER_COLLECTION_STAMP := tools/generated/.community-docker-collection-installed
+PODMAN_COLLECTION_STAMP := tools/generated/.podman-collection-installed
+SOURCES_STAMP := tools/generated/.sources-generated
+SOURCES_INPUTS := tools/ansible/generate-sources.yml tools/ansible/vars/container_config.yml \
+	$(shell find tools/ansible/roles/sources -type f) \
+	tools/configs/container-startup.yml container-startup.yml requirements/requirements_git.txt
 
 .PHONY: PYTHON_VERSION clean git_hooks_config compose-build podman-compose-build docker-compose-build \
 	check lint check_ruff check_ruff_format \
-	podman-compose-basic podman-compose podman-compose-detached podman-compose-attach \
+	podman-compose-basic podman-compose podman-compose-detached podman-compose-attach podman-compose-down \
 	podman-reset podman-reset-volumes \
-	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach \
+	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach docker-compose-down \
 	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
-	collection community-docker-collection requirements check-requirements \
+	collection podman-collection requirements check-requirements tools/generated/sources \
 	ci-image ci-image-push
 
 ## Get the version of python we are working with
@@ -119,7 +123,7 @@ migrate-service-data:
 
 
 ## Start Podman containers without additional playbooks
-podman-compose-basic: tools/generated/sources compose-build git_hooks_config
+podman-compose-basic: $(SOURCES_STAMP) compose-build git_hooks_config
 	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Start the Podman containers, plumb sidecars, and register service proxies
@@ -129,22 +133,26 @@ podman-compose: podman-compose-detached register-services plumb
 	fi
 
 ## Start the Podman containers in detached mode and wait for readiness
-podman-compose-detached: tools/generated/sources compose-build git_hooks_config community-docker-collection
-	env PODMAN_COMPOSE="${PODMAN_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
+podman-compose-detached: $(SOURCES_STAMP) compose-build git_hooks_config podman-collection
+	env UID=${UID} PODMAN_COMPOSE="${PODMAN_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
+	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --detach --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
 ## Attach to the Podman container logs after a detached start
-podman-compose-attach: tools/generated/sources
+podman-compose-attach: $(SOURCES_STAMP)
 	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml up --no-recreate
 
+## Stop and remove Podman Compose containers and networks, preserving named volumes
+podman-compose-down:
+	if [ -f tools/generated/compose.yml ] ; then env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) down ; fi
+
 ## Delete Podman containers, networks, volumes, and generated files
-podman-reset: tools/generated/sources
+podman-reset: $(SOURCES_STAMP)
 	if [ -f tools/generated/compose.yml ] ; then $(PODMAN_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
 
 ## Remove Podman container volumes and networks
-podman-reset-volumes: tools/generated/sources
+podman-reset-volumes: $(SOURCES_STAMP)
 	if [ -f tools/generated/compose.yml ] ; then $(PODMAN_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 
 ## Backward-compatible alias for podman-compose-basic
@@ -158,6 +166,9 @@ docker-compose-detached: podman-compose-detached
 
 ## Backward-compatible alias for podman-compose-attach
 docker-compose-attach: podman-compose-attach
+
+## Backward-compatible alias for podman-compose-down
+docker-compose-down: podman-compose-down
 
 ## Backward-compatible alias for podman-reset
 docker-reset: podman-reset
@@ -174,16 +185,20 @@ container-startup.yml: tools/configs/container-startup.yml
 	fi;
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
-## Generate all files from generate-source playbook
-tools/generated/sources: tools/ansible/roles/sources/templates/Containerfile.j2 tools/ansible/roles/sources/templates/compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
+## Backward-compatible target for generating container sources
+tools/generated/sources: $(SOURCES_STAMP)
+
+## Generate all container source files
+$(SOURCES_STAMP): $(SOURCES_INPUTS)
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
+	touch $@
 
-## Install the Ansible collection used by Docker-specific container setup
-community-docker-collection: $(COMMUNITY_DOCKER_COLLECTION_STAMP)
+## Install the Ansible collection used by Podman-specific container setup
+podman-collection: $(PODMAN_COLLECTION_STAMP)
 
-$(COMMUNITY_DOCKER_COLLECTION_STAMP): requirements/requirements.yml
+$(PODMAN_COLLECTION_STAMP): requirements/requirements.yml
 	ansible-galaxy collection install --force -r requirements/requirements.yml
 	touch $@
 
@@ -210,9 +225,9 @@ podman-compose-build: compose-build
 docker-compose-build: compose-build
 
 ## Build the Compose containers
-compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
+compose-build: $(SOURCES_STAMP) update_django_ansible_base_hash tools/generated/.has_built_api
 
-API_TARGETS = tools/generated/.django_ansible_base_head tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/generated/sources requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
     API_TARGETS += tools/generated/.has_built_ui
 endif
@@ -240,7 +255,9 @@ update_django_ansible_base_hash:
 		fi; \
 	else \
 		echo "Not checking for django-ansible-base update because a local checkout of it was found."; \
-		echo local > tools/generated/.django_ansible_base_head; \
+		if [[ ! -f tools/generated/.django_ansible_base_head ]] || ! grep -qx local tools/generated/.django_ansible_base_head; then \
+			echo local > tools/generated/.django_ansible_base_head; \
+		fi; \
 	fi
 
 ## Generate the tools/generated/.django_ansible_base_head file for tracking django-ansible-base
@@ -294,7 +311,7 @@ CI_IMAGE ?= quay.io/ansible/jewel-ci:$(CI_IMAGE_TAG)
 CI_CONTAINERFILE = tools/generated/Containerfile.ci
 
 ## Build the CI container image (amd64 for GitHub Actions runners)
-ci-image: tools/generated/sources
+ci-image: $(SOURCES_STAMP)
 	$(CONTAINER_ENGINE) buildx build --platform linux/amd64 -f $(CI_CONTAINERFILE) -t $(CI_IMAGE) --load .
 
 ## Build and push the CI container image (only from devel or stable-* branches)

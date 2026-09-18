@@ -48,14 +48,6 @@
     - compose.yml
     - haproxy.cfg
 
-- name: Remove obsolete generated Compose files
-  ansible.builtin.file:
-    path: "{{ sources_dest }}/{{ item }}"
-    state: absent
-  loop:
-    - docker-compose.yml
-    - docker-compose-stage.yml
-
 - name: Initialize Redis
   include_tasks:
     file: initialize_redis.yml

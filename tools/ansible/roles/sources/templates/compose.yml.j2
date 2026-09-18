@@ -51,7 +51,7 @@ services:
       - service-mesh
 {% if gateway_host_address == 'host-gateway' %}
     extra_hosts:
-      host-gateway: host-gateway
+      - "host-gateway:host-gateway"
 {% endif %}
     ports:
       - "{{ exposed_port }}:8000"
@@ -241,7 +241,7 @@ services:
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
 {% if gateway_host_address == 'host-gateway' %}
     extra_hosts:
-      host-gateway: host-gateway
+      - "host-gateway:host-gateway"
 {% endif %}
     networks:
       - dbnet
@@ -275,7 +275,7 @@ services:
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
 {% if gateway_host_address == 'host-gateway' %}
     extra_hosts:
-      host-gateway: host-gateway
+      - "host-gateway:host-gateway"
 {% endif %}
     networks:
       - dbnet
