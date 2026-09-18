@@ -4,7 +4,7 @@
     - name: Run dev env smoke test
       block:
         - name: Start the development environment
-          command: make docker-compose
+          command: make podman-compose
           args:
             chdir: "{{ repo_root }}"
           environment:
@@ -53,7 +53,7 @@
 
       always:
         - name: Print container logs
-          command: docker compose -f tools/generated/compose.yml logs
+          command: podman-compose --in-pod false -f tools/generated/compose.yml logs
           args:
             chdir: "{{ repo_root }}"
           changed_when: false

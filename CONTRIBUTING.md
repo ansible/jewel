@@ -97,7 +97,14 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   See [TESTING.md](TESTING.md) for the full testing guide.
 * **Linting**: Run `make lint` to auto-format with ruff.
-* **Docker**: Run `make docker-compose` to start a full development environment.
+* **Development environment**: Install Podman, then create and activate a Python virtual environment before installing the development tools and starting the stack:
+  ```
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements/requirements_dev.txt
+  make podman-compose
+  ```
+  This installs `ansible`, `tox`, `ruff`, and `podman-compose` into the active virtual environment.
 
 ## Code quality
 

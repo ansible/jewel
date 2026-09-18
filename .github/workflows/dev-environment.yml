@@ -104,7 +104,7 @@ jobs:
             --always-clone-repos ansible/ansible.platform
 
       - name: Install make
-        run: sudo apt install make
+        run: sudo apt update && sudo apt install --yes make podman
 
       - name: Install python 3.12
         uses: actions/setup-python@v5
@@ -113,7 +113,7 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip3.12 install --upgrade -r ansible.platform/requirements/requirements_dev.txt ansible-core
+          pip3.12 install --upgrade -r requirements/requirements_dev.txt -r ansible.platform/requirements/requirements_dev.txt ansible-core
           pip3.12 install openapi-spec-validator
 
       - name: Configure faster xDS refresh for CI
@@ -125,7 +125,7 @@ jobs:
           echo "Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
 
       - name: Start the dev environment
-        run: COMPOSE_UP_OPTS='-d' make docker-compose
+        run: COMPOSE_UP_OPTS='-d' make podman-compose
 
       - name: Run smoke test
         id: smoke_test
@@ -191,4 +191,4 @@ jobs:
 
       - name: Dump the container logs on failure
         if: failure()
-        run: docker compose -f tools/generated/compose.yml logs
+        run: podman-compose --in-pod false -f tools/generated/compose.yml logs

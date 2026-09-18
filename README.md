@@ -25,7 +25,7 @@ A pre-built container image is published to the GitHub Container Registry on eve
 docker pull ghcr.io/ansible/jewel:latest
 ```
 
-> **Note:** Jewel requires PostgreSQL, Redis, and configuration to run. A standalone `docker run` won't work out of the box. Use `make docker-compose` for a full working environment — see the development setup below.
+> **Note:** Jewel requires PostgreSQL, Redis, and configuration to run. A standalone container run won't work out of the box. Use `make podman-compose` for a full working environment; see the [development setup](CONTRIBUTING.md#development-setup).
 
 There are currently no versioned releases. The `latest` tag always points to the most recent `devel` build. Per-commit SHA tags are available for pinning:
 

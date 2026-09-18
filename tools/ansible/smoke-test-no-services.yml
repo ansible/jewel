@@ -4,7 +4,7 @@
     - name: Run dev env smoke test
       block:
         - name: Start the development environment
-          command: make docker-compose-basic
+          command: make podman-compose-basic
           args:
             chdir: "{{ repo_root }}"
           environment:
@@ -33,6 +33,6 @@
           until: "admin_request is success and admin_request.json.results[0].username == 'admin'"
       always:
         - name: Print container logs
-          command: docker compose -f tools/generated/compose.yml logs
+          command: podman-compose --in-pod false -f tools/generated/compose.yml logs
           args:
             chdir: "{{ repo_root }}"

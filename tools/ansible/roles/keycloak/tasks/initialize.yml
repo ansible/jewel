@@ -14,7 +14,7 @@
 
     - name: Start database container
       shell:
-        cmd: "{{ docker_compose_cmd }} up db -d --wait"
+        cmd: "{{ compose_cmd }} up db -d --wait"
 
     - name: Wait for port to be opened
       ansible.builtin.wait_for:
@@ -57,7 +57,7 @@
 
     - name: Start keycloak
       shell:
-        cmd: "{{ docker_compose_cmd }} up keycloak -d --wait"
+        cmd: "{{ compose_cmd }} up keycloak -d --wait"
 
     - name: Load certs, existing and new SAML settings
       set_fact:
@@ -139,7 +139,7 @@
   always:
     - name: Shutdown containers we started
       shell:
-        cmd: "{{ docker_compose_cmd }} stop {{ container }}"
+        cmd: "{{ compose_cmd }} stop {{ container }}"
       loop:
         - keycloak
         - db

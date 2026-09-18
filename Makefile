@@ -7,7 +7,7 @@ RM ?= /bin/rm
 UID := $(shell id -u)
 TOX_ARGS ?= ""
 CONTAINER_ENGINE ?= docker
-DOCKER_COMPOSE ?= $(CONTAINER_ENGINE) compose
+PODMAN_COMPOSE ?= podman-compose --in-pod false
 
 COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
@@ -16,9 +16,12 @@ GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
 COMMUNITY_DOCKER_COLLECTION_STAMP := tools/generated/.community-docker-collection-installed
 
-.PHONY: PYTHON_VERSION clean git_hooks_config compose-build docker-compose-build \
+.PHONY: PYTHON_VERSION clean git_hooks_config compose-build podman-compose-build docker-compose-build \
 	check lint check_ruff check_ruff_format \
-	docker-compose plumb update_django_ansible_base_hash \
+	podman-compose-basic podman-compose podman-compose-detached podman-compose-attach \
+	podman-reset podman-reset-volumes \
+	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach \
+	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
 	collection community-docker-collection requirements check-requirements \
 	ci-image ci-image-push
 
@@ -115,34 +118,52 @@ migrate-service-data:
 
 
 
-## Start docker containers without additional playbooks
-docker-compose-basic: tools/generated/sources compose-build git_hooks_config
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
+## Start Podman containers without additional playbooks
+podman-compose-basic: tools/generated/sources compose-build git_hooks_config
+	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
-## Start the docker container + plumb the sidecar containers and register services' proxy
-docker-compose: docker-compose-detached register-services plumb
+## Start the Podman containers, plumb sidecars, and register service proxies
+podman-compose: podman-compose-detached register-services plumb
 	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
-		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml up --no-recreate; \
+		env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml up --no-recreate; \
 	fi
 
-## Start the docker container in detached mode, wait for finish
-docker-compose-detached: tools/generated/sources compose-build git_hooks_config community-docker-collection
-	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
+## Start the Podman containers in detached mode and wait for readiness
+podman-compose-detached: tools/generated/sources compose-build git_hooks_config community-docker-collection
+	env PODMAN_COMPOSE="${PODMAN_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
+	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
-## Attach to the container logs if docker in detached mode
-docker-compose-attach: tools/generated/sources
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml up --no-recreate
+## Attach to the Podman container logs after a detached start
+podman-compose-attach: tools/generated/sources
+	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml up --no-recreate
 
-## Delete the containers and docker networks and Remove all generated files when starting up docker
-docker-reset: tools/generated/sources
-	if [ -f tools/generated/compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/compose.yml down -v ; fi
+## Delete Podman containers, networks, volumes, and generated files
+podman-reset: tools/generated/sources
+	if [ -f tools/generated/compose.yml ] ; then $(PODMAN_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
 
-## Remove the container volumes and docker networks
-docker-reset-volumes: tools/generated/sources
-	if [ -f tools/generated/compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/compose.yml down -v ; fi
+## Remove Podman container volumes and networks
+podman-reset-volumes: tools/generated/sources
+	if [ -f tools/generated/compose.yml ] ; then $(PODMAN_COMPOSE) -f tools/generated/compose.yml down -v ; fi
+
+## Backward-compatible alias for podman-compose-basic
+docker-compose-basic: podman-compose-basic
+
+## Backward-compatible alias for podman-compose
+docker-compose: podman-compose
+
+## Backward-compatible alias for podman-compose-detached
+docker-compose-detached: podman-compose-detached
+
+## Backward-compatible alias for podman-compose-attach
+docker-compose-attach: podman-compose-attach
+
+## Backward-compatible alias for podman-reset
+docker-reset: podman-reset
+
+## Backward-compatible alias for podman-reset-volumes
+docker-reset-volumes: podman-reset-volumes
 
 ## Generate the container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
@@ -182,6 +203,9 @@ collection:
 	fi;
 	pip install requests
 
+## Canonical Podman Compose build target
+podman-compose-build: compose-build
+
 ## Backward-compatible alias for compose-build
 docker-compose-build: compose-build
 
@@ -197,7 +221,7 @@ tools/generated/.has_built_api: $(API_TARGETS)
 	mkdir -p django-ansible-base/requirements
 	$(eval GATEWAY_NODE_COUNT=$(shell grep 'gateway_node_count' container-startup.yml | sed 's:[^0-9]::g')) \
 	$(eval GATEWAY_NODES=$(shell seq 1 ${GATEWAY_NODE_COUNT} | sed 's:^:gateway:g' | xargs)) \
-	$(DOCKER_COMPOSE) -f tools/generated/compose.yml \
+	$(PODMAN_COMPOSE) -f tools/generated/compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
 	    ${GATEWAY_NODES}
