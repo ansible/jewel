@@ -32,6 +32,7 @@ from aap_gateway_api.models import (
     Preference,
     ServiceAPIRoute,
     ServiceCluster,
+    ServiceKey,
     ServiceNode,
     ServiceType,
     UIPluginRoute,
@@ -807,3 +808,17 @@ def multiple_ca_certificates(randname):
     yield certs
     for cert in certs:
         cert.delete()
+
+
+@pytest.fixture
+def service_key_factory():
+    created_keys = []
+
+    def create(service_cluster, **kwargs):
+        key = service_cluster.generate_key(**kwargs)
+        created_keys.append(key.pk)
+        return key
+
+    yield create
+
+    ServiceKey.objects.filter(pk__in=created_keys).delete()
