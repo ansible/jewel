@@ -9,12 +9,6 @@ TOX_ARGS ?= ""
 CONTAINER_ENGINE ?= docker
 DOCKER_COMPOSE ?= $(CONTAINER_ENGINE) compose
 
-# Select the appropriate container-startup config based on container engine
-ifeq ($(CONTAINER_ENGINE),docker)
-CONTAINER_STARTUP_CONFIG := tools/configs/container-startup.yml
-else
-CONTAINER_STARTUP_CONFIG := tools/configs/container-startup-podman.yml
-endif
 COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
 ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urlsafe(20))")
@@ -157,14 +151,14 @@ docker-reset: tools/generated/sources
 docker-reset-volumes: tools/generated/sources
 	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
 
-## Generate the container-startup.yml file (uses podman config when CONTAINER_ENGINE != docker)
-container-startup.yml: $(CONTAINER_STARTUP_CONFIG)
+## Generate the container-startup.yml file
+container-startup.yml: tools/configs/container-startup.yml
 	@if [ -f container-startup.yml ] ; then \
 		cp container-startup.yml container-startup.yml.backup; \
 		echo ">>>>>> WARNING <<<<<<<<" ; \
 		echo "container-startup.yml has been overwritten but a backup was taken (will be overwritten on next change)!"; \
 	fi;
-	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" $(CONTAINER_STARTUP_CONFIG) > ./container-startup.yml
+	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
 ## Generate all files from generate-source playbook
 tools/generated/sources: collection tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
