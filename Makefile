@@ -45,11 +45,11 @@ check:
 
 ## Run unit tests (excludes perf tests)
 check_test:
-	GATEWAY_TEST_DIRS="" TOX_DOCKER_GATEWAY=0.0.0.0 tox -e py312 -- -m "not perf"
+	tox -e py312 -- -m "not perf"
 
 ## Run performance/scaling tests only
 check_perf:
-	GATEWAY_TEST_DIRS="" TOX_DOCKER_GATEWAY=0.0.0.0 tox -e py312 -- -m perf -v
+	tox -e py312 -- -m perf -v
 
 ## Run linters (and modify files if necessary)
 lint:

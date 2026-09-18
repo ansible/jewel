@@ -6,7 +6,6 @@ ipython                 # Used in shell_plus
 ruff==0.14.1            # Fast Python linter and formatter (replaces black, flake8, isort)
 remote-pdb              # The debugger setup with Python's breakpoint()
 tox                     # Used for unit tests
-tox-docker              # For running postgres during tests
 colorama                # Allows addition of color to logs
 logutils
 psycopg[binary]

@@ -313,10 +313,10 @@ make check_perf
 make check_test
 
 # Run perf tests directly via tox
-GATEWAY_TEST_DIRS="" TOX_DOCKER_GATEWAY=0.0.0.0 tox -e py312 -- -m perf -v
+tox -e py312 -- -m perf -v
 
 # Run a specific perf test file
-GATEWAY_TEST_DIRS="" TOX_DOCKER_GATEWAY=0.0.0.0 tox -e py312 -- aap_gateway_api/tests/path/to/test_file_perf.py -v
+GATEWAY_TEST_DIRS="" tox -e py312 -- aap_gateway_api/tests/path/to/test_file_perf.py -v
 ```
 
 ### Writing Perf Tests

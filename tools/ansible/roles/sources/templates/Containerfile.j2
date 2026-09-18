@@ -275,11 +275,6 @@ RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt
 # Install test and development dependencies.
 RUN pip install --no-cache-dir -r /tmp/requirements_test.txt && \
     pip install --no-cache-dir -r /tmp/requirements_dev.txt
-# Install the tox ecosystem used by CI.
-RUN pip install --no-cache-dir tox tox-docker requests
-# psycopg[binary] is required by test runs connecting to PostgreSQL.
-RUN pip install --no-cache-dir 'psycopg[binary]'
-
 # Pre-seed the tox environment so CI skips its expensive creation step.
 ENV TOX_WORK_DIR=/opt/tox-cache
 RUN mkdir -p ${TOX_WORK_DIR}/py312 && \
