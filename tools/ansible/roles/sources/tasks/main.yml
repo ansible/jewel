@@ -30,7 +30,7 @@
   loop:
     - docker-compose.yml
     - docker-compose-stage.yml
-    - Dockerfile
+    - Containerfile
     - haproxy.cfg
 
 - name: Initialize Redis

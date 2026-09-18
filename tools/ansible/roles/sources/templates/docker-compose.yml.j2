@@ -7,7 +7,7 @@ services:
   gateway{{ container_id }}:
     build:
       context: $PWD
-      dockerfile: tools/generated/Dockerfile
+      dockerfile: tools/generated/Containerfile
     command:
       - /usr/bin/launch-gateway
     container_name: aap_gw_{{ container_id }}

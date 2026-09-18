@@ -161,7 +161,7 @@ container-startup.yml: tools/configs/container-startup.yml
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
 ## Generate all files from generate-source playbook
-tools/generated/sources: collection tools/ansible/roles/sources/templates/Dockerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
+tools/generated/sources: collection tools/ansible/roles/sources/templates/Containerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
 	ansible-galaxy install --force -r requirements/requirements.yml
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
