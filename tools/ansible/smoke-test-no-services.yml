@@ -33,6 +33,6 @@
           until: "admin_request is success and admin_request.json.results[0].username == 'admin'"
       always:
         - name: Print container logs
-          command: docker compose -f tools/generated/docker-compose.yml logs
+          command: docker compose -f tools/generated/compose.yml logs
           args:
             chdir: "{{ repo_root }}"

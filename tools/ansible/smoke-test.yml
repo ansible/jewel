@@ -53,7 +53,7 @@
 
       always:
         - name: Print container logs
-          command: docker compose -f tools/generated/docker-compose.yml logs
+          command: docker compose -f tools/generated/compose.yml logs
           args:
             chdir: "{{ repo_root }}"
           changed_when: false

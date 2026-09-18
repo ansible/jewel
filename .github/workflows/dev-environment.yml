@@ -191,4 +191,4 @@ jobs:
 
       - name: Dump the container logs on failure
         if: failure()
-        run: docker compose -f tools/generated/docker-compose.yml logs
+        run: docker compose -f tools/generated/compose.yml logs

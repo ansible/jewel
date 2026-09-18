@@ -16,7 +16,7 @@ GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
 COMMUNITY_DOCKER_COLLECTION_STAMP := tools/generated/.community-docker-collection-installed
 
-.PHONY: PYTHON_VERSION clean git_hooks_config \
+.PHONY: PYTHON_VERSION clean git_hooks_config compose-build docker-compose-build \
 	check lint check_ruff check_ruff_format \
 	docker-compose plumb update_django_ansible_base_hash \
 	collection community-docker-collection requirements check-requirements \
@@ -116,33 +116,33 @@ migrate-service-data:
 
 
 ## Start docker containers without additional playbooks
-docker-compose-basic: tools/generated/sources docker-compose-build git_hooks_config
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
+docker-compose-basic: tools/generated/sources compose-build git_hooks_config
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Start the docker container + plumb the sidecar containers and register services' proxy
 docker-compose: docker-compose-detached register-services plumb
 	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
-		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate; \
+		env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml up --no-recreate; \
 	fi
 
 ## Start the docker container in detached mode, wait for finish
-docker-compose-detached: tools/generated/sources docker-compose-build git_hooks_config community-docker-collection
+docker-compose-detached: tools/generated/sources compose-build git_hooks_config community-docker-collection
 	env DOCKER_COMPOSE="${DOCKER_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
 ## Attach to the container logs if docker in detached mode
 docker-compose-attach: tools/generated/sources
-	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml up --no-recreate
+	env UID=${UID} $(DOCKER_COMPOSE) -f tools/generated/compose.yml up --no-recreate
 
 ## Delete the containers and docker networks and Remove all generated files when starting up docker
 docker-reset: tools/generated/sources
-	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
+	if [ -f tools/generated/compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
 
 ## Remove the container volumes and docker networks
 docker-reset-volumes: tools/generated/sources
-	if [ -f tools/generated/docker-compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml down -v ; fi
+	if [ -f tools/generated/compose.yml ] ; then $(DOCKER_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 
 ## Generate the container-startup.yml file
 container-startup.yml: tools/configs/container-startup.yml
@@ -154,7 +154,7 @@ container-startup.yml: tools/configs/container-startup.yml
 	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
 
 ## Generate all files from generate-source playbook
-tools/generated/sources: tools/ansible/roles/sources/templates/Containerfile.j2 tools/ansible/roles/sources/templates/docker-compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
+tools/generated/sources: tools/ansible/roles/sources/templates/Containerfile.j2 tools/ansible/roles/sources/templates/compose.yml.j2 tools/ansible/roles/sources/templates/redis-users.acl.j2 tools/ansible/roles/sources/templates/redis-sidecar.conf.j2 container-startup.yml
 	ansible-playbook tools/ansible/generate-sources.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
@@ -182,8 +182,11 @@ collection:
 	fi;
 	pip install requests
 
-## Build the docker containers
-docker-compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
+## Backward-compatible alias for compose-build
+docker-compose-build: compose-build
+
+## Build the Compose containers
+compose-build: tools/generated/sources update_django_ansible_base_hash tools/generated/.has_built_api
 
 API_TARGETS = tools/generated/.django_ansible_base_head tools/configs/uwsgi.ini tools/configs/supervisord.conf tools/generated/sources requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt tools/generated/proxy.yml $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
@@ -194,7 +197,7 @@ tools/generated/.has_built_api: $(API_TARGETS)
 	mkdir -p django-ansible-base/requirements
 	$(eval GATEWAY_NODE_COUNT=$(shell grep 'gateway_node_count' container-startup.yml | sed 's:[^0-9]::g')) \
 	$(eval GATEWAY_NODES=$(shell seq 1 ${GATEWAY_NODE_COUNT} | sed 's:^:gateway:g' | xargs)) \
-	$(DOCKER_COMPOSE) -f tools/generated/docker-compose.yml \
+	$(DOCKER_COMPOSE) -f tools/generated/compose.yml \
 	    build \
 	    --build-arg DJANGO_ANSIBLE_BASE_DEVEL_SHA=$(shell cat tools/generated/.django_ansible_base_head) \
 	    ${GATEWAY_NODES}
