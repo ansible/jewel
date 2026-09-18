@@ -1,3 +1,4 @@
+{% if containerfile_profile == 'dev_env' %}
 ARG PYTHON=python3.12
 
 FROM quay.io/centos/centos:stream9 as builder
@@ -112,3 +113,183 @@ EXPOSE 8000
 
 WORKDIR /opt/aap_gateway/src
 CMD /usr/bin/launch-gateway
+{% elif containerfile_profile == 'runtime' %}
+ARG PYTHON=python3.12
+
+FROM quay.io/centos/centos:stream9 AS builder
+ARG PYTHON
+
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+
+ARG DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+ENV DJANGO_SETTINGS_MODULE=$DJANGO_SETTINGS_MODULE
+ENV PYTHONUNBUFFERED=1
+
+RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/centos.repo && \
+    dnf install -y \
+    git \
+    gcc \
+    "${PYTHON}-devel" \
+    "${PYTHON}" \
+    "${PYTHON}-pip" \
+    libpq \
+    libpq-devel \
+    libtool-ltdl-devel \
+    openldap-devel \
+    postgresql \
+    less \
+    xmlsec1-devel
+
+RUN for dir in \
+      /opt/aap_gateway; \
+    do mkdir -p "$dir" && chgrp -R 0 "$dir" && chmod -R g=u "$dir" ; done
+
+RUN "/usr/bin/${PYTHON}" -m venv /opt/aap_gateway/venv
+RUN echo "/opt/aap_gateway/aap_gateway" > "/opt/aap_gateway/venv/lib/${PYTHON}/site-packages/project.pth"
+
+# See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
+RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
+
+COPY requirements/requirements.txt /tmp/requirements.txt
+COPY requirements/requirements_git.txt /tmp/requirements_git.txt
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
+
+FROM quay.io/centos/centos:stream9 AS jewel
+ARG PYTHON
+
+RUN dnf module install -y nginx:1.22/common && \
+    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm  && \
+    dnf install -y \
+    inotify-tools \
+    less \
+    libpq \
+    postgresql \
+    "${PYTHON}" \
+    "${PYTHON}-pip" \
+    supervisor \
+    xmlsec1-openssl
+
+COPY --from=builder /opt/aap_gateway /opt/aap_gateway
+COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
+COPY tools/scripts/auto-reload /usr/bin/auto-reload
+COPY tools/scripts/aap-gateway-manage /usr/bin/aap-gateway-manage
+COPY tools/configs/nginx.conf /etc/ansible-automation-platform/gateway/nginx.conf
+COPY tools/configs/nginx-gateway.conf /etc/ansible-automation-platform/gateway/nginx-gateway.conf
+COPY tools/configs/uwsgi.ini /etc/ansible-automation-platform/gateway/uwsgi.ini
+COPY tools/configs/supervisord.conf /etc/supervisord.conf
+COPY tools/configs/settings.py /etc/ansible-automation-platform/gateway/settings.py
+
+RUN for dir in \
+      /etc/nginx \
+      /opt/aap_gateway \
+      /opt/aap_gateway/src \
+      /var/log/supervisor \
+      /var/run/supervisor \
+      /var/run/uwsgi \
+      /var/log/nginx \
+      /var/run/django_metrics ; \
+    do mkdir -m 0775 -p "$dir" ; chmod g+rwx "$dir" ; chgrp root "$dir" ; done && \
+    for file in \
+      /etc/nginx/gateway.crt \
+      /etc/nginx/gateway.key ; \
+    do touch "$file" ; chmod g+rw "$file" ; chgrp root "$file" ; done && \
+    ln -s /usr/bin/aap-gateway-manage /usr/bin/gateway-manage
+
+# This is required for the xds protobuf definitions in order for them to be
+# compatible with protobuf 3.21+. Remove once a new xds-protos is available.
+ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+ENV DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
+ENV PYTHONUNBUFFERED=1
+
+COPY aap_gateway_api /opt/aap_gateway/src/aap_gateway_api/
+ENV PATH=/opt/aap_gateway/venv/bin:$PATH
+ENV PYTHONPATH=/opt/aap_gateway/src
+
+# The platform UI is optional. The "jewel" target ships without it; the
+# "jewel-ui" target extends this stage with the UI.
+RUN mkdir -p /opt/aap_gateway/platform_ui && \
+    printf '%s\n' \
+      '<!DOCTYPE html><html><head><title>Jewel API</title></head><body>' \
+      '<h1>Jewel API Server</h1>' \
+      '<p>This image was built without the platform UI.</p>' \
+      '<p>Build with <code>--target jewel-ui</code> to include it.</p>' \
+      '</body></html>' > /opt/aap_gateway/platform_ui/index.html
+
+USER 1000
+EXPOSE 8000
+
+WORKDIR /opt
+CMD ["/usr/bin/launch-gateway"]
+
+FROM jewel AS jewel-ui
+COPY --from=quay.io/ansible/platform-ui:latest /usr/share/nginx/html /opt/aap_gateway/platform_ui
+{% elif containerfile_profile == 'ci' %}
+ARG PYTHON=python3.12
+
+FROM quay.io/centos/centos:stream9
+ARG PYTHON
+
+LABEL org.opencontainers.image.source="https://github.com/ansible/jewel"
+LABEL org.opencontainers.image.description="CI image for jewel (aap-gateway) with pre-built Python dependencies"
+
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV PYTHONUNBUFFERED=1
+ENV JEWEL_CI_CONTAINER=true
+
+RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/centos.repo && \
+    dnf install -y \
+    diffutils \
+    git \
+    gcc \
+    make \
+    nodejs \
+    "${PYTHON}-devel" \
+    "${PYTHON}" \
+    "${PYTHON}-pip" \
+    libpq \
+    libpq-devel \
+    libtool-ltdl-devel \
+    openldap-devel \
+    openssl-devel \
+    xmlsec1-devel \
+    xmlsec1-openssl \
+    && dnf clean all
+
+RUN mkdir -p /opt/ci-venv && \
+    "/usr/bin/${PYTHON}" -m venv /opt/ci-venv
+
+ENV VIRTUAL_ENV=/opt/ci-venv
+ENV PATH=/opt/ci-venv/bin:$PATH
+
+RUN pip install --upgrade pip setuptools wheel
+
+COPY requirements/requirements.txt /tmp/requirements.txt
+COPY requirements/requirements_test.txt /tmp/requirements_test.txt
+COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
+
+# Install production dependencies from the hashed lockfile.
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt
+# Install test and development dependencies.
+RUN pip install --no-cache-dir -r /tmp/requirements_test.txt && \
+    pip install --no-cache-dir -r /tmp/requirements_dev.txt
+# Install the tox ecosystem used by CI.
+RUN pip install --no-cache-dir tox tox-docker requests
+# psycopg[binary] is required by test runs connecting to PostgreSQL.
+RUN pip install --no-cache-dir 'psycopg[binary]'
+
+# Pre-seed the tox environment so CI skips its expensive creation step.
+ENV TOX_WORK_DIR=/opt/tox-cache
+RUN mkdir -p ${TOX_WORK_DIR}/py312 && \
+    python -m venv ${TOX_WORK_DIR}/py312 && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --upgrade pip setuptools wheel && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir -r /tmp/requirements_test.txt && \
+    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir 'psycopg[binary]'
+
+RUN rm -f /tmp/requirements*.txt
+
+WORKDIR /workspace
+{% endif %}

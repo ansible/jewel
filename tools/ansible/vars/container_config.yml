@@ -7,7 +7,7 @@ db_username: gateway
 db_password: gateway
 db_port: 5440
 container_reference: localhost
-# This is where to put all the docker source files relative to the tools/docker-compose/ansible directory
+# This is where to put generated container source files relative to the Ansible directory
 sources_dest: '{{ playbook_dir | dirname }}/generated'
 docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default='docker compose') }} -f {{ sources_dest }}/docker-compose.yml"
 

@@ -22,7 +22,24 @@
   loop_control:
     label: 'reading line'
 
-- name: Render docker templates
+- name: Render Containerfiles
+  template:
+    src: Containerfile.j2
+    dest: "{{ sources_dest }}/{{ item.filename }}"
+    mode: '0666'
+  loop:
+    - filename: Containerfile
+      profile: runtime
+    - filename: Containerfile.dev_env
+      profile: dev_env
+    - filename: Containerfile.ci
+      profile: ci
+  loop_control:
+    label: "{{ item.filename }}"
+  vars:
+    containerfile_profile: "{{ item.profile }}"
+
+- name: Render development environment templates
   template:
     src: "{{ item }}.j2"
     dest: "{{ sources_dest }}/{{ item }}"
@@ -30,7 +47,6 @@
   loop:
     - docker-compose.yml
     - docker-compose-stage.yml
-    - Containerfile
     - haproxy.cfg
 
 - name: Initialize Redis
