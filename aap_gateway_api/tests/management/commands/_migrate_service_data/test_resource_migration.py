@@ -657,7 +657,42 @@ def test_is_service_already_synced_all_migrated():
     mock_client.list_resources.side_effect = list_resources_side_effect
     cmd.client = mock_client
 
-    assert cmd._is_service_already_synced() is True
+    with patch.object(cmd, "_find_missing_gateway_resources", return_value={}):
+        assert cmd._is_service_already_synced() is True
+
+
+def test_is_service_already_synced_warns_when_gateway_resources_are_missing():
+    """A false synced state is called out with the supported recovery command."""
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.upstream_service_id = "upstream-svc"
+    cmd.resource_types_to_migrate = ["shared.organization"]
+
+    mock_client = Mock()
+
+    def list_resources_side_effect(filters=None):
+        resp = Mock()
+        filters = filters or {}
+        if filters.get("is_partially_migrated") == "false":
+            resp.json.return_value = {"count": 0, "results": []}
+        else:
+            resp.json.return_value = {"count": 5, "results": []}
+        return resp
+
+    mock_client.list_resources.side_effect = list_resources_side_effect
+    cmd.client = mock_client
+
+    with patch.object(
+        cmd,
+        "_find_missing_gateway_resources",
+        return_value={"shared.organization": [{"ansible_id": "missing-org"}]},
+    ):
+        assert cmd._is_service_already_synced() is True
+
+    warning = cmd.stderr.getvalue().lower()
+    assert "resource audit found 1" in warning
+    assert "--force" in warning
 
 
 def test_is_service_already_synced_after_service_id_rewrite():
@@ -690,8 +725,90 @@ def test_is_service_already_synced_after_service_id_rewrite():
     mock_client.list_resources.side_effect = list_resources_side_effect
     cmd.client = mock_client
 
-    assert cmd._is_service_already_synced() is True
+    with patch.object(cmd, "_find_missing_gateway_resources", return_value={}):
+        assert cmd._is_service_already_synced() is True
     assert "empty" not in cmd.stderr.getvalue().lower()
+
+
+def test_find_missing_gateway_resources_returns_gateway_owned_missing_resources():
+    """The audit finds resources rewritten to Gateway that no longer exist locally."""
+    cmd = MigrateCommand()
+    cmd.RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
+    cmd.client = Mock()
+
+    response = Mock()
+    response.json.return_value = {
+        "count": 2,
+        "next": None,
+        "results": [
+            {
+                "ansible_id": "missing-org",
+                "name": "Missing Org",
+                "resource_type": "shared.organization",
+                "service_id": "gateway-svc",
+                "is_partially_migrated": False,
+                "resource_data": {"name": "Missing Org"},
+            },
+            {
+                "ansible_id": "existing-org",
+                "name": "Existing Org",
+                "resource_type": "shared.organization",
+                "service_id": "gateway-svc",
+                "is_partially_migrated": False,
+                "resource_data": {"name": "Existing Org"},
+            },
+        ],
+    }
+    cmd.client.list_resources.return_value = response
+
+    with (
+        patch(
+            "aap_gateway_api.management.commands._migrate_service_data.resource_migration.service_id",
+            return_value="gateway-svc",
+        ),
+        patch.object(Resource.objects, "filter") as resource_filter,
+    ):
+        resource_filter.return_value.values_list.return_value = ["existing-org"]
+        missing = cmd._find_missing_gateway_resources("shared.organization")
+
+    assert [resource["ansible_id"] for resource in missing["shared.organization"]] == ["missing-org"]
+
+
+@pytest.mark.django_db
+def test_force_migration_reconciles_gateway_owned_missing_resources():
+    """Force mode processes the audit findings after the normal migration pass."""
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.client = Mock()
+    cmd.client.service.api_slug = "controller"
+    cmd.resource_types_to_migrate = {
+        "shared.organization": {
+            "type": ResourceType.objects.get(name="shared.organization"),
+            "unique_fields": ["name"],
+        }
+    }
+
+    missing = [
+        {
+            "ansible_id": "missing-org",
+            "name": "Missing Org",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "Missing Org"},
+        }
+    ]
+
+    with (
+        patch.object(cmd, "_get_filtered_resources", return_value=([], 0)),
+        patch.object(cmd, "_find_missing_gateway_resources", return_value={"shared.organization": missing}),
+        patch.object(cmd, "_process_resource_page_batch", return_value=1) as process_batch,
+    ):
+        cmd.migrate_resource("shared.organization", force=True)
+
+    process_batch.assert_called_once()
+    assert process_batch.call_args.args[0] == missing
 
 
 def test_get_filtered_resources_excludes_system_user():
