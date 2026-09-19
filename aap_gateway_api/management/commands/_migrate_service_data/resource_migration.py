@@ -10,6 +10,63 @@ from django.db import transaction
 
 
 class ResourceMigrationMixin:
+    def _resource_type_names(self) -> List[str]:
+        """Return resource type names for both production and unit-test configurations."""
+        if hasattr(self.resource_types_to_migrate, "keys"):
+            return list(self.resource_types_to_migrate.keys())
+        return list(self.resource_types_to_migrate)
+
+    def _find_missing_gateway_resources(self, resource_type_name: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Find upstream resources marked as Gateway-owned but missing locally.
+
+        A migrated resource changes its upstream ``service_id`` to Gateway's ID.
+        Therefore, checking only for resources still owned by the upstream service
+        cannot detect a partial migration after that rewrite has happened.
+        """
+        resource_type_names = [resource_type_name] if resource_type_name else self._resource_type_names()
+        gateway_service_id = str(service_id())
+        missing: Dict[str, List[Dict[str, Any]]] = {}
+
+        for current_resource_type in resource_type_names:
+            gateway_resource_ids = {
+                str(ansible_id)
+                for ansible_id in Resource.objects.filter(
+                    service_id=service_id(),
+                    content_type__resource_type__name=current_resource_type,
+                ).values_list("ansible_id", flat=True)
+            }
+
+            upstream_resources: List[Dict[str, Any]] = []
+            page = 1
+            while True:
+                data = self.client.list_resources(
+                    filters={
+                        **self.RESOURCE_DATA_FILTERS,
+                        "content_type__resource_type__name": current_resource_type,
+                        "is_partially_migrated": "false",
+                        "page": page,
+                    }
+                ).json()
+                page_results = data.get("results", [])
+                upstream_resources.extend(page_results)
+
+                # Normally ``next`` tells us when to stop. The count fallback also
+                # handles services that return more resources than fit in the first
+                # page but omit a next link.
+                if not page_results or (not data.get("next") and len(upstream_resources) >= data.get("count", 0)):
+                    break
+                page += 1
+
+            for resource in upstream_resources:
+                if str(resource.get("service_id")) != gateway_service_id:
+                    continue
+                if current_resource_type == SHARED_USER_RESOURCE_TYPE and resource.get("name") == settings.SYSTEM_USERNAME:
+                    continue
+                if str(resource.get("ansible_id")) not in gateway_resource_ids:
+                    missing.setdefault(current_resource_type, []).append(resource)
+
+        return missing
+
     def _is_service_already_synced(self) -> bool:
         """Check if all migratable resource types for the current service have already been migrated."""
         response = self.client.list_resources(
@@ -37,6 +94,15 @@ class ResourceMigrationMixin:
                 logging.WARNING,
             )
             return False
+
+        missing_gateway_resources = self._find_missing_gateway_resources()
+        if missing_gateway_resources:
+            missing_count = sum(len(resources) for resources in missing_gateway_resources.values())
+            self._log(
+                f"Resource audit found {missing_count} upstream resources marked as Gateway-owned but missing in Gateway. "
+                "This may indicate a partial migration; rerun with --force to recover.",
+                logging.WARNING,
+            )
 
         return True
 
@@ -462,7 +528,7 @@ class ResourceMigrationMixin:
         # No items to update upstream (results was empty or all filtered out).
         return 0
 
-    def migrate_resource(self, resource_type_name: str) -> None:
+    def migrate_resource(self, resource_type_name: str, force: bool = False) -> None:
         """
         Migrate all resources of a specific type from upstream service to Gateway.
 
@@ -556,3 +622,12 @@ class ResourceMigrationMixin:
                     logging.WARNING,
                 )
             self._log_progress(progress_label, resource_processed, resource_total)
+
+        if force:
+            missing_resources = self._find_missing_gateway_resources(resource_type_name).get(resource_type_name, [])
+            if missing_resources:
+                self._log(
+                    f"Recovering {len(missing_resources)} {resource_type_name} resource(s) already marked as Gateway-owned but missing locally.",
+                    logging.WARNING,
+                )
+                self._process_resource_page_batch(missing_resources, resource_context)

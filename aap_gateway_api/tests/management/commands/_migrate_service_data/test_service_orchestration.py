@@ -63,6 +63,51 @@ def test_migrate_single_service_skips_mismatched_service_type(admin_user, capsys
     assert "Service type mismatch" in captured.err
 
 
+@pytest.mark.django_db
+def test_migrate_single_service_force_bypasses_sync_check(admin_user, capsys, service_api_route_controller):
+    """The recovery flag must bypass the per-service sync short-circuit."""
+    cmd = MigrateCommand()
+    cmd._progress_thresholds = {}
+    cmd.resource_types_to_migrate = OrderedDict({"shared.organization": {}})
+
+    mock_client = Mock()
+    mock_client.service = service_api_route_controller
+    mock_client.user = admin_user
+    mock_client.get_service_metadata.return_value.json.return_value = {
+        "service_id": str(uuid.uuid4()),
+        "service_type": "controller",
+    }
+
+    with (
+        patch(_ORCH_CLIENT, return_value=mock_client),
+        patch.object(cmd, "_is_service_already_synced") as sync_check,
+        patch.object(cmd, "migrate_resource") as migrate_resource,
+        patch.object(cmd, "migrate_role_assignments"),
+    ):
+        success, error = cmd._migrate_single_service(service_api_route_controller, service_api_route_controller.api_slug, admin_user, force=True)
+
+    assert success is True
+    assert error is None
+    sync_check.assert_not_called()
+    migrate_resource.assert_called_once_with("shared.organization", force=True)
+    assert "bypassing the synchronization check" in capsys.readouterr().err
+
+
+def test_process_all_services_forwards_force_to_every_service():
+    """The recovery flag applies consistently across the service processing loop."""
+    cmd = MigrateCommand()
+    cmd.stdout = Mock()
+    cmd.stderr = Mock()
+    service_apis = [Mock(api_slug=slug) for slug in ("controller", "hub", "eda")]
+
+    with patch.object(cmd, "_migrate_single_service", return_value=(True, None)) as migrate_single_service:
+        successful, failed = cmd._process_all_services(service_apis, Mock(), force=True)
+
+    assert successful == ["controller", "hub", "eda"]
+    assert failed == {}
+    assert all(call.kwargs["force"] is True for call in migrate_single_service.call_args_list)
+
+
 @pytest.mark.django_db(transaction=True)
 def test_migrate_with_ignored_flags(
     migration_service,
