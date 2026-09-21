@@ -30,6 +30,9 @@
         cmd: "{{ compose_cmd }} exec -T redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} cluster nodes"
       changed_when: False
       register: cluster_nodes
+      retries: 10
+      delay: 2
+      until: cluster_nodes.rc == 0
 
     - name: Get IPs from Redis cluster
       shell:

@@ -20,7 +20,7 @@ from tox.tox_env.api import ToxEnv
 from tox.tox_env.errors import Fail
 
 LOGGER = logging.getLogger(__name__)
-RUNNING_CONTAINERS: Dict[str, str] = {}
+RUNNING_CONTAINERS: Dict[str, List[str]] = {}
 VALID_ENVIRONMENT_VARIABLE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 PODMAN_EXECUTABLE = os.environ.get("PODMAN_EXECUTABLE", "podman")
 
@@ -142,14 +142,13 @@ def published_port(name: str, exposed_port: ExposedPort) -> str:
 
 def stop_container(name: str) -> None:
     try:
-        run_podman("rm", "--force", name)
+        run_podman("rm", "--force", name, timeout=10)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         LOGGER.debug("Unable to remove Podman test container %s", name, exc_info=True)
 
 
 def clean_up(tox_env: ToxEnv) -> None:
-    name = RUNNING_CONTAINERS.pop(tox_env.conf["env_name"], None)
-    if name:
+    for name in RUNNING_CONTAINERS.pop(tox_env.conf["env_name"], []):
         stop_container(name)
 
 
@@ -192,7 +191,7 @@ def start_container(tox_env: ToxEnv, config: PodmanContainer) -> None:
 
     LOGGER.warning("podman> run %s", config.image)
     run_podman(*args)
-    RUNNING_CONTAINERS[tox_env.conf["env_name"]] = name
+    RUNNING_CONTAINERS.setdefault(tox_env.conf["env_name"], []).append(name)
     start_cleanup_watchdog(name)
 
 
