@@ -26,7 +26,7 @@
   template:
     src: Containerfile.j2
     dest: "{{ sources_dest }}/{{ item.filename }}"
-    mode: '0664'
+    mode: '0660'
   loop:
     - filename: Containerfile
       profile: runtime
@@ -43,7 +43,7 @@
   template:
     src: "{{ item }}.j2"
     dest: "{{ sources_dest }}/{{ item }}"
-    mode: '0664'
+    mode: '0660'
   loop:
     - compose.yml
     - haproxy.cfg

@@ -1,2 +1,0 @@
-# Dependencies required only to render generated container build files.
-ansible-core==2.21.1
