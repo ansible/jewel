@@ -7,16 +7,19 @@
 
 {% block content %}
 <div class="l-login">
-<div class="well" style="width: 320px; margin-left: auto; margin-right: auto">
+<div class="well login-card">
   <div class="row-fluid">
+    <h1>{% trans 'Log in to your account' %}</h1>
 
+    {% if show_password_login %}
+    <p class="login-card-intro">{% trans 'Enter your credentials.' %}</p>
     <form action="{% url 'login' %}" method="post">
       {% csrf_token %}
-      <input type="hidden" name="next" value={% if request.GET.next %}"{{ request.GET.next }}"{% elif request.POST.next %}"{{ request.POST.next }}"{% else %}"{% url 'api_gateway_v1_root_view' %}"{% endif %} />
+      <input type="hidden" name="next" value="{{ next }}" />
       <div class="clearfix control-group {% if form.username.errors %}error{% endif %}"
           id="div_id_username">
         <div class="form-group">
-          <label for="id_username">Username:</label>
+          <label for="id_username">{% trans 'Username' %} <span aria-hidden="true">*</span></label>
           <input type="text" name="username" maxlength="100"
               autocapitalize="off"
               autocorrect="off" class="form-control textinput textInput"
@@ -30,7 +33,7 @@
       <div class="clearfix control-group {% if form.password.errors %}error{% endif %}"
           id="div_id_password">
         <div class="form-group">
-          <label for="id_password">Password:</label>
+          <label for="id_password">{% trans 'Password' %} <span aria-hidden="true">*</span></label>
           <input type="password" name="password" maxlength="100" autocapitalize="off"
               autocorrect="off" class="form-control textinput textInput" id="id_password"
               autocomplete="off" required>
@@ -48,6 +51,17 @@
         <button type="submit" class="btn btn-primary js-tooltip" title="Log in">LOG IN</button>
       </div>
     </form>
+    {% endif %}
+
+    {% if sso_authenticators %}
+      {% if show_password_login %}<hr>{% endif %}
+      <p class="login-card-sso-heading">{% trans 'Log in with:' %}</p>
+      <div class="form-actions-no-box sso-login-options">
+        {% for authenticator in sso_authenticators %}
+          <a class="btn sso-login-button" href="{{ authenticator.login_url }}"><span class="glyphicon glyphicon-user" aria-hidden="true"></span> {{ authenticator.name }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
 
   </div><!-- /.row-fluid -->
 </div><!-- /.well -->

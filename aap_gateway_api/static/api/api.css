@@ -96,6 +96,8 @@
     display: flex;
     min-block-size: calc(100svb - 100px);
     align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
   }
 }
 
@@ -184,6 +186,11 @@
   .form-control:focus-visible {
     outline: 2px solid var(--blue-40);
   }
+  .sso-login-options {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: center;
+  }
   textarea.form-control {
     font-family: 'Overpass Mono', monospace;
   }
@@ -202,6 +209,85 @@
     border-radius: unset;
     box-shadow: unset;
     -webkit-box-shadow: unset;
+  }
+
+  .login-card {
+    inline-size: min(100%, 30rem);
+    margin: 0;
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    background-color: var(--gray-85);
+    color: var(--gray-10);
+    border: 0;
+    border-radius: 2.5rem;
+  }
+  .login-card h1 {
+    margin: 0 0 1rem;
+    color: inherit;
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    font-weight: 700;
+  }
+  .login-card-intro {
+    margin-block-end: 1.5rem;
+    font-size: 1.125rem;
+  }
+  .login-card .form-group {
+    margin-block-end: 1.25rem;
+  }
+  .login-card label {
+    display: block;
+    margin-block-end: 0.5rem;
+    font-size: 1rem;
+  }
+  .login-card label span {
+    color: #ec6a00;
+  }
+  .login-card .form-control {
+    min-block-size: 2.75rem;
+    padding-inline: 1rem;
+    background-color: var(--gray-80);
+    color: var(--gray-10);
+    border: 2px solid var(--gray-40);
+    border-radius: 0.75rem;
+    font-size: 1rem;
+  }
+  .login-card .form-control:focus {
+    border: 3px solid #8bc0f4;
+  }
+  .login-card .btn {
+    inline-size: 100%;
+    min-block-size: 2.75rem;
+    border-radius: 999px;
+    font-size: 1rem;
+  }
+  .login-card .btn-primary {
+    background-color: #8bc0f4;
+    color: var(--gray-90);
+  }
+  .login-card hr {
+    margin-block: 2rem 1.25rem;
+    border-color: var(--gray-70);
+  }
+  .login-card-sso-heading {
+    margin-block-end: 1rem;
+    font-size: 1rem;
+  }
+  .login-card .sso-login-options {
+    gap: 0.75rem;
+    padding-inline: clamp(0rem, 3vw, 2rem);
+  }
+  .login-card .sso-login-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    color: #b7d9fc;
+    background-color: transparent;
+    border: 2px solid #8bc0f4;
+  }
+  .login-card .sso-login-button:hover,
+  .login-card .sso-login-button:focus {
+    color: var(--gray-90);
+    background-color: #8bc0f4;
   }
 
   .footer-copyright {
