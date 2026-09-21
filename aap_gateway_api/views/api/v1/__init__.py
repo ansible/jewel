@@ -28,10 +28,23 @@ class V1RootView(AnsibleBaseView):
     name = _('v1')
     versioning_class = None
 
+    @staticmethod
+    def _singularize_endpoint(endpoint):
+        """Return a singular form for reverse-lookup name generation.
+
+        ``str.rstrip('s')`` strips every trailing 's', which truncates names
+        that end in 'ss' such as role_user_access -> role_user_acce.
+        """
+        if endpoint == 'status':
+            return endpoint
+        if endpoint.endswith('s') and not endpoint.endswith('ss'):
+            return endpoint[:-1]
+        return endpoint
+
     def _find_endpoints_reverse_lookup_names(self, endpoints):
         """
         Attempts to retrieve all possible endpoint names for reverse URL lookup.
-        If no matching endpoint name is found, logs an error message.
+        If no matching endpoint name is found, logs a debug message.
         Returns:
         - data(dict): A mapping of endpoint names to their corresponding URL paths
         """
@@ -41,9 +54,7 @@ class V1RootView(AnsibleBaseView):
             if endpoint in ignore_endpoints:
                 continue
 
-            singular_endpoint = endpoint.rstrip('s')
-            if endpoint == 'status':
-                singular_endpoint = endpoint
+            singular_endpoint = self._singularize_endpoint(endpoint)
 
             # Now, we try to form all possible view name patterns
             no_underscore = singular_endpoint.replace('_', '')
@@ -61,7 +72,7 @@ class V1RootView(AnsibleBaseView):
                     pass
 
             if endpoint not in data:
-                logger.error(f'{singular_endpoint} had neither a -list nor -view reverse lookup method, ignoring')
+                logger.debug(f'{singular_endpoint} had neither a -list nor -view reverse lookup method, ignoring')
 
         return data
 
