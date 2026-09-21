@@ -153,6 +153,25 @@ def clean_up(tox_env: ToxEnv) -> None:
         stop_container(name)
 
 
+def start_cleanup_watchdog(name: str) -> None:
+    """Remove a container if tox exits before its teardown hook runs."""
+    subprocess.Popen(
+        [
+            "sh",
+            "-c",
+            'while kill -0 "$1" 2>/dev/null; do sleep 1; done; "$2" rm --force "$3" >/dev/null 2>&1 || true',
+            "tox-podman-watchdog",
+            str(os.getpid()),
+            PODMAN_EXECUTABLE,
+            name,
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
 def start_container(tox_env: ToxEnv, config: PodmanContainer) -> None:
     name = container_name(tox_env, config)
     args = [
@@ -174,6 +193,7 @@ def start_container(tox_env: ToxEnv, config: PodmanContainer) -> None:
     LOGGER.warning("podman> run %s", config.image)
     run_podman(*args)
     RUNNING_CONTAINERS[tox_env.conf["env_name"]] = name
+    start_cleanup_watchdog(name)
 
 
 def wait_for_health(config: PodmanContainer, name: str) -> None:

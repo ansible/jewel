@@ -40,7 +40,7 @@ permissions:
 jobs:
   dev-env-tests:
     name: Dev environment tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       HEADLESS: "yes"
     steps:
@@ -104,7 +104,10 @@ jobs:
             --always-clone-repos ansible/ansible.platform
 
       - name: Install make
-        run: sudo apt update && sudo apt install --yes make podman
+        run: sudo apt update && sudo apt install --yes make
+
+      - name: Install Podman
+        uses: redhat-actions/podman-install@072203a124c069d8fc8621c1a33f9fa9510ae2e1 # v1.1.1
 
       - name: Install python 3.12
         uses: actions/setup-python@v5
@@ -123,6 +126,9 @@ jobs:
         run: |
           sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
           echo "Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
+
+      - name: Verify Podman prerequisites
+        run: make podman-preflight
 
       - name: Start the dev environment
         run: COMPOSE_UP_OPTS='-d' make podman-compose

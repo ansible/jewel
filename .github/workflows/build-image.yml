@@ -16,7 +16,7 @@ env:
 jobs:
   build-and-push-image:
     if: github.repository == 'ansible/jewel'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -32,43 +32,66 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Podman
+        uses: redhat-actions/podman-install@072203a124c069d8fc8621c1a33f9fa9510ae2e1 # v1.1.1
+
+      - name: Install multi-architecture build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes buildah qemu-user-static
+
       - name: Generate container build files
         run: |
           python -m pip install ansible-core
           make tools/generated/sources
 
       - name: Log in to the Container registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # QEMU enables emulation for cross-platform builds (arm64 on amd64 runners)
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-
-      # Buildx is required for multi-arch image builds and direct registry push
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha
-            type=sha,format=long
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          short_sha="${COMMIT_SHA:0:7}"
+          created=$(date --utc +%Y-%m-%dT%H:%M:%SZ)
+          {
+            echo 'tags<<EOF'
+            echo latest
+            echo "sha-${short_sha}"
+            echo "sha-${COMMIT_SHA}"
+            echo EOF
+            echo 'labels<<EOF'
+            echo "org.opencontainers.image.created=${created}"
+            echo "org.opencontainers.image.revision=${COMMIT_SHA}"
+            echo "org.opencontainers.image.source=https://github.com/${REPOSITORY}"
+            echo "org.opencontainers.image.url=https://github.com/${REPOSITORY}"
+            echo 'org.opencontainers.image.version=latest'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      - name: Build multi-architecture image
+        id: build-image
+        uses: redhat-actions/buildah-build@719e3c40d8af9790c23eca13f7daa339f2867034 # v3.1.0
         with:
           context: .
-          file: tools/generated/Containerfile
-          target: jewel
+          containerfiles: tools/generated/Containerfile
+          image: ${{ env.IMAGE_NAME }}
           platforms: linux/amd64,linux/arm64
-          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          extra-args: |
+            --target
+            jewel
+
+      - name: Push multi-architecture image
+        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3.0.0
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.REGISTRY }}

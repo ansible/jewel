@@ -13,7 +13,6 @@ compose_cmd: "{{ lookup('ansible.builtin.env', 'PODMAN_COMPOSE', default='podman
 
 container_engine: podman
 gateway_image: 'quay.io/ansible/jewel:devel' # placeholder until public image available
-gateway_host_address: host-gateway
 gateway_services: "{{ enabled_services | default([], true) }}"
 gateway_container_name: aap_gw_1
 

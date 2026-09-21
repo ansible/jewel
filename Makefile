@@ -6,8 +6,12 @@ CHECK_SYNTAX_FILES ?= aap_gateway_api/
 RM ?= /bin/rm
 UID := $(shell id -u)
 TOX_ARGS ?= ""
-CONTAINER_ENGINE ?= podman
+PODMAN ?= podman
 PODMAN_COMPOSE ?= podman-compose --in-pod false
+PODMAN_MIN_VERSION ?= 5.0.0
+PODMAN_COMPOSE_MIN_VERSION ?= 1.6.0
+PODMAN_ROOTLESS := $(shell podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null || true)
+DEFAULT_PROXY_PORT := $(if $(filter false,$(PODMAN_ROOTLESS)),443,8443)
 
 COMPOSE_OPTS ?=
 COMPOSE_UP_OPTS ?=
@@ -19,6 +23,8 @@ SOURCES_STAMP := tools/generated/.sources-generated
 SOURCES_INPUTS := tools/ansible/generate-sources.yml tools/ansible/vars/container_config.yml \
 	$(shell find tools/ansible/roles/sources -type f) \
 	tools/configs/container-startup.yml container-startup.yml requirements/requirements_git.txt
+PROXY_CONFIG_INPUTS := tools/ansible/generate-proxy-configs.yml tools/ansible/vars/container_config.yml \
+	$(shell find tools/ansible/roles/proxy-config -type f) container-startup.yml
 
 .PHONY: PYTHON_VERSION clean git_hooks_config compose-build podman-compose-build docker-compose-build \
 	check lint check_ruff check_ruff_format \
@@ -26,7 +32,7 @@ SOURCES_INPUTS := tools/ansible/generate-sources.yml tools/ansible/vars/containe
 	podman-reset podman-reset-volumes \
 	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach docker-compose-down \
 	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
-	collection podman-collection requirements check-requirements tools/generated/sources \
+	collection podman-collection podman-preflight requirements check-requirements tools/generated/sources \
 	ci-image ci-image-push
 
 ## Get the version of python we are working with
@@ -123,7 +129,7 @@ migrate-service-data:
 
 
 ## Start Podman containers without additional playbooks
-podman-compose-basic: $(SOURCES_STAMP) compose-build git_hooks_config
+podman-compose-basic: $(SOURCES_STAMP) tools/generated/proxy.yml compose-build git_hooks_config
 	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --remove-orphans $(COMPOSE_UP_OPTS)
 
 ## Start the Podman containers, plumb sidecars, and register service proxies
@@ -133,26 +139,26 @@ podman-compose: podman-compose-detached register-services plumb
 	fi
 
 ## Start the Podman containers in detached mode and wait for readiness
-podman-compose-detached: $(SOURCES_STAMP) compose-build git_hooks_config podman-collection
+podman-compose-detached: $(SOURCES_STAMP) tools/generated/proxy.yml compose-build git_hooks_config podman-collection
 	env UID=${UID} PODMAN_COMPOSE="${PODMAN_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --detach --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
 ## Attach to the Podman container logs after a detached start
-podman-compose-attach: $(SOURCES_STAMP)
+podman-compose-attach: $(SOURCES_STAMP) podman-preflight
 	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml up --no-recreate
 
 ## Stop and remove Podman Compose containers and networks, preserving named volumes
-podman-compose-down:
+podman-compose-down: podman-preflight
 	if [ -f tools/generated/compose.yml ] ; then env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) down ; fi
 
 ## Delete Podman containers, networks, volumes, and generated files
-podman-reset: $(SOURCES_STAMP)
+podman-reset: $(SOURCES_STAMP) podman-preflight
 	if [ -f tools/generated/compose.yml ] ; then $(PODMAN_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 	rm -fr tools/generated/{,.[!.],..?}*
 	touch tools/generated/.gitkeep
 
 ## Remove Podman container volumes and networks
-podman-reset-volumes: $(SOURCES_STAMP)
+podman-reset-volumes: $(SOURCES_STAMP) podman-preflight
 	if [ -f tools/generated/compose.yml ] ; then $(PODMAN_COMPOSE) -f tools/generated/compose.yml down -v ; fi
 
 ## Backward-compatible alias for podman-compose-basic
@@ -183,7 +189,10 @@ container-startup.yml: tools/configs/container-startup.yml
 		echo ">>>>>> WARNING <<<<<<<<" ; \
 		echo "container-startup.yml has been overwritten but a backup was taken (will be overwritten on next change)!"; \
 	fi;
-	@sed "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" tools/configs/container-startup.yml > ./container-startup.yml
+	@sed \
+	    -e "s/gateway_admin_password: .*/gateway_admin_password: '$(ADMIN_PASSWORD)'/" \
+	    -e "s/^proxy_port: .*/proxy_port: $(DEFAULT_PROXY_PORT)/" \
+	    tools/configs/container-startup.yml > ./container-startup.yml
 
 ## Backward-compatible target for generating container sources
 tools/generated/sources: $(SOURCES_STAMP)
@@ -225,7 +234,7 @@ podman-compose-build: compose-build
 docker-compose-build: compose-build
 
 ## Build the Compose containers
-compose-build: $(SOURCES_STAMP) update_django_ansible_base_hash tools/generated/.has_built_api
+compose-build: $(SOURCES_STAMP) podman-preflight update_django_ansible_base_hash tools/generated/.has_built_api
 
 API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
@@ -264,8 +273,8 @@ update_django_ansible_base_hash:
 tools/generated/.django_ansible_base_head: update_django_ansible_base_hash
 
 ## Check to pull the latest platform-ui if needed
-tools/generated/.has_built_ui:
-	$(CONTAINER_ENGINE) pull quay.io/ansible/platform-ui:latest > tools/generated/last_ui_pull
+tools/generated/.has_built_ui: podman-preflight
+	$(PODMAN) pull quay.io/ansible/platform-ui:latest > tools/generated/last_ui_pull
 	if [ ! -f $@ ] || [ `cat tools/generated/last_ui_pull | grep "Image is up to date" | wc -l` == "0" ] ; then \
 	    echo "Updating UI"; \
 	    touch $@ ; \
@@ -280,8 +289,42 @@ ifeq ($(UNAME_S),Linux)
 endif
 
 ## Build the proxy config file
-tools/generated/proxy.yml: $(shell find tools/ansible/roles/proxy-config/templates -type f)
+tools/generated/proxy.yml: $(PROXY_CONFIG_INPUTS)
 	ansible-playbook tools/ansible/generate-proxy-configs.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
+
+## Verify the local Podman and podman-compose versions meet the supported minimums
+podman-preflight:
+	@set -eu; \
+	version_at_least() { \
+		awk -v actual="$$1" -v minimum="$$2" 'BEGIN { \
+			split(actual, actual_parts, "."); \
+			split(minimum, minimum_parts, "."); \
+			for (part = 1; part <= 3; part++) { \
+				if ((actual_parts[part] + 0) > (minimum_parts[part] + 0)) exit 0; \
+				if ((actual_parts[part] + 0) < (minimum_parts[part] + 0)) exit 1; \
+			} \
+			exit 0; \
+		}'; \
+	}; \
+	if ! command -v "$(word 1,$(PODMAN))" >/dev/null 2>&1; then \
+		echo "Error: Podman is required. Install Podman $(PODMAN_MIN_VERSION) or newer."; \
+		exit 1; \
+	fi; \
+	podman_version="$$($(PODMAN) version --format '{{.Client.Version}}' 2>/dev/null || true)"; \
+	if [ -z "$$podman_version" ] || ! version_at_least "$$podman_version" "$(PODMAN_MIN_VERSION)"; then \
+		echo "Error: Podman $(PODMAN_MIN_VERSION) or newer is required (found: $${podman_version:-unknown})."; \
+		exit 1; \
+	fi; \
+	if ! command -v "$(word 1,$(PODMAN_COMPOSE))" >/dev/null 2>&1; then \
+		echo "Error: podman-compose is required. Install podman-compose $(PODMAN_COMPOSE_MIN_VERSION) or newer."; \
+		exit 1; \
+	fi; \
+	podman_compose_version="$$($(word 1,$(PODMAN_COMPOSE)) --version 2>/dev/null | awk '/podman-compose/ { print; exit }' | sed -E 's/[^0-9]*([0-9]+(\.[0-9]+){1,2}).*/\1/')"; \
+	if [ -z "$$podman_compose_version" ] || ! version_at_least "$$podman_compose_version" "$(PODMAN_COMPOSE_MIN_VERSION)"; then \
+		echo "Error: podman-compose $(PODMAN_COMPOSE_MIN_VERSION) or newer is required (found: $${podman_compose_version:-unknown})."; \
+		exit 1; \
+	fi; \
+	echo "Using Podman $$podman_version and podman-compose $$podman_compose_version."
 
 ## Regenerate requirements.txt from requirements.in
 requirements: requirements/requirements.in
@@ -311,11 +354,11 @@ CI_IMAGE ?= quay.io/ansible/jewel-ci:$(CI_IMAGE_TAG)
 CI_CONTAINERFILE = tools/generated/Containerfile.ci
 
 ## Build the CI container image (amd64 for GitHub Actions runners)
-ci-image: $(SOURCES_STAMP)
-	$(CONTAINER_ENGINE) buildx build --platform linux/amd64 -f $(CI_CONTAINERFILE) -t $(CI_IMAGE) --load .
+ci-image: $(SOURCES_STAMP) podman-preflight
+	$(PODMAN) build --platform linux/amd64 -f $(CI_CONTAINERFILE) -t $(CI_IMAGE) .
 
 ## Build and push the CI container image (only from devel or stable-* branches)
-ci-image-push:
+ci-image-push: podman-preflight
 	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
 	if [ "$$BRANCH" != "devel" ] && ! echo "$$BRANCH" | grep -qE '^stable-[0-9]+\.[0-9]+$$'; then \
 		echo "Error: CI image can only be pushed from 'devel' or a 'stable-*' branch (current: $$BRANCH)."; \
@@ -323,14 +366,14 @@ ci-image-push:
 	fi
 	$(MAKE) ci-image
 	@if [ -n "$(QUAY_USERNAME)" ] && [ -n "$(QUAY_PASSWORD)" ]; then \
-		echo "$(QUAY_PASSWORD)" | $(CONTAINER_ENGINE) login quay.io -u "$(QUAY_USERNAME)" --password-stdin || \
+		echo "$(QUAY_PASSWORD)" | $(PODMAN) login quay.io -u "$(QUAY_USERNAME)" --password-stdin || \
 			{ echo "Error: Login to quay.io failed with provided QUAY_USERNAME/QUAY_PASSWORD."; exit 1; }; \
 	fi; \
-	$(CONTAINER_ENGINE) push $(CI_IMAGE) || \
+	$(PODMAN) push $(CI_IMAGE) || \
 		{ echo ""; \
 		  echo "Error: Push to quay.io failed. Possible causes:"; \
-		  echo "  - Not logged in: run '$(CONTAINER_ENGINE) login quay.io'"; \
-		  echo "  - Expired credentials: re-run '$(CONTAINER_ENGINE) login quay.io'"; \
+		  echo "  - Not logged in: run '$(PODMAN) login quay.io'"; \
+		  echo "  - Expired credentials: re-run '$(PODMAN) login quay.io'"; \
 		  echo "  - Repository does not exist: create 'ansible/jewel-ci' at quay.io"; \
 		  echo "  - Insufficient permissions: ensure your account has write access"; \
 		  echo ""; \
