@@ -9,6 +9,7 @@ on:
       - 'requirements/requirements.txt'
       - 'requirements/requirements_test.txt'
       - 'requirements/requirements_dev.txt'
+      - 'requirements/requirements_build.txt'
       - 'Makefile'
       - 'tools/ansible/roles/sources/tasks/main.yml'
       - 'tools/ansible/roles/sources/templates/Containerfile.j2'
@@ -25,7 +26,7 @@ env:
 jobs:
   build-and-push:
     name: Build and push CI image
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: >-
       github.repository == 'ansible/jewel' &&
       (github.ref_name == 'devel' || startsWith(github.ref_name, 'stable-'))
@@ -43,7 +44,8 @@ jobs:
         uses: redhat-actions/podman-install@072203a124c069d8fc8621c1a33f9fa9510ae2e1 # v1.1.1
 
       - name: Install source-generation dependency
-        run: python -m pip install ansible-core
+        run: |
+          python -m pip install --only-binary :all: -r requirements/requirements_build.txt
 
       - name: Determine branch tag
         id: branch

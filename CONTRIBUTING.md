@@ -97,7 +97,7 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   See [TESTING.md](TESTING.md) for the full testing guide.
 * **Linting**: Run `make lint` to auto-format with ruff.
-* **Development environment**: Jewel requires Podman 5.0 or later and `podman-compose` 1.6.0 or later. On macOS, install Podman and start its virtual machine before creating the development environment:
+* **Development environment**: Jewel requires Podman 4.9.3 or later and `podman-compose` 1.6.0 or later. On macOS, install Podman and start its virtual machine before creating the development environment:
   ```
   brew install podman
   podman machine init

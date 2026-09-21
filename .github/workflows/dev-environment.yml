@@ -40,7 +40,7 @@ permissions:
 jobs:
   dev-env-tests:
     name: Dev environment tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       HEADLESS: "yes"
     steps:
@@ -116,7 +116,7 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip3.12 install --upgrade -r requirements/requirements_dev.txt -r ansible.platform/requirements/requirements_dev.txt ansible-core
+          pip3.12 install --upgrade -r requirements/requirements_dev.txt -r ansible.platform/requirements/requirements_dev.txt
           pip3.12 install openapi-spec-validator
 
       - name: Configure faster xDS refresh for CI
@@ -126,9 +126,6 @@ jobs:
         run: |
           sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
           echo "Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
-
-      - name: Verify Podman prerequisites
-        run: make podman-preflight
 
       - name: Start the dev environment
         run: COMPOSE_UP_OPTS='-d' make podman-compose
