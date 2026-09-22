@@ -4,7 +4,7 @@ SHELL=/bin/bash
 PYTHON := $(notdir $(shell for i in python3.12 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= aap_gateway_api/
 RM ?= /bin/rm
-UID := $(shell id -u)
+UID ?= $(if $(filter true,$(PODMAN_ROOTLESS)),1000,$(shell id -u))
 TOX_ARGS ?= ""
 PODMAN ?= podman
 PODMAN_COMPOSE ?= podman-compose --in-pod false
@@ -135,7 +135,7 @@ podman-compose-basic: $(SOURCES_STAMP) tools/generated/proxy.yml compose-build g
 ## Start the Podman containers, plumb sidecars, and register service proxies
 podman-compose: podman-compose-detached register-services plumb
 	@if [[ ! "${COMPOSE_UP_OPTS}" =~ "-d" ]] ; then \
-		env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml up --no-recreate; \
+		$(MAKE) podman-compose-attach; \
 	fi
 
 ## Start the Podman containers in detached mode and wait for readiness
@@ -145,7 +145,8 @@ podman-compose-detached: $(SOURCES_STAMP) tools/generated/proxy.yml compose-buil
 
 ## Attach to the Podman container logs after a detached start
 podman-compose-attach: $(SOURCES_STAMP) podman-preflight
-	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml up --no-recreate
+	@trap 'env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) down; exit 130' INT TERM; \
+		env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml logs --follow
 
 ## Stop and remove Podman Compose containers and networks, preserving named volumes
 podman-compose-down: podman-preflight
