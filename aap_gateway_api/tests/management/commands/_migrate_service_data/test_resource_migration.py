@@ -785,6 +785,7 @@ def test_force_migration_reconciles_gateway_owned_missing_resources():
     cmd.client = Mock()
     cmd.client.service.api_slug = "controller"
     cmd.upstream_service_id = "upstream-svc"
+    cmd.MAX_BULK_CHUNK_SIZE = 1
     cmd.resource_types_to_migrate = {
         "shared.organization": {
             "type": ResourceType.objects.get(name="shared.organization"),
@@ -798,7 +799,13 @@ def test_force_migration_reconciles_gateway_owned_missing_resources():
             "name": "Missing Org",
             "resource_type": "shared.organization",
             "resource_data": {"name": "Missing Org"},
-        }
+        },
+        {
+            "ansible_id": "missing-org-2",
+            "name": "Missing Org 2",
+            "resource_type": "shared.organization",
+            "resource_data": {"name": "Missing Org 2"},
+        },
     ]
 
     with (
@@ -808,8 +815,9 @@ def test_force_migration_reconciles_gateway_owned_missing_resources():
     ):
         cmd.migrate_resource("shared.organization", force=True)
 
-    process_batch.assert_called_once()
-    assert process_batch.call_args.args[0] == missing
+    assert process_batch.call_count == 2
+    assert process_batch.call_args_list[0].args[0] == missing[:1]
+    assert process_batch.call_args_list[1].args[0] == missing[1:]
 
 
 def test_get_filtered_resources_excludes_system_user():

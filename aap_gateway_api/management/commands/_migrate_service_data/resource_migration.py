@@ -36,7 +36,8 @@ class ResourceMigrationMixin:
                 ).values_list("ansible_id", flat=True)
             }
 
-            upstream_resources: List[Dict[str, Any]] = []
+            missing_resources: List[Dict[str, Any]] = []
+            resources_seen = 0
             page = 1
             while True:
                 data = self.client.list_resources(
@@ -48,22 +49,25 @@ class ResourceMigrationMixin:
                     }
                 ).json()
                 page_results = data.get("results", [])
-                upstream_resources.extend(page_results)
+                resources_seen += len(page_results)
+
+                for resource in page_results:
+                    if str(resource.get("service_id")) != gateway_service_id:
+                        continue
+                    if current_resource_type == SHARED_USER_RESOURCE_TYPE and resource.get("name") == settings.SYSTEM_USERNAME:
+                        continue
+                    if str(resource.get("ansible_id")) not in gateway_resource_ids:
+                        missing_resources.append(resource)
 
                 # Normally ``next`` tells us when to stop. The count fallback also
                 # handles services that return more resources than fit in the first
                 # page but omit a next link.
-                if not page_results or (not data.get("next") and len(upstream_resources) >= data.get("count", 0)):
+                if not page_results or (not data.get("next") and resources_seen >= data.get("count", 0)):
                     break
                 page += 1
 
-            for resource in upstream_resources:
-                if str(resource.get("service_id")) != gateway_service_id:
-                    continue
-                if current_resource_type == SHARED_USER_RESOURCE_TYPE and resource.get("name") == settings.SYSTEM_USERNAME:
-                    continue
-                if str(resource.get("ansible_id")) not in gateway_resource_ids:
-                    missing.setdefault(current_resource_type, []).append(resource)
+            if missing_resources:
+                missing[current_resource_type] = missing_resources
 
         return missing
 
@@ -630,4 +634,6 @@ class ResourceMigrationMixin:
                     f"Recovering {len(missing_resources)} {resource_type_name} resource(s) already marked as Gateway-owned but missing locally.",
                     logging.WARNING,
                 )
-                self._process_resource_page_batch(missing_resources, resource_context)
+                for start in range(0, len(missing_resources), self.MAX_BULK_CHUNK_SIZE):
+                    chunk = missing_resources[start : start + self.MAX_BULK_CHUNK_SIZE]
+                    self._process_resource_page_batch(chunk, resource_context)
