@@ -97,7 +97,21 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   See [TESTING.md](TESTING.md) for the full testing guide.
 * **Linting**: Run `make lint` to auto-format with ruff.
-* **Docker**: Run `make docker-compose` to start a full development environment.
+* **Development environment**: Jewel requires Podman 4.9.3 or later and `podman-compose` 1.6.0 or later. On macOS, install Podman and start its virtual machine before creating the development environment:
+  ```
+  brew install podman
+  podman machine init
+  podman machine start
+  ```
+  On Linux, install Podman through the distribution package manager. Then create and activate a Python virtual environment before installing the development tools and starting the stack:
+  ```
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements/requirements_dev.txt
+  make podman-preflight
+  make podman-compose
+  ```
+  This installs `ansible`, `tox`, `ruff`, and `podman-compose` into the active virtual environment. When `container-startup.yml` is first created, the Makefile selects port 443 for confirmed rootful Podman and 8443 otherwise; set `proxy_port` in that file to override it.
 
 ## Code quality
 

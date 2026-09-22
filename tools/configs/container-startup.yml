@@ -1,11 +1,13 @@
 ---
 gateway_host: https://localhost:8000
 gateway_node_count: 1  # Envoy will be scaled equally with the number of gateway nodes
-proxy_port: 443
+# The Makefile uses 443 only for confirmed rootful Podman; otherwise it uses 8443.
+proxy_port: 8443
 gateway_validate_certs: False
 gateway_admin_username: admin
 gateway_admin_password: admin
 container_reference: 'localhost'
+
 # This is the delay between envoy refreshing the xDS configuration
 xds_refresh_delay_seconds: 60
 # enable_django_debug_toolbar: True

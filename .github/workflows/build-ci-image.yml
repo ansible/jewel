@@ -9,7 +9,9 @@ on:
       - 'requirements/requirements.txt'
       - 'requirements/requirements_test.txt'
       - 'requirements/requirements_dev.txt'
-      - 'tools/docker/Containerfile.ci'
+      - 'Makefile'
+      - 'tools/ansible/roles/sources/tasks/main.yml'
+      - 'tools/ansible/roles/sources/templates/Containerfile.j2'
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
@@ -32,6 +34,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Podman
+        uses: redhat-actions/podman-install@072203a124c069d8fc8621c1a33f9fa9510ae2e1 # v1.1.1
+
+      - name: Install source-generation dependency
+        run: |
+          python -m pip install --only-binary :all: ansible-core==2.21.1 podman-compose==1.6.0
+
       - name: Determine branch tag
         id: branch
         env:
@@ -39,7 +53,7 @@ jobs:
         run: echo "name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Quay.io
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0.0
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
@@ -59,7 +73,7 @@ jobs:
         env:
           IMAGE_REF: ${{ env.IMAGE_NAME }}
           BRANCH_NAME: ${{ steps.branch.outputs.name }}
-        run: make ci-image "CI_IMAGE=${IMAGE_REF}:${BRANCH_NAME}" CONTAINER_ENGINE=docker
+        run: make ci-image "CI_IMAGE=${IMAGE_REF}:${BRANCH_NAME}"
 
       - name: Tag additional versions
         env:
@@ -68,8 +82,8 @@ jobs:
           SHORT_SHA: ${{ steps.tags.outputs.short_sha }}
           DATE_TAG: ${{ steps.tags.outputs.date_tag }}
         run: |
-          docker tag "${IMAGE_REF}:${BRANCH_NAME}" "${IMAGE_REF}:${BRANCH_NAME}-${SHORT_SHA}"
-          docker tag "${IMAGE_REF}:${BRANCH_NAME}" "${IMAGE_REF}:${BRANCH_NAME}-${DATE_TAG}"
+          podman tag "${IMAGE_REF}:${BRANCH_NAME}" "${IMAGE_REF}:${BRANCH_NAME}-${SHORT_SHA}"
+          podman tag "${IMAGE_REF}:${BRANCH_NAME}" "${IMAGE_REF}:${BRANCH_NAME}-${DATE_TAG}"
 
       - name: Push all tags
         env:
@@ -78,6 +92,6 @@ jobs:
           SHORT_SHA: ${{ steps.tags.outputs.short_sha }}
           DATE_TAG: ${{ steps.tags.outputs.date_tag }}
         run: |
-          docker push "${IMAGE_REF}:${BRANCH_NAME}"
-          docker push "${IMAGE_REF}:${BRANCH_NAME}-${SHORT_SHA}"
-          docker push "${IMAGE_REF}:${BRANCH_NAME}-${DATE_TAG}"
+          podman push "${IMAGE_REF}:${BRANCH_NAME}"
+          podman push "${IMAGE_REF}:${BRANCH_NAME}-${SHORT_SHA}"
+          podman push "${IMAGE_REF}:${BRANCH_NAME}-${DATE_TAG}"

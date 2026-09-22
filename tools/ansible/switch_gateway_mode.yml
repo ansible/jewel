@@ -2,19 +2,6 @@
 - name: Switch gateway mode
   hosts: localhost
   gather_facts: false
-  pre_tasks:
-    - name: Fetch Docker context
-      community.docker.docker_context_info:
-        only_current: true
-      when: docker_host is not defined
-      ignore_errors: true
-      register: docker_context
-
-    - name: Set Docker socket path
-      when: docker_context is not skipped and docker_context is success
-      set_fact:
-        docker_host: "{{ docker_context.contexts[0].config.docker_host }}"
-
   tasks:
     - name: Make sure we got proper input
       ansible.builtin.fail:
@@ -23,15 +10,17 @@
         - mode is not defined or mode not in ['normal', 'debug'] or service is not defined or service not in ['api', 'control-plane']
 
     - name: Ensure the container is running
-      community.docker.docker_container_info:
-        docker_host: "{{ docker_host | default(omit) }}"
-        name: aap_gw_1
+      containers.podman.podman_container_info:
+        name:
+          - aap_gw_1
       register: gateway_container_status
 
     - name: Fail if the container is not running
       ansible.builtin.fail:
         msg: "The aap_gw_1 container is not running"
-      when: gateway_container_status.container['State']['Status'] != 'running'
+      when: >-
+        gateway_container_status.containers | length == 0
+        or gateway_container_status.containers[0]['State']['Status'] != 'running'
 
     - name: Determine services and port
       ansible.builtin.set_fact:
@@ -45,17 +34,15 @@
         debugpy_port: "{{ (service == 'api') | ternary(13000, 13001) }}"
 
     - name: "Stop process {{ stop_process }}"
-      community.docker.docker_container_exec:
-        docker_host: "{{ docker_host | default(omit) }}"
-        container: aap_gw_1
+      containers.podman.podman_container_exec:
+        name: aap_gw_1
         command: "supervisorctl stop {{ stop_process }}"
       register: stop_output
       changed_when: "'ERROR' not in stop_output.stdout"
 
     - name: "Start process {{ start_process }}"
-      community.docker.docker_container_exec:
-        docker_host: "{{ docker_host | default(omit) }}"
-        container: aap_gw_1
+      containers.podman.podman_container_exec:
+        name: aap_gw_1
         command: "supervisorctl start {{ start_process }}"
       register: start_output
       changed_when: "'ERROR' not in start_output.stdout"
