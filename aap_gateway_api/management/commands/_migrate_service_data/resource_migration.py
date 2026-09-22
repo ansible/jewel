@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import requests
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
@@ -15,6 +15,48 @@ class ResourceMigrationMixin:
         if hasattr(self.resource_types_to_migrate, "keys"):
             return list(self.resource_types_to_migrate.keys())
         return list(self.resource_types_to_migrate)
+
+    def _iter_gateway_resource_pages(self, resource_type_name: str) -> Iterator[List[Dict[str, Any]]]:
+        """Yield all upstream pages for resources of a given type."""
+        resources_seen = 0
+        page = 1
+        while True:
+            data = self.client.list_resources(
+                filters={
+                    **self.RESOURCE_DATA_FILTERS,
+                    "content_type__resource_type__name": resource_type_name,
+                    "is_partially_migrated": "false",
+                    "page": page,
+                }
+            ).json()
+            page_results = data.get("results", [])
+            resources_seen += len(page_results)
+            yield page_results
+
+            # Normally ``next`` tells us when to stop. The count fallback also
+            # handles services that return more resources than fit in the first
+            # page but omit a next link.
+            if not page_results or (not data.get("next") and resources_seen >= data.get("count", 0)):
+                return
+            page += 1
+
+    def _missing_gateway_resources_from_page(
+        self,
+        page_results: List[Dict[str, Any]],
+        resource_type_name: str,
+        gateway_service_id: str,
+        gateway_resource_ids: set[str],
+    ) -> List[Dict[str, Any]]:
+        """Return Gateway-owned upstream resources that are absent locally."""
+        missing_resources = []
+        for resource in page_results:
+            if str(resource.get("service_id")) != gateway_service_id:
+                continue
+            if resource_type_name == SHARED_USER_RESOURCE_TYPE and resource.get("name") == settings.SYSTEM_USERNAME:
+                continue
+            if str(resource.get("ansible_id")) not in gateway_resource_ids:
+                missing_resources.append(resource)
+        return missing_resources
 
     def _find_missing_gateway_resources(self, resource_type_name: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         """Find upstream resources marked as Gateway-owned but missing locally.
@@ -37,34 +79,10 @@ class ResourceMigrationMixin:
             }
 
             missing_resources: List[Dict[str, Any]] = []
-            resources_seen = 0
-            page = 1
-            while True:
-                data = self.client.list_resources(
-                    filters={
-                        **self.RESOURCE_DATA_FILTERS,
-                        "content_type__resource_type__name": current_resource_type,
-                        "is_partially_migrated": "false",
-                        "page": page,
-                    }
-                ).json()
-                page_results = data.get("results", [])
-                resources_seen += len(page_results)
-
-                for resource in page_results:
-                    if str(resource.get("service_id")) != gateway_service_id:
-                        continue
-                    if current_resource_type == SHARED_USER_RESOURCE_TYPE and resource.get("name") == settings.SYSTEM_USERNAME:
-                        continue
-                    if str(resource.get("ansible_id")) not in gateway_resource_ids:
-                        missing_resources.append(resource)
-
-                # Normally ``next`` tells us when to stop. The count fallback also
-                # handles services that return more resources than fit in the first
-                # page but omit a next link.
-                if not page_results or (not data.get("next") and resources_seen >= data.get("count", 0)):
-                    break
-                page += 1
+            for page_results in self._iter_gateway_resource_pages(current_resource_type):
+                missing_resources.extend(
+                    self._missing_gateway_resources_from_page(page_results, current_resource_type, gateway_service_id, gateway_resource_ids)
+                )
 
             if missing_resources:
                 missing[current_resource_type] = missing_resources
@@ -532,6 +550,20 @@ class ResourceMigrationMixin:
         # No items to update upstream (results was empty or all filtered out).
         return 0
 
+    def _recover_missing_gateway_resources(self, resource_type_name: str, resource_context: Dict[str, Any]) -> None:
+        """Process resources marked as Gateway-owned but missing locally."""
+        missing_resources = self._find_missing_gateway_resources(resource_type_name).get(resource_type_name, [])
+        if not missing_resources:
+            return
+
+        self._log(
+            f"Recovering {len(missing_resources)} {resource_type_name} resource(s) already marked as Gateway-owned but missing locally.",
+            logging.WARNING,
+        )
+        for start in range(0, len(missing_resources), self.MAX_BULK_CHUNK_SIZE):
+            chunk = missing_resources[start : start + self.MAX_BULK_CHUNK_SIZE]
+            self._process_resource_page_batch(chunk, resource_context)
+
     def migrate_resource(self, resource_type_name: str, force: bool = False) -> None:
         """
         Migrate all resources of a specific type from upstream service to Gateway.
@@ -628,12 +660,4 @@ class ResourceMigrationMixin:
             self._log_progress(progress_label, resource_processed, resource_total)
 
         if force:
-            missing_resources = self._find_missing_gateway_resources(resource_type_name).get(resource_type_name, [])
-            if missing_resources:
-                self._log(
-                    f"Recovering {len(missing_resources)} {resource_type_name} resource(s) already marked as Gateway-owned but missing locally.",
-                    logging.WARNING,
-                )
-                for start in range(0, len(missing_resources), self.MAX_BULK_CHUNK_SIZE):
-                    chunk = missing_resources[start : start + self.MAX_BULK_CHUNK_SIZE]
-                    self._process_resource_page_batch(chunk, resource_context)
+            self._recover_missing_gateway_resources(resource_type_name, resource_context)

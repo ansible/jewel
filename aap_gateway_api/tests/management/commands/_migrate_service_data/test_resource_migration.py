@@ -820,9 +820,7 @@ def test_find_missing_gateway_resources_supports_list_configuration_and_paginati
             "aap_gateway_api.management.commands._migrate_service_data.resource_migration.service_id",
             return_value="gateway-svc",
         ),
-        patch(
-            "aap_gateway_api.management.commands._migrate_service_data.resource_migration.settings"
-        ) as mock_settings,
+        patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.settings") as mock_settings,
         patch.object(Resource.objects, "filter") as resource_filter,
     ):
         mock_settings.SYSTEM_USERNAME = "system-user"
