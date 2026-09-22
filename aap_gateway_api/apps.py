@@ -57,6 +57,12 @@ class MyAppConfig(AppConfig):
         # Load the signals and feature flag conditions
         import aap_gateway_api.signals  # noqa 401
 
+        from aap_gateway_api.utils.validation_bypass_observability import (
+            configure_validation_bypass_observability,
+        )
+
+        configure_validation_bypass_observability()
+
     def _is_server_startup(self):
         """
         Check if this is actual server startup (uwsgi/runserver) vs a management command.
