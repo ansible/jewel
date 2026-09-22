@@ -89,7 +89,7 @@ class ResourceMigrationMixin:
 
         return missing
 
-    def _is_service_already_synced(self) -> bool:
+    def _is_service_already_synced(self, service_slug: str) -> bool:
         """Check if all migratable resource types for the current service have already been migrated."""
         response = self.client.list_resources(
             filters={
@@ -121,7 +121,7 @@ class ResourceMigrationMixin:
         if missing_gateway_resources:
             missing_count = sum(len(resources) for resources in missing_gateway_resources.values())
             self._log(
-                f"Resource audit found {missing_count} upstream resources marked as Gateway-owned but missing in Gateway. "
+                f"Resource audit for service {service_slug} found {missing_count} upstream resources marked as Gateway-owned but missing in Gateway. "
                 "This may indicate a partial migration; rerun with --force to recover.",
                 logging.WARNING,
             )

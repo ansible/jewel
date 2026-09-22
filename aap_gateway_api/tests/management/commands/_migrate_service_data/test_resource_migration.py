@@ -616,7 +616,7 @@ def test_is_service_already_synced_without_system_username_filter():
 
     with patch("aap_gateway_api.management.commands._migrate_service_data.resource_migration.settings") as mock_settings:
         mock_settings.SYSTEM_USERNAME = ""
-        assert cmd._is_service_already_synced() is False
+        assert cmd._is_service_already_synced("controller") is False
 
 
 def test_is_service_already_synced_empty_registry():
@@ -631,7 +631,7 @@ def test_is_service_already_synced_empty_registry():
     mock_client.list_resources.return_value.json.return_value = {"count": 0, "results": []}
     cmd.client = mock_client
 
-    assert cmd._is_service_already_synced() is False
+    assert cmd._is_service_already_synced("controller") is False
     assert "empty" in cmd.stderr.getvalue().lower()
 
 
@@ -658,7 +658,7 @@ def test_is_service_already_synced_all_migrated():
     cmd.client = mock_client
 
     with patch.object(cmd, "_find_missing_gateway_resources", return_value={}):
-        assert cmd._is_service_already_synced() is True
+        assert cmd._is_service_already_synced("controller") is True
 
 
 def test_is_service_already_synced_warns_when_gateway_resources_are_missing():
@@ -688,10 +688,10 @@ def test_is_service_already_synced_warns_when_gateway_resources_are_missing():
         "_find_missing_gateway_resources",
         return_value={"shared.organization": [{"ansible_id": "missing-org"}]},
     ):
-        assert cmd._is_service_already_synced() is True
+        assert cmd._is_service_already_synced("controller") is True
 
     warning = cmd.stderr.getvalue().lower()
-    assert "resource audit found 1" in warning
+    assert "resource audit for service controller found 1" in warning
     assert "--force" in warning
 
 
@@ -726,7 +726,7 @@ def test_is_service_already_synced_after_service_id_rewrite():
     cmd.client = mock_client
 
     with patch.object(cmd, "_find_missing_gateway_resources", return_value={}):
-        assert cmd._is_service_already_synced() is True
+        assert cmd._is_service_already_synced("controller") is True
     assert "empty" not in cmd.stderr.getvalue().lower()
 
 

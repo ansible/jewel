@@ -98,7 +98,7 @@ class ServiceOrchestrationMixin:
             )
             should_migrate = True
         else:
-            should_migrate = not self._is_service_already_synced()
+            should_migrate = not self._is_service_already_synced(service_slug)
 
         if not should_migrate:
             self._log(f"Service {service_slug} is already synchronized — skipping resource migration.", logging.INFO)
