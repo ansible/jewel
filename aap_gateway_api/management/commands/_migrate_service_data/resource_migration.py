@@ -323,7 +323,8 @@ class ResourceMigrationMixin:
             bulk_item["resource_data"] = updated_service_resource["resource_data"]
         return bulk_item
 
-    MAX_BULK_CHUNK_SIZE = 1000
+    # Keep requests below the upstream Controller bulk-update timeout.
+    MAX_BULK_CHUNK_SIZE = 100
     MAX_TRANSIENT_RETRIES = 3
     TRANSIENT_STATUS_CODES = {502, 503, 504}
 
@@ -333,7 +334,7 @@ class ResourceMigrationMixin:
     def _send_bulk_update(self, bulk_update_items: List[Dict[str, Any]]) -> int:
         """Send bulk update to upstream and return the number of successfully updated items.
 
-        Items are chunked to respect the upstream MAX_BULK_SIZE limit (1000).
+        Items are chunked according to the configured bulk-update chunk size.
         Transient HTTP errors (502/503/504, network errors) are retried with
         exponential backoff. Permanent errors (4xx) fail immediately.
         Per-item errors from successful responses are logged as warnings.

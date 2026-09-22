@@ -1063,6 +1063,7 @@ def test_send_bulk_update_chunks_large_batches():
     cmd = MigrateCommand()
     cmd.stdout = StringIO()
     cmd.stderr = StringIO()
+    cmd.MAX_BULK_CHUNK_SIZE = 1000
 
     success_resp = Mock()
     success_resp.status_code = 200

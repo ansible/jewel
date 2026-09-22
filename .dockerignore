@@ -8,3 +8,4 @@ aap-dev
 **/venv
 **/.tox
 .venv-test
+**/.venv-*
