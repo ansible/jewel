@@ -784,6 +784,7 @@ def test_force_migration_reconciles_gateway_owned_missing_resources():
     cmd.stderr = StringIO()
     cmd.client = Mock()
     cmd.client.service.api_slug = "controller"
+    cmd.upstream_service_id = "upstream-svc"
     cmd.resource_types_to_migrate = {
         "shared.organization": {
             "type": ResourceType.objects.get(name="shared.organization"),
