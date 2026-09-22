@@ -774,6 +774,65 @@ def test_find_missing_gateway_resources_returns_gateway_owned_missing_resources(
     assert [resource["ansible_id"] for resource in missing["shared.organization"]] == ["missing-org"]
 
 
+def test_find_missing_gateway_resources_supports_list_configuration_and_pagination():
+    """The audit supports test-style resource lists and paginated user results."""
+    cmd = MigrateCommand()
+    cmd.RESOURCE_DATA_FILTERS = {"extra_fields": "resource_data"}
+    cmd.resource_types_to_migrate = ["shared.user"]
+    cmd.client = Mock()
+
+    first_page = Mock()
+    first_page.json.return_value = {
+        "count": 3,
+        "next": "https://upstream.example/api/v2/resources/?page=2",
+        "results": [
+            {
+                "ansible_id": "system-user",
+                "name": "system-user",
+                "resource_type": "shared.user",
+                "service_id": "gateway-svc",
+            },
+            {
+                "ansible_id": "missing-user",
+                "name": "Missing User",
+                "resource_type": "shared.user",
+                "service_id": "gateway-svc",
+            },
+        ],
+    }
+    second_page = Mock()
+    second_page.json.return_value = {
+        "count": 3,
+        "next": None,
+        "results": [
+            {
+                "ansible_id": "missing-user-2",
+                "name": "Missing User 2",
+                "resource_type": "shared.user",
+                "service_id": "gateway-svc",
+            }
+        ],
+    }
+    cmd.client.list_resources.side_effect = [first_page, second_page]
+
+    with (
+        patch(
+            "aap_gateway_api.management.commands._migrate_service_data.resource_migration.service_id",
+            return_value="gateway-svc",
+        ),
+        patch(
+            "aap_gateway_api.management.commands._migrate_service_data.resource_migration.settings"
+        ) as mock_settings,
+        patch.object(Resource.objects, "filter") as resource_filter,
+    ):
+        mock_settings.SYSTEM_USERNAME = "system-user"
+        resource_filter.return_value.values_list.return_value = []
+        missing = cmd._find_missing_gateway_resources()
+
+    assert [resource["ansible_id"] for resource in missing["shared.user"]] == ["missing-user", "missing-user-2"]
+    assert [call.kwargs["filters"]["page"] for call in cmd.client.list_resources.call_args_list] == [1, 2]
+
+
 @pytest.mark.django_db
 def test_force_migration_reconciles_gateway_owned_missing_resources():
     """Force mode processes the audit findings after the normal migration pass."""
@@ -818,6 +877,34 @@ def test_force_migration_reconciles_gateway_owned_missing_resources():
     assert process_batch.call_count == 2
     assert process_batch.call_args_list[0].args[0] == missing[:1]
     assert process_batch.call_args_list[1].args[0] == missing[1:]
+
+
+@pytest.mark.django_db
+def test_force_migration_skips_empty_gateway_resource_recovery():
+    """Force mode does not process a recovery batch when the audit is empty."""
+    from ansible_base.resource_registry.models import ResourceType
+
+    cmd = MigrateCommand()
+    cmd.stdout = StringIO()
+    cmd.stderr = StringIO()
+    cmd.client = Mock()
+    cmd.client.service.api_slug = "controller"
+    cmd.upstream_service_id = "upstream-svc"
+    cmd.resource_types_to_migrate = {
+        "shared.organization": {
+            "type": ResourceType.objects.get(name="shared.organization"),
+            "unique_fields": ["name"],
+        }
+    }
+
+    with (
+        patch.object(cmd, "_get_filtered_resources", return_value=([], 0)),
+        patch.object(cmd, "_find_missing_gateway_resources", return_value={}),
+        patch.object(cmd, "_process_resource_page_batch") as process_batch,
+    ):
+        cmd.migrate_resource("shared.organization", force=True)
+
+    process_batch.assert_not_called()
 
 
 def test_get_filtered_resources_excludes_system_user():
