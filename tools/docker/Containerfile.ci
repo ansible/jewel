@@ -48,8 +48,12 @@ RUN pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/requ
 ENV TOX_WORK_DIR=/opt/tox-cache
 RUN mkdir -p "${TOX_WORK_DIR}/py312" && \
     python -m venv "${TOX_WORK_DIR}/py312" && \
-    "${TOX_WORK_DIR}/py312/bin/pip" install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/requirements.txt && \
-    "${TOX_WORK_DIR}/py312/bin/pip" install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/requirements_test_ci.txt && \
+    "${TOX_WORK_DIR}/py312/bin/pip" install \
+        --no-cache-dir --require-hashes --only-binary=:all: \
+        -r /tmp/requirements.txt && \
+    "${TOX_WORK_DIR}/py312/bin/pip" install \
+        --no-cache-dir --require-hashes --only-binary=:all: \
+        -r /tmp/requirements_test_ci.txt && \
     rm -f /tmp/requirements*.txt && \
     mkdir -p /home/ci && \
     chown -R 1001:0 /home/ci "${TOX_WORK_DIR}"
