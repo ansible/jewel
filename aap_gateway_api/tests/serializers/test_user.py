@@ -10,7 +10,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.test import Client
+from django.test import Client, override_settings
 from django.test.client import RequestFactory
 from rest_framework import status
 from rest_framework.exceptions import ErrorDetail
@@ -1692,7 +1692,13 @@ class TestEmailFieldRestrictions:
         response = user_api_client.patch(url, {'email': 'hacked@example.com'})
         assert response.status_code == 403
 
-    def test_regular_user_can_change_own_username(self, user_api_client, user):
+    def test_regular_user_cannot_change_own_username(self, user_api_client, user):
+        url = get_relative_url('user-detail', kwargs={'pk': user.id})
+        response = user_api_client.patch(url, {'username': 'new_username'})
+        assert response.status_code == 403
+
+    @override_settings(ALLOW_USER_USERNAME_SELF_EDIT=True)
+    def test_regular_user_can_change_own_username_when_setting_enabled(self, user_api_client, user):
         url = get_relative_url('user-detail', kwargs={'pk': user.id})
         response = user_api_client.patch(url, {'username': 'new_username'})
         assert response.status_code == 200
