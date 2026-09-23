@@ -145,7 +145,7 @@ class _ExternalAuth:
 
     def _return_no_auth_with_reason(self, reason, html_body=None, code=7, http_status_code=403):
         if "application/json" in self.drf_request.META.get("HTTP_ACCEPT", ""):
-            response_body = json.dumps(dict(details=reason))
+            response_body = json.dumps({"details": reason})
             content_type = "application/json"
         else:
             # If we specified an html_body use that, otherwise just return a text body
@@ -263,7 +263,7 @@ class _ExternalAuth:
         self.headers.append(HeaderValueOption(header=HeaderValue(key=header_name, value=header_val)))
         return self._return_authenticated(user.username)
 
-    def Check(self, request, context):
+    def Check(self, request, context):  # NOSONAR -- Envoy's gRPC service requires this method name.
         self.start_time = time.time()
 
         self.headers = []

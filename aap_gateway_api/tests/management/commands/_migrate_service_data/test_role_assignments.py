@@ -908,7 +908,7 @@ def migration_service_hub_roles(patched_resource_client, service_api_route_hub, 
     kill_test_service(proc)
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_controller_role_assignment_migration(migration_service_controller_roles, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in controller are migrated"""
     service_client = patched_resource_client(service=migration_service_controller_roles, user=admin_user, raise_if_bad_request=True)
@@ -927,7 +927,7 @@ def test_controller_role_assignment_migration(migration_service_controller_roles
         assert _user_assignment_exists(assignment[0], assignment[1], assignment[2])
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_controller_role_assignment_migration_reinstall_is_noop(
     migration_service_controller_roles, admin_user, admin_api_client, patched_resource_client, capsys
 ):
@@ -963,7 +963,7 @@ def test_controller_role_assignment_migration_reinstall_is_noop(
     assert "0 assignments created" in captured.out
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_controller_role_assignment_migration_paginated(migration_service_controller_roles_paginated, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in controller are migrated with pagination"""
     assert RoleUserAssignment.objects.filter(user__username='many-assignments-user').count() == 0
@@ -971,7 +971,7 @@ def test_controller_role_assignment_migration_paginated(migration_service_contro
     assert RoleUserAssignment.objects.filter(user__username='many-assignments-user').count() == 40
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_controller_role_assignment_migration_duplicate_team_names(
     migration_service_controller_roles_duplicate_teams, admin_user, admin_api_client, patched_resource_client
 ):
@@ -981,7 +981,7 @@ def test_controller_role_assignment_migration_duplicate_team_names(
     assert RoleUserAssignment.objects.filter(user__username='duplicate-teams-user').count() == 2
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_controller_role_assignment_remoteobject(migration_service_controller_roles_remoteobject, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments referencing remote objects are migrated"""
     assert RoleUserAssignment.objects.filter(user__username='test-user').count() == 0
@@ -992,7 +992,7 @@ def test_controller_role_assignment_remoteobject(migration_service_controller_ro
     assert issubclass(rd.content_type.model_class(), RemoteObject)
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_hub_role_assignment_migration(migration_service_hub_roles, admin_user, admin_api_client, patched_resource_client):
     """Test that role assignments in hub are migrated"""
     service_client = patched_resource_client(service=migration_service_hub_roles, user=admin_user, raise_if_bad_request=True)
@@ -1014,7 +1014,7 @@ def test_hub_role_assignment_migration(migration_service_hub_roles, admin_user, 
         assert not _user_assignment_exists(assignment[0], assignment[1], assignment[2])
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
     with (
         patch('aap_gateway_api.utils.resources_client.GWResourceAPIClient') as mock_client_class,
@@ -1067,7 +1067,7 @@ def test_role_assignment_migration_skips_user_not_found(admin_user, capsys, serv
         assert f"Unable to find user with ansible_id {invalid_user_ansible_id}" in captured.err
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_role_assignment_migration_skips_role_definition_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
     from aap_gateway_api.models import User
 
@@ -1122,7 +1122,7 @@ def test_role_assignment_migration_skips_role_definition_not_found(admin_user, c
         assert "Unable to find role definition 'INVALID ROLE DEFINITION'" in captured.err
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db
 def test_role_assignment_migration_skips_object_not_found(admin_user, capsys, service_api_route_controller, patched_resource_client):
     from aap_gateway_api.models import User
 

@@ -10,11 +10,8 @@ def test_httpport_api_port_unique(http_api_port_factory):
     from aap_gateway_api.models import HTTPPort
 
     http_api_port_factory()
+    port = HTTPPort(name="port-1337", number=1337, is_api_port=True)
     with pytest.raises(IntegrityError):
-        port = HTTPPort()
-        port.name = "port-1337"
-        port.number = 1337
-        port.is_api_port = True
         port.save()
 
 

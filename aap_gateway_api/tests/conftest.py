@@ -328,9 +328,8 @@ def setup_test_preferences(db, request, register_preference):
 
         preferences.append(preference)
 
-    yield preferences
-
-    # no need a cleanup section here because register_preference fixture should take care of it
+    # register_preference handles cleanup for the created preferences.
+    return preferences
 
 
 @pytest.fixture
@@ -431,12 +430,12 @@ def organization_factory():
 
 @pytest.fixture
 def http_port(http_port_factory):
-    yield http_port_factory()
+    return http_port_factory()
 
 
 @pytest.fixture
 def http_api_port(http_api_port_factory):
-    yield http_api_port_factory()
+    return http_api_port_factory()
 
 
 @pytest.fixture
@@ -694,7 +693,7 @@ def system_user(db, settings, no_log_messages, django_user_model):
     # The system user should be created by the migrations so we never want to try and create it here.
     # Use all_objects manager to include managed users (system user is managed=True)
     user_obj = django_user_model.all_objects.get(username=settings.SYSTEM_USERNAME)
-    yield user_obj
+    return user_obj
 
 
 @pytest.fixture

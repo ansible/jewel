@@ -1,4 +1,4 @@
-def get_model_lookup_keys(ModelCls):
+def get_model_lookup_keys(model_cls):
     """
     Determine the field names that can be used to uniquely look up existing instances of the given model class
     This method returns a set of the unique fields (not including the pk) and fields that are flattened from the unique_together tuples
@@ -8,14 +8,14 @@ def get_model_lookup_keys(ModelCls):
     lookup_fields = set()
 
     # First the concrete and unique fields
-    for field in ModelCls._meta.fields:
-        if field.unique and field != ModelCls._meta.pk:
+    for field in model_cls._meta.fields:
+        if field.unique and field != model_cls._meta.pk:
             lookup_fields.add(field.name)
 
     # Now, the flattened unique_together fields
-    for unique_together in ModelCls._meta.unique_together:
+    for unique_together in model_cls._meta.unique_together:
         for field in unique_together:
-            if field != ModelCls._meta.pk:
+            if field != model_cls._meta.pk:
                 lookup_fields.add(field)
 
     return lookup_fields
