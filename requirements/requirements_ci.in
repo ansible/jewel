@@ -1,0 +1,6 @@
+# Dependencies for the pre-built CI image.
+-r requirements_test.txt
+-r requirements_dev.txt
+pip
+wheel
+-c requirements.txt

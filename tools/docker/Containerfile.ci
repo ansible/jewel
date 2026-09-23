@@ -28,43 +28,36 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     openssl-devel \
     xmlsec1-devel \
     xmlsec1-openssl \
-    && dnf clean all
-
-RUN mkdir -p /opt/ci-venv && \
-    "/usr/bin/${PYTHON}" -m venv /opt/ci-venv
+    && dnf clean all \
+    && mkdir -p /opt/ci-venv \
+    && "/usr/bin/${PYTHON}" -m venv /opt/ci-venv
 
 ENV VIRTUAL_ENV=/opt/ci-venv
 ENV PATH=/opt/ci-venv/bin:$PATH
 
-RUN pip install --upgrade pip setuptools wheel
-
 COPY requirements/requirements.txt /tmp/requirements.txt
-COPY requirements/requirements_test.txt /tmp/requirements_test.txt
-COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
+COPY requirements/requirements_ci.txt /tmp/requirements_ci.txt
+COPY requirements/requirements_test_ci.txt /tmp/requirements_test_ci.txt
 
-# Install production dependencies (hashed lockfile)
-RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt
-
-# Install test and dev dependencies (unhashed)
-RUN pip install --no-cache-dir -r /tmp/requirements_test.txt && \
-    pip install --no-cache-dir -r /tmp/requirements_dev.txt
-
-# Install tox ecosystem for running tests
-RUN pip install --no-cache-dir tox tox-docker requests
-
-# psycopg[binary] is needed for test runs connecting to postgres
-RUN pip install --no-cache-dir 'psycopg[binary]'
+# Install production and CI dependencies from pinned, hashed requirement files.
+RUN pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/requirements.txt && \
+    pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/requirements_ci.txt
 
 # Pre-seed the tox py312 virtualenv so CI skips the expensive env creation.
 # Workflows rely on TOX_WORK_DIR so tox uses this cache instead of ./.tox.
 ENV TOX_WORK_DIR=/opt/tox-cache
-RUN mkdir -p ${TOX_WORK_DIR}/py312 && \
-    python -m venv ${TOX_WORK_DIR}/py312 && \
-    ${TOX_WORK_DIR}/py312/bin/pip install --upgrade pip setuptools wheel && \
-    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && \
-    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir -r /tmp/requirements_test.txt && \
-    ${TOX_WORK_DIR}/py312/bin/pip install --no-cache-dir 'psycopg[binary]'
-
-RUN rm -f /tmp/requirements*.txt
+RUN mkdir -p "${TOX_WORK_DIR}/py312" && \
+    python -m venv "${TOX_WORK_DIR}/py312" && \
+    "${TOX_WORK_DIR}/py312/bin/pip" install \
+        --no-cache-dir --require-hashes --only-binary=:all: \
+        -r /tmp/requirements.txt && \
+    "${TOX_WORK_DIR}/py312/bin/pip" install \
+        --no-cache-dir --require-hashes --only-binary=:all: \
+        -r /tmp/requirements_test_ci.txt && \
+    rm -f /tmp/requirements*.txt && \
+    mkdir -p /home/ci && \
+    chown -R 1001:0 /home/ci "${TOX_WORK_DIR}"
+ENV HOME=/home/ci
+USER 1001:0
 
 WORKDIR /workspace

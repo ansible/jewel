@@ -30,7 +30,7 @@ class TestRelatedViews:
 
 @pytest.mark.parametrize('user_type', ['user', 'team_member', 'team_admin', 'org_member', 'org_admin', 'platform_auditor', 'superuser'])
 class TestRelatedViewsBase:
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(autouse=True)
     def init_user(self, user_type, user_api_client, user, team, organization):
         if user_type in ['platform_auditor', 'superuser']:
             user.is_platform_auditor = user_type == 'platform_auditor'
