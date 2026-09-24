@@ -44,17 +44,76 @@ def test_lds_cache_hit_returns_cached_response(unauthenticated_api_client, full_
 
 
 @pytest.mark.django_db
-def test_sds_cache_hit_returns_cached_response(unauthenticated_api_client):
+def test_sds_cache_hit_returns_cached_response(unauthenticated_api_client, randname):
     """Second SDS call returns cached response."""
     from django.core.cache import cache
+
+    pem = "-----BEGIN CERTIFICATE-----\ncache-hit-ca\n-----END CERTIFICATE-----"
+    CACertificate.objects.create(
+        name=randname("cache_hit_ca"),
+        pem_data=pem,
+        sha256=hashlib.sha256(pem.encode()).hexdigest(),
+    )
 
     url = reverse("sds")
     first = unauthenticated_api_client.post(url, data={})
     assert first.status_code == 200
+    assert first.data["resources"][0]["validationContext"]["trustedCa"]["inlineString"] == pem
     assert cache.get(XDS_CACHE_KEY_SDS) is not None
     second = unauthenticated_api_client.post(url, data={})
     assert second.status_code == 200
     assert second.data == first.data
+
+
+@pytest.mark.parametrize(
+    "pem_data",
+    [None, "", "  \n\t  "],
+    ids=["no-certificates", "empty-pem", "whitespace-only-pem"],
+)
+@pytest.mark.django_db
+def test_sds_without_usable_ca_certificates_is_not_cached(unauthenticated_api_client, randname, pem_data):
+    """SDS does not cache a response before usable CA certificates exist."""
+    from django.core.cache import cache
+
+    CACertificate.objects.all().delete()
+    cache.clear()
+    if pem_data is not None:
+        CACertificate.objects.create(
+            name=randname("empty_sds"),
+            pem_data=pem_data,
+            sha256=hashlib.sha256(pem_data.encode()).hexdigest(),
+        )
+
+    response = unauthenticated_api_client.post(reverse("sds"), data={})
+
+    assert response.status_code == 200
+    assert cache.get(XDS_CACHE_KEY_SDS) is None
+
+
+@pytest.mark.django_db
+def test_sds_bootstrap_recovers_after_ca_certificate_is_added(unauthenticated_api_client, randname):
+    """An SDS poll after bootstrap sees and caches a newly added CA certificate."""
+    from django.core.cache import cache
+
+    CACertificate.objects.all().delete()
+    cache.clear()
+    url = reverse("sds")
+
+    empty_response = unauthenticated_api_client.post(url, data={})
+    assert empty_response.status_code == 200
+    assert cache.get(XDS_CACHE_KEY_SDS) is None
+
+    pem = "-----BEGIN CERTIFICATE-----\nbootstrap-ca\n-----END CERTIFICATE-----"
+    CACertificate.objects.create(
+        name=randname("bootstrap_ca"),
+        pem_data=pem,
+        sha256=hashlib.sha256(pem.encode()).hexdigest(),
+    )
+    populated_response = unauthenticated_api_client.post(url, data={})
+
+    assert populated_response.status_code == 200
+    assert populated_response.data["resources"][0]["validationContext"]["trustedCa"]["inlineString"] == pem
+    assert cache.get(XDS_CACHE_KEY_SDS) == populated_response.data
 
 
 @pytest.mark.django_db

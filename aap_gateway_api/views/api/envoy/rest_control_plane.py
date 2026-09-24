@@ -175,7 +175,10 @@ class SecretDiscoverServiceView(XDSView):
 
         secret_resource = self._collect_db_ca_certs()
         response_data = self.get_xds_response(Secret, [secret_resource])
-        cache.set(XDS_CACHE_KEY_SDS, response_data)
+        # Do not cache an empty bootstrap response; Envoy must be able to pick
+        # up CA certificates added after its first poll.
+        if secret_resource["validation_context"].get("trusted_ca"):
+            cache.set(XDS_CACHE_KEY_SDS, response_data)
         return Response(response_data)
 
     def _collect_db_ca_certs(self) -> dict:

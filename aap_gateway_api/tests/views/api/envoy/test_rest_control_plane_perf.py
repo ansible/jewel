@@ -277,13 +277,15 @@ def test_cache_invalidated_on_ca_certificate_save(unauthenticated_api_client):
     from aap_gateway_api.models.ca_certificate import CACertificate
 
     url = reverse("sds")
-    unauthenticated_api_client.post(url, data={})
-
-    CACertificate.objects.create(
+    cert = CACertificate.objects.create(
         name="perf-ca-invalidation",
         pem_data="-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----",
         sha256="invalidation-test",
     )
+    unauthenticated_api_client.post(url, data={})
+    cert.pem_data = "-----BEGIN CERTIFICATE-----\nupdated\n-----END CERTIFICATE-----"
+    cert.sha256 = "invalidation-test-updated"
+    cert.save()
 
     with CaptureQueriesContext(connection) as ctx:
         unauthenticated_api_client.post(url, data={})
