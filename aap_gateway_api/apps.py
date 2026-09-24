@@ -50,9 +50,30 @@ class MyAppConfig(AppConfig):
 
         dispatcherd_setup(get_dispatcherd_config())
 
-        if not MyAppConfig._xds_cache_cleared:
+        if not MyAppConfig._xds_cache_cleared and self._is_server_startup():
             _clear_xds_cache_on_startup()
             MyAppConfig._xds_cache_cleared = True
 
         # Load the signals and feature flag conditions
         import aap_gateway_api.signals  # noqa 401
+
+    def _is_server_startup(self):
+        """
+        Check if this is actual server startup (uwsgi/runserver) vs a management command.
+        Management commands like showmigrations run frequently and shouldn't clear the cache.
+        """
+        import sys
+
+        # Check if running under uwsgi
+        try:
+            import uwsgi  # noqa: F401
+
+            return True
+        except ImportError:
+            pass
+
+        # Check if running via runserver
+        if len(sys.argv) > 1 and sys.argv[1] == "runserver":
+            return True
+
+        return False
