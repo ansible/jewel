@@ -37,6 +37,7 @@ def _clear_xds_cache_on_startup():
 class MyAppConfig(AppConfig):
     name = "aap_gateway_api"
     verbose_name = "Gateway"
+    _xds_cache_cleared = False
 
     def ready(self):
         signals.post_migrate.connect(_initialize_preferences, sender=self, weak=False)
@@ -49,7 +50,9 @@ class MyAppConfig(AppConfig):
 
         dispatcherd_setup(get_dispatcherd_config())
 
-        _clear_xds_cache_on_startup()
+        if not MyAppConfig._xds_cache_cleared:
+            _clear_xds_cache_on_startup()
+            MyAppConfig._xds_cache_cleared = True
 
         # Load the signals and feature flag conditions
         import aap_gateway_api.signals  # noqa 401
