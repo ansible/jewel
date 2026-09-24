@@ -1,7 +1,10 @@
 # django-ansible-base, RBAC and resource_registry highly involved here
+import logging
+
 from ansible_base.rbac.api.serializers import RoleDefinitionSerializer, RoleTeamAssignmentSerializer
 from ansible_base.rbac.api.views import BaseAssignmentViewSet, RoleDefinitionViewSet, RoleTeamAssignmentViewSet, RoleUserAssignmentViewSet
-from ansible_base.rbac.policies import can_view_all_users
+from ansible_base.rbac.policies import can_view_all_users, check_content_obj_permission
+from ansible_base.rbac.validators import check_locally_managed
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from requests.exceptions import HTTPError
@@ -14,6 +17,8 @@ from aap_gateway_api.models.service_type import service_type_to_api_slug
 from aap_gateway_api.utils.resources_client import GWResourceAPIClient
 
 from .common import ResourceAllClientMixin, ResourceAPIUpdateMixin
+
+logger = logging.getLogger('aap_gateway_api.views.api.v1.role')
 
 
 class GatewayRoleDefinitionSerializer(RoleDefinitionSerializer):
@@ -127,19 +132,47 @@ class AssignmentSyncMixin(ResourceAllClientMixin):
         service = ServiceAPIRoute.objects.get(api_slug=service_name)
         return GWResourceAPIClient(service, user=self.request.user, raise_if_bad_request=True)
 
+    def _pre_sync_to_service(self, serializer, obj=None):
+        """Sync assignment to the owning service BEFORE local creation.
+
+        For service-owned resources, the service knows the parent organization.
+        Returns the content object with parent_reference set from the service response.
+        """
+        rd = serializer.validated_data['role_definition']
+        client = self.get_direct_client(rd)
+
+        data = {'role_definition': rd.name}
+
+        actor = serializer.validated_data.get('user') or serializer.validated_data.get('team')
+        actor_type = 'user' if serializer.Meta.model._meta.model_name == 'roleuserassignment' else 'team'
+        data[f'{actor_type}_ansible_id'] = str(actor.resource.ansible_id)
+
+        if obj is None:
+            obj = serializer.get_object_from_data(serializer.validated_data, rd, self.request.user)
+        if obj is not None:
+            data['object_id'] = str(obj.pk)
+
+        if self.request.user and hasattr(self.request.user, 'resource'):
+            data['created_by_ansible_id'] = str(self.request.user.resource.ansible_id)
+
+        try:
+            response = client._sync_assignment(data)
+            response_data = response.json()
+            parent_reference = response_data.get('parent_reference', '')
+            if parent_reference and obj is not None:
+                obj.parent_reference = parent_reference
+        except HTTPError as e:
+            try:
+                error_detail = e.response.json()
+            except Exception:
+                error_detail = e.response.text
+            raise ProxyAPIException(detail=error_detail, status_code=e.response.status_code)
+
+        return obj
+
     def remote_sync_assignment(self, assignment):
         if self._is_owned_by_gateway(assignment.role_definition):
             self._resources_client.sync_assignment(assignment)
-        else:
-            client = self.get_direct_client(assignment.role_definition)
-            try:
-                client.sync_assignment(assignment)
-            except HTTPError as e:
-                try:
-                    error_detail = e.response.json()
-                except Exception:
-                    error_detail = e.response.text
-                raise ProxyAPIException(detail=error_detail, status_code=e.response.status_code)
 
     def remote_sync_unassignment(self, role_definition, actor, content_object):
         if self._is_owned_by_gateway(role_definition):
@@ -155,11 +188,35 @@ class AssignmentSyncMixin(ResourceAllClientMixin):
                     error_detail = e.response.text
                 raise ProxyAPIException(detail=error_detail, status_code=e.response.status_code)
 
-    @transaction.atomic  # just making it atomic
+    @transaction.atomic
     def perform_create(self, serializer):
+        rd = serializer.validated_data.get('role_definition')
+
+        if rd and not self._is_owned_by_gateway(rd):
+            requesting_user = self.request.user
+            actor = serializer.validated_data.get('user') or serializer.validated_data.get('team')
+            obj = serializer.get_object_from_data(serializer.validated_data, rd, requesting_user)
+
+            # Run the same DAB checks BaseAssignmentSerializer.create() would,
+            # before syncing to the owning service (avoids creating upstream
+            # assignments that local authz would reject).
+            if obj is not None and getattr(obj, 'validate_role_assignment', None):
+                obj.validate_role_assignment(actor, rd, requesting_user=requesting_user)
+            check_locally_managed(rd)
+            if not obj:
+                raise ValidationError({'object_id': _('Object must be specified for this role assignment')})
+            check_content_obj_permission(requesting_user, obj)
+
+            obj = self._pre_sync_to_service(serializer, obj=obj)
+
+            with transaction.atomic():
+                assignment = rd.give_permission(actor, obj)
+            serializer.instance = assignment
+            return assignment
+
         return super().perform_create(serializer)
 
-    @transaction.atomic  # just making it atomic
+    @transaction.atomic
     def perform_destroy(self, assignment):
         return super().perform_destroy(assignment)
 
