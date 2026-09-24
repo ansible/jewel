@@ -151,7 +151,7 @@ class ApiSpecs:
         return valid_endpoints
 
 
-@pytest.fixture(autouse=True, scope='function')
+@pytest.fixture(autouse=True)
 def loaded_apis(admin_api_client):
     return ApiSpecs(admin_api_client)
 

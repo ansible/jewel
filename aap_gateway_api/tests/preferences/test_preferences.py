@@ -129,8 +129,6 @@ def test_settings_bound_pref_none(register_preference):
         ("string", "foo", True, "Cannot serialize, value True is not a string"),  # In the API this gets coerced and works
         ("bool", False, "true", "true is not a boolean"),
         ("bool", False, 1, "1 is not a boolean"),
-        ("bool", False, "true", "true is not a boolean"),
-        ("bool", False, 1, "1 is not a boolean"),
         ("bool", False, "1", "1 is not a boolean"),
         ("bool", False, "false", "false is not a boolean"),
         ("bool", False, 0, "0 is not a boolean"),

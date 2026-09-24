@@ -133,8 +133,10 @@ class AppUrlTestCase(TestCase):
         assert client.login(username=the_user, password="password")
         response = client.get(url)
 
-        assert response is not None and response.status_code == 200
-        assert response.data is not None and 'count' in response.data
+        assert response is not None
+        assert response.status_code == 200
+        assert response.data is not None
+        assert 'count' in response.data
         assert response.data['count'] == expected_count
 
         try:

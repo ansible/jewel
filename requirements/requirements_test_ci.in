@@ -1,0 +1,7 @@
+# Dependencies pre-seeded in the tox test environment.
+-r requirements_test.txt
+pip
+setuptools
+wheel
+psycopg[binary]
+-c requirements.txt
