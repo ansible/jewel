@@ -1,7 +1,10 @@
 import logging
+import re
 from typing import Any, Optional
 
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
+from ansible_base.lib.utils.settings import get_setting
+from ansible_base.lib.utils.validation import validate_free_text
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 from drf_spectacular.types import OpenApiTypes
@@ -22,6 +25,217 @@ from aap_gateway_api.utils import (
 
 logger = logging.getLogger('aap.gateway.serializers.preferences')
 
+_LOG_CONTROL_RE = re.compile(r'[\x00-\x1f\x7f-\x9f]')
+_INCOMPLETE_VALIDATION_MSG = _("Validation could not be completed for this field.")
+
+# Fields excluded from CleanText validation because they legitimately contain
+# HTML (custom_login_info) or binary/image data (custom_logo).
+_CLEAN_TEXT_EXCLUDED_FIELDS = frozenset({'custom_login_info', 'custom_logo'})
+
+
+class _PreferenceModelStub:
+    """Minimal stand-in for Meta.model used by audit-log messages.
+
+    CleanTextMixin's ``_log_validation_failure`` reads
+    ``self.Meta.model._meta.app_label`` and ``_meta.object_name``.
+    SettingSectionSerializer has no real Django model, so this stub
+    provides just enough surface area for the log line.
+    """
+
+    class _meta:
+        app_label = 'aap_gateway_api'
+        object_name = 'Preference'
+
+
+class PlainSerializerCleanTextMixin:
+    """CleanTextMixin adaptation for plain (non-ModelSerializer) serializers.
+
+    Instead of introspecting Django model fields via ``model._meta.get_fields()``,
+    this mixin classifies DRF serializer fields by their type:
+
+    * **text fields** — ``CharField``, ``URLField`` → Tier 2 ``validate_free_text``
+    * **list/JSON fields** — ``ListField``, ``JSONField`` (including ``JSONListField``)
+      → recurse into string leaves with ``validate_free_text``
+
+    The mixin is designed for ``SettingSectionSerializer`` where fields are
+    dynamically generated from the preference registry rather than a model.
+    """
+
+    excluded_fields = _CLEAN_TEXT_EXCLUDED_FIELDS
+    _MAX_JSON_DEPTH = 10
+
+    def _clean_text_validate(self, changed_values, stored_values):
+        """Validate text content in *changed* preference values.
+
+        Args:
+            changed_values: dict mapping preference name → new parsed value.
+            stored_values: dict mapping preference name → current stored value
+                           (used for grandfathering unchanged nested leaves).
+
+        Returns:
+            dict of field-name → error detail, empty when all values pass.
+        """
+        if not get_setting('ENHANCED_INPUT_VALIDATION_ENABLED', False):
+            return {}
+
+        errors = {}
+        serializer_fields = self.get_fields()
+
+        for field_name, new_value in changed_values.items():
+            if field_name in self.excluded_fields:
+                continue
+
+            field = serializer_fields.get(field_name)
+            if field is None:
+                continue
+
+            stored = stored_values.get(field_name)
+
+            if isinstance(new_value, str):
+                # Top-level string value (CharField, URLField, etc.)
+                if new_value != stored:
+                    self._run_clean_text_validator(field_name, new_value, errors)
+            elif isinstance(new_value, list):
+                json_errors = self._validate_json_list(
+                    new_value,
+                    field_name=field_name,
+                    stored_data=stored,
+                )
+                if json_errors:
+                    errors[field_name] = json_errors
+            elif isinstance(new_value, dict):
+                json_errors = self._validate_json_dict(
+                    new_value,
+                    field_name=field_name,
+                    stored_data=stored,
+                )
+                if json_errors:
+                    errors[field_name] = json_errors
+
+        return errors
+
+    def _run_clean_text_validator(self, field_name, value, errors):
+        """Apply Tier 2 free-text validation and collect errors."""
+        try:
+            validate_free_text(value)
+        except serializers.ValidationError as exc:
+            errors[field_name] = exc.detail
+            self._log_clean_text_failure(field_name, exc.detail)
+        except Exception:
+            logger.exception("Unexpected error validating preference '%s'", field_name)
+            if get_setting('ENHANCED_INPUT_VALIDATION_ENABLED', False):
+                errors[field_name] = [_INCOMPLETE_VALIDATION_MSG]
+
+    def _validate_json_list(self, data, field_name="", stored_data=None, depth=0):
+        """Validate string values inside a list, recursing into nested structures."""
+        if depth >= self._MAX_JSON_DEPTH:
+            logger.warning(
+                "JSON validation depth limit (%d) reached for preference '%s'",
+                self._MAX_JSON_DEPTH,
+                field_name,
+            )
+            return {field_name: [_INCOMPLETE_VALIDATION_MSG]}
+
+        errors = {}
+        for idx, item in enumerate(data):
+            stored_item = stored_data[idx] if isinstance(stored_data, list) and idx < len(stored_data) else None
+            item_key = f"[{idx}]"
+
+            if isinstance(item, str):
+                if item == stored_item:
+                    continue
+                self._validate_json_string(item, item_key, errors, field_name)
+            elif isinstance(item, dict):
+                self._validate_json_dict(
+                    item,
+                    field_name=field_name,
+                    stored_data=stored_item,
+                    key_prefix=f"{item_key}.",
+                    depth=depth + 1,
+                    errors=errors,
+                )
+            elif isinstance(item, list):
+                nested = self._validate_json_list(
+                    item,
+                    field_name=field_name,
+                    stored_data=stored_item,
+                    depth=depth + 1,
+                )
+                if nested:
+                    errors.update(nested)
+
+        return errors or None
+
+    def _validate_json_dict(self, data, field_name="", stored_data=None, key_prefix="", depth=0, errors=None):
+        """Validate string values inside a dict, recursing into nested structures."""
+        if depth >= self._MAX_JSON_DEPTH:
+            logger.warning(
+                "JSON validation depth limit (%d) reached for preference '%s'",
+                self._MAX_JSON_DEPTH,
+                field_name,
+            )
+            return {field_name: [_INCOMPLETE_VALIDATION_MSG]}
+
+        if errors is None:
+            errors = {}
+
+        for key, val in data.items():
+            safe_key = _LOG_CONTROL_RE.sub(lambda m: repr(m.group())[1:-1], key) if isinstance(key, str) else key
+            qualified_key = f"{key_prefix}{safe_key}"
+            stored_val = stored_data.get(key) if isinstance(stored_data, dict) else None
+
+            if isinstance(val, str):
+                if val == stored_val:
+                    continue
+                self._validate_json_string(val, qualified_key, errors, field_name)
+            elif isinstance(val, dict):
+                self._validate_json_dict(
+                    val,
+                    field_name=field_name,
+                    stored_data=stored_val,
+                    key_prefix=f"{qualified_key}.",
+                    depth=depth + 1,
+                    errors=errors,
+                )
+            elif isinstance(val, list):
+                nested = self._validate_json_list(
+                    val,
+                    field_name=field_name,
+                    stored_data=stored_val,
+                    depth=depth + 1,
+                )
+                if nested:
+                    errors.update(nested)
+
+        return errors or None
+
+    def _validate_json_string(self, val, qualified_key, errors, field_name):
+        """Validate a single string leaf inside a JSON structure."""
+        try:
+            validate_free_text(val)
+        except serializers.ValidationError as exc:
+            errors[qualified_key] = exc.detail
+            log_field = f"{field_name}.{qualified_key}" if field_name else qualified_key
+            self._log_clean_text_failure(log_field, exc.detail)
+        except Exception:
+            logger.exception("Unexpected error validating JSON key '%s'", qualified_key)
+            if get_setting('ENHANCED_INPUT_VALIDATION_ENABLED', False):
+                errors[qualified_key] = [_INCOMPLETE_VALIDATION_MSG]
+
+    def _log_clean_text_failure(self, field_name, detail):
+        """Emit a WARNING-level audit log for a rejected preference value."""
+        resource_type = f"{_PreferenceModelStub._meta.app_label}.{_PreferenceModelStub._meta.object_name}"
+        if isinstance(detail, list):
+            reason = '; '.join(str(d) for d in detail)
+        else:
+            reason = str(detail)
+        logger.warning(
+            "Validation rejected '%s' on %s: %s",
+            field_name,
+            resource_type,
+            reason,
+        )
+
 
 class SettingSectionListSerializer(serializers.Serializer):
     # This is the serializer for the list of categories (/api/gateway/v1/settings)
@@ -31,8 +245,13 @@ class SettingSectionListSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
 
 
-class SettingSectionSerializer(serializers.Serializer):
+class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serializer):
     # This is the serializer for a given category (like /api/gateway/v1/settings/all)
+
+    class Meta:
+        # Fake model stand-in for audit log messages and OPTIONS metadata.
+        model = _PreferenceModelStub
+
     def __init__(self, category_slug=None, *args, **kwargs):
         if category_slug == 'all':
             self.category_slug = None
@@ -152,6 +371,10 @@ class SettingSectionSerializer(serializers.Serializer):
 
         return validated_fields, errors, values_to_save
 
+    def _build_encrypted_field_set(self):
+        """Return the set of preference names that are encrypted."""
+        return frozenset(pref.name for pref in gateway_preference_registry.preferences(self.category_slug) if pref.encrypted)
+
     def validate_and_save(self, data: dict) -> dict:
         logger.info(f"Validating settings for section {self.category_slug if self.category_slug else 'all'}")
 
@@ -163,6 +386,24 @@ class SettingSectionSerializer(serializers.Serializer):
 
         if errors:
             raise serializers.ValidationError(errors)
+
+        # CleanText validation: validate changed preference values before persisting.
+        # Build stored-values dict for grandfathering unchanged nested leaves,
+        # and skip encrypted preferences (their values should not be inspected).
+        if values_to_save:
+            encrypted_fields = self._build_encrypted_field_set()
+            changed_for_clean = {}
+            stored_for_clean = {}
+            for pref_name, save_info in values_to_save.items():
+                if pref_name in encrypted_fields:
+                    continue
+                changed_for_clean[pref_name] = save_info['value']
+                stored_for_clean[pref_name] = validated_fields.get(pref_name)
+
+            if changed_for_clean:
+                clean_errors = self._clean_text_validate(changed_for_clean, stored_for_clean)
+                if clean_errors:
+                    raise serializers.ValidationError(clean_errors)
 
         # Since we have made it here w/o errors we are cleared to save the values
         for key, value in values_to_save.items():
