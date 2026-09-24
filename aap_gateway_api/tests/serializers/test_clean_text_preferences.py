@@ -234,3 +234,185 @@ class TestOptionsPatternBehavior:
         response = admin_api_client.options(url)
         assert response.status_code == 200, f"OPTIONS /settings/all/ returned {response.status_code}"
         assert 'actions' in response.data
+
+
+# ---------------------------------------------------------------------------
+# 6. Unsafe string inside a dict preference rejected with 400
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestUnsafeDictLeafRejected:
+    """PUT with a dangerous string leaf inside a JSON dict preference must return 400."""
+
+    def test_rejects_unsafe_dict_leaf(self, admin_api_client, register_preference):
+        """A dict preference containing an unsafe string leaf must be rejected."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_json_pref",
+            default={},
+            preference_type="json",
+            encrypted=False,
+        )
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        response = admin_api_client.put(
+            url,
+            {'test_json_pref': {'safe_key': 'safe_value', 'bad_key': DANGEROUS_SCRIPT}},
+            format='json',
+        )
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.data}"
+        assert 'test_json_pref' in response.data
+
+    def test_rejects_unsafe_nested_dict_leaf(self, admin_api_client, register_preference):
+        """A nested dict with an unsafe string leaf must be rejected."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_json_pref",
+            default={},
+            preference_type="json",
+            encrypted=False,
+        )
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        response = admin_api_client.put(
+            url,
+            {'test_json_pref': {'outer': {'inner': DANGEROUS_SHELL}}},
+            format='json',
+        )
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.data}"
+        assert 'test_json_pref' in response.data
+
+    def test_accepts_safe_dict(self, admin_api_client, register_preference):
+        """A dict preference with only safe string leaves should succeed."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_json_pref",
+            default={},
+            preference_type="json",
+            encrypted=False,
+        )
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        response = admin_api_client.put(
+            url,
+            {'test_json_pref': {'key1': 'safe value', 'key2': 'also safe'}},
+            format='json',
+        )
+        assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# 7. Depth-limit propagation for over-depth dict payloads
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestDepthLimitPropagation:
+    """Over-depth dict payloads must fail closed with a 400 error."""
+
+    def test_over_depth_dict_rejected(self, admin_api_client, register_preference):
+        """A deeply nested dict that exceeds _MAX_JSON_DEPTH must return 400."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_json_pref",
+            default={},
+            preference_type="json",
+            encrypted=False,
+        )
+
+        # Build a dict nested beyond the depth limit (default 10).
+        payload = current = {}
+        for i in range(12):
+            child = {}
+            current[f"level_{i}"] = child
+            current = child
+        current["leaf"] = "value"
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        response = admin_api_client.put(
+            url,
+            {'test_json_pref': payload},
+            format='json',
+        )
+        assert response.status_code == 400, f"Expected 400 for over-depth dict, got {response.status_code}: {response.data}"
+        assert 'test_json_pref' in response.data
+
+
+# ---------------------------------------------------------------------------
+# 8. Grandfathering uses persisted value, not submitted value
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGrandfatheringPersistedValue:
+    """Grandfathering compares against the persisted value, not the submitted value."""
+
+    def test_unchanged_safe_value_grandfathered(self, admin_api_client, register_preference):
+        """Re-submitting the same safe value should succeed (no validation needed)."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_string_pref",
+            default="safe default",
+            preference_type="string",
+            encrypted=False,
+        )
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        # First update to a safe value
+        response = admin_api_client.put(url, {'test_string_pref': 'safe value'}, format='json')
+        assert response.status_code == 200
+
+        # Re-submit the same value — should be accepted (unchanged, skipped by process_fields)
+        response = admin_api_client.put(url, {'test_string_pref': 'safe value'}, format='json')
+        assert response.status_code == 200
+
+    def test_changed_unsafe_value_rejected(self, admin_api_client, register_preference):
+        """Changing a preference to an unsafe value must be rejected even when the
+        new value differs from the persisted value."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_string_pref",
+            default="safe default",
+            preference_type="string",
+            encrypted=False,
+        )
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        # Set to a safe value first
+        response = admin_api_client.put(url, {'test_string_pref': 'safe value'}, format='json')
+        assert response.status_code == 200
+
+        # Now change to an unsafe value — must be rejected
+        response = admin_api_client.put(url, {'test_string_pref': DANGEROUS_SCRIPT}, format='json')
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.data}"
+        assert 'test_string_pref' in response.data
+
+    def test_unchanged_nested_leaf_grandfathered_while_new_leaf_rejected(self, admin_api_client, register_preference):
+        """In a dict, an unchanged leaf should be grandfathered while a newly added
+        unsafe leaf is rejected."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_json_pref",
+            default={},
+            preference_type="json",
+            encrypted=False,
+        )
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        # Set the preference to a dict with a safe value
+        response = admin_api_client.put(
+            url,
+            {'test_json_pref': {'existing_key': 'safe value'}},
+            format='json',
+        )
+        assert response.status_code == 200
+
+        # Submit same existing key (grandfathered) plus a new unsafe key
+        response = admin_api_client.put(
+            url,
+            {'test_json_pref': {'existing_key': 'safe value', 'new_key': DANGEROUS_SCRIPT}},
+            format='json',
+        )
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.data}"
+        assert 'test_json_pref' in response.data

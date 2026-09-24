@@ -168,16 +168,22 @@ class PlainSerializerCleanTextMixin:
 
     def _validate_json_dict(self, data, field_name="", stored_data=None, key_prefix="", depth=0, errors=None):
         """Validate string values inside a dict, recursing into nested structures."""
+        if errors is None:
+            errors = {}
+
         if depth >= self._MAX_JSON_DEPTH:
             logger.warning(
                 "JSON validation depth limit (%d) reached for preference '%s'",
                 self._MAX_JSON_DEPTH,
                 field_name,
             )
-            return {field_name: [_INCOMPLETE_VALIDATION_MSG]}
-
-        if errors is None:
-            errors = {}
+            # Merge the depth-limit error into the caller's errors dict so it
+            # propagates even when the recursive call's return value is ignored.
+            # Use key_prefix (the nesting path) to avoid double-nesting under
+            # field_name when _clean_text_validate wraps the result.
+            error_key = key_prefix.rstrip('.') if key_prefix else field_name
+            errors[error_key] = [_INCOMPLETE_VALIDATION_MSG]
+            return errors
 
         for key, val in data.items():
             safe_key = _LOG_CONTROL_RE.sub(lambda m: repr(m.group())[1:-1], key) if isinstance(key, str) else key
@@ -366,7 +372,11 @@ class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serial
                     continue
 
                 # validation succeeded, we need to mark the setting to be saved
-                values_to_save[registered_preference.name] = {'value': parsed_value, 'section': registered_preference.section.name}
+                values_to_save[registered_preference.name] = {
+                    'value': parsed_value,
+                    'section': registered_preference.section.name,
+                    'persisted_value': current_value,
+                }
                 validated_fields[registered_preference.name] = masked_value
 
         return validated_fields, errors, values_to_save
@@ -398,7 +408,9 @@ class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serial
                 if pref_name in encrypted_fields:
                     continue
                 changed_for_clean[pref_name] = save_info['value']
-                stored_for_clean[pref_name] = validated_fields.get(pref_name)
+                # Use the persisted value captured before process_fields
+                # overwrote validated_fields with the submitted value.
+                stored_for_clean[pref_name] = save_info.get('persisted_value')
 
             if changed_for_clean:
                 clean_errors = self._clean_text_validate(changed_for_clean, stored_for_clean)
