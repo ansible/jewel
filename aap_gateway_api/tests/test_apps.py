@@ -27,13 +27,14 @@ def test_clear_xds_cache_on_startup_removes_only_xds_entries():
 @patch("dispatcherd.config.setup")
 @patch("django.db.models.signals.post_migrate.connect")
 @patch("dynamic_preferences.signals.preference_updated.connect")
-@patch("sys.modules", {"uwsgi": None})
 def test_ready_invokes_xds_cache_clearing_on_server_startup(mock_pref_updated_connect, mock_post_migrate_connect, mock_dispatcherd_setup, mock_clear_xds_cache):
     from aap_gateway_api.apps import MyAppConfig
 
     MyAppConfig._xds_cache_cleared = False
     config = MyAppConfig.create("aap_gateway_api")
-    config.ready()
+
+    with patch.object(config, "_is_server_startup", return_value=True):
+        config.ready()
 
     mock_clear_xds_cache.assert_called_once()
 
@@ -42,7 +43,6 @@ def test_ready_invokes_xds_cache_clearing_on_server_startup(mock_pref_updated_co
 @patch("dispatcherd.config.setup")
 @patch("django.db.models.signals.post_migrate.connect")
 @patch("dynamic_preferences.signals.preference_updated.connect")
-@patch("sys.modules", {"uwsgi": None})
 def test_ready_only_clears_cache_once_when_called_multiple_times(
     mock_pref_updated_connect, mock_post_migrate_connect, mock_dispatcherd_setup, mock_clear_xds_cache
 ):
@@ -50,9 +50,11 @@ def test_ready_only_clears_cache_once_when_called_multiple_times(
 
     MyAppConfig._xds_cache_cleared = False
     config = MyAppConfig.create("aap_gateway_api")
-    config.ready()
-    config.ready()
-    config.ready()
+
+    with patch.object(config, "_is_server_startup", return_value=True):
+        config.ready()
+        config.ready()
+        config.ready()
 
     mock_clear_xds_cache.assert_called_once()
 
@@ -62,19 +64,12 @@ def test_ready_only_clears_cache_once_when_called_multiple_times(
 @patch("django.db.models.signals.post_migrate.connect")
 @patch("dynamic_preferences.signals.preference_updated.connect")
 def test_ready_skips_cache_clearing_for_management_commands(mock_pref_updated_connect, mock_post_migrate_connect, mock_dispatcherd_setup, mock_clear_xds_cache):
-    import sys
-
     from aap_gateway_api.apps import MyAppConfig
 
     MyAppConfig._xds_cache_cleared = False
+    config = MyAppConfig.create("aap_gateway_api")
 
-    # Simulate a management command (e.g., showmigrations)
-    original_argv = sys.argv
-    try:
-        sys.argv = ["manage.py", "showmigrations"]
-        config = MyAppConfig.create("aap_gateway_api")
+    with patch.object(config, "_is_server_startup", return_value=False):
         config.ready()
 
-        mock_clear_xds_cache.assert_not_called()
-    finally:
-        sys.argv = original_argv
+    mock_clear_xds_cache.assert_not_called()
