@@ -28,6 +28,12 @@ def _notify_on_preference_update(sender, section, name, old_value, new_value, **
         preference.on_update(old_value, new_value)
 
 
+def _clear_xds_cache_on_startup():
+    from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, invalidate_xds_cache
+
+    invalidate_xds_cache(XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS)
+
+
 class MyAppConfig(AppConfig):
     name = "aap_gateway_api"
     verbose_name = "Gateway"
@@ -42,6 +48,8 @@ class MyAppConfig(AppConfig):
         from aap_gateway_api.dispatch.config import get_dispatcherd_config
 
         dispatcherd_setup(get_dispatcherd_config())
+
+        _clear_xds_cache_on_startup()
 
         # Load the signals and feature flag conditions
         import aap_gateway_api.signals  # noqa 401
