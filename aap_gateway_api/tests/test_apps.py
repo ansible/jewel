@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from django.core.cache import cache
 
@@ -19,3 +21,15 @@ def test_clear_xds_cache_on_startup_removes_only_xds_entries():
     assert cache.get(XDS_CACHE_KEY_LDS) is None
     assert cache.get(XDS_CACHE_KEY_SDS) is None
     assert cache.get("unrelated") == "preserved"
+
+
+@pytest.mark.django_db
+@patch("aap_gateway_api.apps._clear_xds_cache_on_startup")
+@patch("dispatcherd.config.setup")
+def test_ready_invokes_xds_cache_clearing(mock_dispatcherd_setup, mock_clear_xds_cache):
+    from aap_gateway_api.apps import MyAppConfig
+
+    config = MyAppConfig("aap_gateway_api", MagicMock())
+    config.ready()
+
+    mock_clear_xds_cache.assert_called_once()
