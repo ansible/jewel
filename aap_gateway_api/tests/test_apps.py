@@ -73,3 +73,60 @@ def test_ready_skips_cache_clearing_for_management_commands(mock_pref_updated_co
         config.ready()
 
     mock_clear_xds_cache.assert_not_called()
+
+
+def test_is_server_startup_returns_true_for_runserver():
+    import sys
+
+    from aap_gateway_api.apps import MyAppConfig
+
+    config = MyAppConfig.create("aap_gateway_api")
+    original_argv = sys.argv
+
+    try:
+        sys.argv = ["manage.py", "runserver"]
+        assert config._is_server_startup() is True
+    finally:
+        sys.argv = original_argv
+
+
+def test_is_server_startup_returns_false_for_management_commands():
+    import sys
+
+    from aap_gateway_api.apps import MyAppConfig
+
+    config = MyAppConfig.create("aap_gateway_api")
+    original_argv = sys.argv
+
+    try:
+        sys.argv = ["manage.py", "migrate"]
+        assert config._is_server_startup() is False
+
+        sys.argv = ["manage.py", "showmigrations"]
+        assert config._is_server_startup() is False
+
+        sys.argv = ["manage.py", "collectstatic"]
+        assert config._is_server_startup() is False
+    finally:
+        sys.argv = original_argv
+
+
+def test_is_server_startup_returns_true_when_uwsgi_available():
+    from unittest.mock import MagicMock
+
+    from aap_gateway_api.apps import MyAppConfig
+
+    config = MyAppConfig.create("aap_gateway_api")
+
+    # Mock uwsgi module being available
+    import sys
+
+    fake_uwsgi = MagicMock()
+    original_modules = sys.modules.copy()
+
+    try:
+        sys.modules["uwsgi"] = fake_uwsgi
+        assert config._is_server_startup() is True
+    finally:
+        sys.modules.clear()
+        sys.modules.update(original_modules)
