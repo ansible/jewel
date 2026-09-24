@@ -91,28 +91,32 @@ class PlainSerializerCleanTextMixin:
 
             stored = stored_values.get(field_name)
 
-            if isinstance(new_value, str):
-                # Top-level string value (CharField, URLField, etc.)
-                if new_value != stored:
-                    self._run_clean_text_validator(field_name, new_value, errors)
-            elif isinstance(new_value, list):
-                json_errors = self._validate_json_list(
-                    new_value,
-                    field_name=field_name,
-                    stored_data=stored,
-                )
-                if json_errors:
-                    errors[field_name] = json_errors
-            elif isinstance(new_value, dict):
-                json_errors = self._validate_json_dict(
-                    new_value,
-                    field_name=field_name,
-                    stored_data=stored,
-                )
-                if json_errors:
-                    errors[field_name] = json_errors
+            self._validate_field_value(field_name, new_value, stored, errors)
 
         return errors
+
+    def _validate_field_value(self, field_name, new_value, stored, errors):
+        """Dispatch validation for a single preference value by type."""
+        if isinstance(new_value, str):
+            # Top-level string value (CharField, URLField, etc.)
+            if new_value != stored:
+                self._run_clean_text_validator(field_name, new_value, errors)
+        elif isinstance(new_value, list):
+            json_errors = self._validate_json_list(
+                new_value,
+                field_name=field_name,
+                stored_data=stored,
+            )
+            if json_errors:
+                errors[field_name] = json_errors
+        elif isinstance(new_value, dict):
+            json_errors = self._validate_json_dict(
+                new_value,
+                field_name=field_name,
+                stored_data=stored,
+            )
+            if json_errors:
+                errors[field_name] = json_errors
 
     def _run_clean_text_validator(self, field_name, value, errors):
         """Apply Tier 2 free-text validation and collect errors."""
@@ -126,6 +130,27 @@ class PlainSerializerCleanTextMixin:
             if get_setting('ENHANCED_INPUT_VALIDATION_ENABLED', False):
                 errors[field_name] = [_INCOMPLETE_VALIDATION_MSG]
 
+    @staticmethod
+    def _get_stored_list_item(stored_data, idx):
+        """Retrieve item from stored list by index, or None if unavailable."""
+        if isinstance(stored_data, list) and idx < len(stored_data):
+            return stored_data[idx]
+        return None
+
+    @staticmethod
+    def _sanitize_dict_key(key):
+        """Sanitize a dictionary key for safe use in log messages."""
+        if isinstance(key, str):
+            return _LOG_CONTROL_RE.sub(lambda m: repr(m.group())[1:-1], key)
+        return key
+
+    @staticmethod
+    def _get_stored_dict_value(stored_data, key):
+        """Retrieve value from stored dict by key, or None if unavailable."""
+        if isinstance(stored_data, dict):
+            return stored_data.get(key)
+        return None
+
     def _validate_json_list(self, data, field_name="", stored_data=None, depth=0):
         """Validate string values inside a list, recursing into nested structures."""
         if depth >= self._MAX_JSON_DEPTH:
@@ -138,7 +163,7 @@ class PlainSerializerCleanTextMixin:
 
         errors = {}
         for idx, item in enumerate(data):
-            stored_item = stored_data[idx] if isinstance(stored_data, list) and idx < len(stored_data) else None
+            stored_item = self._get_stored_list_item(stored_data, idx)
             item_key = f"[{idx}]"
 
             if isinstance(item, str):
@@ -164,7 +189,7 @@ class PlainSerializerCleanTextMixin:
                 if nested:
                     errors.update(nested)
 
-        return errors or None
+        return errors
 
     def _validate_json_dict(self, data, field_name="", stored_data=None, key_prefix="", depth=0, errors=None):
         """Validate string values inside a dict, recursing into nested structures."""
@@ -186,9 +211,9 @@ class PlainSerializerCleanTextMixin:
             return errors
 
         for key, val in data.items():
-            safe_key = _LOG_CONTROL_RE.sub(lambda m: repr(m.group())[1:-1], key) if isinstance(key, str) else key
+            safe_key = self._sanitize_dict_key(key)
             qualified_key = f"{key_prefix}{safe_key}"
-            stored_val = stored_data.get(key) if isinstance(stored_data, dict) else None
+            stored_val = self._get_stored_dict_value(stored_data, key)
 
             if isinstance(val, str):
                 if val == stored_val:
@@ -213,7 +238,7 @@ class PlainSerializerCleanTextMixin:
                 if nested:
                     errors.update(nested)
 
-        return errors or None
+        return errors
 
     def _validate_json_string(self, val, qualified_key, errors, field_name):
         """Validate a single string leaf inside a JSON structure."""
@@ -385,6 +410,34 @@ class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serial
         """Return the set of preference names that are encrypted."""
         return frozenset(pref.name for pref in gateway_preference_registry.preferences(self.category_slug) if pref.encrypted)
 
+    def _run_clean_text_on_pending_saves(self, values_to_save):
+        """Build clean-text inputs from pending saves and run validation.
+
+        Skips encrypted preferences (their values should not be inspected)
+        and provides persisted values for grandfathering unchanged leaves.
+
+        Returns:
+            dict of field-name → error detail, or empty dict when all pass.
+        """
+        if not values_to_save:
+            return {}
+
+        encrypted_fields = self._build_encrypted_field_set()
+        changed_for_clean = {}
+        stored_for_clean = {}
+        for pref_name, save_info in values_to_save.items():
+            if pref_name in encrypted_fields:
+                continue
+            changed_for_clean[pref_name] = save_info['value']
+            # Use the persisted value captured before process_fields
+            # overwrote validated_fields with the submitted value.
+            stored_for_clean[pref_name] = save_info.get('persisted_value')
+
+        if not changed_for_clean:
+            return {}
+
+        return self._clean_text_validate(changed_for_clean, stored_for_clean)
+
     def validate_and_save(self, data: dict) -> dict:
         logger.info(f"Validating settings for section {self.category_slug if self.category_slug else 'all'}")
 
@@ -397,25 +450,11 @@ class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serial
         if errors:
             raise serializers.ValidationError(errors)
 
-        # CleanText validation: validate changed preference values before persisting.
-        # Build stored-values dict for grandfathering unchanged nested leaves,
-        # and skip encrypted preferences (their values should not be inspected).
-        if values_to_save:
-            encrypted_fields = self._build_encrypted_field_set()
-            changed_for_clean = {}
-            stored_for_clean = {}
-            for pref_name, save_info in values_to_save.items():
-                if pref_name in encrypted_fields:
-                    continue
-                changed_for_clean[pref_name] = save_info['value']
-                # Use the persisted value captured before process_fields
-                # overwrote validated_fields with the submitted value.
-                stored_for_clean[pref_name] = save_info.get('persisted_value')
-
-            if changed_for_clean:
-                clean_errors = self._clean_text_validate(changed_for_clean, stored_for_clean)
-                if clean_errors:
-                    raise serializers.ValidationError(clean_errors)
+        # CleanText validation on pending saves (skips encrypted prefs,
+        # uses persisted values for grandfathering).
+        clean_errors = self._run_clean_text_on_pending_saves(values_to_save)
+        if clean_errors:
+            raise serializers.ValidationError(clean_errors)
 
         # Since we have made it here w/o errors we are cleared to save the values
         for key, value in values_to_save.items():
