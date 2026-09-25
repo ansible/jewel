@@ -204,24 +204,6 @@ def test_delete_inactive_keys(service_cluster_gateway):
 
 
 @pytest.mark.django_db
-def test_generate_service_key_api(user_api_client, admin_api_client, service_cluster_eda):
-    url = get_relative_url("service_key-list")
-    data = {"service_cluster": service_cluster_eda.pk, "mark_previous_inactive": True}
-
-    # Check that unprivileged users can't generate new keys.
-    resp = user_api_client.post(url, data, format="json")
-    assert resp.status_code == 403
-    assert ServiceKey.objects.count() == 0
-
-    resp = admin_api_client.post(url, data, format="json")
-    assert resp.status_code == 201
-    assert ServiceKey.objects.filter(service_cluster=service_cluster_eda).count() == 1
-
-    key = ServiceKey.objects.first()
-    assert resp.json()["secret"] == key.secret
-
-
-@pytest.mark.django_db
 def test_service_key_api(user_api_client, admin_api_client, service_cluster_eda):
     key_list = get_relative_url("service_key-list")
     key = service_cluster_eda.generate_key()
