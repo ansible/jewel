@@ -10,6 +10,8 @@ tests use the enable_enhanced_validation fixture to enable it.
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
 
+from aap_gateway_api.utils import update_preference_value
+
 DANGEROUS_SCRIPT = '<script>alert(1)</script>'
 DANGEROUS_SHELL = '$(rm -rf /)'
 
@@ -389,8 +391,8 @@ class TestGrandfatheringPersistedValue:
         assert 'test_string_pref' in response.data
 
     def test_unchanged_nested_leaf_grandfathered_while_new_leaf_rejected(self, admin_api_client, register_preference):
-        """In a dict, an unchanged leaf should be grandfathered while a newly added
-        unsafe leaf is rejected."""
+        """In a dict, an unchanged unsafe persisted leaf should be grandfathered
+        while a newly added unsafe leaf is rejected."""
         register_preference(
             section="cleantext_test",
             preference_name="test_json_pref",
@@ -400,18 +402,22 @@ class TestGrandfatheringPersistedValue:
         )
 
         url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
-        # Set the preference to a dict with a safe value
+
+        # Seed an unsafe value directly, bypassing validation.
+        update_preference_value("cleantext_test", "test_json_pref", {"existing_key": DANGEROUS_SCRIPT}, validate=False)
+
+        # The persisted unsafe leaf is grandfathered while the new safe leaf is accepted.
         response = admin_api_client.put(
             url,
-            {'test_json_pref': {'existing_key': 'safe value'}},
+            {'test_json_pref': {'existing_key': DANGEROUS_SCRIPT, 'new_key': 'safe value'}},
             format='json',
         )
         assert response.status_code == 200
 
-        # Submit same existing key (grandfathered) plus a new unsafe key
+        # A new unsafe leaf is still rejected.
         response = admin_api_client.put(
             url,
-            {'test_json_pref': {'existing_key': 'safe value', 'new_key': DANGEROUS_SCRIPT}},
+            {'test_json_pref': {'existing_key': DANGEROUS_SCRIPT, 'new_key': DANGEROUS_SCRIPT}},
             format='json',
         )
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.data}"
