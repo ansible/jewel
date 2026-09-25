@@ -450,25 +450,11 @@ class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serial
         if errors:
             raise serializers.ValidationError(errors)
 
-        # CleanText validation: validate changed preference values before persisting.
-        # Build stored-values dict for grandfathering unchanged nested leaves,
-        # and skip encrypted preferences (their values should not be inspected).
-        if values_to_save:
-            encrypted_fields = self._build_encrypted_field_set()
-            changed_for_clean = {}
-            stored_for_clean = {}
-            for pref_name, save_info in values_to_save.items():
-                if pref_name in encrypted_fields:
-                    continue
-                changed_for_clean[pref_name] = save_info['value']
-                # Use the persisted value captured before process_fields
-                # overwrote validated_fields with the submitted value.
-                stored_for_clean[pref_name] = save_info.get('persisted_value')
-
-            if changed_for_clean:
-                clean_errors = self._clean_text_validate(changed_for_clean, stored_for_clean)
-                if clean_errors:
-                    raise serializers.ValidationError(clean_errors)
+        # CleanText validation on pending saves (skips encrypted prefs,
+        # uses persisted values for grandfathering).
+        clean_errors = self._run_clean_text_on_pending_saves(values_to_save)
+        if clean_errors:
+            raise serializers.ValidationError(clean_errors)
 
         # Since we have made it here w/o errors we are cleared to save the values
         for key, value in values_to_save.items():
