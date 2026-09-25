@@ -60,6 +60,7 @@ class ServiceOrchestrationMixin:
         service_api: ServiceAPIRoute,
         service_slug: str,
         user: AbstractUser,
+        force: bool = False,
     ) -> Tuple[bool, Optional[str]]:
         """Migrate data from a single service."""
         self.client = resources_client.GWResourceAPIClient(service_api, raise_if_bad_request=True, user=user)
@@ -90,7 +91,16 @@ class ServiceOrchestrationMixin:
         service_api.service_cluster.service_id = self.upstream_service_id
         service_api.service_cluster.save()
 
-        if self._is_service_already_synced():
+        if force:
+            self._log(
+                f"Force migration requested for service {service_slug} — bypassing the synchronization check.",
+                logging.WARNING,
+            )
+            should_migrate = True
+        else:
+            should_migrate = not self._is_service_already_synced(service_slug)
+
+        if not should_migrate:
             self._log(f"Service {service_slug} is already synchronized — skipping resource migration.", logging.INFO)
         else:
             self._log(
@@ -99,7 +109,7 @@ class ServiceOrchestrationMixin:
             )
 
             for r_type in self.resource_types_to_migrate.keys():
-                self.migrate_resource(r_type)
+                self.migrate_resource(r_type, force=force)
 
         self.migrate_role_assignments(service_slug, service_type_name)
 

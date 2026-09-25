@@ -7,3 +7,5 @@ aap-dev
 **/.venv
 **/venv
 **/.tox
+.venv-test
+**/.venv-*

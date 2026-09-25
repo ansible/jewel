@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import requests
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
@@ -10,7 +10,86 @@ from django.db import transaction
 
 
 class ResourceMigrationMixin:
-    def _is_service_already_synced(self) -> bool:
+    def _resource_type_names(self) -> List[str]:
+        """Return resource type names for both production and unit-test configurations."""
+        if hasattr(self.resource_types_to_migrate, "keys"):
+            return list(self.resource_types_to_migrate.keys())
+        return list(self.resource_types_to_migrate)
+
+    def _iter_gateway_resource_pages(self, resource_type_name: str) -> Iterator[List[Dict[str, Any]]]:
+        """Yield all upstream pages for resources of a given type."""
+        resources_seen = 0
+        page = 1
+        while True:
+            data = self.client.list_resources(
+                filters={
+                    **self.RESOURCE_DATA_FILTERS,
+                    "content_type__resource_type__name": resource_type_name,
+                    "is_partially_migrated": "false",
+                    "page": page,
+                }
+            ).json()
+            page_results = data.get("results", [])
+            resources_seen += len(page_results)
+            yield page_results
+
+            # Normally ``next`` tells us when to stop. The count fallback also
+            # handles services that return more resources than fit in the first
+            # page but omit a next link.
+            if not page_results or (not data.get("next") and resources_seen >= data.get("count", 0)):
+                return
+            page += 1
+
+    def _missing_gateway_resources_from_page(
+        self,
+        page_results: List[Dict[str, Any]],
+        resource_type_name: str,
+        gateway_service_id: str,
+        gateway_resource_ids: set[str],
+    ) -> List[Dict[str, Any]]:
+        """Return Gateway-owned upstream resources that are absent locally."""
+        missing_resources = []
+        for resource in page_results:
+            if str(resource.get("service_id")) != gateway_service_id:
+                continue
+            if resource_type_name == SHARED_USER_RESOURCE_TYPE and resource.get("name") == settings.SYSTEM_USERNAME:
+                continue
+            if str(resource.get("ansible_id")) not in gateway_resource_ids:
+                missing_resources.append(resource)
+        return missing_resources
+
+    def _find_missing_gateway_resources(self, resource_type_name: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Find upstream resources marked as Gateway-owned but missing locally.
+
+        A migrated resource changes its upstream ``service_id`` to Gateway's ID.
+        Therefore, checking only for resources still owned by the upstream service
+        cannot detect a partial migration after that rewrite has happened.
+        """
+        resource_type_names = [resource_type_name] if resource_type_name else self._resource_type_names()
+        gateway_service_id = str(service_id())
+        missing: Dict[str, List[Dict[str, Any]]] = {}
+
+        for current_resource_type in resource_type_names:
+            gateway_resource_ids = {
+                str(ansible_id)
+                for ansible_id in Resource.objects.filter(
+                    service_id=service_id(),
+                    content_type__resource_type__name=current_resource_type,
+                ).values_list("ansible_id", flat=True)
+            }
+
+            missing_resources: List[Dict[str, Any]] = []
+            for page_results in self._iter_gateway_resource_pages(current_resource_type):
+                missing_resources.extend(
+                    self._missing_gateway_resources_from_page(page_results, current_resource_type, gateway_service_id, gateway_resource_ids)
+                )
+
+            if missing_resources:
+                missing[current_resource_type] = missing_resources
+
+        return missing
+
+    def _is_service_already_synced(self, service_slug: str) -> bool:
         """Check if all migratable resource types for the current service have already been migrated."""
         response = self.client.list_resources(
             filters={
@@ -37,6 +116,15 @@ class ResourceMigrationMixin:
                 logging.WARNING,
             )
             return False
+
+        missing_gateway_resources = self._find_missing_gateway_resources()
+        if missing_gateway_resources:
+            missing_count = sum(len(resources) for resources in missing_gateway_resources.values())
+            self._log(
+                f"Resource audit for service {service_slug} found {missing_count} upstream resources marked as Gateway-owned but missing in Gateway. "
+                "This may indicate a partial migration; rerun with --force to recover.",
+                logging.WARNING,
+            )
 
         return True
 
@@ -235,7 +323,8 @@ class ResourceMigrationMixin:
             bulk_item["resource_data"] = updated_service_resource["resource_data"]
         return bulk_item
 
-    MAX_BULK_CHUNK_SIZE = 1000
+    # Keep requests below the upstream Controller bulk-update timeout.
+    MAX_BULK_CHUNK_SIZE = 100
     MAX_TRANSIENT_RETRIES = 3
     TRANSIENT_STATUS_CODES = {502, 503, 504}
 
@@ -245,7 +334,7 @@ class ResourceMigrationMixin:
     def _send_bulk_update(self, bulk_update_items: List[Dict[str, Any]]) -> int:
         """Send bulk update to upstream and return the number of successfully updated items.
 
-        Items are chunked to respect the upstream MAX_BULK_SIZE limit (1000).
+        Items are chunked according to the configured bulk-update chunk size.
         Transient HTTP errors (502/503/504, network errors) are retried with
         exponential backoff. Permanent errors (4xx) fail immediately.
         Per-item errors from successful responses are logged as warnings.
@@ -462,7 +551,21 @@ class ResourceMigrationMixin:
         # No items to update upstream (results was empty or all filtered out).
         return 0
 
-    def migrate_resource(self, resource_type_name: str) -> None:
+    def _recover_missing_gateway_resources(self, resource_type_name: str, resource_context: Dict[str, Any]) -> None:
+        """Process resources marked as Gateway-owned but missing locally."""
+        missing_resources = self._find_missing_gateway_resources(resource_type_name).get(resource_type_name, [])
+        if not missing_resources:
+            return
+
+        self._log(
+            f"Recovering {len(missing_resources)} {resource_type_name} resource(s) already marked as Gateway-owned but missing locally.",
+            logging.WARNING,
+        )
+        for start in range(0, len(missing_resources), self.MAX_BULK_CHUNK_SIZE):
+            chunk = missing_resources[start : start + self.MAX_BULK_CHUNK_SIZE]
+            self._process_resource_page_batch(chunk, resource_context)
+
+    def migrate_resource(self, resource_type_name: str, force: bool = False) -> None:
         """
         Migrate all resources of a specific type from upstream service to Gateway.
 
@@ -556,3 +659,6 @@ class ResourceMigrationMixin:
                     logging.WARNING,
                 )
             self._log_progress(progress_label, resource_processed, resource_total)
+
+        if force:
+            self._recover_missing_gateway_resources(resource_type_name, resource_context)
