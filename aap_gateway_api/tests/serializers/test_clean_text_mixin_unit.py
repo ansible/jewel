@@ -27,6 +27,7 @@ class _TestMixinSerializer(PlainSerializerCleanTextMixin, serializers.Serializer
     test_field = serializers.CharField(required=False)
     test_list = serializers.ListField(required=False)
     test_json = serializers.JSONField(required=False)
+    custom_login_info = serializers.CharField(required=False)
 
 
 @pytest.fixture
@@ -247,6 +248,40 @@ class TestValidateJsonList:
         result = mixin_instance._validate_json_list(data, field_name="deep")
         assert result  # non-empty means depth-limit error was raised
 
+    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
+    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
+    def test_key_prefix_propagated_to_item_keys(self, _gs, _vft, mixin_instance):
+        """When key_prefix is provided, item keys include the prefix."""
+        result = mixin_instance._validate_json_list(
+            ["bad"],
+            field_name="f",
+            key_prefix="outer_key",
+        )
+        assert "outer_key[0]" in result
+
+    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
+    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
+    def test_nested_list_keys_do_not_collide(self, _gs, _vft, mixin_instance):
+        """Nested lists produce distinct error keys for each branch."""
+        result = mixin_instance._validate_json_list(
+            [["bad_a"], ["bad_b"]],
+            field_name="f",
+        )
+        # Each inner list item should have a unique key: [0][0] and [1][0]
+        assert "[0][0]" in result
+        assert "[1][0]" in result
+
+    def test_depth_limit_uses_key_prefix(self, mixin_instance):
+        """When key_prefix is provided, depth-limit error uses the prefix."""
+        result = mixin_instance._validate_json_list(
+            ["anything"],
+            field_name="pref",
+            depth=mixin_instance._MAX_JSON_DEPTH,
+            key_prefix="parent[0]",
+        )
+        assert "parent[0]" in result
+        assert result["parent[0]"] == [_INCOMPLETE_VALIDATION_MSG]
+
 
 # ===================================================================
 # 4. _validate_json_dict: recursion, depth limit, grandfathering
@@ -307,6 +342,16 @@ class TestValidateJsonDict:
             field_name="f",
         )
         mock_vft.assert_called_once_with("val")
+
+    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
+    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
+    def test_list_inside_dict_errors_include_dict_key(self, _gs, _vft, mixin_instance):
+        """Error keys for list items inside a dict include the dict key prefix."""
+        result = mixin_instance._validate_json_dict(
+            {"settings": ["bad_value"]},
+            field_name="f",
+        )
+        assert "settings[0]" in result
 
     def test_deeply_nested_dict_hits_depth_limit(self, mixin_instance):
         payload = current = {}

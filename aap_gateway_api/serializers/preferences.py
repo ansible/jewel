@@ -151,7 +151,7 @@ class PlainSerializerCleanTextMixin:
             return stored_data.get(key)
         return None
 
-    def _validate_json_list(self, data, field_name="", stored_data=None, depth=0):
+    def _validate_json_list(self, data, field_name="", stored_data=None, depth=0, key_prefix=""):
         """Validate string values inside a list, recursing into nested structures."""
         if depth >= self._MAX_JSON_DEPTH:
             logger.warning(
@@ -159,12 +159,13 @@ class PlainSerializerCleanTextMixin:
                 self._MAX_JSON_DEPTH,
                 field_name,
             )
-            return {field_name: [_INCOMPLETE_VALIDATION_MSG]}
+            error_key = key_prefix.rstrip('.') if key_prefix else field_name
+            return {error_key: [_INCOMPLETE_VALIDATION_MSG]}
 
         errors = {}
         for idx, item in enumerate(data):
             stored_item = self._get_stored_list_item(stored_data, idx)
-            item_key = f"[{idx}]"
+            item_key = f"{key_prefix.rstrip('.')}[{idx}]" if key_prefix else f"[{idx}]"
 
             if isinstance(item, str):
                 if item == stored_item:
@@ -185,6 +186,7 @@ class PlainSerializerCleanTextMixin:
                     field_name=field_name,
                     stored_data=stored_item,
                     depth=depth + 1,
+                    key_prefix=item_key,
                 )
                 if nested:
                     errors.update(nested)
@@ -234,6 +236,7 @@ class PlainSerializerCleanTextMixin:
                     field_name=field_name,
                     stored_data=stored_val,
                     depth=depth + 1,
+                    key_prefix=qualified_key,
                 )
                 if nested:
                     errors.update(nested)
