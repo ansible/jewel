@@ -167,9 +167,7 @@ class PlainSerializerCleanTextMixin:
             stored_item = self._get_stored_list_item(stored_data, idx)
             item_key = f"{key_prefix.rstrip('.')}[{idx}]" if key_prefix else f"[{idx}]"
 
-            if isinstance(item, str):
-                if item == stored_item:
-                    continue
+            if isinstance(item, str) and item != stored_item:
                 self._validate_json_string(item, item_key, errors, field_name)
             elif isinstance(item, dict):
                 self._validate_json_dict(
