@@ -5,18 +5,15 @@ serializers so ``_protected_models`` is populated. See DAB
 ``docs/lib/validation_bypass_observability.md``.
 """
 
-from ansible_base.lib.utils.validation_signals import (
-    extend_caller_allowlist_prefixes,
-    extend_internal_caller_prefixes,
-    register_validation_signals,
-)
+from ansible_base.lib.utils.validation_signals import extend_caller_allowlist_prefixes, extend_internal_caller_prefixes, register_validation_signals
 
 
 def _import_registry_serializers() -> None:
     """Load CleanTextMixin serializers (Gateway + shared DAB API models)."""
-    import aap_gateway_api.serializers  # noqa: F401
     import ansible_base.authentication.serializers  # noqa: F401
     import ansible_base.rbac.api.serializers  # noqa: F401
+
+    import aap_gateway_api.serializers  # noqa: F401
 
 
 def configure_validation_bypass_observability() -> None:
