@@ -174,6 +174,31 @@ class TestValidateFieldValue:
         mixin_instance._validate_field_value("my_dict", {"k": "evil"}, None, errors)
         assert "my_dict" in errors
 
+    def test_over_depth_list_error_shape(self, mixin_instance):
+        """Over-depth list via _validate_field_value produces the correct nested error shape."""
+        data = current = []
+        for _ in range(12):
+            child = []
+            current.append(child)
+            current = child
+        current.append("leaf")
+
+        errors = {}
+        mixin_instance._validate_field_value("my_list", data, None, errors)
+
+        # The outer key is the field name.
+        assert "my_list" in errors
+        inner = errors["my_list"]
+
+        # The inner dict contains a nesting-path key (not a duplicate field_name key).
+        assert isinstance(inner, dict)
+        assert "my_list" not in inner, "depth-limit error must not double-nest under field_name"
+
+        # Exactly one path key carrying the incomplete-validation message.
+        assert len(inner) == 1
+        path_key = next(iter(inner))
+        assert inner[path_key] == [_INCOMPLETE_VALIDATION_MSG]
+
 
 # ===================================================================
 # 3. _validate_json_list: recursion, depth limit, grandfathering

@@ -34,12 +34,12 @@ _CLEAN_TEXT_EXCLUDED_FIELDS = frozenset({'custom_login_info', 'custom_logo'})
 
 
 class _PreferenceModelStub:
-    """Minimal stand-in for Meta.model used by audit-log messages.
+    """Minimal namespace providing ``_meta.app_label`` and ``_meta.object_name``.
 
-    CleanTextMixin's ``_log_validation_failure`` reads
-    ``self.Meta.model._meta.app_label`` and ``_meta.object_name``.
-    SettingSectionSerializer has no real Django model, so this stub
-    provides just enough surface area for the log line.
+    ``_log_clean_text_failure`` references ``_PreferenceModelStub._meta``
+    directly (class-level access) to build the resource-type string for
+    audit-log messages.  SettingSectionSerializer has no real Django model,
+    so this stub supplies just enough surface area for the log line.
     """
 
     class _meta:
@@ -51,11 +51,12 @@ class PlainSerializerCleanTextMixin:
     """CleanTextMixin adaptation for plain (non-ModelSerializer) serializers.
 
     Instead of introspecting Django model fields via ``model._meta.get_fields()``,
-    this mixin classifies DRF serializer fields by their type:
+    this mixin dispatches validation based on the **runtime type** of each
+    submitted value:
 
-    * **text fields** — ``CharField``, ``URLField`` → Tier 2 ``validate_free_text``
-    * **list/JSON fields** — ``ListField``, ``JSONField`` (including ``JSONListField``)
-      → recurse into string leaves with ``validate_free_text``
+    * ``str`` → Tier 2 ``validate_free_text`` (skipped when unchanged)
+    * ``list`` → recurse into elements; validate string leaves
+    * ``dict`` → recurse into values; validate string leaves
 
     The mixin is designed for ``SettingSectionSerializer`` where fields are
     dynamically generated from the preference registry rather than a model.
@@ -279,10 +280,6 @@ class SettingSectionListSerializer(serializers.Serializer):
 
 class SettingSectionSerializer(PlainSerializerCleanTextMixin, serializers.Serializer):
     # This is the serializer for a given category (like /api/gateway/v1/settings/all)
-
-    class Meta:
-        # Fake model stand-in for audit log messages and OPTIONS metadata.
-        model = _PreferenceModelStub
 
     def __init__(self, category_slug=None, *args, **kwargs):
         if category_slug == 'all':

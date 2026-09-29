@@ -340,6 +340,33 @@ class TestDepthLimitPropagation:
         assert response.status_code == 400, f"Expected 400 for over-depth dict, got {response.status_code}: {response.data}"
         assert 'test_json_pref' in response.data
 
+    def test_over_depth_list_rejected(self, admin_api_client, register_preference):
+        """A deeply nested list that exceeds _MAX_JSON_DEPTH must return 400."""
+        register_preference(
+            section="cleantext_test",
+            preference_name="test_list_pref",
+            default=[],
+            preference_type="string_list",
+            encrypted=False,
+        )
+
+        # Build a list nested beyond the depth limit (default 10).
+        payload = current = []
+        for _ in range(12):
+            child = []
+            current.append(child)
+            current = child
+        current.append("leaf")
+
+        url = get_relative_url('setting-section-list', kwargs={'category_slug': 'cleantext_test'})
+        response = admin_api_client.put(
+            url,
+            {'test_list_pref': payload},
+            format='json',
+        )
+        assert response.status_code == 400, f"Expected 400 for over-depth list, got {response.status_code}: {response.data}"
+        assert 'test_list_pref' in response.data
+
 
 # ---------------------------------------------------------------------------
 # 8. Grandfathering uses persisted value, not submitted value
