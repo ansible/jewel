@@ -13,6 +13,12 @@ OPENAPI_ONLY_ACTIONS = {
     "/api/gateway/v1/service_keys/": {"POST"},
 }
 
+# Actions with an explicit OpenAPI schema that do not use the standard OPTIONS
+# serializer for request validation.
+MANUAL_SCHEMA_ACTIONS = {
+    "/api/gateway/v1/service-index/resources/bulk-update/": {"POST"},
+}
+
 
 # Ignores non-existent objects and returns full OPTIONS metadata anyway
 def determine_actions(self, request, view):
@@ -183,6 +189,10 @@ def test_request_objects(loaded_apis):
     for endpoint in loaded_apis.openapi_endpoints:
         for action in loaded_apis.openapi_schemas[endpoint].keys():
             if action in OPENAPI_ONLY_ACTIONS.get(endpoint, set()):
+                continue
+            if action in MANUAL_SCHEMA_ACTIONS.get(endpoint, set()):
+                # This action validates its envelope manually and does not use
+                # the standard OPTIONS serializer.
                 continue
             # Check params
             if loaded_apis.openapi_schemas[endpoint][action]:
