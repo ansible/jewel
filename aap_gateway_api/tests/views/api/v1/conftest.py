@@ -7,7 +7,7 @@ from aap_gateway_api.models import Organization, Team, User
 
 @pytest.mark.parametrize('user_type', ['unauthenticated', 'user', 'platform_auditor', 'superuser'])
 class TestPermissionsBase:
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(autouse=True)
     def init_api_client(self, user_type, unauthenticated_api_client, user_api_client, user):
         if user_type in ['platform_auditor', 'superuser']:
             user.is_platform_auditor = user_type == 'platform_auditor'

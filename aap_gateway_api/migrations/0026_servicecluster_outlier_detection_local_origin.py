@@ -26,7 +26,7 @@ def unset_local_origin_outlier_defaults(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('aap_gateway_api', '0025_servicecluster_health_check_interval_default'),
+        ('aap_gateway_api', '0022_usersessionmembership'),
     ]
 
     operations = [

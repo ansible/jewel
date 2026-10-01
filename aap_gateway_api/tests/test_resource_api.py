@@ -194,8 +194,9 @@ class TestGatewayRoleDefinitionType:
         }
 
         # The serializer should not be valid due to DoesNotExist error
+        role_definition_type = ResourceType.objects.get(name='shared.roledefinition')
         with pytest.raises(DABPermission.DoesNotExist):
-            Resource.create_resource(resource_type=ResourceType.objects.get(name='shared.roledefinition'), resource_data=data)
+            Resource.create_resource(resource_type=role_definition_type, resource_data=data)
 
     def test_update_role_definition_basic_merge(self, role_definition, shared_permissions, awx_permissions):
         """Test updating a role definition with nuanced behavior (shared + awx = 2 services)"""
@@ -403,18 +404,18 @@ class TestGatewayRoleDefinitionType:
     def test_field_level_validation_edge_cases(self, shared_permissions):
         """Test edge cases in field-level validation"""
         # Test with None permissions
+        serializer = GatewayRoleDefinitionType(data={'permissions': None})
         with pytest.raises(ValidationError):
-            serializer = GatewayRoleDefinitionType(data={'permissions': None})
             serializer.is_valid(raise_exception=True)
 
         # Test with non-list permissions
+        serializer = GatewayRoleDefinitionType(data={'permissions': 'not-a-list'})
         with pytest.raises(ValidationError):
-            serializer = GatewayRoleDefinitionType(data={'permissions': 'not-a-list'})
             serializer.is_valid(raise_exception=True)
 
         # Test with mixed valid and invalid permissions
+        serializer = GatewayRoleDefinitionType(data={'permissions': ['shared.view_organization', 'invalid.permission']})
         with pytest.raises(DABPermission.DoesNotExist):
-            serializer = GatewayRoleDefinitionType(data={'permissions': ['shared.view_organization', 'invalid.permission']})
             serializer.is_valid(raise_exception=True)
 
     def test_performance_with_many_permissions(self, organization_content_type):

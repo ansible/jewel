@@ -158,7 +158,7 @@ class SettingSectionSerializer(serializers.Serializer):
         validated_fields, errors, values_to_save = self.process_fields(data)
         # Search for user sending us additional random data
         if data.keys() != validated_fields.keys():
-            for additional_key in list(set(data.keys()) - set(validated_fields.keys())):
+            for additional_key in set(data.keys()) - set(validated_fields.keys()):
                 errors[additional_key] = _("Invalid key for category %(category_slug)s") % {"category_slug": self.category_slug}
 
         if errors:

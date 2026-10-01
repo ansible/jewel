@@ -83,7 +83,7 @@ class TestPlatformAuditorSync:
 class TestUserPermissionsBase:
     ROLE_NAME = "---"
 
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(autouse=True)
     def init_db(self, users, teams, organizations):
         associate_users(users, teams, organizations)
 

@@ -9,6 +9,10 @@ on:
       - 'requirements/requirements.txt'
       - 'requirements/requirements_test.txt'
       - 'requirements/requirements_dev.txt'
+      - 'requirements/requirements_ci.in'
+      - 'requirements/requirements_ci.txt'
+      - 'requirements/requirements_test_ci.in'
+      - 'requirements/requirements_test_ci.txt'
       - 'tools/docker/Containerfile.ci'
   workflow_dispatch:
   schedule:

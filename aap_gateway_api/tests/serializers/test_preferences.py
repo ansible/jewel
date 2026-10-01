@@ -64,13 +64,15 @@ def test_secret_field_retains_original_value_when_passed_encrypted_marker(admin_
 
     preference_1 = Preference.objects.get(section="general", name="preference_1")
     preference_2 = Preference.objects.get(section="general", name="preference_2")
-    assert preference_1.value == 'one' and preference_2.value == 'two'
+    assert preference_1.value == 'one'
+    assert preference_2.value == 'two'
 
     url = get_relative_url('setting-section-list', kwargs={'category_slug': 'all'})
 
     # check that the value is encrypted on the API
     get_res = admin_api_client.get(url)
-    assert get_res.data["preference_1"] == ENCRYPTED_STRING and get_res.data["preference_2"] == ENCRYPTED_STRING
+    assert get_res.data["preference_1"] == ENCRYPTED_STRING
+    assert get_res.data["preference_2"] == ENCRYPTED_STRING
 
     # now, update preference_1 with a normal value
     # and preference_2 with the encrypted marker

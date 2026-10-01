@@ -263,7 +263,7 @@ def mock_controller_client(service_api_route_controller):
         ):
             return cmd._collect_controller_superusers(service_api_route_controller, admin_user)
 
-    yield mock_client, run
+    return mock_client, run
 
 
 @pytest.mark.django_db

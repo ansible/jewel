@@ -10,14 +10,14 @@ from rest_framework import status
 from aap_gateway_api.signals.preloaded_data import toggle_install_time_flags
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def runtime_feature_flags_enabled():
     """Fixture to enable runtime feature flags for tests that require it."""
     with override_settings(RUNTIME_FEATURE_FLAGS=True):
         yield
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def runtime_feature_flags_disabled():
     """Fixture to disable runtime feature flags for tests that require it."""
     with override_settings(RUNTIME_FEATURE_FLAGS=False):
@@ -240,7 +240,8 @@ def test_feature_flag_detail_and_metadata(admin_api_client):
     assert flag['toggle_type'] in ['install-time', 'run-time'], "toggle_type should be valid enum per test plan"
     assert flag['support_level'] in ['DEVELOPER_PREVIEW', 'TECHNOLOGY_PREVIEW'], "support_level should be valid enum per test plan"
     assert flag['condition'] in ['boolean', 'param'], "condition should be valid type per test plan"
-    assert isinstance(flag['name'], str) and len(flag['name']) > 0, "name should be non-empty string per test plan"
+    assert isinstance(flag['name'], str)
+    assert len(flag['name']) > 0, "name should be non-empty string per test plan"
     assert isinstance(flag['ui_name'], str), "ui_name should be string per test plan"
     assert isinstance(flag['description'], str), "description should be string per test plan"
     assert isinstance(flag['support_url'], str) or flag['support_url'] is None, "support_url should be string or null per test plan"

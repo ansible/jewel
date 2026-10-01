@@ -43,7 +43,7 @@ class Command(BaseCommand):
             self.stdout.write(f'Creating cluster for {service_type}')
             service, _ = ServiceCluster.objects.get_or_create(name=service_type.name, service_type=service_type)
 
-            api_route, _ = ServiceAPIRoute.objects.update_or_create(
+            ServiceAPIRoute.objects.update_or_create(
                 service_cluster=service,
                 defaults={
                     "name": f"{name} api",

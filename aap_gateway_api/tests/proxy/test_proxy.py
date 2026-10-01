@@ -118,12 +118,12 @@ def test_get_drf_request(method, host, path, body, headers):
 
 @pytest.fixture
 def ext_auth():
-    yield ExternalAuth()
+    return ExternalAuth()
 
 
 @pytest.fixture
 def _ext_auth():
-    yield _ExternalAuth()
+    return _ExternalAuth()
 
 
 class MockSessionAuth(SessionAuthentication):

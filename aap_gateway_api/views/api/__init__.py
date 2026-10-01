@@ -30,5 +30,5 @@ class GatewayRootView(AnsibleBaseView):
         v1 = get_relative_url('api_gateway_v1_root_view')
         data = OrderedDict()
         data['current_version'] = v1
-        data['available_versions'] = dict(v1=v1)
+        data['available_versions'] = {'v1': v1}
         return Response(data)
