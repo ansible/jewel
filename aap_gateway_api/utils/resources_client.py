@@ -196,6 +196,15 @@ class AllServicesClient(GWResourceAPIClient):
         except Exception as e:
             logger.exception(f"Error in async request for service {service.pk}: {e}")
             response = None
+
+        if response is not None and not 200 <= response.status_code < 300:
+            logger.warning(
+                'Resource sync to service %s failed: HTTP %s: %s',
+                service.pk,
+                response.status_code,
+                response.text,
+            )
+
         if callback:
             try:
                 callback(service, response)
