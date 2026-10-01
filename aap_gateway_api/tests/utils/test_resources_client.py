@@ -139,6 +139,23 @@ class TestAsyncWorker:
         mock_logger.exception.assert_called_once()
         callback.assert_called_once_with(mock_service, None)
 
+    def test_failed_response_logs_service_status_and_body(self, client, mock_service):
+        """A rejected service request records the diagnostic response body."""
+        response = mock.MagicMock(status_code=400, text='invalid assignment')
+
+        with (
+            mock.patch.object(client, '_make_service_request', return_value=(mock_service.pk, response)),
+            mock.patch('aap_gateway_api.utils.resources_client.logger') as mock_logger,
+        ):
+            client._async_worker(mock_service, 'POST', '/assign/', {}, None, 'jwt', None)
+
+        mock_logger.warning.assert_called_once_with(
+            'Resource sync to service %s failed: HTTP %s: %s',
+            mock_service.pk,
+            400,
+            'invalid assignment',
+        )
+
     def test_no_callback_does_not_error(self, client, mock_service):
         """No callback is fine — just runs the request."""
         mock_resp = mock.MagicMock(status_code=200)
