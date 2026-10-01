@@ -262,6 +262,7 @@ class PlainSerializerCleanTextMixin:
             reason = '; '.join(str(d) for d in detail)
         else:
             reason = str(detail)
+        reason = _LOG_CONTROL_RE.sub(lambda m: repr(m.group())[1:-1], reason)
         logger.warning(
             "Validation rejected '%s' on %s: %s",
             field_name,

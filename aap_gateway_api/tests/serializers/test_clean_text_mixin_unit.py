@@ -477,6 +477,16 @@ class TestLogCleanTextFailure:
         call_args = mock_logger.warning.call_args
         assert "single error" in call_args[0][3]
 
+    @patch("aap_gateway_api.serializers.preferences.logger")
+    def test_control_chars_in_detail_sanitized(self, mock_logger, mixin_instance):
+        """Control characters in validation detail are escaped before logging."""
+        mixin_instance._log_clean_text_failure("field", ["err\x00one", "err\x1ftwo"])
+        mock_logger.warning.assert_called_once()
+        reason = mock_logger.warning.call_args[0][3]
+        assert "\x00" not in reason
+        assert "\x1f" not in reason
+        assert "err" in reason
+
 
 # ===================================================================
 # 8. _clean_text_validate: gating and field filtering
