@@ -2,19 +2,94 @@
 
 if [ $# -lt 2 ]; then
     echo "Usage:"
-    echo "    auto-reload directory command"
+    echo "    auto-reload command path [path ...]"
     exit 1
 fi
 
-last_reload=$(date +%s)
+command=$1
+shift
 
-inotifywait -mrq -e create,delete,attrib,close_write,move --exclude '(.*/tests/.*|.*/migrations/.*)' "$1" | while read -r file; do
-   this_reload=$(date +%s)
-   since_last=$((this_reload-last_reload))
-   if [[ $file =~ ^[^.].*\.py$ ]] && [[ $since_last -gt 1 ]]; then
-      echo "File changed: $file"
-      echo "Running command: $2"
-      eval "$2"
-      last_reload=$(date +%s)
-   fi
+paths=()
+for path in "$@"; do
+    if [[ -e $path ]]; then
+        paths+=("$path")
+    else
+        echo "Skipping missing watch path: $path" >&2
+    fi
 done
+
+if [[ ${#paths[@]} -eq 0 ]]; then
+    echo "No watch paths exist" >&2
+    exit 1
+fi
+
+set -- "${paths[@]}"
+
+reload() {
+    echo "Files changed: $1"
+    echo "Running command: $command"
+    eval "$command"
+}
+
+mount_type() {
+    findmnt -n -o FSTYPE -T "$1" 2>/dev/null || stat -f -c '%T' "$1"
+}
+
+watch_mode=${AUTO_RELOAD_MODE:-auto}
+
+if [[ $watch_mode == auto ]]; then
+    watch_mode=inotify
+
+    for path in "$@"; do
+        case "$(mount_type "$path")" in
+            fuse*|9p|virtiofs)
+                watch_mode=poll
+                break
+                ;;
+        esac
+    done
+fi
+
+case "$watch_mode" in
+    inotify)
+        last_reload=$(date +%s)
+
+        inotifywait -mrq -e create,delete,attrib,close_write,move --exclude '(.*/tests/.*|.*/migrations/.*)' "$@" | while read -r file; do
+            this_reload=$(date +%s)
+            since_last=$((this_reload-last_reload))
+
+            if [[ ( $file == *.py || $file == */tools/configs/* || $file == */tools/generated/* ) && $since_last -gt 1 ]]; then
+                reload "$file"
+                last_reload=$(date +%s)
+            fi
+        done
+        ;;
+    poll)
+        poll_interval=${AUTO_RELOAD_POLL_INTERVAL:-1}
+
+        snapshot() {
+            find "$@" \
+                -type d \( -path '*/tests' -o -path '*/migrations' \) -prune -o \
+                -type f \( -name '*.py' -o -path '*/tools/configs/*' -o -path '*/tools/generated/*' \) \
+                -printf '%T@:%s:%p\n' | LC_ALL=C sort | sha256sum
+        }
+
+        previous_snapshot=$(snapshot "$@")
+        echo "Using polling watcher for shared filesystem"
+
+        while true; do
+            sleep "$poll_interval"
+            current_snapshot=$(snapshot "$@")
+
+            if [[ $current_snapshot != "$previous_snapshot" ]]; then
+                reload "watched paths"
+                previous_snapshot=$current_snapshot
+                last_reload=$(date +%s)
+            fi
+        done
+        ;;
+    *)
+        echo "Invalid AUTO_RELOAD_MODE: $watch_mode (expected auto, inotify, or poll)" >&2
+        exit 1
+        ;;
+esac
