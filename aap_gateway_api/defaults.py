@@ -398,6 +398,23 @@ ANSIBLE_BASE_MANAGED_ROLE_REGISTRY = {
     'team_admin': {},
     'org_admin': {},
     'org_member': {},
+    'automation_dashboard_viewer': {
+        'shortname': 'custom',
+        'name': 'Automation Dashboard Viewer',
+        'description': 'Can view the automation dashboard for an organization',
+        'model_name': 'aap_gateway_api.Organization',
+        'permission_list': ['shared.view_automation_dashboard'],
+    },
+    'automation_dashboard_editor': {
+        'shortname': 'custom',
+        'name': 'Automation Dashboard Editor',
+        'description': 'Can view and edit automation dashboard settings for an organization',
+        'model_name': 'aap_gateway_api.Organization',
+        'permission_list': ['shared.view_automation_dashboard', 'shared.change_automation_dashboard'],
+    },
+}
+ALLOW_SHARED_RESOURCE_CUSTOM_ROLE_PERMISSIONS = {
+    'shared.organization': ['shared.view_automation_dashboard', 'shared.change_automation_dashboard'],
 }
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'aap_gateway_api.Organization'
 ANSIBLE_BASE_PRODUCT_NAME = 'Jewel'
