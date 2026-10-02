@@ -125,6 +125,12 @@ class Command(
             help="Force migration to run even if it has already completed. Useful for testing and benchmarking.",
             default=False,
         )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Force migration for every service, bypassing the per-service synchronization check. Use to recover from a partial migration.",
+            default=False,
+        )
 
     def _warn_ignored_flags(self, options: dict) -> None:
         if options.get("api_slug"):
@@ -158,7 +164,7 @@ class Command(
         self._warn_ignored_flags(options)
         self._configure_logging(options.get("log_file"))
 
-        if MigrateServiceDataHasRan.has_migration_completed() and not options.get("rerun"):
+        if MigrateServiceDataHasRan.has_migration_completed() and not (options.get("rerun") or options.get("force")):
             self._log("Migration has already completed. Skipping.", logging.INFO)
             return
 
@@ -220,7 +226,7 @@ class Command(
         self._merge_partially_migrated_users(service_apis, user)
 
         # Process each service and report results
-        successful_services, failed_services = self._process_all_services(service_apis, user)
+        successful_services, failed_services = self._process_all_services(service_apis, user, force=options.get("force", False))
         self._report_migration_summary(service_apis, successful_services, failed_services)
 
         self._ensure_superuser_consistency(service_apis, user)
@@ -229,7 +235,12 @@ class Command(
         MigrateServiceDataHasRan.mark_migration_completed()
         self._log("Migration flag updated: Service authentication is now enabled.", logging.INFO)
 
-    def _process_all_services(self, service_apis: List[ServiceAPIRoute], user: AbstractUser) -> Tuple[List[str], Dict[str, str]]:
+    def _process_all_services(
+        self,
+        service_apis: List[ServiceAPIRoute],
+        user: AbstractUser,
+        force: bool = False,
+    ) -> Tuple[List[str], Dict[str, str]]:
         """Process migration for all services, returning success/failure lists."""
         successful_services: List[str] = []
         failed_services: Dict[str, str] = {}
@@ -240,7 +251,7 @@ class Command(
             self._log(f"\n=== Processing service: {service_slug} ({service_idx}/{total_services}) ===", logging.INFO)
 
             try:
-                success, error_msg = self._migrate_single_service(service_api, service_slug, user)
+                success, error_msg = self._migrate_single_service(service_api, service_slug, user, force=force)
                 if success:
                     successful_services.append(service_slug)
                 else:

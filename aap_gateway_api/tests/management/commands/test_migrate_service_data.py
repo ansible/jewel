@@ -219,7 +219,7 @@ def test_add_arguments_registers_expected_args():
     cmd = MigrateCommand()
     parser = cmd.create_parser("manage.py", "migrate_service_data")
 
-    expected_flags = ["--api-slug", "--username", "--merge-teams", "--merge-organizations", "--log-file", "--rerun"]
+    expected_flags = ["--api-slug", "--username", "--merge-teams", "--merge-organizations", "--log-file", "--rerun", "--force"]
     for flag in expected_flags:
         assert flag in parser._option_string_actions, f"Expected argument {flag} not found in parser"
 
