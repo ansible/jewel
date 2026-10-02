@@ -7,13 +7,12 @@ db_username: gateway
 db_password: gateway
 db_port: 5440
 container_reference: localhost
-# This is where to put all the docker source files relative to the tools/docker-compose/ansible directory
+# This is where to put generated container source files relative to the Ansible directory
 sources_dest: '{{ playbook_dir | dirname }}/generated'
-docker_compose_cmd: "{{ lookup('ansible.builtin.env', 'DOCKER_COMPOSE', default='docker compose') }} -f {{ sources_dest }}/docker-compose.yml"
+compose_cmd: "{{ lookup('ansible.builtin.env', 'PODMAN_COMPOSE', default='podman-compose --in-pod false') }} -f {{ sources_dest }}/compose.yml"
 
-container_engine: docker
+container_engine: podman
 gateway_image: 'quay.io/ansible/jewel:devel' # placeholder until public image available
-gateway_host_address: host-gateway
 gateway_services: "{{ enabled_services | default([], true) }}"
 gateway_container_name: aap_gw_1
 
@@ -56,7 +55,7 @@ keycloak_password: admin
 cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN=devenv"
 oidc_reference:
 
-# LDAP docker compose settings
+# LDAP Podman Compose settings
 ldap_exposed_ldap_port: 389
 ldap_exposed_ldaps_port: 636
 ldap_image_version: latest

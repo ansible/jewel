@@ -32,8 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
-    env:
-      TOX_DOCKER_GATEWAY: "0.0.0.0"
     services:
       redis:
         image: redis
