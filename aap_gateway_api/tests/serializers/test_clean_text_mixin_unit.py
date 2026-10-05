@@ -1,20 +1,31 @@
-"""Unit tests for PlainSerializerCleanTextMixin helpers and recursive paths.
+"""Unit tests for PlainSerializerCleanTextMixin: DAB-reuse integration and Jewel-specific logic.
 
-These tests exercise the extracted helper methods and edge cases directly,
-using mocks to control ``validate_free_text`` and ``get_setting`` without
-needing the full API endpoint or database.
+These tests exercise the Jewel-specific entry points (_clean_text_validate,
+_validate_field_value, _log_validation_failure override, validate() bypass)
+and verify that inherited DAB CleanTextMixin helpers (JSON recursion,
+depth-limiting, text validation) work correctly through the integration.
 
-Coverage targets: static helpers, type dispatch, JSON recursion with
-depth limits, grandfathering, error shape, unexpected-exception branches,
-encrypted-field exclusion, and the validate-and-save clean-text path.
+Coverage targets: type dispatch, DAB delegation (skip_keys, errors dict),
+depth limits through integration, grandfathering, encrypted-field exclusion,
+validate() model-path bypass, and the validate-and-save clean-text path.
 """
 
 from unittest.mock import patch
 
 import pytest
+from ansible_base.lib.serializers.mixins import _INCOMPLETE_VALIDATION_MSG, CleanTextMixin
 from rest_framework import serializers
 
-from aap_gateway_api.serializers.preferences import _INCOMPLETE_VALIDATION_MSG, PlainSerializerCleanTextMixin
+from aap_gateway_api.serializers.preferences import PlainSerializerCleanTextMixin
+
+# Mock target for validate_free_text — lives in DAB's mixins module
+# because the inherited _run_text_validator / _validate_json_string
+# call it from there.
+_VFT = "ansible_base.lib.serializers.mixins.validate_free_text"
+# Mock target for get_setting — DAB's methods use the DAB-side import;
+# Jewel's _clean_text_validate uses the Jewel-side import.
+_GS_DAB = "ansible_base.lib.serializers.mixins.get_setting"
+_GS_JEWEL = "aap_gateway_api.serializers.preferences.get_setting"
 
 # ---------------------------------------------------------------------------
 # Minimal test serializer that exposes the mixin without Django models
@@ -37,111 +48,70 @@ def mixin_instance():
 
 
 # ===================================================================
-# 1. Static helper tests
+# 1. Inheritance verification
 # ===================================================================
 
 
-class TestGetStoredListItem:
-    """_get_stored_list_item: safe index lookup into stored list data."""
+class TestInheritance:
+    """Verify PlainSerializerCleanTextMixin correctly inherits from DAB."""
 
-    @pytest.mark.parametrize(
-        "stored_data, idx, expected",
-        [
-            (["a", "b", "c"], 0, "a"),
-            (["a", "b", "c"], 2, "c"),
-            (["a", "b", "c"], 3, None),
-            (None, 0, None),
-            ("not_a_list", 0, None),
-            ({}, 0, None),
-            ([], 0, None),
-        ],
-        ids=[
-            "valid_first",
-            "valid_last",
-            "out_of_bounds",
-            "none_stored",
-            "string_stored",
-            "dict_stored",
-            "empty_list",
-        ],
-    )
-    def test_returns_expected(self, stored_data, idx, expected):
-        assert PlainSerializerCleanTextMixin._get_stored_list_item(stored_data, idx) == expected
+    def test_inherits_from_clean_text_mixin(self):
+        assert issubclass(PlainSerializerCleanTextMixin, CleanTextMixin)
 
+    def test_name_fields_empty(self):
+        """Preferences use Tier 2 only — no Tier 1 name-field validation."""
+        assert PlainSerializerCleanTextMixin.name_fields == frozenset()
 
-class TestSanitizeDictKey:
-    """_sanitize_dict_key: escapes C0/C1 control characters in keys."""
-
-    def test_plain_string_unchanged(self):
-        assert PlainSerializerCleanTextMixin._sanitize_dict_key("normal") == "normal"
-
-    def test_control_chars_escaped(self):
-        result = PlainSerializerCleanTextMixin._sanitize_dict_key("a\x00b\x1fc")
-        assert "\x00" not in result
-        assert "\x1f" not in result
-        assert result.startswith("a")
-
-    def test_non_string_returned_as_is(self):
-        assert PlainSerializerCleanTextMixin._sanitize_dict_key(42) == 42
-        assert PlainSerializerCleanTextMixin._sanitize_dict_key(None) is None
-
-
-class TestGetStoredDictValue:
-    """_get_stored_dict_value: safe key lookup into stored dict data."""
-
-    @pytest.mark.parametrize(
-        "stored_data, key, expected",
-        [
-            ({"a": 1}, "a", 1),
-            ({"a": 1}, "missing", None),
-            (None, "k", None),
-            ([], "k", None),
-            (42, "k", None),
-        ],
-        ids=[
-            "key_present",
-            "key_absent",
-            "none_stored",
-            "list_stored",
-            "int_stored",
-        ],
-    )
-    def test_returns_expected(self, stored_data, key, expected):
-        assert PlainSerializerCleanTextMixin._get_stored_dict_value(stored_data, key) == expected
+    def test_max_json_depth_inherited(self, mixin_instance):
+        """_MAX_JSON_DEPTH is inherited from CleanTextMixin."""
+        assert mixin_instance._MAX_JSON_DEPTH == 10
 
 
 # ===================================================================
-# 2. _validate_field_value type dispatch
+# 2. validate() bypass
+# ===================================================================
+
+
+class TestValidateBypass:
+    """validate() must skip CleanTextMixin model-backed path."""
+
+    def test_validate_does_not_access_meta_model(self, mixin_instance):
+        """Calling validate() on a plain serializer must not crash
+        due to missing Meta.model — it should reach the base
+        Serializer.validate() which simply returns attrs."""
+        result = mixin_instance.validate({"test_field": "value"})
+        assert result == {"test_field": "value"}
+
+
+# ===================================================================
+# 3. _validate_field_value type dispatch
 # ===================================================================
 
 
 class TestValidateFieldValue:
-    """_validate_field_value: routes str/list/dict to the right validator."""
+    """_validate_field_value: routes str/list/dict to the right DAB validator."""
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_changed_string_runs_validation(self, _gs, mock_vft, mixin_instance):
+    @patch(_VFT)
+    def test_changed_string_runs_validation(self, mock_vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("f", "new", "old", errors)
         mock_vft.assert_called_once_with("new")
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
+    @patch(_VFT)
     def test_unchanged_string_skipped(self, mock_vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("f", "same", "same", errors)
         mock_vft.assert_not_called()
         assert errors == {}
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_list_value_dispatches(self, _gs, mock_vft, mixin_instance):
+    @patch(_VFT)
+    def test_list_value_dispatches(self, mock_vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("f", ["item"], None, errors)
         mock_vft.assert_called_once_with("item")
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_dict_value_dispatches(self, _gs, mock_vft, mixin_instance):
+    @patch(_VFT)
+    def test_dict_value_dispatches(self, mock_vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("f", {"k": "v"}, None, errors)
         mock_vft.assert_called_once_with("v")
@@ -153,23 +123,20 @@ class TestValidateFieldValue:
         mixin_instance._validate_field_value("f", True, None, errors)
         assert errors == {}
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_string_failure_collects_error(self, _gs, _vft, mixin_instance):
+    @patch(_VFT, side_effect=serializers.ValidationError(["bad"]))
+    def test_string_failure_collects_error(self, _vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("f", "evil", "old", errors)
         assert "f" in errors
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_list_failure_collects_error_under_field_name(self, _gs, _vft, mixin_instance):
+    @patch(_VFT, side_effect=serializers.ValidationError(["bad"]))
+    def test_list_failure_collects_error_under_field_name(self, _vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("my_list", ["evil"], None, errors)
         assert "my_list" in errors
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_dict_failure_collects_error_under_field_name(self, _gs, _vft, mixin_instance):
+    @patch(_VFT, side_effect=serializers.ValidationError(["bad"]))
+    def test_dict_failure_collects_error_under_field_name(self, _vft, mixin_instance):
         errors = {}
         mixin_instance._validate_field_value("my_dict", {"k": "evil"}, None, errors)
         assert "my_dict" in errors
@@ -199,186 +166,8 @@ class TestValidateFieldValue:
         path_key = next(iter(inner))
         assert inner[path_key] == [_INCOMPLETE_VALIDATION_MSG]
 
-
-# ===================================================================
-# 3. _validate_json_list: recursion, depth limit, grandfathering
-# ===================================================================
-
-
-class TestValidateJsonList:
-    """_validate_json_list: validates string leaves in lists."""
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_empty_list_returns_empty_dict(self, _gs, _vft, mixin_instance):
-        assert mixin_instance._validate_json_list([], field_name="f") == {}
-
-    def test_depth_limit_returns_error(self, mixin_instance):
-        result = mixin_instance._validate_json_list(
-            ["anything"],
-            field_name="pref",
-            depth=mixin_instance._MAX_JSON_DEPTH,
-        )
-        assert "pref" in result
-        assert result["pref"] == [_INCOMPLETE_VALIDATION_MSG]
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_grandfathering_skips_unchanged_items(self, _gs, mock_vft, mixin_instance):
-        result = mixin_instance._validate_json_list(
-            ["kept"],
-            field_name="f",
-            stored_data=["kept"],
-        )
-        mock_vft.assert_not_called()
-        assert result == {}
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_changed_item_validated(self, _gs, mock_vft, mixin_instance):
-        mixin_instance._validate_json_list(
-            ["changed"],
-            field_name="f",
-            stored_data=["original"],
-        )
-        mock_vft.assert_called_once_with("changed")
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_dict_inside_list_recurses(self, _gs, mock_vft, mixin_instance):
-        mixin_instance._validate_json_list(
-            [{"nested_key": "val"}],
-            field_name="f",
-        )
-        mock_vft.assert_called_once_with("val")
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_list_inside_list_recurses(self, _gs, mock_vft, mixin_instance):
-        mixin_instance._validate_json_list(
-            [["inner"]],
-            field_name="f",
-        )
-        mock_vft.assert_called_once_with("inner")
-
-    def test_deeply_nested_list_hits_depth_limit(self, mixin_instance):
-        """Nested lists beyond _MAX_JSON_DEPTH produce an error."""
-        data = current = []
-        for _ in range(12):
-            child = []
-            current.append(child)
-            current = child
-        current.append("leaf")
-
-        result = mixin_instance._validate_json_list(data, field_name="deep")
-        assert result  # non-empty means depth-limit error was raised
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_key_prefix_propagated_to_item_keys(self, _gs, _vft, mixin_instance):
-        """When key_prefix is provided, item keys include the prefix."""
-        result = mixin_instance._validate_json_list(
-            ["bad"],
-            field_name="f",
-            key_prefix="outer_key",
-        )
-        assert "outer_key[0]" in result
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_nested_list_keys_do_not_collide(self, _gs, _vft, mixin_instance):
-        """Nested lists produce distinct error keys for each branch."""
-        result = mixin_instance._validate_json_list(
-            [["bad_a"], ["bad_b"]],
-            field_name="f",
-        )
-        # Each inner list item should have a unique key: [0][0] and [1][0]
-        assert "[0][0]" in result
-        assert "[1][0]" in result
-
-    def test_depth_limit_uses_key_prefix(self, mixin_instance):
-        """When key_prefix is provided, depth-limit error uses the prefix."""
-        result = mixin_instance._validate_json_list(
-            ["anything"],
-            field_name="pref",
-            depth=mixin_instance._MAX_JSON_DEPTH,
-            key_prefix="parent[0]",
-        )
-        assert "parent[0]" in result
-        assert result["parent[0]"] == [_INCOMPLETE_VALIDATION_MSG]
-
-
-# ===================================================================
-# 4. _validate_json_dict: recursion, depth limit, grandfathering
-# ===================================================================
-
-
-class TestValidateJsonDict:
-    """_validate_json_dict: validates string leaves in dicts."""
-
-    def test_depth_limit_error_key_uses_field_name(self, mixin_instance):
-        """Without key_prefix, error key is the field_name."""
-        result = mixin_instance._validate_json_dict(
-            {"k": "v"},
-            field_name="pref",
-            depth=mixin_instance._MAX_JSON_DEPTH,
-        )
-        assert "pref" in result
-        assert result["pref"] == [_INCOMPLETE_VALIDATION_MSG]
-
-    def test_depth_limit_error_key_uses_key_prefix(self, mixin_instance):
-        """With key_prefix, error key uses the nesting path."""
-        result = mixin_instance._validate_json_dict(
-            {"k": "v"},
-            field_name="pref",
-            key_prefix="[0].inner.",
-            depth=mixin_instance._MAX_JSON_DEPTH,
-        )
-        assert "[0].inner" in result
-
-    def test_depth_limit_mutates_passed_errors_dict(self, mixin_instance):
-        """When errors dict is passed in, depth-limit error is merged into it."""
-        errors = {"existing": "error"}
-        mixin_instance._validate_json_dict(
-            {"k": "v"},
-            field_name="pref",
-            depth=mixin_instance._MAX_JSON_DEPTH,
-            errors=errors,
-        )
-        assert "pref" in errors
-        assert "existing" in errors  # original errors preserved
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_grandfathering_skips_unchanged(self, _gs, mock_vft, mixin_instance):
-        result = mixin_instance._validate_json_dict(
-            {"key": "same_val"},
-            field_name="f",
-            stored_data={"key": "same_val"},
-        )
-        mock_vft.assert_not_called()
-        assert result == {}
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_list_inside_dict_recurses(self, _gs, mock_vft, mixin_instance):
-        mixin_instance._validate_json_dict(
-            {"key": ["val"]},
-            field_name="f",
-        )
-        mock_vft.assert_called_once_with("val")
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=serializers.ValidationError(["bad"]))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_list_inside_dict_errors_include_dict_key(self, _gs, _vft, mixin_instance):
-        """Error keys for list items inside a dict include the dict key prefix."""
-        result = mixin_instance._validate_json_dict(
-            {"settings": ["bad_value"]},
-            field_name="f",
-        )
-        assert "settings[0]" in result
-
-    def test_deeply_nested_dict_hits_depth_limit(self, mixin_instance):
+    def test_over_depth_dict_error_shape(self, mixin_instance):
+        """Over-depth dict via _validate_field_value produces the correct nested error shape."""
         payload = current = {}
         for i in range(12):
             child = {}
@@ -386,93 +175,87 @@ class TestValidateJsonDict:
             current = child
         current["leaf"] = "value"
 
-        result = mixin_instance._validate_json_dict(payload, field_name="deep")
-        assert result  # non-empty means depth-limit error was raised
+        errors = {}
+        mixin_instance._validate_field_value("my_dict", payload, None, errors)
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_empty_dict_returns_empty(self, _gs, _vft, mixin_instance):
-        result = mixin_instance._validate_json_dict({}, field_name="f")
-        assert result == {}
+        assert "my_dict" in errors
+        inner = errors["my_dict"]
+        assert isinstance(inner, dict)
+        assert "my_dict" not in inner
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_non_string_values_skipped(self, _gs, mock_vft, mixin_instance):
-        """Integer and boolean values inside dicts should not be validated."""
-        result = mixin_instance._validate_json_dict(
-            {"num": 42, "flag": True},
-            field_name="f",
-        )
+    @patch(_VFT)
+    def test_grandfathering_list_unchanged_items(self, mock_vft, mixin_instance):
+        """Unchanged list items are grandfathered (skipped) via inherited DAB helpers."""
+        errors = {}
+        mixin_instance._validate_field_value("f", ["kept"], ["kept"], errors)
         mock_vft.assert_not_called()
-        assert result == {}
+        assert errors == {}
+
+    @patch(_VFT)
+    def test_grandfathering_dict_unchanged_values(self, mock_vft, mixin_instance):
+        """Unchanged dict values are grandfathered (skipped) via inherited DAB helpers."""
+        errors = {}
+        mixin_instance._validate_field_value("f", {"k": "same"}, {"k": "same"}, errors)
+        mock_vft.assert_not_called()
+        assert errors == {}
+
+    @patch(_VFT)
+    def test_nested_dict_in_list_recurses(self, mock_vft, mixin_instance):
+        """Nested dict inside list is validated recursively via DAB helpers."""
+        errors = {}
+        mixin_instance._validate_field_value("f", [{"key": "val"}], None, errors)
+        mock_vft.assert_called_once_with("val")
+
+    @patch(_VFT)
+    def test_nested_list_in_dict_recurses(self, mock_vft, mixin_instance):
+        """Nested list inside dict is validated recursively via DAB helpers."""
+        errors = {}
+        mixin_instance._validate_field_value("f", {"key": ["val"]}, None, errors)
+        mock_vft.assert_called_once_with("val")
 
 
 # ===================================================================
-# 5. _run_clean_text_validator: unexpected-exception branch
+# 4. _run_text_validator integration (inherited from DAB)
 # ===================================================================
 
 
-class TestRunCleanTextValidatorExceptionBranch:
-    """Covers the generic Exception handler in _run_clean_text_validator."""
+class TestRunTextValidatorIntegration:
+    """Inherited _run_text_validator: exception handling via DAB."""
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=RuntimeError("boom"))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
+    @patch(_VFT, side_effect=RuntimeError("boom"))
+    @patch(_GS_DAB, return_value=True)
     def test_unexpected_exception_adds_incomplete_error(self, _gs, _vft, mixin_instance):
         errors = {}
-        mixin_instance._run_clean_text_validator("field", "val", errors)
+        mixin_instance._run_text_validator("field", "val", errors)
         assert "field" in errors
         assert errors["field"] == [_INCOMPLETE_VALIDATION_MSG]
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=RuntimeError("boom"))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=False)
+    @patch(_VFT, side_effect=RuntimeError("boom"))
+    @patch(_GS_DAB, return_value=False)
     def test_unexpected_exception_skipped_when_validation_disabled(self, _gs, _vft, mixin_instance):
         errors = {}
-        mixin_instance._run_clean_text_validator("field", "val", errors)
+        mixin_instance._run_text_validator("field", "val", errors)
         assert errors == {}
 
 
 # ===================================================================
-# 6. _validate_json_string: unexpected-exception branch
+# 5. _log_validation_failure override: list vs string detail
 # ===================================================================
 
 
-class TestValidateJsonStringExceptionBranch:
-    """Covers the generic Exception handler in _validate_json_string."""
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=RuntimeError("boom"))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
-    def test_unexpected_exception_adds_incomplete_error(self, _gs, _vft, mixin_instance):
-        errors = {}
-        mixin_instance._validate_json_string("val", "key", errors, "field")
-        assert "key" in errors
-        assert errors["key"] == [_INCOMPLETE_VALIDATION_MSG]
-
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text", side_effect=RuntimeError("boom"))
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=False)
-    def test_unexpected_exception_skipped_when_validation_disabled(self, _gs, _vft, mixin_instance):
-        errors = {}
-        mixin_instance._validate_json_string("val", "key", errors, "field")
-        assert errors == {}
-
-
-# ===================================================================
-# 7. _log_clean_text_failure: list vs string detail
-# ===================================================================
-
-
-class TestLogCleanTextFailure:
-    """_log_clean_text_failure handles both list and string detail."""
+class TestLogValidationFailureOverride:
+    """_log_validation_failure override handles both list and string detail."""
 
     @patch("aap_gateway_api.serializers.preferences.logger")
     def test_list_detail_joined(self, mock_logger, mixin_instance):
-        mixin_instance._log_clean_text_failure("field", ["err1", "err2"])
+        mixin_instance._log_validation_failure("field", ["err1", "err2"])
         mock_logger.warning.assert_called_once()
         call_args = mock_logger.warning.call_args
         assert "err1; err2" in call_args[0][3]
 
     @patch("aap_gateway_api.serializers.preferences.logger")
     def test_string_detail_used_directly(self, mock_logger, mixin_instance):
-        mixin_instance._log_clean_text_failure("field", "single error")
+        mixin_instance._log_validation_failure("field", "single error")
         mock_logger.warning.assert_called_once()
         call_args = mock_logger.warning.call_args
         assert "single error" in call_args[0][3]
@@ -480,23 +263,30 @@ class TestLogCleanTextFailure:
     @patch("aap_gateway_api.serializers.preferences.logger")
     def test_control_chars_in_detail_sanitized(self, mock_logger, mixin_instance):
         """Control characters in validation detail are escaped before logging."""
-        mixin_instance._log_clean_text_failure("field", ["err\x00one", "err\x1ftwo"])
+        mixin_instance._log_validation_failure("field", ["err\x00one", "err\x1ftwo"])
         mock_logger.warning.assert_called_once()
         reason = mock_logger.warning.call_args[0][3]
         assert "\x00" not in reason
         assert "\x1f" not in reason
         assert "err" in reason
 
+    @patch("aap_gateway_api.serializers.preferences.logger")
+    def test_resource_type_uses_preference_stub(self, mock_logger, mixin_instance):
+        """Log message includes the Preference model stub resource type."""
+        mixin_instance._log_validation_failure("field", "error")
+        call_args = mock_logger.warning.call_args
+        assert "aap_gateway_api.Preference" in call_args[0][2]
+
 
 # ===================================================================
-# 8. _clean_text_validate: gating and field filtering
+# 6. _clean_text_validate: gating and field filtering
 # ===================================================================
 
 
 class TestCleanTextValidateGating:
     """_clean_text_validate: disabled gate, excluded fields, unknown fields."""
 
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=False)
+    @patch(_GS_JEWEL, return_value=False)
     def test_returns_empty_when_disabled(self, _gs, mixin_instance):
         result = mixin_instance._clean_text_validate(
             {"test_field": "<script>"},
@@ -504,8 +294,8 @@ class TestCleanTextValidateGating:
         )
         assert result == {}
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
+    @patch(_VFT)
+    @patch(_GS_JEWEL, return_value=True)
     def test_excluded_field_skipped(self, _gs, mock_vft, mixin_instance):
         result = mixin_instance._clean_text_validate(
             {"custom_login_info": "<b>html</b>"},
@@ -514,8 +304,8 @@ class TestCleanTextValidateGating:
         mock_vft.assert_not_called()
         assert result == {}
 
-    @patch("aap_gateway_api.serializers.preferences.validate_free_text")
-    @patch("aap_gateway_api.serializers.preferences.get_setting", return_value=True)
+    @patch(_VFT)
+    @patch(_GS_JEWEL, return_value=True)
     def test_unknown_field_skipped(self, _gs, mock_vft, mixin_instance):
         """A field name not in serializer fields is silently skipped."""
         result = mixin_instance._clean_text_validate(
@@ -527,7 +317,7 @@ class TestCleanTextValidateGating:
 
 
 # ===================================================================
-# 9. _run_clean_text_on_pending_saves (integration via SettingSectionSerializer)
+# 7. _run_clean_text_on_pending_saves (integration via SettingSectionSerializer)
 # ===================================================================
 
 
