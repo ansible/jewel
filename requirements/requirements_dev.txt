@@ -6,7 +6,7 @@ ipython                 # Used in shell_plus
 ruff==0.14.1            # Fast Python linter and formatter (replaces black, flake8, isort)
 remote-pdb              # The debugger setup with Python's breakpoint()
 tox                     # Used for unit tests
-tox-docker              # For running postgres during tests
+podman-compose>=1.6.0   # Starts the local development environment with Podman
 colorama                # Allows addition of color to logs
 logutils
 psycopg[binary]
@@ -14,5 +14,4 @@ requests
 openapi-spec-validator   # Used for OpenAPI schema validation in CI/CD
 setuptools>=78.1.1      # Needed for the plumbing of the side cars
 setuptools_scm          # Needed for proper version string on /api/gateway/v1/ping
-docker                  # Needed for the plumbing of the side cars via Ansible
 PyYAML                  # Collection tests

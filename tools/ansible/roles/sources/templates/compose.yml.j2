@@ -5,9 +5,10 @@ services:
   {% set container_id = loop.index %}
   {% set exposed_port = 7999 + container_id | int %}
   gateway{{ container_id }}:
+    image: {{ gateway_image }}
     build:
       context: $PWD
-      dockerfile: tools/generated/Dockerfile
+      dockerfile: tools/generated/Containerfile.dev_env
     command:
       - /usr/bin/launch-gateway
     container_name: aap_gw_{{ container_id }}
@@ -45,21 +46,9 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:{{ otel_collector_grpc_port }}
       - OTEL_SERVICE_NAME=aap-gateway
 {% endif %}
-{% if container_engine == 'docker' %}
-    links:
-      - db
-{% for i in range(redis_node_count|int) %}
-{% set container_id = loop.index %}
-      - redis{{ container_id }}
-{% endfor %}
-{% endif %}
     networks:
       - dbnet
       - service-mesh
-{% if container_engine == 'docker' %}
-    extra_hosts:
-      host-gateway: host-gateway
-{% endif %}
     ports:
       - "{{ exposed_port }}:8000"
       - "{{ container_id }}4444:4444"
@@ -246,10 +235,6 @@ services:
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
       - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
-{% if container_engine == 'docker' %}
-    extra_hosts:
-      host-gateway: host-gateway
-{% endif %}
     networks:
       - dbnet
       - service-mesh
@@ -280,10 +265,6 @@ services:
       - $PWD/tools/scripts/envoy-path-rewrite.lua:/etc/envoy/envoy-path-rewrite.lua:z
       - $PWD/tools/generated/gateway.crt:/etc/ansible-automation-platform/gateway/gateway.crt:z
       - $PWD/tools/generated/gateway.key:/etc/ansible-automation-platform/gateway/gateway.key:z
-{% if container_engine == 'docker' %}
-    extra_hosts:
-      host-gateway: host-gateway
-{% endif %}
     networks:
       - dbnet
       - service-mesh

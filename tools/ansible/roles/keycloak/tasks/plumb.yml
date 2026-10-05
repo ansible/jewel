@@ -1,4 +1,9 @@
 ---
+- name: Generate public cert for keycloak
+  command: 'openssl pkey -pubout -in {{ private_key_file }} -out {{ public_key_cert }}'
+  args:
+    creates: "{{ public_key_cert }}"
+
 - name: Load certs, existing and new SAML settings
   set_fact:
     oidc_public_key: "{{ lookup('file', public_key_cert) | regex_replace('\n', '') | regex_replace('-----[^-]*-----', '') }}"
