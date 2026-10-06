@@ -1,1 +1,25 @@
 * @ansible/jewel-pr-reviewers
+
+# Envoy implementation, API, and configuration paths
+/aap_gateway_api/proxy/ @bhavenst
+/aap_gateway_api/common/envoy.py @bhavenst
+/aap_gateway_api/views/api/envoy/ @bhavenst
+/aap_gateway_api/models/*route.py @bhavenst
+/aap_gateway_api/models/http_port.py @bhavenst
+/aap_gateway_api/router.py @bhavenst
+/aap_gateway_api/serializers/*route.py @bhavenst
+/aap_gateway_api/serializers/http_port.py @bhavenst
+/tools/ansible/roles/proxy-config/ @bhavenst
+/tools/ansible/generate-proxy-configs.yml @bhavenst
+/tools/scripts/envoy-path-rewrite.lua @bhavenst
+/docs/configuring_envoy.md @bhavenst
+
+# Tests for Envoy, route, and HTTP port behavior
+/aap_gateway_api/tests/proxy/ @bhavenst
+/aap_gateway_api/tests/views/api/envoy/ @bhavenst
+/aap_gateway_api/tests/views/api/v1/httpport/ @bhavenst
+/aap_gateway_api/tests/models/*route.py @bhavenst
+/aap_gateway_api/tests/models/test_http_port.py @bhavenst
+/aap_gateway_api/tests/views/test_additional_route.py @bhavenst
+/aap_gateway_api/tests/serializers/*route.py @bhavenst
+/aap_gateway_api/tests/serializers/test_http_port.py @bhavenst
