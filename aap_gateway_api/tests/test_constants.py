@@ -119,6 +119,18 @@ class TestXdsConfigsUseConstants:
         result = transport_socket()
         assert result["typed_config"]["@type"] == DOWNSTREAM_TLS_CONTEXT
 
+    @patch("aap_gateway_api.utils.xds_configs.settings")
+    def test_transport_socket_ecdh_curves(self, mock_settings):
+        mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
+        mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
+        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
+        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
+        from aap_gateway_api.utils.xds_configs import transport_socket
+
+        result = transport_socket()
+        assert "ecdh_curves" in result["typed_config"]["common_tls_context"]["tls_params"]
+        assert result["typed_config"]["common_tls_context"]["tls_params"]["ecdh_curves"] == ["X25519MLKEM768", "X25519", "P-256"]
+
 
 class TestApiGatewayV1PrefixConstant:
     """Verify the API_GATEWAY_V1_PREFIX constant value and usage in URL patterns."""
