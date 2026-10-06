@@ -147,6 +147,16 @@ def test_csrf_serializer_non_list_value_defaults_to_empty(expected_log, non_list
     assert result == []
 
 
+def test_csrf_serializer_deduplicates_origin_from_settings_and_preference():
+    from aap_gateway_api.preferences.serializers import CSRFSerializer
+
+    origin = "https://example.com"
+    with override_settings(CSRF_TRUSTED_ORIGINS=[origin]):
+        result = CSRFSerializer.to_python('["https://example.com"]')
+
+    assert result == [origin]
+
+
 @pytest.mark.parametrize(
     "value, expected_error",
     [

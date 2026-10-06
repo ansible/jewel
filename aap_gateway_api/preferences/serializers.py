@@ -58,7 +58,8 @@ class CSRFSerializer(JSONSerializer):
             else:
                 logger.error(f"CSRF_TRUSTED_ORIGINS has an invalid value: {invalid_reason}")
 
-        return valid_values + ret
+        # Merge and deduplicate in case the domain was added in both places
+        return list(dict.fromkeys(valid_values + ret))
 
     @classmethod
     def to_db(cls, value, **kwargs):
