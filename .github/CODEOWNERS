@@ -6,6 +6,7 @@
 /aap_gateway_api/views/api/envoy/ @bhavenst
 /aap_gateway_api/models/*route.py @bhavenst
 /aap_gateway_api/models/http_port.py @bhavenst
+/aap_gateway_api/router.py @bhavenst
 /aap_gateway_api/serializers/*route.py @bhavenst
 /aap_gateway_api/serializers/http_port.py @bhavenst
 /tools/ansible/roles/proxy-config/ @bhavenst
