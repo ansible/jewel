@@ -8,6 +8,7 @@ from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.serializers.mixins import CleanTextMixin
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.lib.utils.views.deprecation import mark_deprecated
 from ansible_base.rbac.policies import can_change_user
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
