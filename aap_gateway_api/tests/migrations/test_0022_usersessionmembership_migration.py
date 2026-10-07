@@ -12,6 +12,5 @@ def test_usersessionmembership_migration_uses_conditional_database_operation():
 
     [database_operation] = operation.database_operations
     assert isinstance(database_operation, migrations.RunSQL)
-    assert 'information_schema.tables' in database_operation.sql
-    assert 'IF NOT EXISTS' in database_operation.sql
+    assert "to_regclass('aap_gateway_api_usersessionmembership') IS NULL" in database_operation.sql
     assert database_operation.reverse_sql == 'DROP TABLE IF EXISTS "aap_gateway_api_usersessionmembership";'
