@@ -17,7 +17,7 @@
 - block:
     - name: Start redis containers
       shell:
-        cmd: "{{ docker_compose_cmd }} up -d --wait {{ ' '.join(nodes_to_start) }}"
+        cmd: "{{ compose_cmd }} up --detach {{ ' '.join(nodes_to_start) }}"
         chdir: '../../'
 
     - name: Wait for port to open
@@ -27,9 +27,12 @@
 
     - name: Check cluster nodes
       shell:
-        cmd: "{{ docker_compose_cmd }} exec -t redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} cluster nodes"
+        cmd: "{{ compose_cmd }} exec -T redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} cluster nodes"
       changed_when: False
       register: cluster_nodes
+      retries: 10
+      delay: 2
+      until: cluster_nodes.rc == 0
 
     - name: Get IPs from Redis cluster
       shell:
@@ -51,12 +54,12 @@
 
     - name: Join the redis Redis cluster
       shell:
-        cmd: "{{ docker_compose_cmd }} exec -t redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} --cluster create {{ ' '.join(nodes_to_cluster) }} --cluster-replicas 1 --cluster-yes"
+        cmd: "{{ compose_cmd }} exec -T redis1 {{ redis_tls_enabled | ternary(base_redis_tls_command, base_redis_command) }} --cluster create {{ ' '.join(nodes_to_cluster) }} --cluster-replicas 1 --cluster-yes"
       register: cluster_command
       when: cluster_nodes.stdout_lines | length == 1
 
   always:
     - name: Shutdown containers we started
       shell:
-        cmd: "{{ docker_compose_cmd }} stop {{ ' '.join(nodes_to_start) }}"
+        cmd: "{{ compose_cmd }} stop {{ ' '.join(nodes_to_start) }}"
         chdir: '../../'

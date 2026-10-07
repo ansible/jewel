@@ -109,10 +109,7 @@ legacy_tox_ini = """
         check = check, check-migrations, check-oauth2-permissions, check-help-text
         lint = ruff-check, ruff-format
 
-    [docker:db]
-    ## NOTE: If you see this failing with KeyError: 'Gateway' (Docker API 1.52+ removed that field),
-    ## set TOX_DOCKER_GATEWAY=0.0.0.0 in the environment where tox is run (CI sets this automatically).
-    ## Alternative: apply patch from https://github.com/tox-dev/tox-docker/pull/196
+    [podman:db]
 
     image = quay.io/sclorg/postgresql-15-c9s
     environment =
@@ -141,7 +138,7 @@ legacy_tox_ini = """
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
         ./tools/scripts/ci/install_django_venv.sh
         ./tools/scripts/run_tests.sh
-    docker = db
+    podman = db
     passenv = 
         ANSIBLE_GW_TEST_DB_HOST
         DB_PORT
@@ -213,19 +210,19 @@ legacy_tox_ini = """
     [testenv:ruff-check]
     deps =
         ruff==0.14.1
-    docker =
+    podman =
     commands = ruff check {posargs:.}
 
     [testenv:ruff-format]
     deps =
         ruff==0.14.1
-    docker =
+    podman =
     commands = ruff format {posargs:.}
 
     [testenv:check-lint]
     deps =
         ruff==0.14.1
-    docker =
+    podman =
     commands =
         ruff check .
         ruff format --check .

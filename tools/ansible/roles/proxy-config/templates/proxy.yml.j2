@@ -44,22 +44,22 @@ gateway_service_nodes:   # Nodes of service clusters
 {% if 'controller' in gateway_services %}
   - name: Controller Node
     service_cluster: controller
-    address: "{{ gateway_host_address }}"
+    address: "host.containers.internal"
 {% endif %}
 {% if 'hub' in gateway_services %}
   - name: Hub Node
     service_cluster: hub
-    address: "{{ gateway_host_address }}"
+    address: "host.containers.internal"
 {% endif %}
 {% if 'eda' in gateway_services %}
   - name: EDA Node
     service_cluster: eda
-    address: "{{ gateway_host_address }}"
+    address: "host.containers.internal"
 {% endif %}
 {% if 'lightspeed' in gateway_services %}
   - name: lightspeed
     service_cluster: lightspeed
-    address: "{{ gateway_host_address }}"
+    address: "host.containers.internal"
 {% endif %}
 
 gateway_services:    # API Services (Hub/EDA/Controller/gateway)
@@ -200,4 +200,3 @@ gateway_routes:
     description: 'pulp container extensions'
     enable_gateway_auth: true
 {% endif %}
-

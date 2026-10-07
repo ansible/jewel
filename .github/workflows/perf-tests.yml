@@ -18,8 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
-    env:
-      TOX_DOCKER_GATEWAY: "0.0.0.0"
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
     services:
       redis:
@@ -60,7 +58,7 @@ jobs:
           GATEWAY_TEST_DIRS: ""
         run: |
           tox -e ${{ steps.tox-env.outputs.name }} \
-            -x testenv:${{ steps.tox-env.outputs.name }}.docker= \
+            -x testenv:${{ steps.tox-env.outputs.name }}.podman= \
             -- --collect-only aap_gateway_api/tests/__init__.py
 
       - name: Run performance tests
@@ -70,7 +68,7 @@ jobs:
           DB_PORT: 5432
         run: |
           tox -e ${{ steps.tox-env.outputs.name }} \
-            -x testenv:${{ steps.tox-env.outputs.name }}.docker= \
+            -x testenv:${{ steps.tox-env.outputs.name }}.podman= \
             -- -m perf -v \
             --junit-xml=junit-perf.xml
 
