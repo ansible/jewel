@@ -157,6 +157,25 @@ def test_csrf_serializer_deduplicates_origin_from_settings_and_preference():
     assert result == [origin]
 
 
+def test_csrf_serializer_unhashable_value_reaches_preference_validation(register_preference):
+    from rest_framework.exceptions import ValidationError as DRFValidationError
+
+    from aap_gateway_api.serializers.preferences import SettingSectionSerializer
+
+    register_preference(
+        section="general",
+        preference_name="test_csrf_preference",
+        default=[],
+        required=False,
+        encrypted=False,
+        preference_type="CSRF_list",
+        help_text="This is a test preference",
+    )
+
+    with pytest.raises(DRFValidationError, match="Must be a list of valid origins"):
+        SettingSectionSerializer(category_slug="general").validate_and_save({"test_csrf_preference": [[]]})
+
+
 @pytest.mark.parametrize(
     "value, expected_error",
     [

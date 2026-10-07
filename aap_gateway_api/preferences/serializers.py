@@ -58,8 +58,13 @@ class CSRFSerializer(JSONSerializer):
             else:
                 logger.error(f"CSRF_TRUSTED_ORIGINS has an invalid value: {invalid_reason}")
 
-        # Merge and deduplicate in case the domain was added in both places
-        return list(dict.fromkeys(valid_values + ret))
+        # Use equality-based deduplication because JSON values may be unhashable;
+        # preference validation below this serializer must still report bad types.
+        merged_values = []
+        for value in valid_values + ret:
+            if value not in merged_values:
+                merged_values.append(value)
+        return merged_values
 
     @classmethod
     def to_db(cls, value, **kwargs):
