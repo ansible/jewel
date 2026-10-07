@@ -17,6 +17,11 @@ on:
       - 'tools/ansible/roles/sources/tasks/main.yml'
       - 'tools/ansible/roles/sources/templates/Containerfile.j2'
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch name to build and tag as a jewel-ci image
+        required: true
+        type: string
   schedule:
     - cron: '0 6 * * 1'  # Weekly Monday 06:00 UTC
 
@@ -32,10 +37,11 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       github.repository == 'ansible/jewel' &&
-      (github.ref_name == 'devel' || startsWith(github.ref_name, 'stable-'))
+      (github.event_name == 'workflow_dispatch' || github.ref_name == 'devel' || startsWith(github.ref_name, 'stable-'))
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.branch || github.ref }}
           persist-credentials: false
 
       - name: Set up Python
@@ -50,11 +56,22 @@ jobs:
         run: |
           python -m pip install --only-binary :all: ansible-core==2.21.1
 
-      - name: Determine branch tag
+      - name: Determine CI image tag
         id: branch
         env:
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: echo "name=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
+          BRANCH_NAME: ${{ inputs.branch || github.ref_name }}
+        run: |
+          case "$BRANCH_NAME" in
+            ''|[-.]*|*[!A-Za-z0-9_.-]*)
+              echo "Branch name must be a non-empty, container-tag-safe value that does not begin with a period or hyphen" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#BRANCH_NAME}" -gt 117 ]; then
+            echo "Branch name is too long for generated container tags (maximum: 117 characters)" >&2
+            exit 1
+          fi
+          printf 'name=%s\n' "$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0.0
@@ -63,15 +80,13 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Generate image tags
+      - name: Generate image metadata
         id: tags
-        env:
-          COMMIT_SHA: ${{ github.sha }}
         run: |
-          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
           DATE_TAG=$(date -u +%Y-%m-%d)
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "date_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
+          printf 'short_sha=%s\n' "$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          printf 'date_tag=%s\n' "$DATE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build CI image
         env:
