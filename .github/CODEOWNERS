@@ -1,5 +1,10 @@
 * @ansible/jewel-pr-reviewers
 
+/aap_gateway_api/management/commands/migrate_service_data.py @john-westcott-iv
+/aap_gateway_api/management/commands/_migrate_service_data/** @john-westcott-iv
+/aap_gateway_api/tests/management/commands/test_migrate_service_data.py @john-westcott-iv
+/aap_gateway_api/tests/management/commands/_migrate_service_data/** @john-westcott-iv
+
 # Envoy implementation, API, and configuration paths
 /aap_gateway_api/proxy/ @bhavenst
 /aap_gateway_api/common/envoy.py @bhavenst
