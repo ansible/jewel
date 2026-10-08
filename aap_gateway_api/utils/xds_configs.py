@@ -125,6 +125,13 @@ def transport_socket():
                         "private_key": {"filename": settings.GATEWAY_KEY_FILE},
                     }
                 ],
+                # X25519MLKEM768 is a hybrid post-quantum curve (opt-in in Envoy 1.35+,
+                # default in 1.40+). Clients supporting ML-KEM will use it; others fall
+                # back to X25519 or P-256.
+                # Order matters: curves are tried in preference order.
+                "tls_params": {
+                    "ecdh_curves": ["X25519MLKEM768", "X25519", "P-256"],
+                },
                 "validation_context_sds_secret_config": {
                     "name": SDS_SECRET_CONFIG_NAME,
                     "sds_config": _rest_sds_config(),
