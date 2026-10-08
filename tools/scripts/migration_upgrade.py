@@ -77,6 +77,7 @@ def run_command(command: Sequence[str], *, cwd: Path, env: Mapping[str, str]) ->
         capture_output=True,
         text=True,
         check=False,
+        timeout=300,
     )
 
 
@@ -88,6 +89,7 @@ def git_sha(path: Path) -> str:
         capture_output=True,
         text=True,
         check=True,
+        timeout=30,
     )
     return result.stdout.strip()
 
@@ -141,18 +143,24 @@ class MigrationUpgradeRunner:
             except MigrationUpgradeError as exc:
                 result.status = "failed"
                 result.error = str(exc)
-                self._write_summary()
+                self._write_summary_best_effort()
                 raise
             else:
                 result.status = "passed"
-                self._write_summary()
+                try:
+                    self._write_summary()
+                except Exception as exc:
+                    result.status = "failed"
+                    result.error = f"Summary write failed: {exc}"
+                    self._write_summary_best_effort()
+                    raise MigrationUpgradeError(result.error) from exc
 
     def _stage_sha(self, stage: Stage) -> str:
         if not stage.path.is_dir():
             raise MigrationUpgradeError(f"Stage {stage.name!r} checkout does not exist: {stage.path}")
         try:
             return self.git_sha(stage.path)
-        except (OSError, subprocess.CalledProcessError) as exc:
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise MigrationUpgradeError(f"Stage {stage.name!r} is not a git checkout: {stage.path}") from exc
 
     def _stage_env(self, stage: Stage, venv_dir: Path) -> dict[str, str]:
@@ -215,7 +223,10 @@ class MigrationUpgradeRunner:
         print(f"[{stage.name}] $ {command_text}")
         log.write(f"$ {command_text}\n")
 
-        completed = self.run_command(command, cwd=stage.path, env=env)
+        try:
+            completed = self.run_command(command, cwd=stage.path, env=env)
+        except subprocess.TimeoutExpired as exc:
+            raise MigrationUpgradeError(f"Stage {stage.name!r} command timed out: {command_text}") from exc
         output = f"{completed.stdout or ''}{completed.stderr or ''}"
         if output:
             print(output, end="")
@@ -225,6 +236,12 @@ class MigrationUpgradeRunner:
         if completed.returncode:
             raise MigrationUpgradeError(f"Stage {stage.name!r} command failed with exit code {completed.returncode}: {command_text}")
         return completed
+
+    def _write_summary_best_effort(self) -> None:
+        try:
+            self._write_summary()
+        except Exception as exc:
+            print(f"Unable to write migration upgrade summary: {exc}", file=sys.stderr)
 
     def _write_summary(self) -> None:
         lines = ["# Migration upgrade validation", ""]

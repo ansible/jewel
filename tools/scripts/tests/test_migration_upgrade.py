@@ -52,6 +52,26 @@ class TestMigrationUpgradeRunner:
         assert not output_dir.exists()
         assert not venv_root.exists()
 
+    def test_preserves_stage_error_when_summary_write_fails(self, tmp_path, monkeypatch):
+        stage_path = tmp_path / "release"
+        stage_path.mkdir()
+        runner = migration_upgrade.MigrationUpgradeRunner(
+            stages=[migration_upgrade.Stage("release", stage_path)],
+            output_dir=tmp_path / "output",
+            venv_root=tmp_path / "venvs",
+            run_command=lambda command, *, cwd, env: completed(returncode=1),
+            git_sha=lambda path: "release-sha",
+            base_env={},
+        )
+
+        def fail_summary():
+            raise OSError("disk full")
+
+        monkeypatch.setattr(runner, "_write_summary", fail_summary)
+
+        with pytest.raises(migration_upgrade.MigrationUpgradeError, match="command failed"):
+            runner.run()
+
     def test_runs_each_stage_in_order_and_requires_noop_migration(self, tmp_path):
         stage_path = tmp_path / "release"
         stage_path.mkdir()

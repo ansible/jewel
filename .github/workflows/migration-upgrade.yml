@@ -14,6 +14,7 @@ on:
       - "pyproject.toml"
       - "tools/scripts/ci/**"
       - "tools/scripts/migration_upgrade.py"
+  merge_group:
 
 permissions:
   contents: read
@@ -54,9 +55,10 @@ jobs:
 
       - name: Resolve immutable upgrade inputs
         env:
-          TARGET_BRANCH: ${{ github.base_ref }}
+          TARGET_BRANCH: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
         run: |
           set -euo pipefail
+          TARGET_BRANCH="${TARGET_BRANCH#refs/heads/}"
 
           case "$TARGET_BRANCH" in
             devel)
