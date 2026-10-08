@@ -173,8 +173,9 @@ def test_csrf_serializer_unhashable_value_reaches_preference_validation(register
         help_text="This is a test preference",
     )
 
+    serializer = SettingSectionSerializer(category_slug="general")
     with pytest.raises(DRFValidationError, match="Must be a list of valid origins"):
-        SettingSectionSerializer(category_slug="general").validate_and_save({"test_csrf_preference": unhashable_value})
+        serializer.validate_and_save({"test_csrf_preference": unhashable_value})
 
 
 @pytest.mark.parametrize(
