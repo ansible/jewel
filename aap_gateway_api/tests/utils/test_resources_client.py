@@ -139,6 +139,24 @@ class TestAsyncWorker:
         mock_logger.exception.assert_called_once()
         callback.assert_called_once_with(mock_service, None)
 
+    def test_failed_response_logs_bounded_body_and_truncation_marker(self, client, mock_service):
+        """A rejected service request logs only a bounded response-body excerpt."""
+        response_body = 'x' * 2048
+        response = mock.MagicMock(status_code=400, text=response_body)
+
+        with (
+            mock.patch.object(client, '_make_service_request', return_value=(mock_service.pk, response)),
+            mock.patch('aap_gateway_api.utils.resources_client.logger') as mock_logger,
+        ):
+            client._async_worker(mock_service, 'POST', '/assign/', {}, None, 'jwt', None)
+
+        mock_logger.warning.assert_called_once()
+        message, service_id, status_code, logged_body = mock_logger.warning.call_args.args
+        assert message == 'Resource sync to service %s failed: HTTP %s: %s'
+        assert service_id == mock_service.pk
+        assert status_code == 400
+        assert logged_body == f"{'x' * 1024}... [truncated; {len(response_body)} characters total]"
+
     def test_no_callback_does_not_error(self, client, mock_service):
         """No callback is fine — just runs the request."""
         mock_resp = mock.MagicMock(status_code=200)
