@@ -14,6 +14,7 @@ import re
 import shlex
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
@@ -117,6 +118,11 @@ class MigrationUpgradeRunner:
     def run(self) -> None:
         if not self.stages:
             raise MigrationUpgradeError("At least one migration upgrade stage is required")
+
+        duplicate_names = sorted(name for name, count in Counter(stage.name for stage in self.stages).items() if count > 1)
+        if duplicate_names:
+            names = ", ".join(repr(name) for name in duplicate_names)
+            raise MigrationUpgradeError(f"Duplicate migration stage names: {names}")
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.venv_root.mkdir(parents=True, exist_ok=True)

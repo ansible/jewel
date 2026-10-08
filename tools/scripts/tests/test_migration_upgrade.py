@@ -29,6 +29,29 @@ class TestParseStage:
 
 
 class TestMigrationUpgradeRunner:
+    def test_rejects_duplicate_stage_names_before_setup(self, tmp_path):
+        output_dir = tmp_path / "output"
+        venv_root = tmp_path / "venvs"
+        calls = []
+
+        runner = migration_upgrade.MigrationUpgradeRunner(
+            stages=[
+                migration_upgrade.Stage("release", tmp_path / "first"),
+                migration_upgrade.Stage("release", tmp_path / "second"),
+            ],
+            output_dir=output_dir,
+            venv_root=venv_root,
+            run_command=lambda command, *, cwd, env: calls.append((command, cwd, env)),
+            base_env={},
+        )
+
+        with pytest.raises(migration_upgrade.MigrationUpgradeError, match="Duplicate migration stage names"):
+            runner.run()
+
+        assert calls == []
+        assert not output_dir.exists()
+        assert not venv_root.exists()
+
     def test_runs_each_stage_in_order_and_requires_noop_migration(self, tmp_path):
         stage_path = tmp_path / "release"
         stage_path.mkdir()

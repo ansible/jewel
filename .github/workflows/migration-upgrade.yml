@@ -21,6 +21,9 @@ permissions:
 jobs:
   migration-upgrade:
     name: Validate migration upgrade path
+    # Keep this opt-in until the published release tags and stable branches
+    # required by the upgrade paths exist in this repository.
+    if: vars.MIGRATION_UPGRADE_ENABLED == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -86,7 +89,7 @@ jobs:
             git rev-parse "refs/remotes/origin/$branch"
           }
 
-          RELEASE_SHA=$(git rev-parse "$RELEASE_TAG")
+          RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           PR_SHA=$(git rev-parse HEAD)
           echo "Resolving target=$TARGET_BRANCH release=$RELEASE_TAG ($RELEASE_SHA) PR=$PR_SHA"
 
@@ -97,7 +100,7 @@ jobs:
           echo "PR_SHA=$PR_SHA" >> "$GITHUB_ENV"
           echo "CHECKOUT_ROOT=$CHECKOUT_ROOT" >> "$GITHUB_ENV"
 
-          git worktree add --detach "$CHECKOUT_ROOT/$RELEASE_LABEL" "$RELEASE_TAG"
+          git worktree add --detach "$CHECKOUT_ROOT/$RELEASE_LABEL" "$RELEASE_SHA"
           echo "STAGE_RELEASE=$CHECKOUT_ROOT/$RELEASE_LABEL" >> "$GITHUB_ENV"
 
           case "$TARGET_BRANCH" in
