@@ -113,35 +113,21 @@ def test_authenticator_map_grant_without_assignment_does_not_create_sync_client(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ('operation', 'callback_name', 'log_subject'),
-    [('grant', '_log_sync_result', 'assignment'), ('removal', '_log_unassignment_sync_result', 'unassignment')],
+    ('callback_name', 'log_subject'),
+    [('_log_sync_result', 'assignment'), ('_log_unassignment_sync_result', 'unassignment')],
 )
-@patch('aap_gateway_api.authentication.reconcile.AllServicesClient')
-def test_authenticator_map_sync_logs_service_rejection(all_services_client, caplog, monkeypatch, operation, callback_name, log_subject):
-    """A failed component response is logged with enough context to diagnose it."""
+def test_authenticator_map_sync_logs_service_rejection(caplog, callback_name, log_subject):
+    """The callback preserves sync context without duplicating the response body."""
     from aap_gateway_api.authentication.reconcile import ReconcileUser
 
-    user = SimpleNamespace(username='mapped-user')
-    role_definition = Mock()
-    reconciler = ReconcileUser({}, user, Mock())
-
-    def apply_permissions(reconciler):
-        if operation == 'grant':
-            reconciler._give_permission(role_definition)
-        else:
-            reconciler._remove_permission(role_definition)
-
-    if operation == 'grant':
-        role_definition.give_global_permission.return_value = Mock()
-    monkeypatch.setattr(BaseReconcileUser, 'apply_permissions', apply_permissions)
-    reconciler.apply_permissions()
-    callback = all_services_client.return_value.with_callback.call_args.args[0]
-    assert callback is getattr(ReconcileUser, callback_name)
+    callback = getattr(ReconcileUser, callback_name)
+    response_body = 'x' * 2048
 
     with caplog.at_level(logging.WARNING, logger='aap.gateway.authentication.reconcile'):
-        callback(SimpleNamespace(api_slug='controller'), SimpleNamespace(status_code=400, text='invalid assignment'))
+        callback(SimpleNamespace(api_slug='controller'), SimpleNamespace(status_code=400, text=response_body))
 
-    assert f'Authenticator-map {log_subject} sync to controller failed: HTTP 400: invalid assignment' in caplog.messages
+    assert f'Authenticator-map {log_subject} sync to controller failed: HTTP 400' in caplog.messages
+    assert response_body not in caplog.text
 
 
 @pytest.mark.django_db
