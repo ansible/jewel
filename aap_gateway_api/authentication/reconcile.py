@@ -54,11 +54,10 @@ class ReconcileUser(BaseReconcileUser):
             logger.warning('Authenticator-map %s sync to %s did not receive a response', operation, service_name)
         elif not 200 <= response.status_code < 300:
             logger.warning(
-                'Authenticator-map %s sync to %s failed: HTTP %s: %s',
+                'Authenticator-map %s sync to %s failed: HTTP %s',
                 operation,
                 service_name,
                 response.status_code,
-                response.text,
             )
         else:
             logger.info('Authenticator-map %s sync to %s completed: HTTP %s', operation, service_name, response.status_code)
