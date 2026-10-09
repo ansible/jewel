@@ -95,3 +95,5 @@ class CursorStore:
                 self._log_fn(f"{msg}\n{traceback.format_exc()}", logging.WARNING)
             else:
                 logger.warning(msg, exc_info=True)
+
+# CODEOWNERS review routing test; no runtime behavior changes.
