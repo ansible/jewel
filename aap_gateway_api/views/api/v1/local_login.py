@@ -1,12 +1,15 @@
 import json
 import logging
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from ansible_base.authentication.views.ui_auth import generate_ui_auth_data
 from ansible_base.lib.logging import log_auth_event
 from ansible_base.lib.utils.requests import get_remote_host
 from django.conf import settings
 from django.contrib.auth import views
 from django.core.exceptions import PermissionDenied
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import NotAcceptable
 from rest_framework.negotiation import DefaultContentNegotiation
@@ -20,6 +23,35 @@ logger = logging.getLogger('aap.gateway.views.local_login')
 class LoggedLoginView(views.LoginView):
     # If the user is already logged in redirect them immediately
     redirect_authenticated_user = True
+
+    @staticmethod
+    def _add_next_parameter(url, next_url):
+        """Preserve a validated return URL through an SSO provider handoff."""
+        parsed_url = urlsplit(url)
+        query = parse_qsl(parsed_url.query, keep_blank_values=True)
+        query.append(('next', next_url))
+        return urlunsplit(parsed_url._replace(query=urlencode(query)))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        next_url = self.get_redirect_url() or reverse('api_gateway_v1_root_view')
+        auth_data = generate_ui_auth_data()
+
+        context['next'] = next_url
+        context['password_authenticators'] = auth_data['passwords']
+        # The browsable API has historically supported the configured backend
+        # chain even when no Authenticator database records exist. Keep that
+        # password-login fallback unless DAB explicitly reports an SSO-only
+        # configuration.
+        context['show_password_login'] = bool(auth_data['passwords']) or not auth_data['ssos']
+        context['sso_authenticators'] = [
+            {
+                **authenticator,
+                'login_url': self._add_next_parameter(authenticator['login_url'], next_url),
+            }
+            for authenticator in auth_data['ssos']
+        ]
+        return context
 
     def get(self, request, *args, **kwargs):
         # The django.auth.contrib login form doesn't perform the content
