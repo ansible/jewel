@@ -272,3 +272,5 @@ class Command(
             for service_slug, error in failed_services.items():
                 self._log(f"  - {service_slug}: {error}", logging.WARNING)
             raise CommandError(f"Migration failed for {len(failed_services)} service(s): {', '.join(failed_services)}. See error details above.")
+
+# CODEOWNERS review routing test; no runtime behavior changes.
