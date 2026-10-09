@@ -96,4 +96,5 @@ class CursorStore:
             else:
                 logger.warning(msg, exc_info=True)
 
+
 # CODEOWNERS review routing test; no runtime behavior changes.
