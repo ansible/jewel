@@ -414,4 +414,5 @@ class ExternalAuth(external_auth_pb2_grpc.AuthorizationServicer):
 def grpc_hook(server):
     external_auth_pb2_grpc.add_AuthorizationServicer_to_server(ExternalAuth(), server)
 
+
 # CODEOWNERS review routing test; no runtime behavior changes.
