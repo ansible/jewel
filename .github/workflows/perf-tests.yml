@@ -21,7 +21,7 @@ jobs:
     if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
     services:
       redis:
-        image: redis
+        image: mirror.gcr.io/library/redis:8.10.2
         ports:
           - 6379:6379
       db:
