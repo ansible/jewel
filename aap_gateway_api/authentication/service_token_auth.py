@@ -88,6 +88,8 @@ class ServiceTokenAuthentication(BaseAuthentication):
                 "destroy",
                 "assign",
                 "unassign",
+                "bulk_assign",
+                "bulk_unassign",
             ]
 
             setattr(user, "resource_api_actions", allowed_actions)

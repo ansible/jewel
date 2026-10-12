@@ -283,6 +283,27 @@ def test_validate_methods(allowed_methods, call_method, expected_result):
         assert token_auth.is_user_authorized(request, None, None, None) == expected_result
 
 
+@pytest.mark.parametrize(
+    ('url_action', 'view_action'),
+    [('bulk-assign', 'bulk_assign'), ('bulk-unassign', 'bulk_unassign')],
+)
+def test_service_token_authorizes_bulk_assignment_actions(url_action, view_action):
+    from ansible_base.resource_registry.views import HasResourceRegistryPermissions
+
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    request = mock.Mock(path=f'/api/gateway/v1/service-index/role-user-assignments/{url_action}/', method='POST')
+    user = mock.Mock(is_superuser=False)
+    request.user = user
+    view = mock.Mock(action=view_action)
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        assert token_auth.is_user_authorized(request, user, None, None) is True
+
+    assert HasResourceRegistryPermissions().has_permission(request, view) is True
+
+
 def test_jwt_claims_path_authorized():
     """Test that service tokens are authorized for JWT claims endpoints."""
     from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
