@@ -48,6 +48,16 @@ def test_get_preference_sections():
     assert "proxy" in sections
 
 
+def test_allow_local_pat_creation_preference():
+    preference = gateway_preference_registry.get('allow_local_pat_creation', 'oauth2_provider')
+
+    assert preference.default is True
+    assert preference.required is False
+    assert preference.field_type.__name__ == 'BooleanPreference'
+    assert str(preference.label) == 'Allow Local PAT Creation'
+    assert 'When enabled, users can create local Personal Access Tokens (PATs).' in str(preference.help_text)
+
+
 def test_meta_register_preference_fixture(register_preference):
     register_preference(
         section="general",
