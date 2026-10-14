@@ -65,6 +65,7 @@ urlpatterns = [
     path(f'{API_GATEWAY_V1_PREFIX}logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
     path(f'{API_GATEWAY_V1_PREFIX}me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
     path(f'{API_GATEWAY_V1_PREFIX}session/', views.SessionView.as_view(), name='session-view'),
+    path(f'{API_GATEWAY_V1_PREFIX}ui_config/', views.UIConfigView.as_view(), name='ui-config-view'),
     # settings
     re_path(rf'{API_GATEWAY_V1_PREFIX}settings/(?P<category_slug>[a-z0-9_]+)/$', views.SettingSectionView.as_view(), name='setting-section-list'),
     re_path(

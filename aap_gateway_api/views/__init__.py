@@ -46,6 +46,7 @@ from aap_gateway_api.views.api.v1.service_key import ServiceKeyViewSet  # noqa: 
 from aap_gateway_api.views.api.v1.session import SessionView  # noqa: F401
 from aap_gateway_api.views.api.v1.status import StatusView  # noqa: F401
 from aap_gateway_api.views.api.v1.team import TeamViewSet  # noqa: F401
+from aap_gateway_api.views.api.v1.ui_config import UIConfigView  # noqa: F401
 from aap_gateway_api.views.api.v1.user import UserViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.workload_identity_tokens import WorkloadIdentityTokensView  # noqa: F401
 
