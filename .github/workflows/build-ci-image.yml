@@ -34,9 +34,10 @@ jobs:
   build-and-push:
     name: Build and push CI image
     runs-on: ubuntu-latest
+    # A repository opts in to image builds by configuring this variable.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (vars.CI_IMAGE_BRANCH_STARTS_WITH != '' &&
+      vars.CI_IMAGE_BRANCH_STARTS_WITH != '' &&
+      (github.event_name == 'workflow_dispatch' ||
        startsWith(github.ref_name, vars.CI_IMAGE_BRANCH_STARTS_WITH))
     steps:
       - uses: actions/checkout@v5
