@@ -3,8 +3,7 @@ name: Build CI Image
 on:
   push:
     branches:
-      - devel
-      - stable-*
+      - '**'
     paths:
       - 'requirements/requirements.txt'
       - 'requirements/requirements_test.txt'
@@ -36,8 +35,9 @@ jobs:
     name: Build and push CI image
     runs-on: ubuntu-latest
     if: >-
-      github.repository == 'ansible/jewel' &&
-      (github.event_name == 'workflow_dispatch' || github.ref_name == 'devel' || startsWith(github.ref_name, 'stable-'))
+      github.event_name == 'workflow_dispatch' ||
+      (vars.CI_IMAGE_BRANCH_STARTS_WITH != '' &&
+       startsWith(github.ref_name, vars.CI_IMAGE_BRANCH_STARTS_WITH))
     steps:
       - uses: actions/checkout@v5
         with:
