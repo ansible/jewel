@@ -1,8 +1,8 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
 from ansible_base.lib.utils.models import is_system_user
+from ansible_base.lib.utils.views.deprecation import deprecated, mark_deprecated
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
-from ansible_base.lib.utils.views.deprecation import deprecated
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
@@ -38,6 +38,12 @@ class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayMode
         if is_system_user(instance):
             raise ValidationError({"detail": "The system user cannot be deleted"})
         super().perform_destroy(instance)
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        for warning in getattr(self, 'deprecation_warnings', []):
+            mark_deprecated(response, detail=warning['message'])
+        return response
 
     def filter_queryset(self, qs):
         qs = visible_users(self.request.user, queryset=qs)

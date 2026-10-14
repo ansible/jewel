@@ -8,7 +8,6 @@ from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.serializers.mixins import CleanTextMixin
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.lib.utils.views.deprecation import mark_deprecated
 from ansible_base.rbac.policies import can_change_user
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
@@ -108,6 +107,9 @@ class UserSerializer(CleanTextMixin, CommonUserSerializer):
             self._deprecation_warnings.append({'field': field_name, 'message': message})
             warnings.warn(message, DeprecationWarning, stacklevel=2)
             logger.warning(f"Deprecation warning for field '{field_name}': {message}")
+            view = self.context.get('view')
+            if view is not None:
+                view.deprecation_warnings = self._deprecation_warnings
 
     def _collect_validation_errors(self, validation_functions):
         """

@@ -5,11 +5,10 @@ from rest_framework import serializers
 from rest_framework.serializers import ValidationError
 
 from aap_gateway_api.models import ServiceCluster, ServiceKey
-from ansible_base.lib.utils.views.deprecation import deprecated
 
 DEPRECATED_FIELD_HELP_TEXT = "DEPRECATED: This field is no longer editable"
 
-@deprecated(detail='Service Key has been deprecated')
+
 class ServiceKeySerializerRead(CleanTextMixin, NamedCommonModelSerializer):
     service_cluster = serializers.PrimaryKeyRelatedField(
         read_only=True,
