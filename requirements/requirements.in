@@ -24,7 +24,7 @@ pyasn1>=0.6.4    # CVE-2026-59886 - DoS via crafted ASN.1 REAL values (transitiv
 django-redis>=7.0.0
 python-ldap>=3.4.7
 redis>=8.0.1,<9  # 8.0.0 broke Unix socket connections (redis/redis-py#4086), fixed in 8.0.1
-urllib3>=2.7.0   # CVE-2026-44431 / CVE-2026-44432
+urllib3>=2.8.0  # AAP-97335
 argon2-cffi
 dynaconf>=3.2.13,<4.0.0  # CVE-2026-33154; <4.0.0 because 4.x is expected to have breaking changes
 referencing<0.37.0  # consistent with DAB pin from jsonschema-path
