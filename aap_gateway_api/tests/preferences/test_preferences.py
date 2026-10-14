@@ -51,7 +51,7 @@ def test_get_preference_sections():
 def test_disable_local_pat_creation_preference():
     preference = gateway_preference_registry.get('disable_local_pat_creation', 'oauth2_provider')
 
-    assert preference.default is True
+    assert preference.default is False
     assert preference.required is False
     assert preference.field_type.__name__ == 'BooleanPreference'
 
