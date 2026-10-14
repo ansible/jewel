@@ -402,16 +402,17 @@ register(
 
 register(
     section="oauth2_provider",
-    preference_name="disable_local_pat_creation",
-    default=False,
+    preference_name="allow_local_pat_creation",
+    default=True,
     required=False,
     preference_type="bool",
     help_text=_(
-        "When enabled, this setting prevents local PAT creation for all users. "
-        "The management command can still generate a PAT as a superuser, which is also used by the installer."
+        "When enabled, users can create local Personal Access Tokens (PATs). "
+        "When disabled, local PAT creation is blocked for all users. "
+        "The management command can still generate PATs, including during installation."
     ),
     encrypted=False,
-    label=_('Disable Local PAT Creation'),
+    label=_('Allow Local PAT Creation'),
 )
 
 register(
