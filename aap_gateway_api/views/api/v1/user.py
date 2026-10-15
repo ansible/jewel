@@ -1,7 +1,7 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
 from ansible_base.lib.utils.models import is_system_user
-from ansible_base.lib.utils.views.deprecation import deprecated, mark_deprecated
+from ansible_base.lib.utils.views.deprecation import DeprecatedFieldsViewMixin, deprecated, mark_deprecated
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
@@ -22,7 +22,7 @@ from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPI
 
 
 @extend_schema(responses=UserSerializer)
-class UserViewSet(DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayModelViewSet):
+class UserViewSet(DeprecatedFieldsViewMixin, DABOAuth2UserViewsetMixin, ResourceAPIUpdateMixin, GatewayModelViewSet):
     """
     API endpoint that allows users to be viewed or edited.
     """

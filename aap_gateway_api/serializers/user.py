@@ -8,6 +8,7 @@ from ansible_base.lib.serializers.common import CommonUserSerializer
 from ansible_base.lib.serializers.mixins import CleanTextMixin
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.lib.utils.views.deprecation import DeprecationSerializerMixin
 from ansible_base.rbac.policies import can_change_user
 from crum import get_current_user
 from django.contrib.auth import update_session_auth_hash
@@ -39,7 +40,7 @@ class _AssociatedAuthenticatorsField(serializers.JSONField):
 @extend_schema_serializer(
     deprecate_fields=["authenticators", "authenticator_uid"],
 )
-class UserSerializer(CleanTextMixin, CommonUserSerializer):
+class UserSerializer(DeprecationSerializerMixin, CleanTextMixin, CommonUserSerializer):
     # password has its own dedicated policy validation (validate_password /
     # _perform_password_validation below) and legitimately contains characters
     # like $, {, }, ( ) that CleanTextMixin's Tier 2 blocklist would reject.
@@ -81,6 +82,17 @@ class UserSerializer(CleanTextMixin, CommonUserSerializer):
         self.fields['authenticators'].choices = list(Authenticator.objects.all().values_list('id', 'name').order_by('name'))
         # Track deprecation warnings to show only once per request
         self._deprecation_warnings = []
+
+    deprecated_fields = {
+        'authenticator_uid': (
+            "The 'authenticator_uid' field is deprecated and will be removed in a future version. "
+            "Use 'associated_authenticators' field instead to specify UIDs per authenticator."
+        ),
+        'authenticators': (
+            "The 'authenticators' field is deprecated and will be removed in a future version. "
+            "Use 'associated_authenticators' field instead for full control over multiple authenticators."
+        ),
+    }
 
     class Meta(CommonUserSerializer.Meta):
         model = User
