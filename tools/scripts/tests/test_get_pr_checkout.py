@@ -364,7 +364,7 @@ class TestMainScenarios:
         monkeypatch.setenv("GITHUB_BASE_REF", "devel")
         _set_cli_args("ansible/django-ansible-base")
 
-        # Branch doesn't exist in any variant; listing succeeds but no prefix match
+        # Branch doesn't exist in any variant; listing succeeds but no suffix match
         mock_branch_exists.return_value = False
         mock_list_branches.return_value = ["main"]
         mock_clone.return_value = True
@@ -389,7 +389,7 @@ class TestMainScenarios:
         monkeypatch.setenv("GITHUB_BASE_REF", "feature-sprint-2026-24-migrate_service_data")
         _set_cli_args("ansible/django-ansible-base")
 
-        # Feature branch doesn't exist; no startswith prefix either
+        # Feature branch doesn't exist; no endswith suffix either
         mock_branch_exists.return_value = False
         mock_list_branches.return_value = ["devel", "main"]
         mock_clone.return_value = True
@@ -405,16 +405,17 @@ class TestMainScenarios:
     @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.list_repo_branches")
     @patch("get_pr_checkout.branch_exists")
-    def test_falls_back_to_startswith_prefix_branch(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
-        """Missing exact base → longest existing branch b where target.startswith(b + '-')"""
+    def test_falls_back_to_endswith_suffix_branch(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
+        """Missing exact base → longest existing branch b where target.endswith('-' + b)"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
-        monkeypatch.setenv("GITHUB_BASE_REF", "release-1.2-feature")
+        monkeypatch.setenv("GITHUB_BASE_REF", "feature-release-1.2")
         _set_cli_args("ansible/ansible.platform")
 
         mock_branch_exists.return_value = False
-        # False prefix without '-' boundary must not win (release-1.2-featur vs release-1.2-feature)
-        mock_list_branches.return_value = ["devel", "release-1.1", "release-1.2", "release-1.2-featur"]
+        # Both "1.2" and "release-1.2" match; pick the longer match.
+        # "release-1.2x" must not match (wrong suffix / no '-' boundary).
+        mock_list_branches.return_value = ["devel", "1.2", "release-1.2", "release-1.2x"]
         mock_clone.return_value = True
 
         with pytest.raises(SystemExit) as exc_info:
@@ -427,15 +428,15 @@ class TestMainScenarios:
     @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.list_repo_branches")
     @patch("get_pr_checkout.branch_exists")
-    def test_startswith_no_prefix_falls_back_to_devel(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
-        """If no existing branch is a '-'bounded startswith prefix, fall back to devel"""
+    def test_endswith_no_suffix_falls_back_to_devel(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
+        """If no existing branch is a '-'bounded endswith suffix, fall back to devel"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
-        monkeypatch.setenv("GITHUB_BASE_REF", "release-1.2-feature")
+        monkeypatch.setenv("GITHUB_BASE_REF", "feature-release-1.2")
         _set_cli_args("ansible/ansible.platform")
 
         mock_branch_exists.return_value = False
-        mock_list_branches.return_value = ["devel", "main", "release-1.2-featur"]
+        mock_list_branches.return_value = ["devel", "main", "release-1.2x"]
         mock_clone.return_value = True
 
         with pytest.raises(SystemExit) as exc_info:
@@ -445,13 +446,13 @@ class TestMainScenarios:
         mock_clone.assert_called_once()
         assert mock_clone.call_args[0][1] == "devel"
 
-    def test_branch_matching_prefix_picks_longest_bounded(self):
-        branches = ["devel", "release-1.1", "release-1.2", "release-1.2-featur"]
-        assert get_pr_checkout.branch_matching_prefix("release-1.2-feature", branches) == "release-1.2"
+    def test_branch_matching_suffix_picks_longest_bounded(self):
+        branches = ["devel", "1.2", "release-1.2", "release-1.2x"]
+        assert get_pr_checkout.branch_matching_suffix("feature-release-1.2", branches) == "release-1.2"
 
-    def test_branch_matching_prefix_requires_separator(self):
-        # Without a '-' after the candidate, it is not a prefix match
-        assert get_pr_checkout.branch_matching_prefix("release-1.2-feature", ["devel", "release-1.2-featur"]) is None
+    def test_branch_matching_suffix_requires_separator(self):
+        # Without a '-' before the candidate, it is not a suffix match
+        assert get_pr_checkout.branch_matching_suffix("featurerelease-1.2", ["devel", "release-1.2"]) is None
 
     @patch("get_pr_checkout.make_api_request")
     def test_list_repo_branches_returns_none_on_api_failure(self, mock_api):
@@ -471,7 +472,7 @@ class TestMainScenarios:
         """Failed branch listing must fail the job instead of falling back to devel"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
-        monkeypatch.setenv("GITHUB_BASE_REF", "release-1.2-feature")
+        monkeypatch.setenv("GITHUB_BASE_REF", "feature-release-1.2")
         _set_cli_args("ansible/ansible.platform")
 
         mock_branch_exists.return_value = False
@@ -486,11 +487,11 @@ class TestMainScenarios:
     @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.list_repo_branches")
     @patch("get_pr_checkout.branch_exists")
-    def test_prefix_uses_first_org_variant(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
-        """Ordered variants: first org with a prefix match wins over a longer match later"""
+    def test_suffix_uses_first_org_variant(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
+        """Ordered variants: first org with a suffix match wins over a longer match later"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
-        monkeypatch.setenv("GITHUB_BASE_REF", "release-1.2-feature-extra")
+        monkeypatch.setenv("GITHUB_BASE_REF", "extra-feature-release-1.2")
         _set_cli_args("[ansible-tower|ansible]/django-ansible-base")
 
         mock_branch_exists.return_value = False
@@ -499,7 +500,7 @@ class TestMainScenarios:
             if repo == "ansible-tower/django-ansible-base":
                 return ["devel", "release-1.2"]
             if repo == "ansible/django-ansible-base":
-                return ["devel", "release-1.2", "release-1.2-feature"]
+                return ["devel", "release-1.2", "feature-release-1.2"]
             return []
 
         mock_list_branches.side_effect = _branches

@@ -40,9 +40,9 @@ Repository Specification Format:
     --always-clone-repos accepts "[org1|org2|...]/repo-name" format:
     - Tries each org in order until finding one with the target branch
     - All variants share the same repo name (and thus target directory)
-    - If the exact branch is missing, pick the longest existing dependency branch
-      ``b`` such that ``target_branch.startswith(b + '-')``; otherwise fall back
-      to devel
+    - If the exact branch is missing, among dependency branches ``b`` where
+      ``target_branch.endswith('-' + b)``, pick the longest match; otherwise
+      fall back to devel
 
     Example: ansible/django-ansible-base
     - Tries ansible/django-ansible-base first
@@ -258,14 +258,16 @@ def list_repo_branches(repo: str, token: Optional[str]) -> Optional[List[str]]:
     return names
 
 
-def branch_matching_prefix(target_branch: str, branches: List[str]) -> Optional[str]:
+def branch_matching_suffix(target_branch: str, branches: List[str]) -> Optional[str]:
     """
-    Longest existing branch ``b`` where target_branch.startswith(b + '-').
+    Among branches that match target_branch.endswith('-' + b), return the
+    longest match (by branch name length).
 
-    The trailing '-' boundary avoids false prefixes (e.g. ``foo-bar`` must not
-    match target ``foo-barbaz``).
+    The leading '-' boundary avoids false suffixes (e.g. ``release-1.2`` must
+    not match target ``featurerelease-1.2``). Used for feature bases such as
+    ``feature-release-1.2`` falling back to dependency branch ``release-1.2``.
     """
-    matches = [b for b in branches if b and target_branch.startswith(b + '-')]
+    matches = [b for b in branches if b and target_branch.endswith('-' + b)]
     if not matches:
         return None
     return max(matches, key=len)
@@ -411,19 +413,19 @@ def process_always_clone_repos(always_clone_repos: list, target_branch: str, tok
         matching_repo = _find_repo_with_branch(repo_variants, target_branch, token)
 
         if not matching_repo:
-            # Variants are ordered: first org with a prefix match wins (do not
-            # pick the globally longest prefix across later orgs).
+            # Variants are ordered: first org with a suffix match wins (do not
+            # pick the globally longest suffix across later orgs).
             for repo_variant in repo_variants:
-                print(f"  ⚠️  Branch '{target_branch}' not found, looking for startswith prefix in '{repo_variant}'...")
+                print(f"  ⚠️  Branch '{target_branch}' not found, looking for endswith suffix in '{repo_variant}'...")
                 branches = list_repo_branches(repo_variant, token)
                 if branches is None:
                     print(f"##[error]❌ FATAL: Failed to list branches for '{repo_variant}'")
                     sys.exit(1)
-                prefix_branch = branch_matching_prefix(target_branch, branches)
-                if prefix_branch:
-                    print(f"  ✅ Found prefix branch '{prefix_branch}' in '{repo_variant}'")
+                suffix_branch = branch_matching_suffix(target_branch, branches)
+                if suffix_branch:
+                    print(f"  ✅ Found suffix branch '{suffix_branch}' in '{repo_variant}'")
                     matching_repo = repo_variant
-                    selected_branch = prefix_branch
+                    selected_branch = suffix_branch
                     break
 
         if not matching_repo:
