@@ -1,0 +1,44 @@
+---
+- name: Get a Keycloak admin token for reconciliation
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: admin-cli
+      username: "{{ keycloak_username }}"
+      password: "{{ keycloak_password }}"
+      grant_type: password
+    validate_certs: false
+  register: keycloak_reconcile_token_response
+  until: keycloak_reconcile_token_response is successful
+  retries: 50
+  delay: 6
+
+- name: Get the Keycloak OIDC client
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients?clientId=gateway_oidc_client"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_oidc_client
+
+- name: Verify the Keycloak OIDC client exists
+  ansible.builtin.assert:
+    that:
+      - keycloak_oidc_client.json | length == 1
+    fail_msg: "The gateway_oidc_client client does not exist in the Keycloak gateway realm."
+
+- name: Enable service accounts for the Keycloak OIDC client
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}"
+    method: PUT
+    body_format: json
+    body: "{{ keycloak_oidc_client.json[0] | combine({'serviceAccountsEnabled': true}) }}"
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [204]
+  when: not (keycloak_oidc_client.json[0].serviceAccountsEnabled | default(false) | bool)

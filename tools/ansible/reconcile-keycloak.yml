@@ -1,0 +1,9 @@
+---
+- name: Reconcile the Keycloak development realm
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - include_role:
+        name: keycloak
+        tasks_from: reconcile

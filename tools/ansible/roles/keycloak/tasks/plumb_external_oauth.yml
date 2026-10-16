@@ -1,0 +1,10 @@
+---
+- name: External OAuth authenticator
+  ansible.platform.authenticator:
+    name: "{{ external_oauth_adapter_name }}"
+    slug: "{{ external_oauth_slug }}"
+    enabled: true
+    create_objects: true
+    remove_users: true
+    configuration: "{{ external_oauth_configuration }}"
+    type: "ansible_base.authentication.authenticator_plugins.external_oauth"
