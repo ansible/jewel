@@ -112,6 +112,59 @@ def test_authenticator_map_grant_without_assignment_does_not_create_sync_client(
 
 
 @pytest.mark.django_db
+@patch('aap_gateway_api.authentication.reconcile.AllServicesClient', side_effect=RuntimeError('registry unavailable'))
+def test_sync_client_initialization_error_does_not_abort_permission_reconciliation(all_services_client, monkeypatch, caplog):
+    from aap_gateway_api.authentication.reconcile import ReconcileUser
+
+    user = SimpleNamespace(username='mapped-user')
+    assignment = Mock()
+    role_definition = Mock()
+    role_definition.give_global_permission.return_value = assignment
+
+    def apply_permissions(reconciler):
+        assert reconciler._give_permission(role_definition) is assignment
+
+    monkeypatch.setattr(BaseReconcileUser, 'apply_permissions', apply_permissions)
+
+    with caplog.at_level(logging.ERROR, logger='aap.gateway.authentication.reconcile'):
+        ReconcileUser({}, user, Mock()).apply_permissions()
+
+    role_definition.give_global_permission.assert_called_once_with(user)
+    all_services_client.assert_called_once_with(user=user, wait_for_response=False)
+    assert 'Failed to initialize authenticator-map sync client for user mapped-user' in caplog.text
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ('failing_method', 'other_method'),
+    [('sync_assignments', 'sync_unassignments'), ('sync_unassignments', 'sync_assignments')],
+)
+@patch('aap_gateway_api.authentication.reconcile.AllServicesClient')
+def test_batch_sync_error_does_not_abort_other_batch(all_services_client, failing_method, other_method, monkeypatch, caplog):
+    from aap_gateway_api.authentication.reconcile import ReconcileUser
+
+    callback_client = all_services_client.return_value.with_callback.return_value
+    getattr(callback_client, failing_method).side_effect = RuntimeError('service registry unavailable')
+    user = SimpleNamespace(username='mapped-user')
+    grant_role = Mock()
+    grant_role.give_global_permission.return_value = Mock()
+    removal_role = Mock()
+
+    def apply_permissions(reconciler):
+        reconciler._give_permission(grant_role)
+        reconciler._remove_permission(removal_role)
+
+    monkeypatch.setattr(BaseReconcileUser, 'apply_permissions', apply_permissions)
+
+    with caplog.at_level(logging.ERROR, logger='aap.gateway.authentication.reconcile'):
+        ReconcileUser({}, user, Mock()).apply_permissions()
+
+    getattr(callback_client, failing_method).assert_called_once()
+    getattr(callback_client, other_method).assert_called_once()
+    assert f'Failed to queue authenticator-map {failing_method.removeprefix("sync_")} sync for user mapped-user' in caplog.text
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ('callback_name', 'log_subject'),
     [('_log_sync_result', 'assignment'), ('_log_unassignment_sync_result', 'unassignment')],

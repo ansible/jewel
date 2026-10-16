@@ -30,14 +30,25 @@ class ReconcileUser(BaseReconcileUser):
         if not self._pending_grants and not self._pending_removals:
             return
 
-        client = AllServicesClient(user=self.user, wait_for_response=False)
+        try:
+            client = AllServicesClient(user=self.user, wait_for_response=False)
+        except Exception:
+            logger.exception('Failed to initialize authenticator-map sync client for user %s', self.user.username)
+            return
+
         if self._pending_grants:
             logger.info('Publishing %s authenticator-map assignments for user %s', len(self._pending_grants), self.user.username)
-            client.with_callback(self._log_sync_result).sync_assignments(self._pending_grants)
+            try:
+                client.with_callback(self._log_sync_result).sync_assignments(self._pending_grants)
+            except Exception:
+                logger.exception('Failed to queue authenticator-map assignments sync for user %s', self.user.username)
 
         if self._pending_removals:
             logger.info('Publishing %s authenticator-map unassignments for user %s', len(self._pending_removals), self.user.username)
-            client.with_callback(self._log_unassignment_sync_result).sync_unassignments(self._pending_removals)
+            try:
+                client.with_callback(self._log_unassignment_sync_result).sync_unassignments(self._pending_removals)
+            except Exception:
+                logger.exception('Failed to queue authenticator-map unassignments sync for user %s', self.user.username)
 
     @staticmethod
     def _log_sync_result(service, response):
