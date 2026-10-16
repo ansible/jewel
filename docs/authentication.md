@@ -346,16 +346,9 @@ The command writes only the access token to standard output, allowing it to be
 assigned to a shell variable. It reads credentials from the generated local
 realm import rather than duplicating them in the Makefile or script.
 
-The default token endpoint is `https://localhost:8443`. If
-`keycloak_exposed_port` is overridden, provide the corresponding endpoint:
-
-```bash
-KEYCLOAK_TOKEN_ENDPOINT="https://localhost:<port>/auth/realms/gateway/protocol/openid-connect/token" make token gateway_admin
-```
-
-The helper sends `Host: keycloak:8443` by default so Keycloak uses the
-in-container issuer. Override it with `KEYCLOAK_HOST_HEADER` only when the
-Keycloak issuer host or port has also been customized.
+The helper derives its endpoint and host header from the rendered Keycloak
+configuration, so `container_reference` and `keycloak_exposed_port` are set
+only once in the Ansible configuration.
 
 `token` depends on the generated Keycloak realm. If the realm
 template or Keycloak role changes, Make renders a fresh import before looking

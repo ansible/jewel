@@ -11,8 +11,7 @@ set -euo pipefail
 
 readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly realm_file="${KEYCLOAK_REALM_FILE:-${repository_root}/tools/generated/keycloak.gateway.realm.json}"
-readonly token_endpoint="${KEYCLOAK_TOKEN_ENDPOINT:-https://localhost:8443/auth/realms/gateway/protocol/openid-connect/token}"
-readonly keycloak_host_header="${KEYCLOAK_HOST_HEADER:-keycloak:8443}"
+readonly token_config_file="${repository_root}/tools/generated/keycloak.token.config.json"
 
 subject="${1:-}"
 
@@ -78,6 +77,10 @@ require_command curl
 require_command jq
 
 [ -f "$realm_file" ] || fail "generated Keycloak realm not found: $realm_file. Start the Keycloak development environment first."
+[ -f "$token_config_file" ] || fail "generated Keycloak token configuration not found: $token_config_file. Run make token to generate it."
+
+token_endpoint="$(jq --exit-status --raw-output '.token_endpoint' "$token_config_file")" || fail "unable to read token endpoint from $token_config_file"
+keycloak_host_header="$(jq --exit-status --raw-output '.host_header' "$token_config_file")" || fail "unable to read Keycloak host header from $token_config_file"
 
 if [ -z "$subject" ]; then
     usage

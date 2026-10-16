@@ -28,7 +28,7 @@ PROXY_CONFIG_INPUTS := tools/ansible/generate-proxy-configs.yml tools/ansible/va
 KEYCLOAK_REALM_INPUTS := tools/ansible/render-keycloak-realm.yml tools/ansible/vars/container_config.yml \
 	$(shell find tools/ansible/roles/keycloak -type f) container-startup.yml
 KEYCLOAK_TOKEN_SUBJECT := $(or $(KEYCLOAK_SUBJECT),$(word 2,$(MAKECMDGOALS)))
-KEYCLOAK_TOKEN_PREREQUISITES := tools/generated/keycloak.gateway.realm.json $(if $(KEYCLOAK_TOKEN_SUBJECT),keycloak-reconcile)
+KEYCLOAK_TOKEN_PREREQUISITES := keycloak-render $(if $(KEYCLOAK_TOKEN_SUBJECT),keycloak-reconcile)
 
 # Support `make token <subject>` in addition to the conventional
 # `make token KEYCLOAK_SUBJECT=<subject>` form.
@@ -45,7 +45,7 @@ endif
 	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach docker-compose-down \
 	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
 	collection podman-collection podman-build-preflight podman-preflight requirements check-requirements tools/generated/sources \
-	ci-image ci-image-push keycloak-reconcile token
+	ci-image ci-image-push keycloak-render keycloak-reconcile token
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -229,7 +229,7 @@ $(SOURCES_STAMP): $(SOURCES_INPUTS)
 	touch $@
 
 ## Render the Keycloak realm import for local development
-tools/generated/keycloak.gateway.realm.json: $(KEYCLOAK_REALM_INPUTS)
+keycloak-render: $(KEYCLOAK_REALM_INPUTS)
 	@if ! grep -Eq '^[[:space:]]*keycloak_enabled:[[:space:]]*[Tt]rue([[:space:]]|$$)' container-startup.yml; then \
 		echo "Keycloak is disabled in container-startup.yml; set keycloak_enabled: True before requesting a token." >&2; \
 		exit 1; \
@@ -237,6 +237,9 @@ tools/generated/keycloak.gateway.realm.json: $(KEYCLOAK_REALM_INPUTS)
 	ansible-playbook tools/ansible/render-keycloak-realm.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
+
+tools/generated/keycloak.gateway.realm.json: keycloak-render
+	@test -f "$@"
 
 ## Install the Ansible collection used by Podman-specific container setup
 podman-collection: $(PODMAN_COLLECTION_STAMP)

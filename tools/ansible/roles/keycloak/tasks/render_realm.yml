@@ -32,3 +32,8 @@
   ansible.builtin.template:
     src: keycloak.gateway.realm.json.j2
     dest: "{{ keycloak_realm_template }}"
+
+- name: Render Keycloak token connection configuration
+  ansible.builtin.template:
+    src: keycloak.token.config.json.j2
+    dest: "{{ sources_dest }}/keycloak.token.config.json"
