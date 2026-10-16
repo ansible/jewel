@@ -1,4 +1,5 @@
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 from ansible_base.lib.utils.response import get_relative_url
 
@@ -64,7 +65,7 @@ def test_login_post_failed_login_no_username(logger, unauthenticated_api_client)
     assert logger.warning.call_count == 0
 
 
-def test_login_get_accept_html(unauthenticated_api_client):
+def test_login_get_accept_html(unauthenticated_api_client, local_authenticator):
     """
     Test GETing the login view.
     """
@@ -72,6 +73,35 @@ def test_login_get_accept_html(unauthenticated_api_client):
     response = unauthenticated_api_client.get(url, HTTP_ACCEPT="text/html")
     assert response.status_code == 200
     assert response.template_name == ["rest_framework/login.html"]
+    content = response.content.decode()
+    assert 'name="username"' in content
+    assert '<span class="glyphicon glyphicon-log-in"></span> Log in</a>' not in content
+
+
+def test_login_get_shows_sso_authenticators_and_preserves_next(unauthenticated_api_client, keycloak_authenticator):
+    """SSO authenticators use their DAB-generated login URL with a safe return URL."""
+    next_url = get_relative_url("user-list")
+    url = f'{get_relative_url("login")}?next={next_url}'
+
+    response = unauthenticated_api_client.get(url, HTTP_ACCEPT="text/html")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="username"' not in content
+    assert 'Log in with:' in content
+    assert keycloak_authenticator.name in content
+    sso_authenticator = response.context['sso_authenticators'][0]
+    assert parse_qs(urlsplit(sso_authenticator['login_url']).query)['next'] == [next_url]
+
+
+def test_login_get_shows_password_login_when_no_authenticators_are_enabled(unauthenticated_api_client, keycloak_authenticator):
+    keycloak_authenticator.enabled = False
+    keycloak_authenticator.save()
+
+    response = unauthenticated_api_client.get(get_relative_url("login"), HTTP_ACCEPT="text/html")
+
+    assert response.status_code == 200
+    assert 'name="username"' in response.content.decode()
 
 
 def test_login_get_accept_unknown(unauthenticated_api_client):
