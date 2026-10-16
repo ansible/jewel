@@ -1,0 +1,39 @@
+---
+- name: Create keycloak certs directory
+  ansible.builtin.file:
+    path: "{{ keycloak_certs_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Generate certificates for keycloak
+  ansible.builtin.command: >-
+    openssl req -new -x509 -days 365 -nodes
+    -out {{ public_key_file }} -keyout {{ private_key_file }} -subj "{{ cert_subject }}"
+  args:
+    creates: "{{ public_key_file }}"
+
+- name: Generate public cert for keycloak
+  ansible.builtin.command: >-
+    openssl pkey -pubout -in {{ private_key_file }} -out {{ public_key_cert }}
+  args:
+    creates: "{{ public_key_cert }}"
+
+- name: Load certs for the Keycloak realm
+  ansible.builtin.set_fact:
+    private_key: "{{ private_key_content }}"
+    public_key: "{{ public_key_content }}"
+    public_key_trimmed: "{{ public_key_content | regex_replace('-----BEGIN CERTIFICATE-----\\\\n', '') | regex_replace('\\\\n-----END CERTIFICATE-----', '') }}"
+  vars:
+    # The extra slash preserves newlines in the JSON strings rendered below.
+    public_key_content: "{{ lookup('file', public_key_file) | regex_replace('\n', '\\\\n') }}"
+    private_key_content: "{{ lookup('file', private_key_file) | regex_replace('\n', '\\\\n') }}"
+
+- name: Render the gateway realm
+  ansible.builtin.template:
+    src: keycloak.gateway.realm.json.j2
+    dest: "{{ keycloak_realm_template }}"
+
+- name: Render Keycloak token connection configuration
+  ansible.builtin.template:
+    src: keycloak.token.config.json.j2
+    dest: "{{ sources_dest }}/keycloak.token.config.json"

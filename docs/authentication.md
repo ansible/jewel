@@ -288,6 +288,87 @@ An example authenticator payload ...
 }
 ```
 
+## Keycloak development environment
+
+The local development stack includes an optional Keycloak sidecar for exercising
+the OIDC, SAML, and external OAuth authenticator paths. Enable it before
+starting the stack:
+
+```yaml
+# container-startup.yml
+keycloak_enabled: True
+```
+
+Then start the environment as usual:
+
+```bash
+make podman-compose
+```
+
+When Keycloak is enabled, the development plumbing creates these separate
+Gateway authenticators:
+
+- `Dev Keycloak OIDC` for browser-based Keycloak login;
+- `Dev Keycloak SAML` for SAML login; and
+- `Dev Keycloak External OAuth` for bearer-token API authentication work.
+
+The external OAuth authenticator uses the Keycloak service hostname on the
+container network for its issuer and JWKS endpoints. It is intentionally
+separate from the browser-login OIDC authenticator.
+
+The development setup creates superuser, auditor, and default-organization
+authenticator maps for the external OAuth authenticator, matching the maps
+provided for the Keycloak OIDC authenticator.
+
+### Development tokens
+
+Use the token helper to list the configured test subjects:
+
+```bash
+make token
+```
+
+Mint a user token by supplying one of the listed usernames:
+
+```bash
+make token gateway_admin
+```
+
+Mint a client-credentials token with the listed client identifier, or its
+`service-account-` alias:
+
+```bash
+make token gateway_oidc_client
+make token service-account-gateway_oidc_client
+```
+
+The command writes only the access token to standard output, allowing it to be
+assigned to a shell variable. It reads credentials from the generated local
+realm import rather than duplicating them in the Makefile or script.
+
+The helper derives its endpoint and host header from the rendered Keycloak
+configuration, so `container_reference` and `keycloak_exposed_port` are set
+only once in the Ansible configuration.
+
+`token` depends on the generated Keycloak realm. If the realm
+template or Keycloak role changes, Make renders a fresh import before looking
+up the subject. When minting a token, it also reconciles the existing Keycloak
+client configuration before making the request. Rendering and reconciliation do
+not start or stop the Keycloak or database containers. The target requires
+`keycloak_enabled: True`; the Keycloak sidecar must already be running when a
+token is requested.
+
+For an already-created realm, apply the development client configuration without
+restarting containers or deleting Keycloak data:
+
+```bash
+make keycloak-reconcile
+```
+
+This command is normally unnecessary because token minting performs the same
+reconciliation. It is useful when correcting an existing development realm
+before requesting a token.
+
 ## RADIUS
 
 https://en.wikipedia.org/wiki/RADIUS

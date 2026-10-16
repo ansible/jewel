@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Mint a Keycloak access token for a development-realm user or service account.
+#
+# Usage:
+#   tools/scripts/get_keycloak_token <username|client-id|service-account-client-id>
+#
+# The script reads the generated realm import so that credentials remain defined
+# in the development configuration instead of being duplicated here.
+
+set -euo pipefail
+
+readonly repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+readonly realm_file="${KEYCLOAK_REALM_FILE:-${repository_root}/tools/generated/keycloak.gateway.realm.json}"
+readonly token_config_file="${repository_root}/tools/generated/keycloak.token.config.json"
+
+subject="${1:-}"
+
+fail() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: make token <username|client-id|service-account-client-id>
+   or: make token KEYCLOAK_SUBJECT=<username|client-id|service-account-client-id>
+EOF
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+get_user_password() {
+    jq --exit-status --raw-output --arg username "$subject" '
+        .users[]
+        | select(.username == $username)
+        | .credentials[]?
+        | select(.type == "password")
+        | .value
+    ' "$realm_file" | head -n 1
+}
+
+get_client_secret() {
+    local requested_client_id="$1"
+
+    jq --exit-status --raw-output --arg client_id "$requested_client_id" '
+        .clients[]
+        | select(.clientId == $client_id)
+        | .secret
+    ' "$realm_file"
+}
+
+list_subjects() {
+    local client_token_subjects
+
+    printf 'Available Keycloak users:\n'
+    jq --raw-output '.users[]?.username' "$realm_file" | sed 's/^/  /'
+    printf '\nAvailable Keycloak client token subjects:\n'
+    client_token_subjects="$(jq --raw-output '
+        .clients[]?
+        | select(.protocol == "openid-connect")
+        | select(.secret != null and .secret != "**********")
+        | .clientId
+    ' "$realm_file")"
+    if [ -z "$client_token_subjects" ]; then
+        printf '  (none found in the generated realm)\n'
+        return
+    fi
+
+    while IFS= read -r client_id; do
+        printf '  %s (or service-account-%s)\n' "$client_id" "$client_id"
+    done <<<"$client_token_subjects"
+}
+
+require_command curl
+require_command jq
+
+[ -f "$realm_file" ] || fail "generated Keycloak realm not found: $realm_file. Start the Keycloak development environment first."
+[ -f "$token_config_file" ] || fail "generated Keycloak token configuration not found: $token_config_file. Run make token to generate it."
+
+token_endpoint="$(jq --exit-status --raw-output '.token_endpoint' "$token_config_file")" || fail "unable to read token endpoint from $token_config_file"
+keycloak_host_header="$(jq --exit-status --raw-output '.host_header' "$token_config_file")" || fail "unable to read Keycloak host header from $token_config_file"
+
+if [ -z "$subject" ]; then
+    usage
+    list_subjects
+    exit 0
+fi
+
+if [[ "$subject" == service-account-* ]]; then
+    client_id="${subject#service-account-}"
+else
+    client_id="$subject"
+fi
+
+if client_secret="$(get_client_secret "$client_id" 2>/dev/null)"; then
+    response="$(curl --silent --show-error --fail --insecure --request POST "$token_endpoint" \
+        --header "Host: ${keycloak_host_header}" \
+        --data-urlencode 'grant_type=client_credentials' \
+        --data-urlencode "client_id=${client_id}" \
+        --data-urlencode "client_secret=${client_secret}")"
+else
+    password="$(get_user_password 2>/dev/null)" || fail "no Keycloak user or client named '${subject}' was found in $realm_file"
+    response="$(curl --silent --show-error --fail --insecure --request POST "$token_endpoint" \
+        --header "Host: ${keycloak_host_header}" \
+        --data-urlencode 'grant_type=password' \
+        --data-urlencode 'client_id=gateway_oidc_client' \
+        --data-urlencode "client_secret=$(get_client_secret gateway_oidc_client)" \
+        --data-urlencode "username=${subject}" \
+        --data-urlencode "password=${password}" \
+        --data-urlencode 'scope=openid profile email')"
+fi
+
+jq --exit-status --raw-output '.access_token' <<<"$response"
