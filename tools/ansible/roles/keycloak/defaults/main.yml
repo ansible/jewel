@@ -18,6 +18,28 @@ oidc_configuration:
   ADDITIONAL_UNVERIFIED_ARGS:
     VERIFY_SSL: "{{ gateway_validate_certs }}"
 
+external_oauth_adapter_name: "Dev Keycloak External OAuth"
+external_oauth_slug: "keycloak_external_oauth_dev"
+external_oauth_auth_map_name: "Dev Keycloak External OAuth Map"
+external_oauth_configuration:
+  ISSUER_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway"
+  JWKS_URI: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/certs"
+  ALLOWED_ALGORITHMS:
+    - RS256
+  AUDIENCE: "gateway_oidc_client"
+  JWKS_CACHE_TIMEOUT: 3600
+  CLAIM_LIST:
+    - sub
+    - client_id
+    - azp
+    - preferred_username
+    - is_superuser
+    - is_system_auditor
+  GROUPS_CLAIM: Group
+  USERINFO_URL: ""
+  OIDC_ENDPOINT: ""
+  VERIFY_SSL: false
+
 saml_adapter_name: "Dev Keycloak SAML"
 saml_slug: "keycloak_saml_dev"
 saml_auth_map_name: "Dev Keycloak SAML Map"
