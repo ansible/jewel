@@ -79,6 +79,10 @@ class TestAssignmentSyncMixin:
         )
 
     @pytest.fixture
+    def dashboard_viewer_role_definition(self):
+        return RoleDefinition.objects.get(name='Automation Dashboard Viewer')
+
+    @pytest.fixture
     def service_role_definition(self):
         """Role definition for service-specific resources (awx inventory)"""
         # Use get_or_create with unique app_label/model combination
@@ -160,6 +164,22 @@ class TestGatewayRoleUserAssignmentViewSet(TestAssignmentSyncMixin):
 
         # Verify AllServicesClient was used for gateway-owned role
         mock_client_class.assert_called_once()
+        mock_client.sync_assignment.assert_called_once_with(assignment)
+
+    @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
+    def test_create_assignment_for_dashboard_viewer_role_syncs_to_services(
+        self, mock_client_class, admin_api_client, regular_user, organization, dashboard_viewer_role_definition
+    ):
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+
+        response = admin_api_client.post(
+            self.get_assignment_url(),
+            {'user': regular_user.id, 'object_id': organization.id, 'role_definition': dashboard_viewer_role_definition.id},
+        )
+
+        assert response.status_code == 201, response.data
+        assignment = RoleUserAssignment.objects.get(user=regular_user, object_id=organization.id, role_definition=dashboard_viewer_role_definition)
         mock_client.sync_assignment.assert_called_once_with(assignment)
 
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
@@ -412,6 +432,22 @@ class TestGatewayRoleTeamAssignmentViewSet(TestAssignmentSyncMixin):
 
         # Verify AllServicesClient was used for gateway-owned role
         mock_client_class.assert_called_once()
+        mock_client.sync_assignment.assert_called_once_with(assignment)
+
+    @patch('aap_gateway_api.views.api.v1.common.AllServicesClient')
+    def test_create_team_assignment_for_dashboard_viewer_role_syncs_to_services(
+        self, mock_client_class, admin_api_client, team, organization, dashboard_viewer_role_definition
+    ):
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+
+        response = admin_api_client.post(
+            self.get_assignment_url(),
+            {'team': team.id, 'object_id': organization.id, 'role_definition': dashboard_viewer_role_definition.id},
+        )
+
+        assert response.status_code == 201, response.data
+        assignment = RoleTeamAssignment.objects.get(team=team, object_id=organization.id, role_definition=dashboard_viewer_role_definition)
         mock_client.sync_assignment.assert_called_once_with(assignment)
 
     @patch('aap_gateway_api.views.api.v1.role.GWResourceAPIClient')
