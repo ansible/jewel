@@ -8,7 +8,7 @@
 - name: Generate certificates for keycloak
   ansible.builtin.command: >-
     openssl req -new -x509 -days 365 -nodes
-    -out {{ public_key_file }} -keyout {{ private_key_file }} -subj {{ cert_subject }}
+    -out {{ public_key_file }} -keyout {{ private_key_file }} -subj "{{ cert_subject }}"
   args:
     creates: "{{ public_key_file }}"
 

@@ -316,6 +316,10 @@ The external OAuth authenticator uses the Keycloak service hostname on the
 container network for its issuer and JWKS endpoints. It is intentionally
 separate from the browser-login OIDC authenticator.
 
+The development setup deliberately does not create external OAuth authenticator
+maps. Browser-login role and organization mappings are not applicable to the
+bearer-token authentication work this authenticator supports.
+
 ### Development tokens
 
 Use the token helper to list the configured test subjects:
@@ -341,6 +345,17 @@ make token service-account-gateway_oidc_client
 The command writes only the access token to standard output, allowing it to be
 assigned to a shell variable. It reads credentials from the generated local
 realm import rather than duplicating them in the Makefile or script.
+
+The default token endpoint is `https://localhost:8443`. If
+`keycloak_exposed_port` is overridden, provide the corresponding endpoint:
+
+```bash
+KEYCLOAK_TOKEN_ENDPOINT="https://localhost:<port>/auth/realms/gateway/protocol/openid-connect/token" make token gateway_admin
+```
+
+The helper sends `Host: keycloak:8443` by default so Keycloak uses the
+in-container issuer. Override it with `KEYCLOAK_HOST_HEADER` only when the
+Keycloak issuer host or port has also been customized.
 
 `token` depends on the generated Keycloak realm. If the realm
 template or Keycloak role changes, Make renders a fresh import before looking
