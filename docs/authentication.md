@@ -316,9 +316,9 @@ The external OAuth authenticator uses the Keycloak service hostname on the
 container network for its issuer and JWKS endpoints. It is intentionally
 separate from the browser-login OIDC authenticator.
 
-The development setup deliberately does not create external OAuth authenticator
-maps. Browser-login role and organization mappings are not applicable to the
-bearer-token authentication work this authenticator supports.
+The development setup creates superuser, auditor, and default-organization
+authenticator maps for the external OAuth authenticator, matching the maps
+provided for the Keycloak OIDC authenticator.
 
 ### Development tokens
 
