@@ -140,7 +140,7 @@ token: $(KEYCLOAK_TOKEN_PREREQUISITES)
 	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)"
 
 ## Reconcile the Keycloak development realm without restarting containers
-keycloak-reconcile: tools/generated/keycloak.gateway.realm.json
+keycloak-reconcile: keycloak-render
 	ansible-playbook tools/ansible/reconcile-keycloak.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
@@ -237,9 +237,6 @@ keycloak-render: $(KEYCLOAK_REALM_INPUTS)
 	ansible-playbook tools/ansible/render-keycloak-realm.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
-
-tools/generated/keycloak.gateway.realm.json: keycloak-render
-	@test -f "$@"
 
 ## Install the Ansible collection used by Podman-specific container setup
 podman-collection: $(PODMAN_COLLECTION_STAMP)
