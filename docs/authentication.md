@@ -136,6 +136,15 @@ https://oauth.net/2/
 
 OAuth 2.0 is an industry-standard protocol for authorization, designed to enable secure, third-party access to user data without exposing user credentials. It specifies a process by which users can grant web and desktop applications permission to act on their behalf without sharing their password. Essentially, OAuth 2.0 allows an application (the client) to access resources (such as user data stored on a web server) through a series of interactions involving the resource owner (the user), the client, the authorization server, and the resource server. The protocol defines several grant types for different scenarios, including authorization code, implicit, password, and client credentials, each catering to specific types of client applications and security requirements. OAuth 2.0's flexibility and security have made it the foundation for numerous standards and frameworks, such as OpenID Connect for authentication. For technical documentation writers and quality engineers (QEs) tasked with setting up client configurations for OAuth, understanding these grant types, the flow of tokens, and the roles of different endpoints is crucial. Documentation must clearly articulate how to register applications with the authorization server, how to handle redirections and capture tokens, and how to securely store and use these tokens to access APIs, ensuring that the integration adheres to best practices for security and user privacy.
 
+### Allow Local PAT Creation
+
+Gateway preference `oauth2_provider.allow_local_pat_creation` (label: **Allow Local PAT Creation**, default `true`) controls whether users can create local Personal Access Tokens (PATs) through the API and UI.
+
+When the preference is set to `false`:
+
+- PAT creation via Gateway API token endpoints is rejected.
+- Existing PATs and OAuth2 application tokens continue to authenticate unless revoked.
+- Operators can still create PATs with the Django management command `create_oauth2_token` (including during installation). This exception is intentional so install and recovery workflows are not blocked by the preference.
 
 ## Github OAuth2
 
