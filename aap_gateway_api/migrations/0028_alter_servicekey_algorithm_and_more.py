@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('aap_gateway_api', '0027_merge_0025_0026'),
+        ('aap_gateway_api', '0026_servicecluster_outlier_detection_local_origin'),
     ]
 
     operations = [

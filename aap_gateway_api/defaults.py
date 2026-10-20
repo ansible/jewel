@@ -408,6 +408,7 @@ ANSIBLE_BASE_SETTINGS_FUNCTION = 'aap_gateway_api.utils.preferences.get_setting'
 ANSIBLE_BASE_SOCIAL_AUTH_STRATEGY_SETTINGS_FUNCTION = "aap_gateway_api.authentication.util.load_social_auth_settings"
 ANSIBLE_BASE_TEAM_MODEL = 'aap_gateway_api.Team'
 ANSIBLE_BASE_USER_VIEWSET = 'aap_gateway_api.views.UserViewSet'
+ANSIBLE_BASE_AUTHENTICATOR_RECONCILE_MODULE = 'aap_gateway_api.authentication.reconcile'
 
 # Set the maximum number of secrets that can be active for a service cluster at any given time.
 MAX_ACTIVE_KEYS_PER_SERVICE = 2

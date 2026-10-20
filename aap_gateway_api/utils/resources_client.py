@@ -20,6 +20,7 @@ from aap_gateway_api.utils.jwt_token import create_signed_jwt
 from aap_gateway_api.utils.preferences import get_preference_value
 
 ResourceRequestBody = DABResourceRequestBody
+MAX_LOGGED_RESPONSE_BODY_LENGTH = 1024
 
 logger = logging.getLogger('aap.gateway.utils.resource_api_client')
 
@@ -196,6 +197,19 @@ class AllServicesClient(GWResourceAPIClient):
         except Exception as e:
             logger.exception(f"Error in async request for service {service.pk}: {e}")
             response = None
+
+        if response is not None and not 200 <= response.status_code < 300:
+            response_text = response.text
+            response_text_length = len(response_text)
+            if response_text_length > MAX_LOGGED_RESPONSE_BODY_LENGTH:
+                response_text = f'{response_text[:MAX_LOGGED_RESPONSE_BODY_LENGTH]}... [truncated; {response_text_length} characters total]'
+            logger.warning(
+                'Resource sync to service %s failed: HTTP %s: %s',
+                service.pk,
+                response.status_code,
+                response_text,
+            )
+
         if callback:
             try:
                 callback(service, response)
