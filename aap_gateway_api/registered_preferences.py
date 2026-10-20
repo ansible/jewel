@@ -406,11 +406,7 @@ register(
     default=True,
     required=False,
     preference_type="bool",
-    help_text=_(
-        "When enabled, users can create local Personal Access Tokens (PATs). "
-        "When disabled, local PAT creation is blocked for all users. "
-        "The management command can still generate PATs, including during installation."
-    ),
+    help_text=_("When enabled, users can create local Personal Access Tokens (PATs). When disabled, local PAT creation is blocked for all users."),
     encrypted=False,
     label=_('Allow Local PAT Creation'),
 )
