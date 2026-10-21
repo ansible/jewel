@@ -342,10 +342,12 @@ Mint a user token non-interactively by supplying its username and scope:
 
 ```bash
 make token gateway_admin write
+make token gateway_admin none
 ```
 
 Mint a client-credentials token with the listed client identifier, or its
-`service-account-` alias. Use `read` or `write` as the final argument:
+`service-account-` alias. Use `read` or `write` as the final argument, or use
+`none` to omit both development API scopes:
 
 ```bash
 make token gateway_oidc_client read
@@ -358,6 +360,9 @@ realm import rather than duplicating them in the Makefile or script. The
 development realm exposes `read` and `write` as optional client
 scopes; `write` permits unsafe HTTP methods, while Gateway RBAC still decides
 whether the authenticated user may perform a specific action.
+`none` can be used to test the valid-token path with neither API scope. Standard
+OIDC scopes such as `openid`, `profile`, and `email` may still appear in the
+Keycloak token and do not grant Gateway API access.
 
 The helper derives its endpoint and host header from the rendered Keycloak
 configuration, so `container_reference` and `keycloak_exposed_port` are set

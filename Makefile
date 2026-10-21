@@ -142,7 +142,7 @@ help/generate:
 fetch-service-key:
 	ansible-playbook tools/ansible/fetch-service-key.yml -e @container-startup.yml
 
-## Reconcile Keycloak and mint a token: make token [user-or-client] [read|write]
+## Reconcile Keycloak and mint a token: make token [user-or-client] [read|write|none]
 token: $(KEYCLOAK_TOKEN_PREREQUISITES)
 	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)" "$(KEYCLOAK_TOKEN_SCOPE)"
 

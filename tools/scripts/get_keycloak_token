@@ -2,7 +2,7 @@
 # Mint a Keycloak access token for a development-realm user or service account.
 #
 # Usage:
-#   tools/scripts/get_keycloak_token [username|client-id|service-account-client-id] [read|write]
+#   tools/scripts/get_keycloak_token [username|client-id|service-account-client-id] [read|write|none]
 #
 # The script reads the generated realm import so that credentials remain defined
 # in the development configuration instead of being duplicated here.
@@ -27,8 +27,8 @@ Usage: make token <username|client-id|service-account-client-id>
    or: make token KEYCLOAK_SUBJECT=<username|client-id|service-account-client-id>
 
 Optionally provide a high-level scope:
-  make token <username|client-id|service-account-client-id> <read|write>
-  make token KEYCLOAK_SUBJECT=<subject> KEYCLOAK_SCOPE=<read|write>
+  make token <username|client-id|service-account-client-id> <read|write|none>
+  make token KEYCLOAK_SUBJECT=<subject> KEYCLOAK_SCOPE=<read|write|none>
 EOF
 }
 
@@ -82,6 +82,7 @@ list_scopes() {
     printf 'Available Keycloak token scopes:\n'
     printf '  read\n'
     printf '  write\n'
+    printf '  none (request neither read nor write)\n'
 }
 
 prompt_for_subject() {
@@ -117,10 +118,17 @@ fi
 
 case "$scope" in
     read|write) ;;
-    *) fail "unsupported Keycloak token scope '${scope}'; choose read or write" ;;
+    none) ;;
+    *) fail "unsupported Keycloak token scope '${scope}'; choose read, write, or none" ;;
 esac
 
-requested_scopes="openid profile email ${scope}"
+# `none` intentionally omits the development read/write client scopes. Keycloak
+# may still include its standard OIDC scopes, which are unrelated to Gateway's
+# API read/write authorization.
+requested_scopes="openid profile email"
+if [ "$scope" != "none" ]; then
+    requested_scopes+=" ${scope}"
+fi
 
 if [[ "$subject" == service-account-* ]]; then
     client_id="${subject#service-account-}"
