@@ -2,7 +2,7 @@
 # Mint a Keycloak access token for a development-realm user or service account.
 #
 # Usage:
-#   tools/scripts/get_keycloak_token <username|client-id|service-account-client-id>
+#   tools/scripts/get_keycloak_token [username|client-id|service-account-client-id] [read|write|none]
 #
 # The script reads the generated realm import so that credentials remain defined
 # in the development configuration instead of being duplicated here.
@@ -14,6 +14,7 @@ readonly realm_file="${KEYCLOAK_REALM_FILE:-${repository_root}/tools/generated/k
 readonly token_config_file="${repository_root}/tools/generated/keycloak.token.config.json"
 
 subject="${1:-}"
+scope="${2:-}"
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -24,6 +25,10 @@ usage() {
     cat >&2 <<'EOF'
 Usage: make token <username|client-id|service-account-client-id>
    or: make token KEYCLOAK_SUBJECT=<username|client-id|service-account-client-id>
+
+Optionally provide a high-level scope:
+  make token <username|client-id|service-account-client-id> <read|write|none>
+  make token KEYCLOAK_SUBJECT=<subject> KEYCLOAK_SCOPE=<read|write|none>
 EOF
 }
 
@@ -73,6 +78,27 @@ list_subjects() {
     done <<<"$client_token_subjects"
 }
 
+list_scopes() {
+    printf 'Available Keycloak token scopes:\n'
+    printf '  read\n'
+    printf '  write\n'
+    printf '  none (request neither read nor write)\n'
+}
+
+prompt_for_subject() {
+    list_subjects >&2
+    printf '\nKeycloak user or client token subject: ' >&2
+    read -r subject || fail "unable to read a Keycloak token subject"
+    [ -n "$subject" ] || fail "a Keycloak token subject is required"
+}
+
+prompt_for_scope() {
+    list_scopes >&2
+    printf '\nKeycloak token scope: ' >&2
+    read -r scope || fail "unable to read a Keycloak token scope"
+    [ -n "$scope" ] || fail "a Keycloak token scope is required"
+}
+
 require_command curl
 require_command jq
 
@@ -83,9 +109,25 @@ token_endpoint="$(jq --exit-status --raw-output '.token_endpoint' "$token_config
 keycloak_host_header="$(jq --exit-status --raw-output '.host_header' "$token_config_file")" || fail "unable to read Keycloak host header from $token_config_file"
 
 if [ -z "$subject" ]; then
-    usage
-    list_subjects
-    exit 0
+    prompt_for_subject
+fi
+
+if [ -z "$scope" ]; then
+    prompt_for_scope
+fi
+
+case "$scope" in
+    read|write) ;;
+    none) ;;
+    *) fail "unsupported Keycloak token scope '${scope}'; choose read, write, or none" ;;
+esac
+
+# `none` intentionally omits the development read/write client scopes. Keycloak
+# may still include its standard OIDC scopes, which are unrelated to Gateway's
+# API read/write authorization.
+requested_scopes="openid profile email"
+if [ "$scope" != "none" ]; then
+    requested_scopes+=" ${scope}"
 fi
 
 if [[ "$subject" == service-account-* ]]; then
@@ -99,7 +141,8 @@ if client_secret="$(get_client_secret "$client_id" 2>/dev/null)"; then
         --header "Host: ${keycloak_host_header}" \
         --data-urlencode 'grant_type=client_credentials' \
         --data-urlencode "client_id=${client_id}" \
-        --data-urlencode "client_secret=${client_secret}")"
+        --data-urlencode "client_secret=${client_secret}" \
+        --data-urlencode "scope=${requested_scopes}")"
 else
     password="$(get_user_password 2>/dev/null)" || fail "no Keycloak user or client named '${subject}' was found in $realm_file"
     response="$(curl --silent --show-error --fail --insecure --request POST "$token_endpoint" \
@@ -109,7 +152,8 @@ else
         --data-urlencode "client_secret=$(get_client_secret gateway_oidc_client)" \
         --data-urlencode "username=${subject}" \
         --data-urlencode "password=${password}" \
-        --data-urlencode 'scope=openid profile email')"
+        --data-urlencode "scope=${requested_scopes}")"
 fi
 
-jq --exit-status --raw-output '.access_token' <<<"$response"
+access_token="$(jq --exit-status --raw-output '.access_token' <<<"$response")"
+printf 'export BEARER_TOKEN=%s\n' "$access_token"

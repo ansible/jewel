@@ -21,6 +21,13 @@ oidc_configuration:
 external_oauth_adapter_name: "Dev Keycloak External OAuth"
 external_oauth_slug: "keycloak_external_oauth_dev"
 external_oauth_auth_map_name: "Dev Keycloak External OAuth Map"
+# Keycloak writes requested client scopes to the standard OIDC `scope` claim.
+# A token with the write scope is permitted to perform write operations in addition to read operations.
+# A token with the read scope is permitted to perform read operations only.
+# A token with neither scope is not allowed to perform any operations.
+keycloak_token_scope_attribute_name: "scope"
+keycloak_token_read_scope_name: "read"
+keycloak_token_write_scope_name: "write"
 external_oauth_configuration:
   ISSUER_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway"
   JWKS_URI: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/certs"
@@ -29,13 +36,16 @@ external_oauth_configuration:
   AUDIENCE: "gateway_oidc_client"
   JWKS_CACHE_TIMEOUT: 3600
   CLAIM_LIST:
+    - preferred_username
     - sub
     - client_id
     - azp
-    - preferred_username
     - is_superuser
     - is_system_auditor
   GROUPS_CLAIM: Group
+  SCOPE_ATTRIBUTE_NAME: "{{ keycloak_token_scope_attribute_name }}"
+  WRITE_SCOPE_NAME: "{{ keycloak_token_write_scope_name }}"
+  READ_SCOPE_NAME: "{{ keycloak_token_read_scope_name }}"
   USERINFO_URL: ""
   OIDC_ENDPOINT: ""
   VERIFY_SSL: false

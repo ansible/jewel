@@ -31,6 +31,69 @@
       - keycloak_oidc_client.json | length == 1
     fail_msg: "The gateway_oidc_client client does not exist in the Keycloak gateway realm."
 
+- name: Get Keycloak development token client scopes
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_token_client_scopes
+
+- name: Create missing Keycloak development token client scopes
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ item }}"
+      description: "Gateway development {{ item }} access scope"
+      protocol: openid-connect
+      attributes:
+        include.in.token.scope: "true"
+        display.on.consent.screen: "false"
+      protocolMappers: []
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [201]
+  loop:
+    - "{{ keycloak_token_read_scope_name }}"
+    - "{{ keycloak_token_write_scope_name }}"
+  when: keycloak_token_client_scopes.json | selectattr('name', 'equalto', item) | list | length == 0
+
+- name: Refresh Keycloak development token client scopes
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_token_client_scopes
+
+- name: Verify Keycloak development token client scopes exist
+  ansible.builtin.assert:
+    that:
+      - keycloak_token_client_scopes.json | selectattr('name', 'equalto', item) | list | length == 1
+    fail_msg: "The Keycloak {{ item }} client scope does not exist."
+  loop:
+    - "{{ keycloak_token_read_scope_name }}"
+    - "{{ keycloak_token_write_scope_name }}"
+
+- name: Attach Keycloak development token scopes to the OIDC client
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}/optional-client-scopes/{{ item.id }}"
+    method: PUT
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [204]
+  loop: "{{ keycloak_token_client_scopes.json | selectattr('name', 'in', [keycloak_token_read_scope_name, keycloak_token_write_scope_name]) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: Enable service accounts for the Keycloak OIDC client
   ansible.builtin.uri:
     url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}"

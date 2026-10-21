@@ -470,7 +470,9 @@
         "address",
         "phone",
         "offline_access",
-        "microprofile-jwt"
+        "microprofile-jwt",
+        "{{ keycloak_token_read_scope_name }}",
+        "{{ keycloak_token_write_scope_name }}"
       ]
     }
   ],
@@ -937,6 +939,28 @@
           }
         }
       ]
+    },
+    {
+      "id": "cac7f875-9d7c-4144-bdad-dc9a21710c2e",
+      "name": "{{ keycloak_token_read_scope_name }}",
+      "description": "Gateway development {{ keycloak_token_read_scope_name }} access scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": []
+    },
+    {
+      "id": "755c4ff9-67e3-49d4-a4db-799e4ca07376",
+      "name": "{{ keycloak_token_write_scope_name }}",
+      "description": "Gateway development {{ keycloak_token_write_scope_name }} access scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": []
     },
     {
       "id": "fae034bf-e914-4d3c-8bb5-b327447a029b",
