@@ -52,12 +52,21 @@ jobs:
             libxmlsec1-openssl \
             pkg-config
 
-      - name: Check out public source
+      - name: Check out migration CI tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: migration-ci-runner
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out target source
         uses: actions/checkout@v5
         with:
           ref: >-
             ${{ inputs.snapshot_round_trip && inputs.target_branch ||
             github.ref }}
+          path: migration-target
           fetch-depth: 0
           persist-credentials: false
 
@@ -75,11 +84,14 @@ jobs:
           createdb --version
 
       - name: Resolve immutable upgrade inputs
+        working-directory: ${{ github.workspace }}/migration-ci-runner
         env:
           TARGET_BRANCH: ${{ inputs.target_branch }}
         run: |
           set -euo pipefail
           TARGET_BRANCH="${TARGET_BRANCH#refs/heads/}"
+          RUNNER_WORKSPACE="$GITHUB_WORKSPACE/migration-ci-runner"
+          TARGET_CHECKOUT="$GITHUB_WORKSPACE/migration-target"
 
           case "$TARGET_BRANCH" in
             devel)
@@ -115,11 +127,13 @@ jobs:
           }
 
           RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
-          PR_SHA=$(git rev-parse HEAD)
+          PR_SHA=$(git -C "$TARGET_CHECKOUT" rev-parse HEAD)
           echo "Resolving target=$TARGET_BRANCH release=$RELEASE_TAG" \
             "($RELEASE_SHA) PR=$PR_SHA"
 
           echo "TARGET_BRANCH=$TARGET_BRANCH" >> "$GITHUB_ENV"
+          echo "RUNNER_WORKSPACE=$RUNNER_WORKSPACE" >> "$GITHUB_ENV"
+          echo "STAGE_PULL_REQUEST=$TARGET_CHECKOUT" >> "$GITHUB_ENV"
           echo "RELEASE_LABEL=$RELEASE_LABEL" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
@@ -172,6 +186,7 @@ jobs:
           echo "GATEWAY_SECRET_KEY_FILE=$KEY_FILE" >> "$GITHUB_ENV"
 
       - name: Upgrade one PostgreSQL database through every checkout
+        working-directory: ${{ github.workspace }}/migration-ci-runner
         env:
           DATABASE_ENGINE: django.db.backends.postgresql
           DATABASE_NAME: gw_db
@@ -185,7 +200,7 @@ jobs:
 
           STAGE_ARGS=(
             --stage "$RELEASE_LABEL=$STAGE_RELEASE"
-            --stage "pull-request=$GITHUB_WORKSPACE"
+            --stage "pull-request=$STAGE_PULL_REQUEST"
           )
 
           case "$TARGET_BRANCH" in
@@ -200,7 +215,7 @@ jobs:
               ;;
           esac
 
-          POLICY_PATH="$GITHUB_WORKSPACE/tools/configs/"
+          POLICY_PATH="$RUNNER_WORKSPACE/tools/configs/"
           POLICY_PATH="${POLICY_PATH}migration_upgrade_policy.json"
           RUNNER_ARGS=(
             "${STAGE_ARGS[@]}"
@@ -232,6 +247,7 @@ jobs:
 
       - name: Remove temporary checkouts
         if: always()
+        working-directory: ${{ github.workspace }}/migration-ci-runner
         run: |
           if [ -d "${CHECKOUT_ROOT:-}" ]; then
             for checkout in "$CHECKOUT_ROOT"/*; do

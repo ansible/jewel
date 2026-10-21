@@ -24,7 +24,13 @@ class TestCreatePreloadedData:
         first_state = (organization.pk, organization.name, organization.description, organization.managed, organization.modified)
         assert create_default_organization() is False, "We should not have recreated the default organization"
         organization.refresh_from_db()
-        assert (organization.pk, organization.name, organization.description, organization.managed, organization.modified) == first_state
+        assert (
+            organization.pk,
+            organization.name,
+            organization.description,
+            organization.managed,
+            organization.modified,
+        ) == first_state, "Default organization state should remain unchanged"
 
     @pytest.mark.django_db
     def test_set_system_user_password(self):
@@ -42,7 +48,7 @@ class TestCreatePreloadedData:
         assert system_user.has_usable_password() is False
         assert set_system_user_password() is False, "Should be a no-op when password is already unusable"
         system_user.refresh_from_db()
-        assert (system_user.pk, system_user.password, system_user.managed, system_user.modified) == first_state
+        assert (system_user.pk, system_user.password, system_user.managed, system_user.modified) == first_state, "System user state should remain unchanged"
 
     @pytest.mark.django_db
     def test_default_org_created_by_default(self):
@@ -62,7 +68,9 @@ class TestCreatePreloadedData:
         assert system_user.managed is True
         assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
         system_user.refresh_from_db()
-        assert (system_user.pk, system_user.managed, system_user.password, system_user.modified) == first_state
+        assert (system_user.pk, system_user.managed, system_user.password, system_user.modified) == first_state, (
+            "Managed system user state should remain unchanged"
+        )
 
     @pytest.mark.django_db
     def test_immediate_return_if_no_plan(self):
