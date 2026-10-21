@@ -425,7 +425,7 @@ class TestOAuth2ScopeValidation:
     )
     def test_oauth2_scope_method_combinations(self, ext_auth, admin_user, scope, method, should_succeed):
         """Test all combinations of OAuth2 token scope and HTTP method."""
-        request = Request(method=method, path="/api/controller/v2/organizations/")
+        request = Request(method=method, path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope=scope)
 
         def mock_authenticate(self, req):
@@ -463,7 +463,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_denial_error_message_content(self, ext_auth, admin_user):
         """Test that scope denial error message contains expected information."""
-        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        request = Request(method="POST", path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope='read')
 
         def mock_authenticate(self, req):
@@ -490,7 +490,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_denial_with_application(self, ext_auth, admin_user):
         """Test scope denial logging includes application info when present."""
-        request = Request(method="DELETE", path="/api/hub/v3/collections/")
+        request = Request(method="DELETE", path="/api/hub/v3/collections/", header_diff={"authorization": "Bearer test-token"})
         app = MockOAuth2Application(pk=42, name="My OAuth App")
         token = MockOAuth2Token(scope='read', pk=99, application=app)
 
@@ -526,7 +526,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_denial_personal_access_token(self, ext_auth, admin_user):
         """Test scope denial logging handles personal access tokens (no application)."""
-        request = Request(method="PUT", path="/api/eda/v1/projects/")
+        request = Request(method="PUT", path="/api/eda/v1/projects/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope='read', pk=77, application=None)
 
         def mock_authenticate(self, req):
@@ -556,7 +556,7 @@ class TestOAuth2ScopeValidation:
 
     def test_non_oauth2_auth_not_affected(self, ext_auth, admin_user):
         """Test that non-OAuth2 authentication (basic auth, service token) is not affected by scope validation."""
-        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        request = Request(method="POST", path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
 
         # Simulate service token authentication (not OAuth2)
         with mock.patch(
@@ -571,7 +571,7 @@ class TestOAuth2ScopeValidation:
     @pytest.mark.parametrize("safe_method", list(SAFE_METHODS))
     def test_all_safe_methods_allowed_with_read_scope(self, ext_auth, admin_user, safe_method):
         """Verify all SAFE_METHODS are allowed with read scope."""
-        request = Request(method=safe_method, path="/api/gateway/v1/users/")
+        request = Request(method=safe_method, path="/api/gateway/v1/users/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope='read')
 
         def mock_authenticate(self, req):
@@ -598,7 +598,7 @@ class TestOAuth2ScopeValidation:
 
     def test_scope_validation_returns_403_not_401(self, ext_auth, admin_user):
         """Verify scope violation returns 403 Forbidden, not 401 Unauthorized."""
-        request = Request(method="POST", path="/api/controller/v2/inventories/")
+        request = Request(method="POST", path="/api/controller/v2/inventories/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope='read')
 
         def mock_authenticate(self, req):
@@ -625,7 +625,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_check_token_is_none(self, ext_auth, admin_user):
         """Test that scope check handles None token gracefully (defensive check)."""
-        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        request = Request(method="POST", path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
 
         def mock_authenticate(self, req):
             # Set auth to None (edge case)
@@ -652,7 +652,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_check_user_is_none(self, ext_auth):
         """Test that scope check handles None user gracefully (username becomes '<none>')."""
-        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        request = Request(method="POST", path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope='read', pk=123, application=None)
 
         def mock_authenticate(self, req):
@@ -682,7 +682,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_check_token_missing_attributes(self, ext_auth, admin_user):
         """Test that scope check handles tokens missing scope/pk attributes."""
-        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        request = Request(method="POST", path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
 
         # Create a minimal token object without scope or pk
         class MinimalToken:
@@ -720,7 +720,7 @@ class TestOAuth2ScopeValidation:
 
     def test_oauth2_scope_check_import_error_fallback(self, ext_auth, admin_user):
         """Test that scope check falls back to logger.warning when log_auth_warning import fails."""
-        request = Request(method="POST", path="/api/controller/v2/organizations/")
+        request = Request(method="POST", path="/api/controller/v2/organizations/", header_diff={"authorization": "Bearer test-token"})
         token = MockOAuth2Token(scope='read', pk=55, application=None)
 
         def mock_authenticate(self, req):
@@ -765,7 +765,7 @@ class TestOAuth2ScopeValidation:
         ]
 
         for path in paths:
-            request = Request(method="DELETE", path=path)
+            request = Request(method="DELETE", path=path, header_diff={"authorization": "Bearer test-token"})
             token = MockOAuth2Token(scope='read', pk=1, application=None)
 
             def mock_authenticate(self, req):
