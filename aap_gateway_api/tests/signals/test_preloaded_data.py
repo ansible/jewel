@@ -20,7 +20,11 @@ class TestCreatePreloadedData:
     def test_create_default_organization(self):
         Organization.objects.all().delete()
         assert create_default_organization() is True, "We should have created the default organization"
+        organization = Organization.objects.get(name='Default')
+        first_state = (organization.pk, organization.name, organization.description, organization.managed, organization.modified)
         assert create_default_organization() is False, "We should not have recreated the default organization"
+        organization.refresh_from_db()
+        assert (organization.pk, organization.name, organization.description, organization.managed, organization.modified) == first_state
 
     @pytest.mark.django_db
     def test_set_system_user_password(self):
@@ -33,7 +37,12 @@ class TestCreatePreloadedData:
         system_user.save()
 
         assert set_system_user_password() is True, "Should set unusable password on first call"
+        system_user.refresh_from_db()
+        first_state = (system_user.pk, system_user.password, system_user.managed, system_user.modified)
+        assert system_user.has_usable_password() is False
         assert set_system_user_password() is False, "Should be a no-op when password is already unusable"
+        system_user.refresh_from_db()
+        assert (system_user.pk, system_user.password, system_user.managed, system_user.modified) == first_state
 
     @pytest.mark.django_db
     def test_default_org_created_by_default(self):
@@ -48,7 +57,12 @@ class TestCreatePreloadedData:
         system_user.managed = False
         system_user.save()
         assert set_system_user_managed_flag() is True, "Should set managed=True when unset"
+        system_user.refresh_from_db()
+        first_state = (system_user.pk, system_user.managed, system_user.password, system_user.modified)
+        assert system_user.managed is True
         assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
+        system_user.refresh_from_db()
+        assert (system_user.pk, system_user.managed, system_user.password, system_user.modified) == first_state
 
     @pytest.mark.django_db
     def test_immediate_return_if_no_plan(self):
