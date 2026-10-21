@@ -470,7 +470,9 @@
         "address",
         "phone",
         "offline_access",
-        "microprofile-jwt"
+        "microprofile-jwt",
+        "read",
+        "write"
       ]
     }
   ],
@@ -937,6 +939,28 @@
           }
         }
       ]
+    },
+    {
+      "id": "cac7f875-9d7c-4144-bdad-dc9a21710c2e",
+      "name": "read",
+      "description": "Gateway development read access scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": []
+    },
+    {
+      "id": "755c4ff9-67e3-49d4-a4db-799e4ca07376",
+      "name": "write",
+      "description": "Gateway development write access scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": []
     },
     {
       "id": "fae034bf-e914-4d3c-8bb5-b327447a029b",

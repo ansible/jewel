@@ -28,13 +28,20 @@ PROXY_CONFIG_INPUTS := tools/ansible/generate-proxy-configs.yml tools/ansible/va
 KEYCLOAK_REALM_INPUTS := tools/ansible/render-keycloak-realm.yml tools/ansible/vars/container_config.yml \
 	$(shell find tools/ansible/roles/keycloak -type f) container-startup.yml
 KEYCLOAK_TOKEN_SUBJECT := $(or $(KEYCLOAK_SUBJECT),$(word 2,$(MAKECMDGOALS)))
-KEYCLOAK_TOKEN_PREREQUISITES := keycloak-render $(if $(KEYCLOAK_TOKEN_SUBJECT),keycloak-reconcile)
+KEYCLOAK_TOKEN_SCOPE := $(or $(KEYCLOAK_SCOPE),$(word 3,$(MAKECMDGOALS)))
+KEYCLOAK_TOKEN_PREREQUISITES := keycloak-reconcile
 
-# Support `make token <subject>` in addition to the conventional
-# `make token KEYCLOAK_SUBJECT=<subject>` form.
+# Support `make token <subject> <scope>` in addition to the conventional
+# `make token KEYCLOAK_SUBJECT=<subject> KEYCLOAK_SCOPE=<scope>` form.
 ifneq ($(KEYCLOAK_TOKEN_SUBJECT),)
 .PHONY: $(KEYCLOAK_TOKEN_SUBJECT)
 $(KEYCLOAK_TOKEN_SUBJECT):
+	@:
+endif
+
+ifneq ($(KEYCLOAK_TOKEN_SCOPE),)
+.PHONY: $(KEYCLOAK_TOKEN_SCOPE)
+$(KEYCLOAK_TOKEN_SCOPE):
 	@:
 endif
 
@@ -135,9 +142,9 @@ help/generate:
 fetch-service-key:
 	ansible-playbook tools/ansible/fetch-service-key.yml -e @container-startup.yml
 
-## Reconcile Keycloak and mint a token: make token <user-or-client>
+## Reconcile Keycloak and mint a token: make token [user-or-client] [read|write]
 token: $(KEYCLOAK_TOKEN_PREREQUISITES)
-	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)"
+	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)" "$(KEYCLOAK_TOKEN_SCOPE)"
 
 ## Reconcile the Keycloak development realm without restarting containers
 keycloak-reconcile: keycloak-render
