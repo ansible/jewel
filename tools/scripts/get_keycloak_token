@@ -86,15 +86,15 @@ list_scopes() {
 }
 
 prompt_for_subject() {
-    list_subjects
-    printf '\nKeycloak user or client token subject: '
+    list_subjects >&2
+    printf '\nKeycloak user or client token subject: ' >&2
     read -r subject || fail "unable to read a Keycloak token subject"
     [ -n "$subject" ] || fail "a Keycloak token subject is required"
 }
 
 prompt_for_scope() {
-    list_scopes
-    printf '\nKeycloak token scope: '
+    list_scopes >&2
+    printf '\nKeycloak token scope: ' >&2
     read -r scope || fail "unable to read a Keycloak token scope"
     [ -n "$scope" ] || fail "a Keycloak token scope is required"
 }
@@ -155,4 +155,5 @@ else
         --data-urlencode "scope=${requested_scopes}")"
 fi
 
-jq --exit-status --raw-output '.access_token' <<<"$response"
+access_token="$(jq --exit-status --raw-output '.access_token' <<<"$response")"
+printf 'export BEARER_TOKEN=%s\n' "$access_token"

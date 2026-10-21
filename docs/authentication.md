@@ -354,10 +354,17 @@ make token gateway_oidc_client read
 make token service-account-gateway_oidc_client write
 ```
 
-The command writes only the access token to standard output, allowing it to be
-assigned to a shell variable. It reads credentials from the generated local
-realm import rather than duplicating them in the Makefile or script. The
-development realm exposes `read` and `write` as optional client
+The final output line is a shell-ready `export BEARER_TOKEN=<token>` statement;
+copy and paste that line before making authenticated API requests. For a
+non-interactive request, it can also be evaluated directly:
+
+```bash
+eval "$(make token gateway_admin write)"
+```
+
+The helper
+reads credentials from the generated local realm import rather than duplicating
+them in the Makefile or script. The development realm exposes `read` and `write` as optional client
 scopes; `write` permits unsafe HTTP methods, while Gateway RBAC still decides
 whether the authenticated user may perform a specific action.
 `none` can be used to test the valid-token path with neither API scope. Standard

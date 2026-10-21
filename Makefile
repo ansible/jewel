@@ -143,7 +143,8 @@ fetch-service-key:
 	ansible-playbook tools/ansible/fetch-service-key.yml -e @container-startup.yml
 
 ## Reconcile Keycloak and mint a token: make token [user-or-client] [read|write|none]
-token: $(KEYCLOAK_TOKEN_PREREQUISITES)
+token:
+	@$(MAKE) --no-print-directory $(KEYCLOAK_TOKEN_PREREQUISITES) >&2
 	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)" "$(KEYCLOAK_TOKEN_SCOPE)"
 
 ## Reconcile the Keycloak development realm without restarting containers
