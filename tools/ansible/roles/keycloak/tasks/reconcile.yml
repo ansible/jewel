@@ -59,8 +59,8 @@
       Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
     status_code: [201]
   loop:
-    - read
-    - write
+    - "{{ keycloak_token_read_scope_name }}"
+    - "{{ keycloak_token_write_scope_name }}"
   when: keycloak_token_client_scopes.json | selectattr('name', 'equalto', item) | list | length == 0
 
 - name: Refresh Keycloak development token client scopes
@@ -79,8 +79,8 @@
       - keycloak_token_client_scopes.json | selectattr('name', 'equalto', item) | list | length == 1
     fail_msg: "The Keycloak {{ item }} client scope does not exist."
   loop:
-    - read
-    - write
+    - "{{ keycloak_token_read_scope_name }}"
+    - "{{ keycloak_token_write_scope_name }}"
 
 - name: Attach Keycloak development token scopes to the OIDC client
   ansible.builtin.uri:
@@ -90,7 +90,7 @@
     headers:
       Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
     status_code: [204]
-  loop: "{{ keycloak_token_client_scopes.json | selectattr('name', 'in', ['read', 'write']) | list }}"
+  loop: "{{ keycloak_token_client_scopes.json | selectattr('name', 'in', [keycloak_token_read_scope_name, keycloak_token_write_scope_name]) | list }}"
   loop_control:
     label: "{{ item.name }}"
 
