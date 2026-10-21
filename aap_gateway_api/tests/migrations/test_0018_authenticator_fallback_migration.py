@@ -50,7 +50,7 @@ def test_forward_removes_only_local_fallback_and_preserves_other_configuration(d
     remove_fallback(apps, None)
     for authenticator in (with_fallback, empty_local, custom_fallback, remote_authenticator):
         authenticator.refresh_from_db()
-        assert first_run[authenticator.pk] == (authenticator.configuration, authenticator.modified)
+        assert (authenticator.configuration, authenticator.modified) == first_run[authenticator.pk]
 
 
 def test_reverse_adds_default_once_and_preserves_existing_fallbacks(db):
@@ -77,5 +77,5 @@ def test_reverse_adds_default_once_and_preserves_existing_fallbacks(db):
     restore_fallback(apps, None)
     for authenticator in (missing_fallback, existing_fallback, remote_authenticator):
         authenticator.refresh_from_db()
-        assert first_run[authenticator.pk] == (authenticator.configuration, authenticator.modified)
+        assert (authenticator.configuration, authenticator.modified) == first_run[authenticator.pk]
         assert authenticator.configuration.get("fallback_authentication", []).count(CONTROLLER_FALLBACK) <= 1

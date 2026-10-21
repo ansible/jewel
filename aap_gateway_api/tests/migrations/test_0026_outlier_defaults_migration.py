@@ -59,14 +59,14 @@ def test_forward_and_reverse_set_exact_defaults_idempotently(db, initial_values)
         assert cluster.outlier_detection_split_external_local_origin_errors is True
         assert 0 == cluster.outlier_detection_consecutive_local_origin_failure
         assert first_forward[cluster.pk] == cluster.modified
-        assert original[cluster.pk] == {
+        assert {
             "name": cluster.name,
             "service_type_id": cluster.service_type_id,
             "outlier_detection_enabled": cluster.outlier_detection_enabled,
             "health_checks_enabled": cluster.health_checks_enabled,
             "outlier_detection_interval_seconds": cluster.outlier_detection_interval_seconds,
             "healthy_panic_threshold": cluster.healthy_panic_threshold,
-        }
+        } == original[cluster.pk]
 
     unset_defaults(apps, None)
     for cluster in clusters:
@@ -82,11 +82,11 @@ def test_forward_and_reverse_set_exact_defaults_idempotently(db, initial_values)
         assert cluster.outlier_detection_split_external_local_origin_errors is False
         assert 5 == cluster.outlier_detection_consecutive_local_origin_failure
         assert first_reverse[cluster.pk] == cluster.modified
-        assert original[cluster.pk] == {
+        assert {
             "name": cluster.name,
             "service_type_id": cluster.service_type_id,
             "outlier_detection_enabled": cluster.outlier_detection_enabled,
             "health_checks_enabled": cluster.health_checks_enabled,
             "outlier_detection_interval_seconds": cluster.outlier_detection_interval_seconds,
             "healthy_panic_threshold": cluster.healthy_panic_threshold,
-        }
+        } == original[cluster.pk]
