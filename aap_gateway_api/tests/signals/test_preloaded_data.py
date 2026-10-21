@@ -24,13 +24,13 @@ class TestCreatePreloadedData:
         first_state = (organization.pk, organization.name, organization.description, organization.managed, organization.modified)
         assert create_default_organization() is False, "We should not have recreated the default organization"
         organization.refresh_from_db()
-        assert (
+        assert first_state == (
             organization.pk,
             organization.name,
             organization.description,
             organization.managed,
             organization.modified,
-        ) == first_state, "Default organization state should remain unchanged"
+        ), "Default organization state should remain unchanged"
 
     @pytest.mark.django_db
     def test_set_system_user_password(self):
@@ -48,7 +48,7 @@ class TestCreatePreloadedData:
         assert system_user.has_usable_password() is False
         assert set_system_user_password() is False, "Should be a no-op when password is already unusable"
         system_user.refresh_from_db()
-        assert (system_user.pk, system_user.password, system_user.managed, system_user.modified) == first_state, "System user state should remain unchanged"
+        assert first_state == (system_user.pk, system_user.password, system_user.managed, system_user.modified), "System user state should remain unchanged"
 
     @pytest.mark.django_db
     def test_default_org_created_by_default(self):
@@ -68,7 +68,7 @@ class TestCreatePreloadedData:
         assert system_user.managed is True
         assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
         system_user.refresh_from_db()
-        assert (system_user.pk, system_user.managed, system_user.password, system_user.modified) == first_state, (
+        assert first_state == (system_user.pk, system_user.managed, system_user.password, system_user.modified), (
             "Managed system user state should remain unchanged"
         )
 
@@ -76,7 +76,7 @@ class TestCreatePreloadedData:
     def test_immediate_return_if_no_plan(self):
         Organization.objects.all().delete()
         create_preload_data()
-        assert Organization.objects.count() == 0
+        assert 0 == Organization.objects.count()
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
@@ -90,7 +90,7 @@ class TestCreatePreloadedData:
         Organization.objects.all().delete()
         with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'debug', 'We are rolling back migration', assert_not_called=(not verbosity)):
             create_preload_data(verbosity=verbosity, plan=[('0000', False), ('0001', True)])
-        assert Organization.objects.count() == 0
+        assert 0 == Organization.objects.count()
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
@@ -227,7 +227,7 @@ class TestCreatePreloadedData:
         from ansible_base.rbac.models import DABContentType
 
         valid_ct = DABContentType.objects.get(service='shared', model='organization')
-        assert valid_ct.app_label == 'aap_gateway_api'
+        assert 'aap_gateway_api' == valid_ct.app_label
         assert remove_stale_shared_content_types() is False
         assert DABContentType.objects.filter(pk=valid_ct.pk).exists()
 

@@ -41,16 +41,16 @@ def test_forward_removes_only_local_fallback_and_preserves_other_configuration(d
     for authenticator in (with_fallback, empty_local, custom_fallback, remote_authenticator):
         authenticator.refresh_from_db()
 
-    assert with_fallback.configuration == {"custom": {"enabled": True}}
-    assert empty_local.configuration == {}
-    assert custom_fallback.configuration == {"other": "preserve"}
-    assert remote_authenticator.configuration == {"fallback_authentication": [CONTROLLER_FALLBACK], "remote_setting": "preserve"}
+    assert {"custom": {"enabled": True}} == with_fallback.configuration
+    assert {} == empty_local.configuration
+    assert {"other": "preserve"} == custom_fallback.configuration
+    assert {"fallback_authentication": [CONTROLLER_FALLBACK], "remote_setting": "preserve"} == remote_authenticator.configuration
 
     first_run = {auth.pk: (auth.configuration, auth.modified) for auth in (with_fallback, empty_local, custom_fallback, remote_authenticator)}
     remove_fallback(apps, None)
     for authenticator in (with_fallback, empty_local, custom_fallback, remote_authenticator):
         authenticator.refresh_from_db()
-        assert (authenticator.configuration, authenticator.modified) == first_run[authenticator.pk]
+        assert first_run[authenticator.pk] == (authenticator.configuration, authenticator.modified)
 
 
 def test_reverse_adds_default_once_and_preserves_existing_fallbacks(db):
@@ -69,13 +69,13 @@ def test_reverse_adds_default_once_and_preserves_existing_fallbacks(db):
     for authenticator in (missing_fallback, existing_fallback, remote_authenticator):
         authenticator.refresh_from_db()
 
-    assert missing_fallback.configuration == {"custom": "keep", "fallback_authentication": [CONTROLLER_FALLBACK]}
-    assert existing_fallback.configuration == {"fallback_authentication": [], "custom": "keep"}
-    assert remote_authenticator.configuration == {"custom": "keep"}
+    assert {"custom": "keep", "fallback_authentication": [CONTROLLER_FALLBACK]} == missing_fallback.configuration
+    assert {"fallback_authentication": [], "custom": "keep"} == existing_fallback.configuration
+    assert {"custom": "keep"} == remote_authenticator.configuration
 
     first_run = {auth.pk: (auth.configuration, auth.modified) for auth in (missing_fallback, existing_fallback, remote_authenticator)}
     restore_fallback(apps, None)
     for authenticator in (missing_fallback, existing_fallback, remote_authenticator):
         authenticator.refresh_from_db()
-        assert (authenticator.configuration, authenticator.modified) == first_run[authenticator.pk]
+        assert first_run[authenticator.pk] == (authenticator.configuration, authenticator.modified)
         assert authenticator.configuration.get("fallback_authentication", []).count(CONTROLLER_FALLBACK) <= 1

@@ -683,9 +683,10 @@ def test_rejects_migration_with_non_python_source(tmp_path, monkeypatch):
     source_path = tmp_path / "0001_initial.txt"
     source_path.write_text("not Python", encoding="utf-8")
     monkeypatch.setattr(migration_inventory.importlib, "import_module", lambda module_name: SimpleNamespace(__file__=str(source_path)))
+    migration_instance = migration("example_app.migrations.0001_initial")
 
     with pytest.raises(MigrationInventoryError, match="not Python source"):
-        migration_inventory._migration_source_path("example_app.0001_initial", migration("example_app.migrations.0001_initial"))
+        migration_inventory._migration_source_path("example_app.0001_initial", migration_instance)
 
 
 def test_write_inventory_creates_parent_and_atomically_replaces_file(tmp_path):

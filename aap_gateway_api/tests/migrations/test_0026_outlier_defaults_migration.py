@@ -50,29 +50,29 @@ def test_forward_and_reverse_set_exact_defaults_idempotently(db, initial_values)
     for cluster in clusters:
         cluster.refresh_from_db()
         assert cluster.outlier_detection_split_external_local_origin_errors is True
-        assert cluster.outlier_detection_consecutive_local_origin_failure == 0
+        assert 0 == cluster.outlier_detection_consecutive_local_origin_failure
     first_forward = {cluster.pk: cluster.modified for cluster in clusters}
 
     set_defaults(apps, None)
     for cluster in clusters:
         cluster.refresh_from_db()
         assert cluster.outlier_detection_split_external_local_origin_errors is True
-        assert cluster.outlier_detection_consecutive_local_origin_failure == 0
-        assert cluster.modified == first_forward[cluster.pk]
-        assert {
+        assert 0 == cluster.outlier_detection_consecutive_local_origin_failure
+        assert first_forward[cluster.pk] == cluster.modified
+        assert original[cluster.pk] == {
             "name": cluster.name,
             "service_type_id": cluster.service_type_id,
             "outlier_detection_enabled": cluster.outlier_detection_enabled,
             "health_checks_enabled": cluster.health_checks_enabled,
             "outlier_detection_interval_seconds": cluster.outlier_detection_interval_seconds,
             "healthy_panic_threshold": cluster.healthy_panic_threshold,
-        } == original[cluster.pk]
+        }
 
     unset_defaults(apps, None)
     for cluster in clusters:
         cluster.refresh_from_db()
         assert cluster.outlier_detection_split_external_local_origin_errors is False
-        assert cluster.outlier_detection_consecutive_local_origin_failure == 5
+        assert 5 == cluster.outlier_detection_consecutive_local_origin_failure
     first_reverse = {cluster.pk: cluster.modified for cluster in clusters}
 
     unset_defaults(apps, None)
@@ -80,13 +80,13 @@ def test_forward_and_reverse_set_exact_defaults_idempotently(db, initial_values)
         cluster.refresh_from_db()
         assert cluster.pk in original
         assert cluster.outlier_detection_split_external_local_origin_errors is False
-        assert cluster.outlier_detection_consecutive_local_origin_failure == 5
-        assert cluster.modified == first_reverse[cluster.pk]
-        assert {
+        assert 5 == cluster.outlier_detection_consecutive_local_origin_failure
+        assert first_reverse[cluster.pk] == cluster.modified
+        assert original[cluster.pk] == {
             "name": cluster.name,
             "service_type_id": cluster.service_type_id,
             "outlier_detection_enabled": cluster.outlier_detection_enabled,
             "health_checks_enabled": cluster.health_checks_enabled,
             "outlier_detection_interval_seconds": cluster.outlier_detection_interval_seconds,
             "healthy_panic_threshold": cluster.healthy_panic_threshold,
-        } == original[cluster.pk]
+        }
