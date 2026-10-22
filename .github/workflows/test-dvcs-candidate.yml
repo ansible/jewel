@@ -1,0 +1,19 @@
+---
+name: foobar
+on:
+  pull_request:
+    branches: [devel]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dvcs_candidate:
+    name: Test Brennan's DVCS action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: BrennanPaciorek/dvcs-action@bb616ad73b719c32a8486cac0d7db6c3d52e4cd7
+        with:
+          allow_no_jira: true
