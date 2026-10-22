@@ -25,9 +25,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install DVCS validator dependencies
-        run: python -m pip install --only-binary :all: -r .dvcs-action/requirements.txt
+        run: "python -m pip install --only-binary :all: -r .dvcs-action/requirements.txt"
 
       - name: Validate Jira reference without changing the PR
         env:
           PULL_REQUEST: ${{ toJSON(github.event.pull_request) }}
-        run: python .dvcs-action/check_dvcs.py --dry-run --allow-no-jira=true
+        run: "python .dvcs-action/check_dvcs.py --dry-run --allow-no-jira=true"
