@@ -1,16 +1,33 @@
 ---
 name: DVCS (Find Jira Key)
 on:
-  pull_request_target:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
 jobs:
   dvcs_pr_checker:
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
     runs-on: ubuntu-latest
     name: Check the PR for DVCS integration
     steps:
-      - uses: ansible/dvcs-action@0106255aa32ffdefe91475fe98db51116807a9a6 # v5
+      - name: Check out the pinned DVCS validator
+        uses: actions/checkout@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          allow_no_jira: true
+          repository: ansible/dvcs-action
+          ref: 0106255aa32ffdefe91475fe98db51116807a9a6  # v5
+          path: .dvcs-action
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install DVCS validator dependencies
+        run: python -m pip install --only-binary :all: -r .dvcs-action/requirements.txt
+
+      - name: Validate Jira reference without changing the PR
+        env:
+          PULL_REQUEST: ${{ toJSON(github.event.pull_request) }}
+        run: python .dvcs-action/check_dvcs.py --dry-run --allow-no-jira=true
