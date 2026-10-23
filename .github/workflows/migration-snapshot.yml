@@ -1,0 +1,26 @@
+---
+name: Migration Snapshot Upgrade
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: >-
+          Branch whose upgrade path should receive the synthetic snapshot check
+        type: choice
+        required: true
+        default: devel
+        options:
+          - devel
+          - stable-2.7
+          - stable-2.6
+permissions:
+  contents: read
+
+jobs:
+  migration-snapshot:
+    name: Validate snapshot upgrade path
+    uses: ./.github/workflows/migration-upgrade-core.yml
+    with:
+      target_branch: ${{ inputs.target_branch || 'devel' }}
+      snapshot_round_trip: true
