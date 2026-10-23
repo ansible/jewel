@@ -301,6 +301,7 @@ REST_FRAMEWORK = {
         'ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor',
     ],
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'ansible_base.lib.utils.schema.DABAutoSchema',
 }
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
@@ -319,6 +320,10 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Gateway API',
     'VERSION': 'v1',
     'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'ansible_base.lib.utils.schema.deprecated_fields_detail_hook',
+    ],
 }
 
 STATIC_ROOT = '/opt/aap_gateway/static/'

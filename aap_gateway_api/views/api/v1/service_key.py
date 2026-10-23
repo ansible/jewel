@@ -1,3 +1,4 @@
+from ansible_base.lib.utils.views.deprecation import deprecated as deprecated_action
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -107,6 +108,7 @@ class ServiceKeyViewSet(GatewayModelViewSet):
         response.data.get("actions", {}).pop("POST", None)
         return response
 
+    @deprecated_action(detail=POST_DEPRECATION_MESSAGE)
     def create(self, request, *args, **kwargs):
         # Return the custom 405 response for attempted POST requests.
         resp_data = {
@@ -118,3 +120,7 @@ class ServiceKeyViewSet(GatewayModelViewSet):
         }
 
         return Response(resp_data, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @deprecated_action(detail=UPDATE_DEPRECATION_MESSAGE)
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
