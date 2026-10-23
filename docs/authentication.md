@@ -300,7 +300,7 @@ An example authenticator payload ...
 ## Keycloak development environment
 
 The local development stack includes an optional Keycloak sidecar for exercising
-the OIDC, SAML, and external OAuth authenticator paths. Enable it before
+the OIDC, SAML, and OAuth Bearer authenticator paths. Enable it before
 starting the stack:
 
 ```yaml
@@ -319,14 +319,14 @@ Gateway authenticators:
 
 - `Dev Keycloak OIDC` for browser-based Keycloak login;
 - `Dev Keycloak SAML` for SAML login; and
-- `Dev Keycloak External OAuth` for bearer-token API authentication work.
+- `Dev Keycloak OAuth Bearer Token` for bearer-token API authentication work.
 
-The external OAuth authenticator uses the Keycloak service hostname on the
+The OAuth Bearer authenticator uses the Keycloak service hostname on the
 container network for its issuer and JWKS endpoints. It is intentionally
 separate from the browser-login OIDC authenticator.
 
 The development setup creates superuser, auditor, and default-organization
-authenticator maps for the external OAuth authenticator, matching the maps
+authenticator maps for the OAuth Bearer authenticator, matching the maps
 provided for the Keycloak OIDC authenticator.
 
 ### Development tokens
