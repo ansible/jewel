@@ -58,7 +58,9 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: migration-ci-runner
           fetch-depth: 0
-          persist-credentials: false
+          # Needed so later git fetch of tags/branches works on private/internal
+          # mirrors (public jewel can fetch anonymously; jewel-debug cannot).
+          persist-credentials: true
 
       - name: Check out target source
         uses: actions/checkout@v5
@@ -98,7 +100,9 @@ jobs:
         run: |
           set -euo pipefail
           TARGET_BRANCH="${TARGET_BRANCH#refs/heads/}"
-          RUNNER_WORKSPACE="$GITHUB_WORKSPACE/migration-ci-runner"
+          # Avoid RUNNER_WORKSPACE: Actions runners may predefine that name as
+          # /home/runner/work/<repo>, which breaks GITHUB_ENV overrides.
+          MIGRATION_CI_ROOT="$GITHUB_WORKSPACE/migration-ci-runner"
           TARGET_CHECKOUT="$GITHUB_WORKSPACE/migration-target"
 
           case "$TARGET_BRANCH" in
@@ -140,7 +144,7 @@ jobs:
             "($RELEASE_SHA) PR=$PR_SHA"
 
           echo "TARGET_BRANCH=$TARGET_BRANCH" >> "$GITHUB_ENV"
-          echo "RUNNER_WORKSPACE=$RUNNER_WORKSPACE" >> "$GITHUB_ENV"
+          echo "MIGRATION_CI_ROOT=$MIGRATION_CI_ROOT" >> "$GITHUB_ENV"
           echo "STAGE_PULL_REQUEST=$TARGET_CHECKOUT" >> "$GITHUB_ENV"
           echo "RELEASE_LABEL=$RELEASE_LABEL" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
@@ -223,8 +227,14 @@ jobs:
               ;;
           esac
 
-          POLICY_PATH="$RUNNER_WORKSPACE/tools/configs/"
-          POLICY_PATH="${POLICY_PATH}migration_upgrade_policy.json"
+          POLICY_PATH="${MIGRATION_CI_ROOT}/tools/configs/migration_upgrade_policy.json"
+          if [ ! -f "$POLICY_PATH" ]; then
+            echo "Migration policy missing at $POLICY_PATH" >&2
+            echo "MIGRATION_CI_ROOT=${MIGRATION_CI_ROOT:-<unset>}" >&2
+            echo "pwd=$(pwd)" >&2
+            ls -la "${MIGRATION_CI_ROOT}/tools/configs" >&2 || true
+            exit 1
+          fi
           RUNNER_ARGS=(
             "${STAGE_ARGS[@]}"
             --policy "$POLICY_PATH"

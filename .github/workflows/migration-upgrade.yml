@@ -20,6 +20,17 @@ on:
       - "tools/scripts/ci/**"
       - "tools/scripts/migration_upgrade.py"
   merge_group:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: Branch whose upgrade path should be validated
+        type: choice
+        required: true
+        default: devel
+        options:
+          - devel
+          - stable-2.7
+          - stable-2.6
 
 permissions:
   contents: read
@@ -33,7 +44,8 @@ jobs:
     uses: ./.github/workflows/migration-upgrade-core.yml
     with:
       target_branch: >-
-        ${{ github.event.merge_group.base_ref ||
+        ${{ inputs.target_branch ||
+            github.event.merge_group.base_ref ||
             github.base_ref ||
             github.ref_name }}
       snapshot_round_trip: false
