@@ -283,6 +283,13 @@ class FakeDistribution:
 
 
 def install_inventory_fakes(monkeypatch, tmp_path, *, direct_urls=None):
+    # build_inventory imports Django lazily inside the function so the host CI
+    # runner can start without Django. Patch the Django modules it imports from.
+    import django
+    from django.db import connection
+    from django.db.migrations import loader as migrations_loader
+    from django.db.migrations import recorder as migrations_recorder
+
     first_path = tmp_path / "0001_initial.py"
     first_path.write_bytes(b"first migration\n")
     second_path = tmp_path / "0002_next.py"
@@ -302,20 +309,20 @@ def install_inventory_fakes(monkeypatch, tmp_path, *, direct_urls=None):
     }
 
     class FakeLoader:
-        def __init__(self, connection):
-            assert connection is migration_inventory.connection
+        def __init__(self, connection_arg):
+            assert connection_arg is connection
             self.disk_migrations = migrations
 
     class FakeRecorder:
-        def __init__(self, connection):
-            assert connection is migration_inventory.connection
+        def __init__(self, connection_arg):
+            assert connection_arg is connection
 
         def applied_migrations(self):
             return {("example_app", "0001_initial"): object()}
 
-    monkeypatch.setattr(migration_inventory.django, "setup", lambda: None)
-    monkeypatch.setattr(migration_inventory, "MigrationLoader", FakeLoader)
-    monkeypatch.setattr(migration_inventory, "MigrationRecorder", FakeRecorder)
+    monkeypatch.setattr(django, "setup", lambda: None)
+    monkeypatch.setattr(migrations_loader, "MigrationLoader", FakeLoader)
+    monkeypatch.setattr(migrations_recorder, "MigrationRecorder", FakeRecorder)
     monkeypatch.setattr(
         migration_inventory.importlib,
         "import_module",
