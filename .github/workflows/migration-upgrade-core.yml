@@ -75,6 +75,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Verify migration runner Python environment
+        working-directory: ${{ github.workspace }}/migration-ci-runner
+        run: |
+          set -euo pipefail
+          # Host is stdlib-only; stage deps install via install_django_venv.sh.
+          test -x tools/scripts/ci/install_django_venv.sh
+          python tools/scripts/migration_upgrade.py --help >/dev/null
+
       - name: Verify PostgreSQL client tools
         if: inputs.snapshot_round_trip
         run: |

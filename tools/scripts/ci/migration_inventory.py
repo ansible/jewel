@@ -15,11 +15,6 @@ from importlib import metadata
 from pathlib import Path
 from typing import Sequence
 
-import django
-from django.db import connection
-from django.db.migrations.loader import MigrationLoader
-from django.db.migrations.recorder import MigrationRecorder
-
 POLICY_KEYS = frozenset(
     {
         "enforced_apps",
@@ -210,6 +205,13 @@ def build_inventory(stage: str, checkout_sha: str) -> dict[str, object]:
         raise MigrationInventoryError(f"Invalid stage name: {stage!r}")
     if not re.fullmatch(r"[0-9a-fA-F]{7,64}", checkout_sha):
         raise MigrationInventoryError(f"Invalid checkout SHA: {checkout_sha!r}")
+
+    # Django only exists in the stage venv; keep imports local so the host runner
+    # can start with the stdlib interpreter from actions/setup-python.
+    import django
+    from django.db import connection
+    from django.db.migrations.loader import MigrationLoader
+    from django.db.migrations.recorder import MigrationRecorder
 
     django.setup()
     loader = MigrationLoader(connection)
