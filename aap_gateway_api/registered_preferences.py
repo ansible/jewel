@@ -174,18 +174,18 @@ register(
 
 register(
     section="authentication",
-    preference_name="external_oauth_jwks_refresh_cooldown_seconds",
+    preference_name="jwks_refresh_cooldown_seconds",
     default=DEFAULT_JWKS_REFRESH_COOLDOWN_SECONDS,
     required=True,
     preference_type="int_range",
     min_value=0,
     max_value=MAX_JWKS_REFRESH_COOLDOWN_SECONDS,
     help_text=_(
-        "Minimum time, in seconds, between forced JWKS refreshes after an external OAuth JWT signature failure. "
+        "Minimum time, in seconds, between forced JWKS refreshes after a JWT signature failure. "
         "Set to 0 to disable cooldown and allow every failed signature to request fresh keys."
     ),
     encrypted=False,
-    label=_('External OAuth JWKS Refresh Cooldown (seconds)'),
+    label=_('JWKS Refresh Cooldown (seconds)'),
 )
 
 register(
