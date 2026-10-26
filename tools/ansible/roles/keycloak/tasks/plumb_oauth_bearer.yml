@@ -1,0 +1,38 @@
+---
+- name: OAuth Bearer authenticator
+  ansible.platform.authenticator:
+    name: "{{ oauth_bearer_adapter_name }}"
+    slug: "{{ oauth_bearer_slug }}"
+    enabled: true
+    create_objects: true
+    remove_users: true
+    configuration: "{{ oauth_bearer_configuration }}"
+    type: "ansible_base.authentication.authenticator_plugins.oauth_bearer"
+
+- name: OAuth Bearer authenticator superuser attribute map
+  ansible.platform.authenticator_map:
+    name: "{{ oauth_bearer_auth_map_name }} - superuser"
+    authenticator: "{{ oauth_bearer_adapter_name }}"
+    map_type: "is_superuser"
+    order: 0
+    triggers: "{\"attributes\":{\"is_superuser\": {}, \"join_condition\": \"or\"}}"
+
+- name: OAuth Bearer authenticator auditor attribute map
+  ansible.platform.authenticator_map:
+    name: "{{ oauth_bearer_auth_map_name }} - auditor"
+    authenticator: "{{ oauth_bearer_adapter_name }}"
+    map_type: "role"
+    role: "Platform Auditor"
+    order: 0
+    triggers: "{\"attributes\":{\"is_system_auditor\": {}, \"join_condition\": \"or\"}}"
+
+- name: OAuth Bearer authenticator organization map
+  ansible.platform.authenticator_map:
+    name: "{{ oauth_bearer_auth_map_name }} - org"
+    authenticator: "{{ oauth_bearer_adapter_name }}"
+    map_type: "organization"
+    role: "Organization Member"
+    organization: "Default"
+    order: 0
+    triggers:
+      always: {}

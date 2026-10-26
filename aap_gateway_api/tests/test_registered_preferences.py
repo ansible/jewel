@@ -8,11 +8,11 @@ from rest_framework import status
 from aap_gateway_api.preferences.registry import gateway_preference_registry
 
 
-class TestExternalOAuthJWKSRefreshCooldownPreference:
+class TestJWKSRefreshCooldownPreference:
     """Tests for the configurable forced JWKS refresh cooldown."""
 
     section = "authentication"
-    name = "external_oauth_jwks_refresh_cooldown_seconds"
+    name = "jwks_refresh_cooldown_seconds"
 
     def test_preference_is_registered_with_safe_bounds(self):
         preference = gateway_preference_registry.get(self.name, self.section)
