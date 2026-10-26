@@ -49,6 +49,14 @@ class ResourceAllClientMixin:
         return AllServicesClient(user=self.request.user, wait_for_response=False)
 
     def get_authenticate_header(self, request):
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, _credential = authorization.partition(" ")
+        if scheme.lower() == "bearer":
+            # DAB records a safe RFC 6750 challenge on the request when Bearer
+            # authentication fails.  Returning the normal DRF/DAB challenge
+            # here preserves invalid-token details without exposing credentials.
+            return super().get_authenticate_header(request)
+
         # HTTP Basic auth is insecure by default, because the basic auth
         # backend does not provide CSRF protection.
         #
