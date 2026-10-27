@@ -25,7 +25,11 @@ jobs:
     # Keep this opt-in until the published release tags and stable branches
     # required by the upgrade paths exist in this repository.
     if: vars.MIGRATION_UPGRADE_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    # The upgrade stages install requirements pinned in old release tags
+    # (uwsgi, xmlsec) that no longer build against the toolchain and
+    # libraries of ubuntu-26.04+ images; ubuntu-24.04 is the newest image
+    # where they compile.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:15.19
@@ -53,9 +57,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install migration upgrade build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libldap2-dev libsasl2-dev libxml2-dev libxmlsec1-dev pkg-config
+          # The xmlsec OpenSSL backend package is named libxmlsec1-openssl on
+          # Ubuntu 24.04 and was renamed libxmlsec1-openssl1 on newer releases
+          # (ubuntu-latest moved from 24.04 to 26.04).
+          sudo apt-get install -y libxmlsec1-openssl || sudo apt-get install -y libxmlsec1-openssl1
+
       - name: Resolve immutable upgrade inputs
         env:
           TARGET_BRANCH: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TARGET_BRANCH="${TARGET_BRANCH#refs/heads/}"
@@ -74,6 +88,14 @@ jobs:
               exit 1
               ;;
           esac
+
+          # The checkout does not persist credentials, but resolving the
+          # upgrade inputs requires fetching tags and branches from this
+          # private repository. Grant the job's read-only token to those
+          # fetches only and remove it again when this step finishes.
+          git config --local http.https://github.com/.extraheader \
+            "Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          trap 'git config --local --unset-all http.https://github.com/.extraheader || true' EXIT
 
           git fetch --force --tags origin
           RELEASE_TAG=$(git tag --list "$RELEASE_PATTERN" --sort=-v:refname | head -n 1)
