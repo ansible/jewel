@@ -572,26 +572,27 @@ class UserSerializer(CleanTextMixin, CommonUserSerializer):
 
     def _validate_new_authenticators(self, authenticators, authenticator_uid, user_instance, current_authenticators, errors):
         # For deprecated fields, validate specific scenarios that should fail
-        if user_instance and authenticators != current_authenticators:
-            authenticators_to_add = set(authenticators) - set(current_authenticators)
-            authenticators_to_remove = set(current_authenticators) - set(authenticators)
+        if not user_instance:
+            return
 
-            # If the result would have multiple authenticators, treat it as "multiple new authenticators"
-            if len(authenticators) > 1:
-                errors.setdefault('authenticators', []).append(
-                    ErrorDetail(
-                        _(
-                            "Adding multiple new authenticators is not supported "
-                            "with the 'authenticators' field. Use 'associated_authenticators' field to manage multiple authenticators."
-                        ),
-                        code='multiple_new_authenticators',
-                    )
+        authenticators_to_add = set(authenticators) - set(current_authenticators)
+        uid_changed = authenticator_uid and not self._is_authenticator_uid_unchanged(authenticator_uid, user_instance.get_authenticator_uids())
+
+        # MultipleChoiceField returned a set before DRF 3.18 and returns a list
+        # now. Compare the IDs as sets so validation does not depend on DRF's
+        # internal representation. A changed UID is also ambiguous when the
+        # request names multiple authenticators, even if the authenticator set
+        # itself is unchanged.
+        if len(authenticators) > 1 and (authenticators_to_add or uid_changed):
+            errors.setdefault('authenticators', []).append(
+                ErrorDetail(
+                    _(
+                        "Adding multiple new authenticators is not supported "
+                        "with the 'authenticators' field. Use 'associated_authenticators' field to manage multiple authenticators."
+                    ),
+                    code='multiple_new_authenticators',
                 )
-
-            # Adding to existing authenticators when result would be single: allow this case
-            elif len(authenticators_to_add) >= 1 and not authenticators_to_remove and len(authenticators) == 1:
-                # This is replacing existing authenticator with a single new one - should be allowed
-                pass
+            )
 
     def _validate_empty_authenticators(self, authenticators, authenticator_uid, errors):
         if authenticators is not None and len(authenticators) == 0 and authenticator_uid:
