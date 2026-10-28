@@ -816,6 +816,73 @@ class TestMigrationUpgradeRunner:
         assert (venv_root / "_helpers" / "migration_inventory.py").exists()
         assert "/tmp/key" not in summary
 
+    def test_copies_venv_helpers_into_stages_that_predate_them(self, tmp_path):
+        stage_path = tmp_path / "release"
+        stage_path.mkdir()
+        output_dir = tmp_path / "output"
+        venv_root = tmp_path / "venvs"
+        calls = []
+        responses = iter(
+            [
+                completed(),  # create the virtualenv
+                completed(),  # install the stage dependencies
+                completed("migrations applied\n"),
+                completed(),  # migrate --check
+                completed("planned migrations\n"),
+                completed("aap_gateway_api.0001_initial\n"),
+                completed("No migrations to apply.\n"),
+            ]
+        )
+
+        def fake_run(command, *, cwd, env):
+            calls.append((command, cwd, env))
+            if str(command[1]).endswith("migration_inventory.py"):
+                write_inventory_from_command(
+                    command,
+                    inventory(
+                        "release",
+                        available={"aap_gateway_api.0001_initial": "c" * 64},
+                        applied=["aap_gateway_api.0001_initial"],
+                    ),
+                )
+                return completed("inventory written\n")
+            return next(responses)
+
+        runner = migration_upgrade.MigrationUpgradeRunner(
+            stages=[migration_upgrade.Stage("release", stage_path)],
+            output_dir=output_dir,
+            venv_root=venv_root,
+            run_command=fake_run,
+            git_sha=lambda path: "b" * 40,
+            base_env={},
+            policy_path=PUBLIC_POLICY,
+        )
+
+        runner.run()
+
+        copied_helpers = stage_path / "tools" / "scripts" / "ci"
+        assert (copied_helpers / "install_django_venv.sh").exists()
+        assert (copied_helpers / "tox-reinstall-django-ansible-base.sh").exists()
+        assert calls[1][0][0] == str(copied_helpers / "install_django_venv.sh")
+
+    def test_fails_clearly_when_venv_helpers_cannot_be_provided(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(migration_upgrade, "STAGE_VENV_HELPERS", ("does-not-exist.sh"))
+        stage_path = tmp_path / "release"
+        stage_path.mkdir()
+
+        runner = migration_upgrade.MigrationUpgradeRunner(
+            stages=[migration_upgrade.Stage("release", stage_path)],
+            output_dir=tmp_path / "output",
+            venv_root=tmp_path / "venvs",
+            run_command=lambda command, *, cwd, env: completed(),
+            git_sha=lambda path: "b" * 40,
+            base_env={},
+            policy_path=PUBLIC_POLICY,
+        )
+
+        with pytest.raises(migration_upgrade.MigrationUpgradeError, match="install_django_venv.sh"):
+            runner.run()
+
     def test_fails_when_second_migration_is_not_a_noop(self, tmp_path):
         stage_path = tmp_path / "release"
         stage_path.mkdir()

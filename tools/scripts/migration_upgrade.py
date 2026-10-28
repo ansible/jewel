@@ -30,6 +30,13 @@ NOOP_MIGRATION_MESSAGE = "No migrations to apply."
 SNAPSHOT_DATABASE_PATTERN = re.compile(r"^gw_migration_snapshot_[0-9a-f]{16}$")
 DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$")
 LOCAL_DATABASE_HOSTS = frozenset({"", "localhost", "127.0.0.1", "::1"})
+# Stages cut from release tags older than the CI venv tooling do not carry
+# these scripts, which must run from the stage checkout because they resolve
+# requirements relative to their working directory.
+STAGE_VENV_HELPERS = (
+    "install_django_venv.sh",
+    "tox-reinstall-django-ansible-base.sh",
+)
 MIGRATION_SNAPSHOT = """\
 from django.db import connection
 with connection.cursor() as cursor:
@@ -359,6 +366,33 @@ class MigrationUpgradeRunner:
         env.setdefault("DJANGO_SETTINGS_MODULE", "aap_gateway_api.settings")
         return env
 
+    def _copy_stage_venv_helpers(self, stage: Stage) -> Path:
+        """Copy the venv bootstrap helpers into a stage that predates them and return the install script path.
+
+        Release tags cut before the CI venv tooling landed do not contain
+        tools/scripts/ci/install_django_venv.sh, which _run_stage must execute
+        from the stage checkout. Copy the runner's own helpers into the stage
+        so those tags remain usable as upgrade starting points.
+        """
+        helper_root = Path(__file__).parent / "ci"
+        destination_dir = stage.path / "tools" / "scripts" / "ci"
+        try:
+            destination_dir.mkdir(parents=True, exist_ok=True)
+            for helper in STAGE_VENV_HELPERS:
+                source = helper_root / helper
+                if not source.is_file():
+                    raise MigrationUpgradeError(
+                        f"Stage {stage.name!r} is missing tools/scripts/ci/install_django_venv.sh and the runner cannot provide a fallback copy of {helper!r}"
+                    )
+                destination = destination_dir / helper
+                shutil.copy2(source, destination)
+                destination.chmod(destination.stat().st_mode | 0o755)
+        except OSError as exc:
+            raise MigrationUpgradeError(
+                f"Stage {stage.name!r} is missing tools/scripts/ci/install_django_venv.sh and the fallback copy into the stage checkout failed"
+            ) from exc
+        return destination_dir / "install_django_venv.sh"
+
     def _run_stage(self, stage: Stage, result: StageResult) -> None:
         venv_dir = self.venv_root / stage.name
         env = self._stage_env(stage, venv_dir)
@@ -373,6 +407,8 @@ class MigrationUpgradeRunner:
             )
 
             install_script = stage.path / "tools/scripts/ci/install_django_venv.sh"
+            if not install_script.exists():
+                install_script = self._copy_stage_venv_helpers(stage)
             self._execute(
                 [str(install_script), str(venv_dir)],
                 stage=stage,
