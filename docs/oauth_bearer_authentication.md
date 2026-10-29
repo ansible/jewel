@@ -25,7 +25,7 @@ Configure the following fields in the authenticator's `configuration`:
 | Field | Required | Description |
 | --- | --- | --- |
 | `ISSUER_URL` | Yes | Exact external issuer expected in the token's `iss` claim. |
-| `AUDIENCE` | Yes | Exact audience accepted in the token's `aud` claim. |
+| `AUDIENCE` | Yes | Configured audience that must appear in the token's `aud` claim, whether the claim is a string or list. |
 | `ID_KEY` | Yes | Stable identity claim, such as `sub` for a user or `azp` for a service principal. |
 | `JWKS_URI` or `OIDC_ENDPOINT` | Yes | HTTPS key endpoint, supplied directly or discovered from the issuer. |
 | `ALLOWED_ALGORITHMS` | No | Accepted asymmetric signing algorithms; defaults to `RS256`. |
@@ -33,6 +33,7 @@ Configure the following fields in the authenticator's `configuration`:
 | `SCOPE_KEY`, `READ_SCOPE_NAME`, `WRITE_SCOPE_NAME` | No | Token-scope mapping; defaults are `scope`, `read`, and `write`. |
 | `USERINFO_URL` | No | Supplemental profile and group-claim endpoint. |
 | `EMAIL_KEY`, `FIRST_NAME_KEY`, `LAST_NAME_KEY`, `USERNAME_KEY` | No | Optional mappings from validated claims to local user fields. |
+| `VERIFY_SSL` | No | Verifies TLS certificates for JWKS, OIDC discovery, and UserInfo requests; defaults to `true`. |
 
 For an OIDC issuer, set `OIDC_ENDPOINT` to the issuer base URL. Gateway uses
 the discovery document when the authenticator is saved to populate `JWKS_URI`
