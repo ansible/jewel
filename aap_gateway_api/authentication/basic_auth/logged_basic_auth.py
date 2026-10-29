@@ -1,5 +1,6 @@
 import logging
 
+from ansible_base.lib.utils.auth import get_authentication_challenge, record_authentication_challenge
 from django.utils.encoding import smart_str
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework import authentication
@@ -13,6 +14,10 @@ class LoggedBasicAuthentication(authentication.BasicAuthentication):
     def authenticate(self, request):
         if not get_preference_value('proxy', 'gateway_basic_auth_enabled'):
             return
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, _credential = authorization.partition(" ")
+        if scheme.lower() == "basic":
+            record_authentication_challenge(request, super(LoggedBasicAuthentication, self).authenticate_header(request))
         ret = super(LoggedBasicAuthentication, self).authenticate(request)
         if ret:
             username = ret[0].username if ret[0] else '<none>'
@@ -21,8 +26,9 @@ class LoggedBasicAuthentication(authentication.BasicAuthentication):
 
     def authenticate_header(self, request):
         if not get_preference_value('proxy', 'gateway_basic_auth_enabled'):
-            return
-        return super(LoggedBasicAuthentication, self).authenticate_header(request)
+            return get_authentication_challenge(request)
+        default = super(LoggedBasicAuthentication, self).authenticate_header(request)
+        return get_authentication_challenge(request, default=default)
 
 
 class LoggedBasicAuthenticationScheme(OpenApiAuthenticationExtension):

@@ -1,5 +1,6 @@
 import logging
 
+from ansible_base.lib.utils.auth import get_authentication_challenge, record_authentication_challenge
 from ansible_base.lib.utils.response import get_relative_url
 from django.core.exceptions import ValidationError
 from django.urls import NoReverseMatch
@@ -42,25 +43,16 @@ class ServiceTokenAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request):
         """Preserve a 401 challenge when this path-restricted authenticator is first."""
-        if request.headers.get(service_token_header):
-            return service_token_header
-
-        authorization = request.headers.get("Authorization", "")
-        scheme, _, _credential = authorization.partition(" ")
-        if scheme.lower() == "basic":
-            from aap_gateway_api.authentication.basic_auth import LoggedBasicAuthentication
-
-            return LoggedBasicAuthentication().authenticate_header(request)
-
         from ansible_base.authentication.bearer_authentication import BearerAuthentication
 
-        return BearerAuthentication().authenticate_header(request)
+        return get_authentication_challenge(request, default=BearerAuthentication().authenticate_header(request))
 
     def authenticate(self, request):
         token = request.headers.get(service_token_header, None)
 
         if token is None:
             return None
+        record_authentication_challenge(request, service_token_header)
 
         # Check if migration has completed before allowing service authentication
         if not MigrateServiceDataHasRan.has_migration_completed():

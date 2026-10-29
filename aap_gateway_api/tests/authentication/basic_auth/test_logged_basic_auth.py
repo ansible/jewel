@@ -38,6 +38,7 @@ def test_logged_basic_auth_invalid(unauthenticated_api_client):
     url = get_relative_url("organization-list")
     response = client.get(url)
     assert response.status_code == 401
+    assert response["WWW-Authenticate"] == 'Basic realm="api"'
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [LoggedBasicAuthentication])
