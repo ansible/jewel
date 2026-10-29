@@ -2,6 +2,10 @@ import base64
 from unittest import mock
 
 from ansible_base.lib.utils.response import get_relative_url
+from rest_framework.response import Response
+from rest_framework.settings import api_settings
+from rest_framework.test import APIRequestFactory
+from rest_framework.views import APIView
 
 from aap_gateway_api.authentication.basic_auth import LoggedBasicAuthentication
 
@@ -28,12 +32,19 @@ def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, ad
         assert response.status_code == 401
 
 
-def test_logged_basic_auth_invalid_returns_basic_challenge(unauthenticated_api_client, organization, admin_user, local_authenticator):
-    client = unauthenticated_api_client
-    client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
-    url = get_relative_url("organization-list")
+def test_logged_basic_auth_invalid_returns_basic_challenge(preference_manager):
+    class AuthenticationChallengeView(APIView):
+        authentication_classes = api_settings.DEFAULT_AUTHENTICATION_CLASSES
 
-    response = client.get(url)
+        def get(self, request):
+            return Response()
+
+    request = APIRequestFactory().get(
+        "/authentication-challenge/",
+        HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"),
+    )
+    with preference_manager.set("proxy", "gateway_basic_auth_enabled", True):
+        response = AuthenticationChallengeView.as_view()(request)
 
     assert response.status_code == 401
     assert response["WWW-Authenticate"] == 'Basic realm="api"'
