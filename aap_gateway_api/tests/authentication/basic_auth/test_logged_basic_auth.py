@@ -50,6 +50,15 @@ def test_logged_basic_auth_invalid_returns_basic_challenge(preference_manager):
     assert response["WWW-Authenticate"] == 'Basic realm="api"'
 
 
+def test_logged_basic_auth_disabled_has_no_default_challenge(preference_manager):
+    request = APIRequestFactory().get("/authentication-challenge/")
+
+    with preference_manager.set("proxy", "gateway_basic_auth_enabled", False):
+        challenge = LoggedBasicAuthentication().get_default_authentication_challenge(request)
+
+    assert challenge is None
+
+
 # There is really no better way to do this. I tried. Really hard.
 # We can't use the 'settings' fixture here. Because even though DRF gets notified of the change,
 # the view already has the old settings as local variables. So we have to patch the view to fix that.
