@@ -1,5 +1,19 @@
 # Authentication
 
+## Gateway API authentication precedence
+
+Gateway evaluates API authentication mechanisms in the following order:
+
+1. Service-token authentication, restricted to its authorized service endpoints.
+2. Bearer authentication, which handles trusted external bearer tokens and local OAuth2 tokens.
+3. Basic authentication.
+4. Session authentication.
+
+The order is intentional: service endpoints retain their dedicated authentication
+path, explicitly supplied credentials take precedence over browser sessions, and
+the bearer dispatcher is the single handler for both external and local bearer
+tokens.
+
 ## Basic Auth
 
 If a basic auth header is passed to the proxy the following logic applies.
