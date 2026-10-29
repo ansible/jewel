@@ -28,6 +28,17 @@ def test_logged_basic_auth_disabled(unauthenticated_api_client, organization, ad
         assert response.status_code == 401
 
 
+def test_logged_basic_auth_invalid_returns_basic_challenge(unauthenticated_api_client, organization, admin_user, local_authenticator):
+    client = unauthenticated_api_client
+    client.credentials(HTTP_AUTHORIZATION="Basic " + base64.b64encode("admin:wrongPassw0rd".encode("utf-8")).decode("utf-8"))
+    url = get_relative_url("organization-list")
+
+    response = client.get(url)
+
+    assert response.status_code == 401
+    assert response["WWW-Authenticate"] == 'Basic realm="api"'
+
+
 # There is really no better way to do this. I tried. Really hard.
 # We can't use the 'settings' fixture here. Because even though DRF gets notified of the change,
 # the view already has the old settings as local variables. So we have to patch the view to fix that.
@@ -38,7 +49,6 @@ def test_logged_basic_auth_invalid(unauthenticated_api_client):
     url = get_relative_url("organization-list")
     response = client.get(url)
     assert response.status_code == 401
-    assert response["WWW-Authenticate"] == 'Basic realm="api"'
 
 
 @mock.patch("rest_framework.views.APIView.authentication_classes", [LoggedBasicAuthentication])

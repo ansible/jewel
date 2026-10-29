@@ -297,7 +297,7 @@ def test_validate_methods(allowed_methods, call_method, expected_result):
     request.path = '/junk'
     request.method = call_method
 
-    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', side_effect=['/resource_api', '/junk']):
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', side_effect=['/resource_api', '/junk', '/resource_api']):
         assert token_auth.is_user_authorized(request, None, None, None) == expected_result
 
 
