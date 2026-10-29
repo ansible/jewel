@@ -146,6 +146,14 @@ When the preference is set to `false`:
 - Existing PATs and OAuth2 application tokens continue to authenticate unless revoked.
 - Operators can still create PATs with the Django management command `create_oauth2_token` (including during installation). This exception is intentional so install and recovery workflows are not blocked by the preference.
 
+### External OAuth bearer tokens
+
+Gateway can authenticate API requests with JWT access tokens issued by a
+trusted external OAuth or OpenID Connect provider. See [External OAuth bearer
+token authentication](oauth_bearer_authentication.md) for the authenticator
+configuration, token validation rules, scope behavior, JWKS operations, and
+local Keycloak development workflow.
+
 ## Github OAuth2
 
 The GitHub OAuth2 backend in social-core (a Python social authentication/registration mechanism used by the popular social-auth-app-django among others) simplifies the process of integrating GitHub authentication into your application. Unlike a full OAuth2 setup that requires handling various endpoints, secrets, and client IDs manually, configuring GitHub authentication with social-core primarily involves specifying a few key settings. Users need to register their application with GitHub to obtain a CLIENT_ID and CLIENT_SECRET, which are then used in the social-core configuration. Additionally, they must specify the SOCIAL_AUTH_GITHUB_KEY and SOCIAL_AUTH_GITHUB_SECRET settings with these values, and optionally, define the SOCIAL_AUTH_GITHUB_SCOPE to customize the permissions requested (e.g., accessing public info, user emails, etc.). This approach abstracts away much of the complexity of direct OAuth2 interactions, focusing instead on a straightforward setup that leverages social-core's built-in mechanisms for handling the OAuth2 flow, token exchange, and user data retrieval from GitHub. By doing so, it enables developers to quickly and securely add GitHub as an authentication method in their applications, enhancing the user experience by allowing users to sign in with their existing GitHub accounts.
