@@ -167,6 +167,7 @@ def test_invalid_jwt_schema(service_cluster_gateway, user, token_data):
     url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 401
+    assert resp["WWW-Authenticate"] == "X-ANSIBLE-SERVICE-AUTH"
 
 
 @pytest.mark.django_db

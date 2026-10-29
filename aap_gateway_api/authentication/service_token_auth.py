@@ -40,6 +40,22 @@ class ServiceTokenAuthentication(BaseAuthentication):
         ('workload-identity-tokens-view', {}, ['post']),
     ]
 
+    def authenticate_header(self, request):
+        """Preserve a 401 challenge when this path-restricted authenticator is first."""
+        if request.headers.get(service_token_header):
+            return service_token_header
+
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, _credential = authorization.partition(" ")
+        if scheme.lower() == "basic":
+            from aap_gateway_api.authentication.basic_auth import LoggedBasicAuthentication
+
+            return LoggedBasicAuthentication().authenticate_header(request)
+
+        from ansible_base.authentication.bearer_authentication import BearerAuthentication
+
+        return BearerAuthentication().authenticate_header(request)
+
     def authenticate(self, request):
         token = request.headers.get(service_token_header, None)
 
