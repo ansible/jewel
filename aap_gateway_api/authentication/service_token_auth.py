@@ -1,6 +1,6 @@
 import logging
 
-from ansible_base.lib.utils.auth import get_authentication_challenge, record_authentication_challenge
+from ansible_base.authentication.challenge import ChallengeAwareAuthenticationMixin
 from ansible_base.lib.utils.response import get_relative_url
 from django.core.exceptions import ValidationError
 from django.urls import NoReverseMatch
@@ -26,7 +26,7 @@ class MigrateDataNotCompleteError(APIException):
     default_code = 'migrate_service_data_not_complete'
 
 
-class ServiceTokenAuthentication(BaseAuthentication):
+class ServiceTokenAuthentication(ChallengeAwareAuthenticationMixin, BaseAuthentication):
     authorized_paths = [
         # Entries in this are a 3 item tuple where the items are (in order):
         #   1. The view name to do the reverse lookup on
@@ -41,11 +41,11 @@ class ServiceTokenAuthentication(BaseAuthentication):
         ('workload-identity-tokens-view', {}, ['post']),
     ]
 
-    def authenticate_header(self, request):
+    def get_default_authentication_challenge(self, request):
         """Preserve a 401 challenge when this path-restricted authenticator is first."""
         from ansible_base.authentication.bearer_authentication import BearerAuthentication
 
-        return get_authentication_challenge(request, default=BearerAuthentication().authenticate_header(request))
+        return BearerAuthentication().authenticate_header(request)
 
     def authenticate(self, request):
         token = request.headers.get(service_token_header, None)
@@ -54,7 +54,7 @@ class ServiceTokenAuthentication(BaseAuthentication):
             return None
         if not self.is_authorized_path(request):
             return None
-        record_authentication_challenge(request, service_token_header)
+        self.record_authentication_challenge(request, service_token_header)
 
         # Check if migration has completed before allowing service authentication
         if not MigrateServiceDataHasRan.has_migration_completed():
