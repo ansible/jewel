@@ -1,6 +1,6 @@
+from ansible_base.lib.utils.views.deprecation import DEFAULT_DEPRECATION_MESSAGE, deprecated
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.rbac.api.permissions import AnsibleBaseUserPermissions
-from ansible_base.lib.utils.views.deprecation import deprecated
 from ansible_base.rbac.models import ObjectRole
 from ansible_base.rbac.policies import visible_users
 from django.db.models.functions import Cast
@@ -15,7 +15,7 @@ from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPI
 @extend_schema(
     deprecated=True,
 )
-@deprecated(detail='User Team is deprecated.')
+@deprecated(detail=str(DEFAULT_DEPRECATION_MESSAGE))
 class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Team
     serializer_class = TeamSerializer
@@ -32,7 +32,7 @@ class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
 @extend_schema(
     deprecated=True,
 )
-@deprecated(detail='User Organization is deprecated.')
+@deprecated(detail=str(DEFAULT_DEPRECATION_MESSAGE))
 class UserOrganizationViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Organization
     serializer_class = OrganizationSerializer

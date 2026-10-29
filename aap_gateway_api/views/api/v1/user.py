@@ -1,7 +1,7 @@
 from ansible_base.authentication.models import Authenticator
 from ansible_base.authentication.serializers import AuthenticatorSerializer
 from ansible_base.lib.utils.models import is_system_user
-from ansible_base.lib.utils.views.deprecation import DeprecatedFieldsViewMixin, deprecated, mark_deprecated
+from ansible_base.lib.utils.views.deprecation import DEFAULT_DEPRECATION_MESSAGE, DeprecatedFieldsViewMixin, deprecated, mark_deprecated
 from ansible_base.lib.utils.views.permissions import IsSuperuserOrAuditor
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
 from ansible_base.oauth2_provider.views import DABOAuth2UserViewsetMixin
@@ -93,7 +93,7 @@ class UserViewSet(DeprecatedFieldsViewMixin, DABOAuth2UserViewsetMixin, Resource
 @extend_schema(
     deprecated=True,
 )
-@deprecated(detail='This endpoint is deprecated and will be removed in a future release.')
+@deprecated(detail=str(DEFAULT_DEPRECATION_MESSAGE))
 class DeprecatedRelatedUserViewSet(DABOAuth2UserViewsetMixin, GatewayModelViewSet):
     """
     Shows all users for sublists like /api/v1/organizations/5/users/

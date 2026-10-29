@@ -124,3 +124,7 @@ class ServiceKeyViewSet(GatewayModelViewSet):
     @deprecated_action(detail=UPDATE_DEPRECATION_MESSAGE)
     def update(self, request, *args, **kwargs):
         return super().update(request, *args, **kwargs)
+
+    @deprecated_action(detail=UPDATE_DEPRECATION_MESSAGE)
+    def partial_update(self, request, *args, **kwargs):
+        return super().partial_update(request, *args, **kwargs)
