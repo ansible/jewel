@@ -174,6 +174,13 @@ jobs:
               echo "STAGE_STABLE_27=$CHECKOUT_ROOT/stable-2.7" >> "$GITHUB_ENV"
               echo "STAGE_DEVEL=$CHECKOUT_ROOT/devel" >> "$GITHUB_ENV"
               ;;
+            devel)
+              # The PR checkout is already devel-based; no extra stages.
+              ;;
+            *)
+              echo "Unsupported migration upgrade target branch" >&2
+              exit 1
+              ;;
           esac
 
           {
@@ -224,6 +231,13 @@ jobs:
                 --stage "stable-2.7=$STAGE_STABLE_27"
                 --stage "devel=$STAGE_DEVEL"
               )
+              ;;
+            devel)
+              # The PR checkout is already the newest stage.
+              ;;
+            *)
+              echo "Unsupported migration upgrade target branch" >&2
+              exit 1
               ;;
           esac
 
