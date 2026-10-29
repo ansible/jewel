@@ -52,6 +52,8 @@ class ServiceTokenAuthentication(BaseAuthentication):
 
         if token is None:
             return None
+        if not self.is_authorized_path(request):
+            return None
         record_authentication_challenge(request, service_token_header)
 
         # Check if migration has completed before allowing service authentication
@@ -64,43 +66,24 @@ class ServiceTokenAuthentication(BaseAuthentication):
 
             user = token_data["user"]
             service = token_data["service_cluster"]
-            payload = token_data["token_data"]["payload"]
 
             # Attach service_cluster to request so downstream views can check service authorization.
             request.service_cluster = service
 
-            if self.is_user_authorized(request, user, service, payload):
-                logger.warning(f"User is authorized to access {request.path}.")
-                return (user, SERVICE_TOKEN_AUTH_STRING)
-            else:
-                logger.warning(f"User not authorized to access {request.path}.")
-                return None
+            self.configure_user_authorization(request, user)
+            logger.warning(f"User is authorized to access {request.path}.")
+            return (user, SERVICE_TOKEN_AUTH_STRING)
 
         except ValidationError:
             logger.exception("Invalid token.")
             return None
 
-    def is_user_authorized(self, request, user, service, token_data):
+    def is_authorized_path(self, request):
         resources_api = get_relative_url("service-index-root")
 
         # Allow services to authenticate to the resource registry, regardless of
         # whether or not they are authorized by the user to access the service.
         if request.path.startswith(resources_api):
-            allowed_actions = [
-                "list",
-                "retrieve",
-                "service-metadata",
-                "manifest",  # resource type manifest like /v1/service-index/resource-types/shared.user/manifest/
-                "create",
-                "update",
-                "destroy",
-                "assign",
-                "unassign",
-                "bulk_assign",
-                "bulk_unassign",
-            ]
-
-            setattr(user, "resource_api_actions", allowed_actions)
             return True
 
         # Allow services to access JWT claims for any user
@@ -108,11 +91,6 @@ class ServiceTokenAuthentication(BaseAuthentication):
         # requires specific kwargs to generate URLs via get_relative_url() and we can't use
         # wildcards to accept any user slug in the URL pattern
         if request.path.startswith('/api/gateway/v1/jwt_claims/') and request.method.lower() == 'get':
-            # Set the resource_api_actions based on what's in the token
-            # This is used by the JWT claims view permission check
-            # If no actions are set, default to allowing retrieve
-            if not hasattr(user, 'resource_api_actions'):
-                setattr(user, 'resource_api_actions', ['retrieve'])
             return True
 
         for path_info in self.authorized_paths:
@@ -134,3 +112,33 @@ class ServiceTokenAuthentication(BaseAuthentication):
                 return True
 
         return False
+
+    def configure_user_authorization(self, request, user):
+        resources_api = get_relative_url("service-index-root")
+        if request.path.startswith(resources_api):
+            setattr(
+                user,
+                "resource_api_actions",
+                [
+                    "list",
+                    "retrieve",
+                    "service-metadata",
+                    "manifest",  # resource type manifest like /v1/service-index/resource-types/shared.user/manifest/
+                    "create",
+                    "update",
+                    "destroy",
+                    "assign",
+                    "unassign",
+                    "bulk_assign",
+                    "bulk_unassign",
+                ],
+            )
+        elif request.path.startswith('/api/gateway/v1/jwt_claims/') and not hasattr(user, 'resource_api_actions'):
+            # JWT claims permission defaults to retrieve when the token does not define actions.
+            setattr(user, 'resource_api_actions', ['retrieve'])
+
+    def is_user_authorized(self, request, user, service, token_data):
+        if not self.is_authorized_path(request):
+            return False
+        self.configure_user_authorization(request, user)
+        return True

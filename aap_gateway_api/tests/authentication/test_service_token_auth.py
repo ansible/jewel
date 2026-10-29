@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime, timedelta
 from http import HTTPStatus
+from types import SimpleNamespace
 from unittest import mock
 
 import jwt
 import pytest
+from ansible_base.lib.utils.auth import get_authentication_challenge
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
 from rest_framework.test import APIClient
@@ -181,6 +183,21 @@ def test_token_is_not_jwt(service_jwt_token):
     url = get_relative_url("resource-list")
     resp = client.get(url)
     assert resp.status_code == 401
+
+
+def test_service_token_authentication_declines_unrelated_paths_before_validating_the_token():
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    token_auth.authorized_paths = []
+    request = SimpleNamespace(headers={"X-ANSIBLE-SERVICE-AUTH": "not-a-jwt"}, path="/not-a-service-path", method="GET")
+
+    with mock.patch("aap_gateway_api.authentication.service_token_auth.get_relative_url", return_value="/service-index/"):
+        with mock.patch("aap_gateway_api.authentication.service_token_auth.validate_service_token") as validate_token:
+            assert token_auth.authenticate(request) is None
+
+    validate_token.assert_not_called()
+    assert get_authentication_challenge(request) is None
 
 
 @pytest.mark.django_db
