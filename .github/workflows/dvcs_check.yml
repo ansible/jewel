@@ -10,6 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Check the PR for DVCS integration
     steps:
-      - uses: ansible/dvcs-action@4f8696a8670ad9c5e92c9866106a0c8bb58b507b # AAP-95746
+      - uses: ansible/dvcs-action@b213b07695078ef60390f9b2b2df3d18be8d5c91 # AAP-95746
         with:
           allow_no_jira: true
