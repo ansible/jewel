@@ -34,7 +34,7 @@ jobs:
       image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
     services:
       redis:
-        image: redis
+        image: mirror.gcr.io/library/redis:8.10.2
         ports:
           - 6379:6379
     permissions:

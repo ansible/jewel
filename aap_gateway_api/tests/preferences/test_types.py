@@ -147,6 +147,37 @@ def test_csrf_serializer_non_list_value_defaults_to_empty(expected_log, non_list
     assert result == []
 
 
+def test_csrf_serializer_deduplicates_origin_from_settings_and_preference():
+    from aap_gateway_api.preferences.serializers import CSRFSerializer
+
+    origin = "https://example.com"
+    with override_settings(CSRF_TRUSTED_ORIGINS=[origin]):
+        result = CSRFSerializer.to_python('["https://example.com"]')
+
+    assert result == [origin]
+
+
+@pytest.mark.parametrize("unhashable_value", [[[]], [{}]])
+def test_csrf_serializer_unhashable_value_reaches_preference_validation(register_preference, unhashable_value):
+    from rest_framework.exceptions import ValidationError as DRFValidationError
+
+    from aap_gateway_api.serializers.preferences import SettingSectionSerializer
+
+    register_preference(
+        section="general",
+        preference_name="test_csrf_preference",
+        default=[],
+        required=False,
+        encrypted=False,
+        preference_type="CSRF_list",
+        help_text="This is a test preference",
+    )
+
+    serializer = SettingSectionSerializer(category_slug="general")
+    with pytest.raises(DRFValidationError, match="Must be a list of valid origins"):
+        serializer.validate_and_save({"test_csrf_preference": unhashable_value})
+
+
 @pytest.mark.parametrize(
     "value, expected_error",
     [

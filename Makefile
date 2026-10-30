@@ -32,7 +32,7 @@ PROXY_CONFIG_INPUTS := tools/ansible/generate-proxy-configs.yml tools/ansible/va
 	podman-reset podman-reset-volumes \
 	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach docker-compose-down \
 	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
-	collection podman-collection podman-preflight requirements check-requirements tools/generated/sources \
+	collection podman-collection podman-build-preflight podman-preflight requirements check-requirements tools/generated/sources \
 	ci-image ci-image-push
 
 ## Get the version of python we are working with
@@ -256,7 +256,7 @@ tools/generated/.has_built_api: $(API_TARGETS)
 update_django_ansible_base_hash:
 	@if [ ! -d "django-ansible-base/.git" ]; then \
 		echo "Checking for updates to django-ansible-base"; \
-		$(eval DAB_HEAD=$(shell git ls-remote https://github.com/ansible/django-ansible-base | awk '/refs\/heads\/devel/ { print $$1 }')) \
+		$(eval DAB_HEAD=$(shell git ls-remote https://github.com/ansible/django-ansible-base | awk '$$2 == "refs/heads/devel" { print $$1 }')) \
 		if [[ ! -f tools/generated/.django_ansible_base_head ]] || ! grep -q $(DAB_HEAD) tools/generated/.django_ansible_base_head; then \
 			echo "UPDATE - django-ansible-base is out of date, triggering rebuild"; \
 			echo $(DAB_HEAD) > tools/generated/.django_ansible_base_head; \
@@ -293,8 +293,8 @@ endif
 tools/generated/proxy.yml: $(PROXY_CONFIG_INPUTS)
 	ansible-playbook tools/ansible/generate-proxy-configs.yml -e @tools/ansible/vars/container_config.yml -e @container-startup.yml
 
-## Verify the local Podman and podman-compose versions meet the supported minimums
-podman-preflight:
+## Verify the local Podman version meets the supported minimum
+podman-build-preflight:
 	@set -eu; \
 	version_at_least() { \
 		awk -v actual="$$1" -v minimum="$$2" 'BEGIN { \
@@ -316,6 +316,22 @@ podman-preflight:
 		echo "Error: Podman $(PODMAN_MIN_VERSION) or newer is required (found: $${podman_version:-unknown})."; \
 		exit 1; \
 	fi; \
+	echo "Using Podman $$podman_version."
+
+## Verify the local podman-compose version meets the supported minimum
+podman-preflight: podman-build-preflight
+	@set -eu; \
+	version_at_least() { \
+		awk -v actual="$$1" -v minimum="$$2" 'BEGIN { \
+			split(actual, actual_parts, "."); \
+			split(minimum, minimum_parts, "."); \
+			for (part = 1; part <= 3; part++) { \
+				if ((actual_parts[part] + 0) > (minimum_parts[part] + 0)) exit 0; \
+				if ((actual_parts[part] + 0) < (minimum_parts[part] + 0)) exit 1; \
+			} \
+			exit 0; \
+		}'; \
+	}; \
 	if ! command -v "$(word 1,$(PODMAN_COMPOSE))" >/dev/null 2>&1; then \
 		echo "Error: podman-compose is required. Install podman-compose $(PODMAN_COMPOSE_MIN_VERSION) or newer."; \
 		exit 1; \
@@ -325,7 +341,7 @@ podman-preflight:
 		echo "Error: podman-compose $(PODMAN_COMPOSE_MIN_VERSION) or newer is required (found: $${podman_compose_version:-unknown})."; \
 		exit 1; \
 	fi; \
-	echo "Using Podman $$podman_version and podman-compose $$podman_compose_version."
+	echo "Using podman-compose $$podman_compose_version."
 
 ## Regenerate requirements.txt from requirements.in
 requirements: requirements/requirements.in
@@ -355,7 +371,7 @@ CI_IMAGE ?= quay.io/ansible/jewel-ci:$(CI_IMAGE_TAG)
 CI_CONTAINERFILE = tools/generated/Containerfile.ci
 
 ## Build the CI container image (amd64 for GitHub Actions runners)
-ci-image: $(SOURCES_STAMP) podman-preflight
+ci-image: $(SOURCES_STAMP) podman-build-preflight
 	$(PODMAN) build --platform linux/amd64 -f $(CI_CONTAINERFILE) -t $(CI_IMAGE) .
 
 ## Build and push the CI container image (only from devel or stable-* branches)

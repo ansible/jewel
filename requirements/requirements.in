@@ -1,6 +1,6 @@
 cryptography >= 46.0.7 # CVE-2026-39892
 Django>=5.2.8,<5.3 # Django 5.2 LTS - see AAP-55610
-djangorestframework
+djangorestframework>=3.18.2  # see AAP-99716
 django-crum
 django-dynamic-preferences
 django-extensions>=4.0 # python 3.12 support added in version 4: https://github.com/django-extensions/django-extensions/releases/tag/4.0
@@ -24,7 +24,7 @@ pyasn1>=0.6.4    # CVE-2026-59886 - DoS via crafted ASN.1 REAL values (transitiv
 django-redis>=7.0.0
 python-ldap>=3.4.7
 redis>=8.0.1,<9  # 8.0.0 broke Unix socket connections (redis/redis-py#4086), fixed in 8.0.1
-urllib3>=2.7.0   # CVE-2026-44431 / CVE-2026-44432
+urllib3>=2.8.0  # AAP-97335
 argon2-cffi
 dynaconf>=3.2.13,<4.0.0  # CVE-2026-33154; <4.0.0 because 4.x is expected to have breaking changes
 referencing<0.37.0  # consistent with DAB pin from jsonschema-path
