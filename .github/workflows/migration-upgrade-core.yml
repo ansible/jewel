@@ -1,0 +1,289 @@
+---
+name: Migration Upgrade Core
+
+on:
+  workflow_call:
+    inputs:
+      target_branch:
+        description: Branch whose upgrade path should be validated
+        required: true
+        type: string
+      snapshot_round_trip:
+        description: >-
+          Run the synthetic dump/restore check after the first release stage
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  migration-upgrade:
+    name: Validate migration upgrade path
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:15.19
+        env:
+          POSTGRES_USER: gw
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: gw_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gw -d gw_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Install public build prerequisites
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libldap2-dev \
+            libsasl2-dev \
+            libxml2-dev \
+            libxmlsec1-dev \
+            libxmlsec1-openssl \
+            pkg-config
+
+      - name: Check out migration CI tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: migration-ci-runner
+          fetch-depth: 0
+          # Needed so later git fetch of tags/branches works on private/internal
+          # mirrors (public jewel can fetch anonymously; jewel-debug cannot).
+          persist-credentials: true
+
+      - name: Check out target source
+        uses: actions/checkout@v5
+        with:
+          ref: >-
+            ${{ inputs.snapshot_round_trip && inputs.target_branch ||
+            github.ref }}
+          path: migration-target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify migration runner Python environment
+        working-directory: ${{ github.workspace }}/migration-ci-runner
+        run: |
+          set -euo pipefail
+          # Host is stdlib-only; stage deps install via install_django_venv.sh.
+          test -x tools/scripts/ci/install_django_venv.sh
+          python tools/scripts/migration_upgrade.py --help >/dev/null
+
+      - name: Verify PostgreSQL client tools
+        if: inputs.snapshot_round_trip
+        run: |
+          set -euo pipefail
+          pg_dump --version
+          pg_restore --version
+          createdb --version
+
+      - name: Resolve immutable upgrade inputs
+        working-directory: ${{ github.workspace }}/migration-ci-runner
+        env:
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          set -euo pipefail
+          TARGET_BRANCH="${TARGET_BRANCH#refs/heads/}"
+          # Avoid RUNNER_WORKSPACE: Actions runners may predefine that name as
+          # /home/runner/work/<repo>, which breaks GITHUB_ENV overrides.
+          MIGRATION_CI_ROOT="$GITHUB_WORKSPACE/migration-ci-runner"
+          TARGET_CHECKOUT="$GITHUB_WORKSPACE/migration-target"
+
+          case "$TARGET_BRANCH" in
+            devel)
+              RELEASE_PATTERN='2.7.*'
+              RELEASE_LABEL='published-2.7'
+              ;;
+            stable-2.7|stable-2.6)
+              RELEASE_PATTERN='2.6.*'
+              RELEASE_LABEL='published-2.6'
+              ;;
+            *)
+              echo "Unsupported migration upgrade target branch" >&2
+              exit 1
+              ;;
+          esac
+
+          git fetch --force --tags origin
+          RELEASE_TAG=$(git tag --list "$RELEASE_PATTERN" \
+            --sort=-v:refname | head -n 1)
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "No published release tag matched the configured pattern" >&2
+            exit 1
+          fi
+
+          CHECKOUT_ROOT="$RUNNER_TEMP/migration-upgrade-checkouts"
+          mkdir -p "$CHECKOUT_ROOT"
+
+          fetch_branch() {
+            local branch="$1"
+            git fetch --no-tags --force origin \
+              "refs/heads/$branch:refs/remotes/origin/$branch"
+            git rev-parse "refs/remotes/origin/$branch"
+          }
+
+          RELEASE_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
+          PR_SHA=$(git -C "$TARGET_CHECKOUT" rev-parse HEAD)
+          echo "Resolving target=$TARGET_BRANCH release=$RELEASE_TAG" \
+            "($RELEASE_SHA) PR=$PR_SHA"
+
+          echo "TARGET_BRANCH=$TARGET_BRANCH" >> "$GITHUB_ENV"
+          echo "MIGRATION_CI_ROOT=$MIGRATION_CI_ROOT" >> "$GITHUB_ENV"
+          echo "STAGE_PULL_REQUEST=$TARGET_CHECKOUT" >> "$GITHUB_ENV"
+          echo "RELEASE_LABEL=$RELEASE_LABEL" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
+          echo "PR_SHA=$PR_SHA" >> "$GITHUB_ENV"
+          echo "CHECKOUT_ROOT=$CHECKOUT_ROOT" >> "$GITHUB_ENV"
+
+          git worktree add --detach \
+            "$CHECKOUT_ROOT/$RELEASE_LABEL" "$RELEASE_SHA"
+          echo "STAGE_RELEASE=$CHECKOUT_ROOT/$RELEASE_LABEL" >> "$GITHUB_ENV"
+
+          case "$TARGET_BRANCH" in
+            stable-2.7)
+              DEVEL_SHA=$(fetch_branch devel)
+              git worktree add --detach "$CHECKOUT_ROOT/devel" "$DEVEL_SHA"
+              echo "DEVEL_SHA=$DEVEL_SHA" >> "$GITHUB_ENV"
+              echo "STAGE_DEVEL=$CHECKOUT_ROOT/devel" >> "$GITHUB_ENV"
+              ;;
+            stable-2.6)
+              STABLE_27_SHA=$(fetch_branch stable-2.7)
+              DEVEL_SHA=$(fetch_branch devel)
+              git worktree add --detach \
+                "$CHECKOUT_ROOT/stable-2.7" "$STABLE_27_SHA"
+              git worktree add --detach "$CHECKOUT_ROOT/devel" "$DEVEL_SHA"
+              echo "STABLE_27_SHA=$STABLE_27_SHA" >> "$GITHUB_ENV"
+              echo "DEVEL_SHA=$DEVEL_SHA" >> "$GITHUB_ENV"
+              echo "STAGE_STABLE_27=$CHECKOUT_ROOT/stable-2.7" >> "$GITHUB_ENV"
+              echo "STAGE_DEVEL=$CHECKOUT_ROOT/devel" >> "$GITHUB_ENV"
+              ;;
+            devel)
+              # The PR checkout is already devel-based; no extra stages.
+              ;;
+            *)
+              echo "Unsupported migration upgrade target branch" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "### Migration upgrade inputs"
+            echo "- Pull request target: $TARGET_BRANCH"
+            echo "- Pull request checkout: $PR_SHA"
+            echo "- Starting release: $RELEASE_TAG ($RELEASE_SHA)"
+            if [ -n "${DEVEL_SHA:-}" ]; then
+              echo "- Current devel: $DEVEL_SHA"
+            fi
+            if [ -n "${STABLE_27_SHA:-}" ]; then
+              echo "- Current stable-2.7: $STABLE_27_SHA"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create migration settings
+        run: |
+          set -euo pipefail
+          printf '%s\n' migration-upgrade-ci-secret \
+            > "$RUNNER_TEMP/migration-upgrade-secret-key"
+          KEY_FILE="$RUNNER_TEMP/migration-upgrade-secret-key"
+          echo "GATEWAY_SECRET_KEY_FILE=$KEY_FILE" >> "$GITHUB_ENV"
+
+      - name: Upgrade one PostgreSQL database through every checkout
+        working-directory: ${{ github.workspace }}/migration-ci-runner
+        env:
+          DATABASE_ENGINE: django.db.backends.postgresql
+          DATABASE_NAME: gw_db
+          DATABASE_USER: gw
+          DATABASE_PASSWORD: password
+          DATABASE_HOST: 127.0.0.1
+          DATABASE_PORT: 5432
+          SNAPSHOT_ROUND_TRIP: ${{ inputs.snapshot_round_trip }}
+        run: |
+          set -euo pipefail
+
+          STAGE_ARGS=(
+            --stage "$RELEASE_LABEL=$STAGE_RELEASE"
+            --stage "pull-request=$STAGE_PULL_REQUEST"
+          )
+
+          case "$TARGET_BRANCH" in
+            stable-2.7)
+              STAGE_ARGS+=(--stage "devel=$STAGE_DEVEL")
+              ;;
+            stable-2.6)
+              STAGE_ARGS+=(
+                --stage "stable-2.7=$STAGE_STABLE_27"
+                --stage "devel=$STAGE_DEVEL"
+              )
+              ;;
+            devel)
+              # The PR checkout is already the newest stage.
+              ;;
+            *)
+              echo "Unsupported migration upgrade target branch" >&2
+              exit 1
+              ;;
+          esac
+
+          POLICY_PATH="${MIGRATION_CI_ROOT}/tools/configs/migration_upgrade_policy.json"
+          if [ ! -f "$POLICY_PATH" ]; then
+            echo "Migration policy missing at $POLICY_PATH" >&2
+            echo "MIGRATION_CI_ROOT=${MIGRATION_CI_ROOT:-<unset>}" >&2
+            echo "pwd=$(pwd)" >&2
+            ls -la "${MIGRATION_CI_ROOT}/tools/configs" >&2 || true
+            exit 1
+          fi
+          RUNNER_ARGS=(
+            "${STAGE_ARGS[@]}"
+            --policy "$POLICY_PATH"
+            --output-dir "$RUNNER_TEMP/migration-upgrade-results"
+            --venv-root "$RUNNER_TEMP/migration-upgrade-venvs"
+          )
+          if [ "$SNAPSHOT_ROUND_TRIP" = "true" ]; then
+            RUNNER_ARGS+=(--snapshot-round-trip-after "$RELEASE_LABEL")
+          fi
+
+          python tools/scripts/migration_upgrade.py "${RUNNER_ARGS[@]}"
+
+      - name: Publish migration upgrade summary
+        if: always()
+        run: |
+          SUMMARY_PATH="$RUNNER_TEMP/migration-upgrade-results/summary.md"
+          if [ -f "$SUMMARY_PATH" ]; then
+            cat "$SUMMARY_PATH" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload migration upgrade diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-upgrade-results-${{ github.run_id }}
+          path: ${{ runner.temp }}/migration-upgrade-results
+          if-no-files-found: ignore
+
+      - name: Remove temporary checkouts
+        if: always()
+        working-directory: ${{ github.workspace }}/migration-ci-runner
+        run: |
+          if [ -d "${CHECKOUT_ROOT:-}" ]; then
+            for checkout in "$CHECKOUT_ROOT"/*; do
+              [ -d "$checkout" ] || continue
+              git worktree remove --force "$checkout" || true
+            done
+          fi
