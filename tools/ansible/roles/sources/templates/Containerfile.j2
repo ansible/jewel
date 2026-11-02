@@ -23,6 +23,7 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     libtool-ltdl-devel \
     openldap-devel \
     postgresql \
+    unixODBC-devel \
     less \
     xmlsec1-devel
 
@@ -68,7 +69,12 @@ RUN dnf module install -y nginx:1.22/common && \
     ${PYTHON}-pip \
     socat \
     supervisor \
+    unixODBC \
     xmlsec1-openssl
+
+RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
+    dnf clean all
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
@@ -138,6 +144,7 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     libtool-ltdl-devel \
     openldap-devel \
     postgresql \
+    unixODBC-devel \
     less \
     xmlsec1-devel
 
@@ -169,7 +176,12 @@ RUN dnf module install -y nginx:1.22/common && \
     "${PYTHON}" \
     "${PYTHON}-pip" \
     supervisor \
+    unixODBC \
     xmlsec1-openssl
+
+RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
+    dnf clean all
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
@@ -254,9 +266,14 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     libtool-ltdl-devel \
     openldap-devel \
     openssl-devel \
+    unixODBC-devel \
     xmlsec1-devel \
     xmlsec1-openssl \
     && dnf clean all
+
+RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    ACCEPT_EULA=Y dnf install -y msodbcsql18 unixODBC && \
+    dnf clean all
 
 RUN mkdir -p /opt/ci-venv && \
     "/usr/bin/${PYTHON}" -m venv /opt/ci-venv

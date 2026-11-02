@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+/opt/mssql-tools18/bin/sqlcmd \
+    -S localhost \
+    -U sa \
+    -P "$MSSQL_SA_PASSWORD" \
+    -C \
+    -b \
+    -o /dev/null \
+    -Q "IF DB_ID(N'gateway') IS NULL RAISERROR ('gateway database is not ready', 16, 1)"

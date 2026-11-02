@@ -4,6 +4,7 @@ from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_
 
 from .settings_utils import (
     _GATEWAY_ETC_DIRECTORY,
+    apply_database_backend_settings,
     load_custom_envvars,
     load_grpc_settings,
     load_healthcheck_settings,
@@ -29,6 +30,7 @@ load_standard_settings_files(DYNACONF)  # /etc/ansible-automation-platform/*.yam
 
 load_custom_envvars(DYNACONF)  # load custom unprefixed envvars
 load_envvars(DYNACONF)  # load envvars prefixed with GATEWAY_
+apply_database_backend_settings(DYNACONF)  # SQL Server is single-node until dispatcherd Service Broker support is ready
 set_secret_key(DYNACONF)  # set secret key based on secret key file
 load_healthcheck_settings(DYNACONF)  # create healthcheck DB alias from default
 

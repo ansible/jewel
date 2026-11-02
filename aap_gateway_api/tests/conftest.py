@@ -37,7 +37,7 @@ from aap_gateway_api.models import (
     ServiceType,
     UIPluginRoute,
 )
-from aap_gateway_api.tests.service_test_app.launch import launch_service
+from aap_gateway_api.tests.service_test_app.launch import launch_service, stop_service
 from aap_gateway_api.utils.resources_client import AllServicesClient, GWResourceAPIClient
 
 
@@ -672,21 +672,21 @@ def patched_load_rbac():
 def simulated_controller_resource_api(patched_resource_client, service_api_route_controller, ensure_jwt_keys):
     proc = launch_service("awx", service_api_route_controller.service_port, setup_fixture=None)
     yield service_api_route_controller
-    proc.kill()
+    stop_service(proc)
 
 
 @pytest.fixture
 def simmulated_hub_resource_api(patched_resource_client, service_api_route_hub, ensure_jwt_keys):
     proc = launch_service("galaxy", service_api_route_hub.service_port, setup_fixture=None)
     yield service_api_route_hub
-    proc.kill()
+    stop_service(proc)
 
 
 @pytest.fixture
 def simulated_eda_resource_api(patched_resource_client, service_api_route_eda, ensure_jwt_keys):
     proc = launch_service("eda", service_api_route_eda.service_port, setup_fixture=None)
     yield service_api_route_eda
-    proc.kill()
+    stop_service(proc)
 
 
 @pytest.fixture

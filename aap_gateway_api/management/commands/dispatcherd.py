@@ -14,6 +14,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         config = get_dispatcherd_config()
+        if config is None:
+            logger.info("dispatcherd is disabled for the SQL Server database backend")
+            return
+
         dispatcherd_setup(config)
 
         verbosity = options.get("verbosity", 1)

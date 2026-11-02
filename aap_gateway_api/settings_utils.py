@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -20,6 +21,7 @@ _CUSTOM_ENVVAR_MAPPINGS = (
     ("DATABASE_PASSWORD", "DATABASES__default__PASSWORD"),
     ("DATABASE_HOST", "DATABASES__default__HOST"),
     ("DATABASE_PORT", "DATABASES__default__PORT"),
+    ("DATABASE_OPTIONS", "DATABASES__default__OPTIONS", json.loads),
     ("ENVOY_HOSTNAME", "ENVOY_HOSTNAME"),
     ("ENVOY_VERIFY_HTTPS_CERTIFICATES", "ENVOY_VERIFY_HTTPS_CERTIFICATES"),
     ("ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES", "ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES"),
@@ -66,7 +68,27 @@ def load_custom_envvars(settings):
         )
         data["GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH"] = settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE
 
+    has_database_options = "DATABASES__default__OPTIONS" in data
+    database_options = data.pop("DATABASES__default__OPTIONS", None)
+
     settings.update(data, loader_identifier="settings:load_custom_envvars", merge=True)
+    if has_database_options:
+        settings.set(
+            "DATABASES__default__OPTIONS",
+            database_options,
+            loader_identifier="settings:load_custom_envvars",
+            merge=False,
+        )
+    apply_database_backend_settings(settings)
+
+
+def apply_database_backend_settings(settings: Dynaconf) -> None:
+    """Apply Gateway settings that depend on the selected database backend."""
+    default_db = settings.DATABASES.get("default")
+    if default_db and default_db.get("ENGINE") == "ansible_base.backends.mssql":
+        # The SQL Server single-node profile does not use DAB's distributed
+        # cache invalidation until the dispatcherd Service Broker is ready.
+        settings.set("ANSIBLE_BASE_REDIS_AUTO_INVALIDATE", False, loader_identifier="settings:database_backend")
 
 
 def set_secret_key(settings):
@@ -95,7 +117,10 @@ def load_grpc_settings(settings: Dynaconf) -> None:
 
     logger.debug('Loading GRPC settings')
 
-    settings.load_file("grpc_defaults.py")
+    default_db = settings.DATABASES.get("default", {})
+    database_engine = os.getenv("DATABASE_ENGINE") or default_db.get("ENGINE")
+    if database_engine != "ansible_base.backends.mssql":
+        settings.load_file("grpc_defaults.py")
 
     # Load settings for the GRPC server
     settings_file_path = os.environ.get('GATEWAY_GRPC_SETTINGS_FILE', f'{_GATEWAY_ETC_DIRECTORY}/grpc_settings.py')
@@ -106,15 +131,16 @@ def load_healthcheck_settings(settings: Dynaconf) -> None:
     """Create a 'healthcheck' DATABASES alias derived from 'default'.
 
     Deep-copies the full default DB config via ``to_dict()`` so every key
-    (including any installer-added ones) is preserved, then overlays an
-    aggressive connect_timeout so PingView._check_db() fails fast instead
-    of blocking for ~130 s on unreachable hosts.
+    (including any installer-added ones) is preserved, then overlays the
+    backend-specific timeout so PingView._check_db() fails fast instead of
+    blocking for ~130 s on unreachable hosts.
     """
     default_db = settings.DATABASES.get("default")
     if not default_db:
         return
     healthcheck_db = default_db.to_dict()
-    healthcheck_db.setdefault("OPTIONS", {})["connect_timeout"] = 3
+    timeout_option = "connection_timeout" if default_db.get("ENGINE") == "ansible_base.backends.mssql" else "connect_timeout"
+    healthcheck_db.setdefault("OPTIONS", {})[timeout_option] = 3
     healthcheck_db["CONN_MAX_AGE"] = 0
     healthcheck_db["CONN_HEALTH_CHECKS"] = True
     healthcheck_db["TEST"] = {"MIRROR": "default"}
