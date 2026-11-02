@@ -1,0 +1,8 @@
+{
+  "enforced_apps": [
+    "aap_gateway_api"
+  ],
+  "allowed_missing": [],
+  "allowed_fingerprint_changes": [],
+  "immutable_vcs_stages": []
+}
