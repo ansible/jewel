@@ -22,7 +22,6 @@ from envoy.service.auth.v3 import attribute_context_pb2, external_auth_pb2, exte
 from envoy.type.v3 import http_status_pb2
 from google.rpc import status_pb2
 from rest_framework.exceptions import APIException, AuthenticationFailed, PermissionDenied
-from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import Request as DRFRequest
 from rest_framework.settings import api_settings
 
@@ -60,11 +59,12 @@ def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest)
 
     d_request.META = {**{"HTTP_" + k.upper().replace("-", "_"): v for k, v in request.headers.items()}, "QUERY_STRING": request.query}
 
-    # If we have X-CSRFToken header, we can avoid processing a potentially very large request body for a POST token.
-    if d_request.method not in SAFE_METHODS and settings.CSRF_HEADER_NAME not in d_request.META:
-        # Set up stream for request body parsing
-        d_request._stream = BytesIO(request.raw_body)
-        d_request._read_started = False
+    # DRF may access request.POST while authenticating an OAuth2 request, even when
+    # the CSRF header means that the body is not needed for CSRF validation.  Keep a
+    # stream available for that lazy parsing rather than leaving the custom request
+    # without the state provided by Django's WSGIRequest.
+    d_request._stream = BytesIO(request.raw_body)
+    d_request._read_started = False
 
     d_request.META["HTTP_HOST"] = request.host
     # Needed because body parser will break if called HTTP_CONTENT_LENGTH
