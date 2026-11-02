@@ -322,6 +322,7 @@ SPECTACULAR_SETTINGS = {
     'SCHEMA_PATH_PREFIX': '/api/gateway/v1/',
     'POSTPROCESSING_HOOKS': [
         'drf_spectacular.hooks.postprocess_schema_enums',
+        'ansible_base.api_documentation.postprocessing_hooks.add_x_ai_description',
         'ansible_base.lib.utils.schema.deprecated_fields_detail_hook',
     ],
 }
