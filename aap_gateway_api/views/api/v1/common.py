@@ -49,6 +49,7 @@ class ResourceAllClientMixin:
         return AllServicesClient(user=self.request.user, wait_for_response=False)
 
     def get_authenticate_header(self, request):
+        """Return a Bearer challenge while suppressing browser-triggered Basic auth prompts."""
         authorization = request.headers.get("Authorization", "")
         scheme, _, _credential = authorization.partition(" ")
         if scheme.lower() == "bearer":

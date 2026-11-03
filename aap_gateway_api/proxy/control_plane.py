@@ -51,6 +51,7 @@ class EnvoyRequest(HttpRequest):
 
 
 def get_drf_request(request: attribute_context_pb2.AttributeContext.HttpRequest) -> DRFRequest:
+    """Convert Envoy's gRPC request representation into a middleware-ready DRF request."""
     d_request = EnvoyRequest(request)
     d_request.method = request.method
     d_request.path = request.path
