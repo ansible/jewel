@@ -412,9 +412,13 @@ restarting containers or deleting Keycloak data:
 make keycloak-reconcile
 ```
 
-This command is normally unnecessary because token minting performs the same
-reconciliation. It is useful when correcting an existing development realm
-before requesting a token.
+Token minting automatically reconciles once for each running Keycloak container
+and again when Keycloak configuration changes. To reconcile a running realm
+again without changing its configuration, run:
+
+```bash
+make keycloak-reconcile-force
+```
 
 ## RADIUS
 

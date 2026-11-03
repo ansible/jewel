@@ -27,6 +27,8 @@ PROXY_CONFIG_INPUTS := tools/ansible/generate-proxy-configs.yml tools/ansible/va
 	$(shell find tools/ansible/roles/proxy-config -type f) container-startup.yml
 KEYCLOAK_REALM_INPUTS := tools/ansible/render-keycloak-realm.yml tools/ansible/vars/container_config.yml \
 	$(shell find tools/ansible/roles/keycloak -type f) container-startup.yml
+KEYCLOAK_CONTAINER_ID := $(shell $(PODMAN) container inspect --format '{{.Id}}' aap_gw_keycloak_1 2>/dev/null)
+KEYCLOAK_RECONCILE_STAMP := tools/generated/.keycloak-reconciled-$(KEYCLOAK_CONTAINER_ID)
 KEYCLOAK_TOKEN_SUBJECT := $(or $(KEYCLOAK_SUBJECT),$(word 2,$(MAKECMDGOALS)))
 KEYCLOAK_TOKEN_SCOPE := $(or $(KEYCLOAK_SCOPE),$(word 3,$(MAKECMDGOALS)))
 KEYCLOAK_TOKEN_PREREQUISITES := keycloak-reconcile
@@ -52,7 +54,7 @@ endif
 	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach docker-compose-down \
 	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
 	collection podman-collection podman-build-preflight podman-preflight requirements check-requirements tools/generated/sources \
-	ci-image ci-image-push keycloak-render keycloak-reconcile token
+	ci-image ci-image-push keycloak-render keycloak-reconcile keycloak-reconcile-force token
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -147,11 +149,24 @@ token:
 	@$(MAKE) --no-print-directory $(KEYCLOAK_TOKEN_PREREQUISITES) >&2
 	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)" "$(KEYCLOAK_TOKEN_SCOPE)"
 
-## Reconcile the Keycloak development realm without restarting containers
-keycloak-reconcile: keycloak-render
+## Reconcile the Keycloak development realm when the container or configuration changes
+keycloak-reconcile: $(KEYCLOAK_RECONCILE_STAMP)
+
+$(KEYCLOAK_RECONCILE_STAMP): $(KEYCLOAK_REALM_INPUTS)
+	@if [ -z "$(KEYCLOAK_CONTAINER_ID)" ]; then \
+		echo "Keycloak is not running; start the development environment before reconciling." >&2; \
+		exit 1; \
+	fi
+	@$(MAKE) --no-print-directory keycloak-render
 	ansible-playbook tools/ansible/reconcile-keycloak.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
+	touch $@
+
+## Force reconciliation of the running Keycloak development realm
+keycloak-reconcile-force:
+	$(RM) $(KEYCLOAK_RECONCILE_STAMP)
+	@$(MAKE) --no-print-directory keycloak-reconcile
 
 ## Migrate service data to services
 migrate-service-data:
