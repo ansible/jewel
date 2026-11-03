@@ -307,7 +307,7 @@ services:
     hostname: keycloak
     user: "${UID:-1000}"
     ports:
-      - "{{ keycloak_exposed_port }}:8443"
+      - "127.0.0.1:{{ keycloak_exposed_port }}:8443"
     command: start-dev
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: "{{ keycloak_username }}"
