@@ -1,4 +1,16 @@
 ---
+- name: Ensure generated sources directory exists
+  ansible.builtin.file:
+    path: "{{ sources_dest }}"
+    state: directory
+    mode: "0755"
+
+- name: Restore generated sources directory sentinel
+  ansible.builtin.file:
+    path: "{{ sources_dest }}/.gitkeep"
+    state: touch
+    mode: "0644"
+
 - name: Generate Redis cert subjectAltName and clustered host list
   set_fact:
     sans: "{{ sans | default([]) + [host_sans] }}"
