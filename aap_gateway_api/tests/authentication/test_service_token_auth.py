@@ -6,10 +6,11 @@ from unittest import mock
 
 import jwt
 import pytest
+from ansible_base.authentication.bearer_authentication import BearerAuthentication
 from ansible_base.lib.utils.auth import get_authentication_challenge
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.resource_registry.models import service_id
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
 from aap_gateway_api.models import ServiceCluster, ServiceKey
 
@@ -198,6 +199,15 @@ def test_service_token_authentication_declines_unrelated_paths_before_validating
 
     validate_token.assert_not_called()
     assert get_authentication_challenge(request) is None
+
+
+def test_service_token_authentication_uses_bearer_default_challenge():
+    """Service-token authentication uses the standard Bearer challenge when first."""
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    request = APIRequestFactory().get("/authentication-challenge/")
+
+    assert ServiceTokenAuthentication().get_default_authentication_challenge(request) == BearerAuthentication().authenticate_header(request)
 
 
 @pytest.mark.django_db
