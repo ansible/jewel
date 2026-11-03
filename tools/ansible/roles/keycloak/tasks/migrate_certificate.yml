@@ -1,0 +1,24 @@
+---
+- name: Check for an existing Keycloak certificate
+  ansible.builtin.stat:
+    path: "{{ public_key_file }}"
+  register: keycloak_certificate_file
+
+- name: Inspect the existing Keycloak certificate
+  ansible.builtin.command: >-
+    openssl x509 -in {{ public_key_file }} -noout -text
+  register: keycloak_existing_certificate
+  changed_when: false
+  when: keycloak_certificate_file.stat.exists
+
+- name: Remove a legacy Keycloak certificate without the required hostnames
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ public_key_file }}"
+    - "{{ public_key_cert }}"
+  when: >-
+    keycloak_certificate_file.stat.exists and
+    (('DNS:' ~ container_reference) not in keycloak_existing_certificate.stdout or
+    ('DNS:' ~ keycloak_internal_hostname) not in keycloak_existing_certificate.stdout)

@@ -25,6 +25,9 @@
       register: pg_initialization
       when: "'0 rows' in db_check.stdout"
 
+    - name: Migrate the Keycloak development certificate
+      include_tasks: migrate_certificate.yml
+
     - name: Prepare the gateway realm
       include_tasks: render_realm.yml
 
@@ -34,7 +37,7 @@
 
     - name: Get a keycloak token
       uri:
-        url: "https://localhost:{{ keycloak_exposed_port }}/auth/realms/master/protocol/openid-connect/token"
+        url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/realms/master/protocol/openid-connect/token"
         method: POST
         body_format: form-urlencoded
         body:
@@ -42,7 +45,8 @@
           username: "{{ keycloak_username }}"
           password: "{{ keycloak_password }}"
           grant_type: "password"
-        validate_certs: False
+        ca_path: "{{ public_key_file }}"
+        validate_certs: true
       register: keycloak_response
       until: "keycloak_response is successful"
       retries: 50
@@ -59,11 +63,12 @@
     # We want to see if we can make a call to the keycloak realm to see if the gateway realm exists and not do this step if so
     - name: Create the gateway realm if it does not exists
       uri:
-        url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms"
+        url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms"
         method: POST
         body_format: json
         body: "{{ lookup('file', keycloak_realm_template) }}"
-        validate_certs: False
+        ca_path: "{{ public_key_file }}"
+        validate_certs: true
         headers:
           Authorization: "Bearer {{ keycloak_response.json.access_token }}"
         # 409 conflict is returned if the realm already exists
@@ -77,14 +82,15 @@
 
     - name: Set passwords for gateway realm users
       uri:
-        url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/users/{{ item.id }}/reset-password"
+        url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/users/{{ item.id }}/reset-password"
         method: PUT
         body_format: json
         body:
           type: password
           value: "{{ keycloak_password }}"
           temporary: false
-        validate_certs: False
+        ca_path: "{{ public_key_file }}"
+        validate_certs: true
         headers:
           Authorization: "Bearer {{ keycloak_response.json.access_token }}"
         status_code: [204]

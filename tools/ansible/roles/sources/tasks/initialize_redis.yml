@@ -17,7 +17,7 @@
     - command: 'openssl genrsa -aes256 -out {{ redis_ca_root_key_file }} -passout pass:redis123 4096'
       creates: '{{ redis_ca_root_key_file }}'
       title: Generate Redis CA key
-    - command: 'openssl req -x509 -passin pass:redis123 -new -nodes -key {{ redis_ca_root_key_file }} -sha256 -days 1826 -out {{ redis_ca_root_certificate_file }} -subj "{{ cert_subject }}Redis CA"'
+    - command: 'openssl req -x509 -passin pass:redis123 -new -nodes -key {{ redis_ca_root_key_file }} -sha256 -days 1826 -out {{ redis_ca_root_certificate_file }} -subj "{{ redis_ca_cert_subject }}"'
       creates: '{{ redis_ca_root_certificate_file }}'
       title: Generate Redis CA cert
   loop_control:
@@ -29,7 +29,7 @@
     creates: "{{ item.creates }}"
   loop:
     - title: Generate Redis key and csr
-      command: 'openssl req -new -nodes -out {{ redis_cert_csr_file }} -newkey rsa:4096 -keyout {{ redis_cert_private_key_file }} -subj "{{ cert_subject }}localhost" -addext "subjectAltName = {{ subject_alt_name }}"'
+      command: 'openssl req -new -nodes -out {{ redis_cert_csr_file }} -newkey rsa:4096 -keyout {{ redis_cert_private_key_file }} -subj "{{ redis_cert_subject }}" -addext "subjectAltName = {{ subject_alt_name }}"'
       creates: "{{ redis_cert_private_key_file }}"
     - title: Generate Redis cert
       command: 'openssl x509 -req -passin pass:redis123 -in {{ redis_cert_csr_file }} -CA {{ redis_ca_root_certificate_file }} -CAkey {{ redis_ca_root_key_file }} -CAcreateserial -out {{ redis_cert_certificate_file }} -days 730 -sha256'
