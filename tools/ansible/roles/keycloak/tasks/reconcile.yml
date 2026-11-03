@@ -31,6 +31,35 @@
       - keycloak_oidc_client.json | length == 1
     fail_msg: "The gateway_oidc_client client does not exist in the Keycloak gateway realm."
 
+- name: Get Keycloak OIDC client protocol mappers
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}/protocol-mappers/models"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_oidc_client_mappers
+
+- name: Add the subject mapper to the Keycloak OIDC client
+  ansible.builtin.uri:
+    url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}/protocol-mappers/models"
+    method: POST
+    body_format: json
+    body:
+      name: subject
+      protocol: openid-connect
+      protocolMapper: oidc-sub-mapper
+      consentRequired: false
+      config:
+        access.token.claim: "true"
+        introspection.token.claim: "true"
+    validate_certs: false
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [201]
+  when: keycloak_oidc_client_mappers.json | selectattr('protocolMapper', 'equalto', 'oidc-sub-mapper') | list | length == 0
+
 - name: Get Keycloak development token client scopes
   ansible.builtin.uri:
     url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
