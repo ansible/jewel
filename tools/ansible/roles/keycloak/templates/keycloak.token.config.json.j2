@@ -1,4 +1,6 @@
 {
   "token_endpoint": "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token",
-  "host_header": "keycloak:8443"
+  "host_header": "keycloak:8443",
+  "read_scope": "{{ keycloak_token_read_scope_name }}",
+  "write_scope": "{{ keycloak_token_write_scope_name }}"
 }
