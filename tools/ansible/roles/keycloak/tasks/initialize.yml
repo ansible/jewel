@@ -25,12 +25,12 @@
       register: pg_initialization
       when: "'0 rows' in db_check.stdout"
 
+    - name: Prepare the gateway realm
+      include_tasks: render_realm.yml
+
     - name: Start keycloak
       shell:
         cmd: "{{ compose_cmd }} up --detach keycloak"
-
-    - name: Prepare the gateway realm
-      include_tasks: render_realm.yml
 
     - name: Get a keycloak token
       uri:
