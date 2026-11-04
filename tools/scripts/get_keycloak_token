@@ -107,6 +107,11 @@ require_command jq
 
 token_endpoint="$(jq --exit-status --raw-output '.token_endpoint' "$token_config_file")" || fail "unable to read token endpoint from $token_config_file"
 keycloak_host_header="$(jq --exit-status --raw-output '.host_header' "$token_config_file")" || fail "unable to read Keycloak host header from $token_config_file"
+keycloak_ca_path="$(jq --exit-status --raw-output '.ca_path' "$token_config_file")" || fail "unable to read Keycloak CA path from $token_config_file"
+read_scope="$(jq --exit-status --raw-output '.read_scope' "$token_config_file")" || fail "unable to read configured read scope from $token_config_file"
+write_scope="$(jq --exit-status --raw-output '.write_scope' "$token_config_file")" || fail "unable to read configured write scope from $token_config_file"
+
+[ -f "$keycloak_ca_path" ] || fail "Keycloak CA certificate not found: $keycloak_ca_path. Start the Keycloak development environment first."
 
 if [ -z "$subject" ]; then
     prompt_for_subject
@@ -126,9 +131,10 @@ esac
 # may still include its standard OIDC scopes, which are unrelated to Gateway's
 # API read/write authorization.
 requested_scopes="openid profile email"
-if [ "$scope" != "none" ]; then
-    requested_scopes+=" ${scope}"
-fi
+case "$scope" in
+    read) requested_scopes+=" ${read_scope}" ;;
+    write) requested_scopes+=" ${write_scope}" ;;
+esac
 
 if [[ "$subject" == service-account-* ]]; then
     client_id="${subject#service-account-}"
@@ -137,7 +143,7 @@ else
 fi
 
 if client_secret="$(get_client_secret "$client_id" 2>/dev/null)"; then
-    response="$(curl --silent --show-error --fail --insecure --request POST "$token_endpoint" \
+    response="$(curl --silent --show-error --fail --cacert "$keycloak_ca_path" --request POST "$token_endpoint" \
         --header "Host: ${keycloak_host_header}" \
         --data-urlencode 'grant_type=client_credentials' \
         --data-urlencode "client_id=${client_id}" \
@@ -145,7 +151,7 @@ if client_secret="$(get_client_secret "$client_id" 2>/dev/null)"; then
         --data-urlencode "scope=${requested_scopes}")"
 else
     password="$(get_user_password 2>/dev/null)" || fail "no Keycloak user or client named '${subject}' was found in $realm_file"
-    response="$(curl --silent --show-error --fail --insecure --request POST "$token_endpoint" \
+    response="$(curl --silent --show-error --fail --cacert "$keycloak_ca_path" --request POST "$token_endpoint" \
         --header "Host: ${keycloak_host_header}" \
         --data-urlencode 'grant_type=password' \
         --data-urlencode 'client_id=gateway_oidc_client' \

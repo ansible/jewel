@@ -12,6 +12,7 @@ logger = logging.getLogger('aap.gateway.authentication.basic_auth')
 
 class LoggedBasicAuthentication(ChallengeAwareAuthenticationMixin, authentication.BasicAuthentication):
     def authenticate(self, request):
+        """Authenticate enabled Basic credentials and record their challenge."""
         if not get_preference_value('proxy', 'gateway_basic_auth_enabled'):
             return
         authorization = request.headers.get("Authorization", "")
@@ -25,6 +26,7 @@ class LoggedBasicAuthentication(ChallengeAwareAuthenticationMixin, authenticatio
         return ret
 
     def get_default_authentication_challenge(self, request):
+        """Return the Basic challenge only while Basic authentication is enabled."""
         if not get_preference_value('proxy', 'gateway_basic_auth_enabled'):
             return None
         return authentication.BasicAuthentication.authenticate_header(self, request)

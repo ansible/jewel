@@ -26,7 +26,7 @@ Configure the following fields in the authenticator's `configuration`:
 | --- | --- | --- |
 | `ISSUER_URL` | Yes | Exact external issuer expected in the token's `iss` claim. |
 | `AUDIENCE` | Yes | Configured audience that must appear in the token's `aud` claim, whether the claim is a string or list. |
-| `ID_KEY` | Yes | Stable identity claim, such as `sub` for a user or `azp` for a service principal. |
+| `ID_KEY` | Yes | Stable claim that uniquely identifies the token principal, normally `sub`. Use `azp` only for a dedicated client that cannot issue user tokens. |
 | `JWKS_URI` or `OIDC_ENDPOINT` | Yes | HTTPS key endpoint, supplied directly or discovered from the issuer. |
 | `ALLOWED_ALGORITHMS` | No | Accepted asymmetric signing algorithms; defaults to `RS256`. |
 | `GROUPS_CLAIM` | No | Group-membership claim used by authenticator maps; defaults to `groups`. |

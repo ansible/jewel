@@ -4,15 +4,17 @@
 
 Gateway evaluates API authentication mechanisms in the following order:
 
-1. Service-token authentication, restricted to its authorized service endpoints.
-2. Bearer authentication, which handles trusted external bearer tokens and local OAuth2 tokens.
+1. Bearer authentication, which handles trusted external bearer tokens and local OAuth2 tokens.
+2. Session authentication.
 3. Basic authentication.
-4. Session authentication.
+4. Service-token authentication, restricted to its authorized service endpoints.
 
-The order is intentional: service endpoints retain their dedicated authentication
-path, explicitly supplied credentials take precedence over browser sessions, and
-the bearer dispatcher is the single handler for both external and local bearer
-tokens.
+This is Gateway's current DAB-integrated compatibility order. The unified
+Bearer authenticator replaces the previous local OAuth2 authenticator while
+retaining Bearer/OAuth2 precedence ahead of session authentication; Basic and
+Service Token authentication are evaluated after a valid session. A future
+change, after an appropriate deprecation period, may adopt a credential-first
+order.
 
 ## Basic Auth
 
@@ -412,9 +414,13 @@ restarting containers or deleting Keycloak data:
 make keycloak-reconcile
 ```
 
-This command is normally unnecessary because token minting performs the same
-reconciliation. It is useful when correcting an existing development realm
-before requesting a token.
+Token minting automatically reconciles once for each running Keycloak container
+and again when Keycloak configuration changes. To reconcile a running realm
+again without changing its configuration, run:
+
+```bash
+make keycloak-reconcile-force
+```
 
 ## RADIUS
 

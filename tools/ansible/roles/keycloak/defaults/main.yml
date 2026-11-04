@@ -10,7 +10,7 @@ oidc_auth_map_name: "Dev Keycloak OIDC Map"
 url_base: "https://{{ (oidc_reference == '') | ternary(oidc_reference, container_reference) }}:{{ keycloak_exposed_port }}"
 
 oidc_configuration:
-  ACCESS_TOKEN_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token"
+  ACCESS_TOKEN_URL: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway/protocol/openid-connect/token"
   AUTHORIZATION_URL: "{{ url_base }}/auth/realms/gateway/protocol/openid-connect/auth"
   KEY: "gateway_oidc_client"
   PUBLIC_KEY: "{{ oidc_public_key }}"
@@ -37,16 +37,16 @@ oauth_bearer_configuration:
   FIRST_NAME_KEY: "given_name"
   GROUPS_CLAIM: Group
   ID_KEY: "sub"
-  ISSUER_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway"
+  ISSUER_URL: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway"
   JWKS_CACHE_TIMEOUT: 3600
-  JWKS_URI: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/certs"
+  JWKS_URI: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway/protocol/openid-connect/certs"
   JWKS_URL_TIMEOUT: 30
   JWT_CLOCK_SKEW_TOLERANCE_SECONDS: 0
   LAST_NAME_KEY: "family_name"
   OIDC_ENDPOINT: ""
   READ_SCOPE_NAME: "{{ keycloak_token_read_scope_name }}"
   SCOPE_KEY: "{{ keycloak_token_scope_attribute_name }}"
-  USERINFO_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/userinfo"
+  USERINFO_URL: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway/protocol/openid-connect/userinfo"
   USERINFO_URL_TIMEOUT: 30
   USERNAME_KEY: "preferred_username"
   VERIFY_SSL: false

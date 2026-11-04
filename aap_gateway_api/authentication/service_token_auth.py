@@ -48,6 +48,7 @@ class ServiceTokenAuthentication(ChallengeAwareAuthenticationMixin, BaseAuthenti
         return BearerAuthentication().authenticate_header(request)
 
     def authenticate(self, request):
+        """Authenticate a service token only on paths that permit service access."""
         token = request.headers.get(service_token_header, None)
 
         if token is None:
@@ -79,6 +80,7 @@ class ServiceTokenAuthentication(ChallengeAwareAuthenticationMixin, BaseAuthenti
             return None
 
     def is_authorized_path(self, request):
+        """Return whether a request path and method permit service-token authentication."""
         resources_api = get_relative_url("service-index-root")
 
         # Allow services to authenticate to the resource registry, regardless of
@@ -114,6 +116,7 @@ class ServiceTokenAuthentication(ChallengeAwareAuthenticationMixin, BaseAuthenti
         return False
 
     def configure_user_authorization(self, request, user):
+        """Attach request-specific service-token permissions to the authenticated user."""
         resources_api = get_relative_url("service-index-root")
         if request.path.startswith(resources_api):
             setattr(
@@ -138,6 +141,7 @@ class ServiceTokenAuthentication(ChallengeAwareAuthenticationMixin, BaseAuthenti
             setattr(user, 'resource_api_actions', ['retrieve'])
 
     def is_user_authorized(self, request, user, service, token_data):
+        """Retain the legacy authorization API while applying request-based access rules."""
         if not self.is_authorized_path(request):
             return False
         self.configure_user_authorization(request, user)
