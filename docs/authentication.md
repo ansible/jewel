@@ -9,10 +9,12 @@ Gateway evaluates API authentication mechanisms in the following order:
 3. Basic authentication.
 4. Service-token authentication, restricted to its authorized service endpoints.
 
-This preserves Gateway's established authentication precedence.  The unified
+This is Gateway's current DAB-integrated compatibility order. The unified
 Bearer authenticator replaces the previous local OAuth2 authenticator while
-retaining its position ahead of session authentication.  A future change, after
-an appropriate deprecation period, may adopt a credential-first order.
+retaining Bearer/OAuth2 precedence ahead of session authentication; Basic and
+Service Token authentication are evaluated after a valid session. A future
+change, after an appropriate deprecation period, may adopt a credential-first
+order.
 
 ## Basic Auth
 

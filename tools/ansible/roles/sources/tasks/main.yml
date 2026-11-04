@@ -10,6 +10,8 @@
     path: "{{ sources_dest }}/.gitkeep"
     state: touch
     mode: "0644"
+    access_time: preserve
+    modification_time: preserve
 
 - name: Generate Redis cert subjectAltName and clustered host list
   set_fact:
