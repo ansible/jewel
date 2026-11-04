@@ -52,7 +52,7 @@ endif
 	docker-compose-basic docker-compose docker-compose-detached docker-compose-attach docker-compose-down \
 	docker-reset docker-reset-volumes plumb update_django_ansible_base_hash \
 	collection podman-collection podman-build-preflight podman-preflight requirements check-requirements tools/generated/sources \
-	ci-image ci-image-push keycloak-render keycloak-reconcile token
+	ci-image ci-image-push keycloak-render keycloak-reconcile keycloak-reconcile-force token
 
 ## Get the version of python we are working with
 PYTHON_VERSION:
@@ -147,11 +147,44 @@ token:
 	@$(MAKE) --no-print-directory $(KEYCLOAK_TOKEN_PREREQUISITES) >&2
 	@tools/scripts/get_keycloak_token "$(KEYCLOAK_TOKEN_SUBJECT)" "$(KEYCLOAK_TOKEN_SCOPE)"
 
-## Reconcile the Keycloak development realm without restarting containers
-keycloak-reconcile: keycloak-render
+## Reconcile the Keycloak development realm when the container or configuration changes
+keycloak-reconcile:
+	@container_id="$$( $(PODMAN) container inspect --format '{{.Id}}' aap_gw_keycloak_1 2>/dev/null )"; \
+	if [ -z "$$container_id" ]; then \
+		echo "Keycloak is not running; start the development environment before reconciling." >&2; \
+		exit 1; \
+	fi; \
+	certificate="tools/generated/keycloak_certs/tls.crt"; \
+	if [ ! -f "$$certificate" ] || openssl x509 -in "$$certificate" -noout -subject 2>/dev/null | grep -Eq 'CN[[:space:]]*=[[:space:]]*devenv([,/]|$$)'; then \
+		echo "Your Keycloak development environment is out of sync with this code." >&2; \
+		echo "Restart it with 'make podman-compose-down && make podman-compose', then try again." >&2; \
+		exit 1; \
+	fi; \
+	$(MAKE) --no-print-directory keycloak-reconcile-container KEYCLOAK_CONTAINER_ID="$$container_id"
+
+ifneq ($(filter keycloak-reconcile-container,$(MAKECMDGOALS)),)
+KEYCLOAK_CONTAINER_ID ?= $(shell $(PODMAN) container inspect --format '{{.Id}}' aap_gw_keycloak_1 2>/dev/null)
+KEYCLOAK_RECONCILE_STAMP = tools/generated/.keycloak-reconciled-$(KEYCLOAK_CONTAINER_ID)
+
+keycloak-reconcile-container: $(KEYCLOAK_RECONCILE_STAMP)
+
+$(KEYCLOAK_RECONCILE_STAMP): $(KEYCLOAK_REALM_INPUTS)
+	@$(MAKE) --no-print-directory keycloak-render
 	ansible-playbook tools/ansible/reconcile-keycloak.yml \
 	    -e @tools/ansible/vars/container_config.yml \
 	    -e @container-startup.yml
+	touch $@
+endif
+
+## Force reconciliation of the running Keycloak development realm
+keycloak-reconcile-force:
+	@container_id="$$( $(PODMAN) container inspect --format '{{.Id}}' aap_gw_keycloak_1 2>/dev/null )"; \
+	if [ -z "$$container_id" ]; then \
+		echo "Keycloak is not running; start the development environment before reconciling." >&2; \
+		exit 1; \
+	fi; \
+	$(RM) "tools/generated/.keycloak-reconciled-$$container_id"; \
+	$(MAKE) --no-print-directory keycloak-reconcile
 
 ## Migrate service data to services
 migrate-service-data:
