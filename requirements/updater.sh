@@ -2,6 +2,19 @@
 set -ue
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DAB_DIR="${REPO_ROOT}/django-ansible-base"
+
+ONLY_PACKAGE=""
+USE_LOCAL_DAB=0
+TMP_DIR=""
+
+cleanup() {
+  if [[ -n "${TMP_DIR}" ]]; then
+    rm -rf "${TMP_DIR}"
+  fi
+}
+trap cleanup EXIT
 
 require_uv() {
   if ! command -v uv &>/dev/null; then
@@ -10,22 +23,143 @@ require_uv() {
   fi
 }
 
+ensure_tmp_dir() {
+  if [[ -z "${TMP_DIR}" ]]; then
+    TMP_DIR="$(mktemp -d)"
+  fi
+}
+
+git_requirements_file() {
+  if [[ "${USE_LOCAL_DAB}" != "1" ]]; then
+    echo "${SCRIPT_DIR}/requirements_git.txt"
+    return
+  fi
+  if [[ ! -d "${DAB_DIR}" ]]; then
+    echo "ERROR: local django-ansible-base checkout not found at ${DAB_DIR}" >&2
+    exit 1
+  fi
+  ensure_tmp_dir
+  local local_file="${TMP_DIR}/requirements_git.txt"
+  sed -E "s|@ .*|@ file://${DAB_DIR}|" "${SCRIPT_DIR}/requirements_git.txt" > "${local_file}"
+  echo "Using local django-ansible-base from ${DAB_DIR}" >&2
+  echo "${local_file}"
+}
+
 compile_requirements() {
   require_uv
-  local uv_compile="uv pip compile --generate-hashes --python-version=3.12 --no-header"
+  local uv_compile="uv pip compile --generate-hashes --python-version=3.12 --no-header --no-strip-extras"
   if [[ "${UV_UPGRADE:-}" == "1" ]]; then
     uv_compile="${uv_compile} --upgrade"
   fi
+  if [[ "${USE_LOCAL_DAB}" == "1" ]] || grep -q "@ file://" "${SCRIPT_DIR}/requirements_git.txt"; then
+    uv_compile="${uv_compile} --refresh-package django-ansible-base"
+  fi
   local output_file="$1"
+  local git_requirements
+  git_requirements="$(git_requirements_file)"
   cd "${SCRIPT_DIR}"
+
+  if [[ -z "${ONLY_PACKAGE}" ]]; then
+    ${uv_compile} \
+      --no-emit-package django-ansible-base \
+      --output-file "${output_file}" \
+      requirements.in \
+      "${git_requirements}"
+    return
+  fi
+
+  ensure_tmp_dir
+  local resolved_file="${TMP_DIR}/requirements.resolved.txt"
+  cp "${SCRIPT_DIR}/requirements.txt" "${resolved_file}"
   ${uv_compile} \
     --no-emit-package django-ansible-base \
-    --output-file "${output_file}" \
+    --output-file "${resolved_file}" \
     requirements.in \
-    requirements_git.txt
+    "${git_requirements}"
+  python3 "${REPO_ROOT}/tools/scripts/filter_requirements_update.py" \
+    "${SCRIPT_DIR}/requirements.txt" \
+    "${resolved_file}" \
+    "${ONLY_PACKAGE}" \
+    "${output_file}"
 }
 
-case "${1:-}" in
+usage() {
+  cat <<EOF
+This script generates requirements.txt from requirements.in
+
+Usage: $0 [run|upgrade|check] [options]
+
+Commands:
+  run       Resolve dependencies, only upgrading where required by pins
+  upgrade   Upgrade all packages to latest while respecting pins
+  check     Verify requirements.txt is in sync with requirements.in
+
+Options:
+  --only PACKAGE  Only preserve updates for PACKAGE and its transitive
+                  dependencies (available for run and upgrade)
+  --local-dab     Resolve against the local django-ansible-base checkout
+                  instead of the pinned git reference. Looks for:
+                  ${DAB_DIR}
+  -h, --help      Show this help
+EOF
+}
+
+COMMAND=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    run|upgrade|check)
+      if [[ -n "${COMMAND}" ]]; then
+        echo "ERROR: only one command may be specified" >&2
+        usage >&2
+        exit 1
+      fi
+      COMMAND="$1"
+      shift
+    ;;
+    --only)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --only requires a package name" >&2
+        exit 1
+      fi
+      ONLY_PACKAGE="$2"
+      shift 2
+    ;;
+    --only=*)
+      ONLY_PACKAGE="${1#*=}"
+      shift
+    ;;
+    --local-dab)
+      USE_LOCAL_DAB=1
+      shift
+    ;;
+    -h|--help)
+      usage
+      exit 0
+    ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      usage >&2
+      exit 1
+    ;;
+  esac
+done
+
+if [[ -z "${COMMAND}" ]]; then
+  usage >&2
+  exit 1
+fi
+
+if [[ -n "${ONLY_PACKAGE}" && -z "${ONLY_PACKAGE// }" ]]; then
+  echo "ERROR: --only requires a package name" >&2
+  exit 1
+fi
+
+if [[ "${COMMAND}" == "check" && ( -n "${ONLY_PACKAGE}" || "${USE_LOCAL_DAB}" == "1" ) ]]; then
+  echo "ERROR: --only and --local-dab only apply to run and upgrade" >&2
+  exit 1
+fi
+
+case "${COMMAND}" in
   "run")
     compile_requirements requirements.txt
   ;;
@@ -34,17 +168,5 @@ case "${1:-}" in
   ;;
   "check")
     python3 "${SCRIPT_DIR}/../tools/scripts/check_requirements.py"
-  ;;
-  *)
-    echo "This script generates requirements.txt from requirements.in"
-    echo ""
-    echo "Usage: $0 [run|upgrade|check]"
-    echo ""
-    echo "Commands:"
-    echo "  run       Resolve dependencies, only upgrading where required by pins"
-    echo "  upgrade   Upgrade all packages to latest while respecting pins"
-    echo "  check     Verify requirements.txt is in sync with requirements.in"
-    echo ""
-    exit 1
   ;;
 esac
