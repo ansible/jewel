@@ -15,7 +15,7 @@ from aap_gateway_api.views.api.v1.common import GatewayModelViewSet, ResourceAPI
 @extend_schema(
     deprecated=True,
 )
-@deprecated(detail=str(DEFAULT_DEPRECATION_MESSAGE))
+@deprecated(detail=DEFAULT_DEPRECATION_MESSAGE)
 class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Team
     serializer_class = TeamSerializer
@@ -32,7 +32,7 @@ class UserTeamViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
 @extend_schema(
     deprecated=True,
 )
-@deprecated(detail=str(DEFAULT_DEPRECATION_MESSAGE))
+@deprecated(detail=DEFAULT_DEPRECATION_MESSAGE)
 class UserOrganizationViewSet(ResourceAPIUpdateMixin, GatewayModelViewSet):
     model = Organization
     serializer_class = OrganizationSerializer

@@ -93,7 +93,7 @@ class UserViewSet(DeprecatedFieldsViewMixin, DABOAuth2UserViewsetMixin, Resource
 @extend_schema(
     deprecated=True,
 )
-@deprecated(detail=str(DEFAULT_DEPRECATION_MESSAGE))
+@deprecated(detail=DEFAULT_DEPRECATION_MESSAGE)
 class DeprecatedRelatedUserViewSet(DABOAuth2UserViewsetMixin, GatewayModelViewSet):
     """
     Shows all users for sublists like /api/v1/organizations/5/users/
