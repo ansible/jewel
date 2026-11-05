@@ -301,6 +301,7 @@ REST_FRAMEWORK = {
         'ansible_base.lib.utils.views.permissions.IsSuperuserOrAuditor',
     ],
     'EXCEPTION_HANDLER': 'aap_gateway_api.views.gateway_exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'ansible_base.lib.utils.schema.DABAutoSchema',
 }
 
 ROOT_URLCONF = 'aap_gateway_api.urls'
