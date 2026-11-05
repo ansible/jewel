@@ -40,17 +40,22 @@ def test_resource_views_keep_generic_challenge_without_bearer_credential(admin_u
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("reason", "challenge"),
+    ("reason", "detail", "challenge"),
     [
-        ("invalid", 'Bearer realm="api", error="invalid_token"'),
-        ("expired", 'Bearer realm="api", error="invalid_token", error_description="The access token expired"'),
+        ("invalid", "Invalid Bearer token.", 'Bearer realm="api", error="invalid_token"'),
+        (
+            "expired",
+            "Bearer token has expired.",
+            'Bearer realm="api", error="invalid_token", error_description="The access token expired"',
+        ),
         (
             "provider_unavailable",
+            "Authentication service unavailable.",
             'Bearer realm="api", error="invalid_token", error_description="Authentication service unavailable"',
         ),
     ],
 )
-def test_resource_views_preserve_dab_bearer_failure_challenge(reason, challenge, admin_user, unauthenticated_api_client):
+def test_resource_views_preserve_dab_bearer_failure_challenge(reason, detail, challenge, admin_user, unauthenticated_api_client):
     """The Gateway resource mixin must not replace DAB's safe RFC 6750 response."""
     api_authenticator = Mock()
     api_authenticator.authenticate.side_effect = BearerTokenValidationError(reason)
@@ -63,5 +68,6 @@ def test_resource_views_preserve_dab_bearer_failure_challenge(reason, challenge,
         response = unauthenticated_api_client.get(url, headers={"Authorization": "Bearer invalid-external-token"})
 
     assert response.status_code == 401
+    assert response.data["detail"] == detail
     assert response["WWW-Authenticate"] == challenge
     assert "invalid-external-token" not in response["WWW-Authenticate"]
