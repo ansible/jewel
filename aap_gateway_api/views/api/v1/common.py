@@ -1,3 +1,4 @@
+from ansible_base.lib.utils.auth import get_authentication_challenge
 from ansible_base.lib.utils.hashing import hash_serializer_data
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
@@ -50,13 +51,9 @@ class ResourceAllClientMixin:
 
     def get_authenticate_header(self, request):
         """Return a Bearer challenge while suppressing browser-triggered Basic auth prompts."""
-        authorization = request.headers.get("Authorization", "")
-        scheme, _, _credential = authorization.partition(" ")
-        if scheme.lower() == "bearer":
-            # DAB records a safe RFC 6750 challenge on the request when Bearer
-            # authentication fails.  Returning the normal DRF/DAB challenge
-            # here preserves invalid-token details without exposing credentials.
-            return super().get_authenticate_header(request)
+        challenge = get_authentication_challenge(request)
+        if challenge is not None:
+            return challenge
 
         # HTTP Basic auth is insecure by default, because the basic auth
         # backend does not provide CSRF protection.
