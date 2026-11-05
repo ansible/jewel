@@ -107,6 +107,16 @@ class Request:
                 "CONTENT_TYPE": "application/json; charset=utf-8",
             },
         ),
+        (
+            "POST",
+            "localhost",
+            "/api/gateway/v3/namespaces",
+            request_body_json,
+            {
+                "CONTENT_TYPE": "application/json; charset=utf-8",
+                "X-CSRFToken": "csrf-header-token",
+            },
+        ),
     ],
 )
 def test_get_drf_request(method, host, path, body, headers):
@@ -118,12 +128,12 @@ def test_get_drf_request(method, host, path, body, headers):
 
 @pytest.fixture
 def ext_auth():
-    yield ExternalAuth()
+    return ExternalAuth()
 
 
 @pytest.fixture
 def _ext_auth():
-    yield _ExternalAuth()
+    return _ExternalAuth()
 
 
 class MockSessionAuth(SessionAuthentication):

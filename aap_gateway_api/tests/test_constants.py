@@ -4,7 +4,7 @@ Verifies that duplicated string literals have been properly extracted into
 named constants and are used consistently across the codebase.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
 
@@ -118,6 +118,51 @@ class TestXdsConfigsUseConstants:
 
         result = transport_socket()
         assert result["typed_config"]["@type"] == DOWNSTREAM_TLS_CONTEXT
+
+    @patch("aap_gateway_api.utils.xds_configs.default_backend")
+    @patch("aap_gateway_api.utils.xds_configs.settings")
+    def test_transport_socket_ecdh_curves(self, mock_settings, mock_default_backend):
+        mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
+        mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
+        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
+        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
+        fake_backend = MagicMock()
+        fake_backend._fips_enabled = False
+        mock_default_backend.return_value = fake_backend
+        from aap_gateway_api.utils.xds_configs import transport_socket
+
+        result = transport_socket()
+        assert "ecdh_curves" in result["typed_config"]["common_tls_context"]["tls_params"]
+        assert result["typed_config"]["common_tls_context"]["tls_params"]["ecdh_curves"] == ["X25519MLKEM768", "X25519", "P-256"]
+
+    @patch("aap_gateway_api.utils.xds_configs.default_backend")
+    @patch("aap_gateway_api.utils.xds_configs.settings")
+    def test_transport_socket_ecdh_curves_fips(self, mock_settings, mock_default_backend):
+        mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
+        mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
+        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
+        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
+        fake_backend = MagicMock()
+        fake_backend._fips_enabled = True
+        mock_default_backend.return_value = fake_backend
+        from aap_gateway_api.utils.xds_configs import transport_socket
+
+        result = transport_socket()
+        assert "tls_params" not in result["typed_config"]["common_tls_context"]
+
+    @patch("aap_gateway_api.utils.xds_configs.default_backend")
+    @patch("aap_gateway_api.utils.xds_configs.settings")
+    def test_transport_socket_ecdh_curves_no_fips_attr(self, mock_settings, mock_default_backend):
+        mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
+        mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
+        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
+        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
+        fake_backend = MagicMock()
+        mock_default_backend.return_value = fake_backend
+        from aap_gateway_api.utils.xds_configs import transport_socket
+
+        result = transport_socket()
+        assert "tls_params" not in result["typed_config"]["common_tls_context"]
 
 
 class TestApiGatewayV1PrefixConstant:

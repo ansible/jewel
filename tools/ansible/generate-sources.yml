@@ -1,5 +1,5 @@
 ---
-- name: Generate the docker-compose.yml file for gateway
+- name: Generate the compose.yml file for gateway
   hosts: localhost
   connection: local
   gather_facts: False

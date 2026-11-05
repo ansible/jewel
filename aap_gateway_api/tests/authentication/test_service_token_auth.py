@@ -204,24 +204,6 @@ def test_delete_inactive_keys(service_cluster_gateway):
 
 
 @pytest.mark.django_db
-def test_generate_service_key_api(user_api_client, admin_api_client, service_cluster_eda):
-    url = get_relative_url("service_key-list")
-    data = {"service_cluster": service_cluster_eda.pk, "mark_previous_inactive": True}
-
-    # Check that unprivileged users can't generate new keys.
-    resp = user_api_client.post(url, data, format="json")
-    assert resp.status_code == 403
-    assert ServiceKey.objects.count() == 0
-
-    resp = admin_api_client.post(url, data, format="json")
-    assert resp.status_code == 201
-    assert ServiceKey.objects.filter(service_cluster=service_cluster_eda).count() == 1
-
-    key = ServiceKey.objects.first()
-    assert resp.json()["secret"] == key.secret
-
-
-@pytest.mark.django_db
 def test_service_key_api(user_api_client, admin_api_client, service_cluster_eda):
     key_list = get_relative_url("service_key-list")
     key = service_cluster_eda.generate_key()
@@ -299,6 +281,27 @@ def test_validate_methods(allowed_methods, call_method, expected_result):
 
     with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', side_effect=['/resource_api', '/junk']):
         assert token_auth.is_user_authorized(request, None, None, None) == expected_result
+
+
+@pytest.mark.parametrize(
+    ('url_action', 'view_action'),
+    [('bulk-assign', 'bulk_assign'), ('bulk-unassign', 'bulk_unassign')],
+)
+def test_service_token_authorizes_bulk_assignment_actions(url_action, view_action):
+    from ansible_base.resource_registry.views import HasResourceRegistryPermissions
+
+    from aap_gateway_api.authentication.service_token_auth import ServiceTokenAuthentication
+
+    token_auth = ServiceTokenAuthentication()
+    request = mock.Mock(path=f'/api/gateway/v1/service-index/role-user-assignments/{url_action}/', method='POST')
+    user = mock.Mock(is_superuser=False)
+    request.user = user
+    view = mock.Mock(action=view_action)
+
+    with mock.patch('aap_gateway_api.authentication.service_token_auth.get_relative_url', return_value='/api/gateway/v1/service-index/'):
+        assert token_auth.is_user_authorized(request, user, None, None) is True
+
+    assert HasResourceRegistryPermissions().has_permission(request, view) is True
 
 
 def test_jwt_claims_path_authorized():

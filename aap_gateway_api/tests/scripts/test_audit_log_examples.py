@@ -69,9 +69,9 @@ def test_print_expected_logs_multiple_lines(capsys):
 # -----------------------------------------------------------------------------
 
 
-def test_print_step_header_increments_and_uses_banner(capsys):
+def test_print_step_header_increments_and_uses_banner(capsys, monkeypatch):
     """print_step_header prints banner with step number and increments counter."""
-    audit_log_examples._step_counter = 1
+    monkeypatch.setattr(audit_log_examples, "_step_counter", 1)
     audit_log_examples.print_step_header("Creating organization")
     out, _ = capsys.readouterr()
     assert "-" * 40 in out
@@ -127,8 +127,9 @@ def test_enable_audit_logging_restores_on_exception():
     class FakeModel:
         audit_log_enabled = False
 
+    audit_logging = audit_log_examples.enable_audit_logging(FakeModel)
     with pytest.raises(ValueError):
-        with audit_log_examples.enable_audit_logging(FakeModel):
+        with audit_logging:
             assert FakeModel.audit_log_enabled is True
             raise ValueError("oops")
     assert FakeModel.audit_log_enabled is False

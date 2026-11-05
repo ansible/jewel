@@ -1,5 +1,5 @@
 ---
-# Resolve the quay.io/ansible/jewel-ci tag for a workflow run.
+# Resolve and verify the quay.io/ansible/jewel-ci tag for a workflow run.
 #
 # merge_group.base_ref is refs/heads/<branch>; pull_request github.base_ref
 # and push github.ref_name are already the branch name. GitHub Actions
@@ -36,4 +36,24 @@ jobs:
             echo "Unable to resolve jewel-ci image tag from ref" >&2
             exit 1
           fi
+          case "$TAG" in
+            [-.]*|*[!A-Za-z0-9_.-]*)
+              echo "CI image tags must use only letters, numbers, underscores, periods, and hyphens, and cannot begin with a period or hyphen" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#TAG}" -gt 117 ]; then
+            echo "CI image tags cannot exceed 117 characters because generated image tags include a suffix" >&2
+            exit 1
+          fi
           printf 'tag=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify CI image exists
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          IMAGE="quay.io/ansible/jewel-ci:${TAG}"
+          if ! docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "::error title=Missing CI image::${IMAGE} does not exist. Run the Build CI Image workflow manually with branch '${TAG}', then re-run this workflow."
+            exit 1
+          fi

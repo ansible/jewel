@@ -25,7 +25,7 @@ The review process:
 Configures the GitHub MCP server for automated pull request reviews.
 
 **Key Configuration:**
-- **MCP Server**: Runs GitHub integration in a Docker container
+- **MCP Server**: Runs GitHub integration in a Podman container
 - **Authentication**: Requires a `.github_mcp_env` file with `GITHUB_PERSONAL_ACCESS_TOKEN` set
 - **Permissions**: Granted via the `--approve-mcps` flag in the workflow
 

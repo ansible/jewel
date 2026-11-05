@@ -1,5 +1,5 @@
 ---
-grafana_image: docker.io/grafana/grafana
-grafana_image_version: latest
+grafana_image: mirror.gcr.io/grafana/grafana
+grafana_image_version: 13.2.3
 grafana_http_port: 3000
 grafana_provisioning_dir: "{{ sources_dest }}/grafana/provisioning"

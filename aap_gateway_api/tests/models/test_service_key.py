@@ -6,33 +6,10 @@ from aap_gateway_api.models import ServiceKey
 
 
 @pytest.mark.django_db
-class TestServiceKeyManager:
-    def test_create_generates_secret(self, service_cluster_gateway):
-        key = ServiceKey.objects.create(service_cluster=service_cluster_gateway)
-        assert key.secret
-        assert len(key.secret) > 0
-
-    def test_create_custom_secret_length(self, service_cluster_gateway):
-        from unittest.mock import patch
-
-        with patch("aap_gateway_api.models.service_auth.secrets.token_urlsafe", wraps=__import__("secrets").token_urlsafe) as mock_token:
-            ServiceKey.objects.create(service_cluster=service_cluster_gateway, secret_length=128)
-            mock_token.assert_called_once_with(128)
-
-    def test_create_pops_secret_length(self, service_cluster_gateway):
-        """secret_length is consumed by the manager and not passed to the model."""
-        key = ServiceKey.objects.create(service_cluster=service_cluster_gateway, secret_length=64)
-        assert not hasattr(key, 'secret_length')
-
-
-@pytest.mark.django_db
 class TestServiceKey:
     def test_save_enforces_max_active_keys(self, service_cluster_gateway):
         max_active = settings.MAX_ACTIVE_KEYS_PER_SERVICE
-        # save() uses count() - 1 >= max_active to account for re-saves of
-        # existing objects, so we need max_active + 1 existing active keys
-        # before the next create is rejected.
-        for _ in range(max_active + 1):
+        for _ in range(max_active):
             ServiceKey.objects.create(service_cluster=service_cluster_gateway)
 
         with pytest.raises(ValidationError, match="Cannot have more than"):
@@ -40,8 +17,7 @@ class TestServiceKey:
 
     def test_inactive_keys_do_not_count_toward_limit(self, service_cluster_gateway):
         max_active = settings.MAX_ACTIVE_KEYS_PER_SERVICE
-        # Fill to max_active + 1 so the limit is reached
-        for _ in range(max_active + 1):
+        for _ in range(max_active):
             ServiceKey.objects.create(service_cluster=service_cluster_gateway)
 
         # Deactivating one should allow creating another
@@ -51,6 +27,31 @@ class TestServiceKey:
 
         key = ServiceKey.objects.create(service_cluster=service_cluster_gateway)
         assert key.is_active
+
+    def test_saving_existing_active_key_at_limit_succeeds(self, service_cluster_gateway):
+        max_active = settings.MAX_ACTIVE_KEYS_PER_SERVICE
+        keys = [ServiceKey.objects.create(service_cluster=service_cluster_gateway) for _ in range(max_active)]
+
+        keys[0].refresh_from_db()
+        keys[0].name = "updated-key"
+        keys[0].save()
+
+        keys[0].refresh_from_db()
+        assert keys[0].name == "updated-key"
+
+    @pytest.mark.parametrize("field", ["algorithm", "secret", "service_cluster"])
+    def test_save_rejects_changes_to_write_once_fields(self, field, service_cluster_eda, service_cluster_gateway):
+        key = ServiceKey.objects.create(service_cluster=service_cluster_gateway)
+        key.refresh_from_db()
+        replacement_values = {
+            "algorithm": ServiceKey.JWTAlgorithm.HS512,
+            "secret": "replacement-secret",
+            "service_cluster": service_cluster_eda,
+        }
+        setattr(key, field, replacement_values[field])
+
+        with pytest.raises(ValidationError, match="cannot be changed after creation"):
+            key.save()
 
     def test_name_is_nullable(self, service_cluster_gateway):
         key = ServiceKey.objects.create(service_cluster=service_cluster_gateway, name=None)

@@ -5,6 +5,20 @@ import yaml
 from django.urls import get_resolver, reverse
 from rest_framework.metadata import SimpleMetadata
 
+# Actions that remain in OpenAPI solely to communicate a deprecation, but are
+# unsupported at runtime. OpenAPI exposes the deprecated operation, while
+# OPTIONS and Allow hide it from the browsable API; the view returns a helpful
+# 405 response if a client still calls it.
+OPENAPI_ONLY_ACTIONS = {
+    "/api/gateway/v1/service_keys/": {"POST"},
+}
+
+# Actions with an explicit OpenAPI schema that do not use the standard OPTIONS
+# serializer for request validation.
+MANUAL_SCHEMA_ACTIONS = {
+    "/api/gateway/v1/service-index/resources/bulk-update/": {"POST"},
+}
+
 
 # Ignores non-existent objects and returns full OPTIONS metadata anyway
 def determine_actions(self, request, view):
@@ -151,7 +165,7 @@ class ApiSpecs:
         return valid_endpoints
 
 
-@pytest.fixture(autouse=True, scope='function')
+@pytest.fixture(autouse=True)
 def loaded_apis(admin_api_client):
     return ApiSpecs(admin_api_client)
 
@@ -162,13 +176,24 @@ def test_all_apis_present(loaded_apis):
 
 def test_actions(loaded_apis):
     for endpoint in loaded_apis.openapi_schemas.keys():
-        assert set(loaded_apis.openapi_schemas[endpoint].keys()) == set(loaded_apis.api_schemas[endpoint].keys()), f"Mismatch in actions for {endpoint}"
+        openapi_actions = set(loaded_apis.openapi_schemas[endpoint])
+        options_actions = set(loaded_apis.api_schemas[endpoint])
+        openapi_only_actions = OPENAPI_ONLY_ACTIONS.get(endpoint, set())
+
+        assert openapi_actions - openapi_only_actions == options_actions, f"Mismatch in actions for {endpoint}"
+        assert openapi_actions & openapi_only_actions == openapi_only_actions, f"Missing OpenAPI-only actions for {endpoint}"
 
 
 def test_request_objects(loaded_apis):
     # Compare openapi schema with options schema
     for endpoint in loaded_apis.openapi_endpoints:
         for action in loaded_apis.openapi_schemas[endpoint].keys():
+            if action in OPENAPI_ONLY_ACTIONS.get(endpoint, set()):
+                continue
+            if action in MANUAL_SCHEMA_ACTIONS.get(endpoint, set()):
+                # This action validates its envelope manually and does not use
+                # the standard OPTIONS serializer.
+                continue
             # Check params
             if loaded_apis.openapi_schemas[endpoint][action]:
                 for pname, description in loaded_apis.openapi_schemas[endpoint][action]["properties"].items():

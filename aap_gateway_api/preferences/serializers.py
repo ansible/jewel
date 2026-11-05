@@ -58,7 +58,17 @@ class CSRFSerializer(JSONSerializer):
             else:
                 logger.error(f"CSRF_TRUSTED_ORIGINS has an invalid value: {invalid_reason}")
 
-        return valid_values + ret
+        # Deduplicate string origins in O(n); preserve other JSON values so
+        # preference validation can return its normal bad-type error.
+        merged_values = []
+        seen_values = set()
+        for value in valid_values + ret:
+            if not isinstance(value, str):
+                merged_values.append(value)
+            elif value not in seen_values:
+                seen_values.add(value)
+                merged_values.append(value)
+        return merged_values
 
     @classmethod
     def to_db(cls, value, **kwargs):

@@ -140,7 +140,8 @@ def test_migrating_user_with_invalid_email(migration_service_invalid_users, admi
     call_command(cmd, username=admin_user.username)
 
     users = User.objects.filter(username="bademailuser1")
-    assert users is not None and users.exists()
+    assert users is not None
+    assert users.exists()
     for u in users:
         assert u.first_name == "Badema"
         assert u.last_name == "Iluser"

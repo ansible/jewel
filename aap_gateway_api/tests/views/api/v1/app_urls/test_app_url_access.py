@@ -128,5 +128,8 @@ def test_app_url_create_update_delete(request, client_fixture, rest_action, endp
     elif rest_action == "delete":
         response = client.delete(url, data=data)
 
-    assert response is not None and response.status_code == expected_status
-    assert response.data is not None and 'detail' in response.data and details_response in response.data['detail']
+    assert response is not None
+    assert response.status_code == expected_status
+    assert response.data is not None
+    assert 'detail' in response.data
+    assert details_response in response.data['detail']

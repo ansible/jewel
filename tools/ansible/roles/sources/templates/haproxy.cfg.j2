@@ -11,8 +11,8 @@ defaults
   option httpchk
   option tcp-check
 
-resolvers docker_resolver
-  nameserver dns 127.0.0.11:53
+resolvers container_resolver
+  parse-resolv-conf
 
 frontend stats
   bind *:8404
@@ -27,6 +27,6 @@ frontend aap_frontend
 backend gateway_proxy_servers
 {% for i in range(gateway_node_count|int) %}
   {% set container_id = loop.index %}
-  #server aap-gw-proxy-{{ container_id }} aap-gw-proxy-{{ container_id }}:9080 ssl verify none check inter 5000 fall 15 rise 1 resolvers docker_resolver resolve-prefer ipv4
-  server proxy{{ container_id }} proxy{{ container_id }}:9080 ssl verify none resolvers docker_resolver resolve-prefer ipv4
+  #server aap-gw-proxy-{{ container_id }} aap-gw-proxy-{{ container_id }}:9080 ssl verify none check inter 5000 fall 15 rise 1 resolvers container_resolver resolve-prefer ipv4
+  server proxy{{ container_id }} proxy{{ container_id }}:9080 ssl verify none resolvers container_resolver resolve-prefer ipv4
 {% endfor %}

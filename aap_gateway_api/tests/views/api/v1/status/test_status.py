@@ -407,7 +407,8 @@ def test_that_get_requests_are_async(get, admin_api_client, full_service_hierarc
 
         # We have 3 nodes will all take 3 seconds but they should run all at the same time.
         # So we want to make sure that we took > 3 second but < 9 (3 node * 3 seconds)
-        assert total_time > 3 and total_time < 9, f"Total time was {total_time} and should have been < 9\n{response.data}"
+        assert total_time > 3
+        assert total_time < 9, f"Total time was {total_time} and should have been < 9\n{response.data}"
 
 
 @mock.patch("aap_gateway_api.views.api.v1.status.requests.get")

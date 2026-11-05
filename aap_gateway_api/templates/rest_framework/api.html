@@ -66,7 +66,11 @@
 {% block content %}
   {% if deprecated %}
     <div class="breadcrumb" style="background: #FCC;">
+      {% if deprecated_message_html_safe %}
+        {{ deprecated_message|safe }} <!-- NOSONAR: HTML is explicitly enabled only for developer-authored deprecation messages. -->
+      {% else %}
         <b>{{ deprecated_message }}</b>
+      {% endif %}
     </div>
   {% endif %}
 {{ block.super }}

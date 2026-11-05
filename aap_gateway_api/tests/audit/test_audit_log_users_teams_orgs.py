@@ -48,7 +48,8 @@ def test_audit_log_user_create(no_log_messages):
     try:
         log_auth_event.assert_called_once()
         msg = log_auth_event.call_args[0][0].lower()
-        assert "create" in msg and "user" in msg
+        assert "create" in msg
+        assert "user" in msg
         # DAB logs password as '$encrypted$'; no raw password must appear
         assert "newsecretpassword123!" not in msg
         assert "_system" in msg  # Verifies actor is logged, system user in this case
@@ -66,7 +67,8 @@ def test_audit_log_user_update(no_log_messages, user):
             user.save()
     assert log_auth_event.call_count == 2
     messages = " ".join(call[0][0].lower() for call in log_auth_event.call_args_list)
-    assert "update" in messages and "user" in messages
+    assert "update" in messages
+    assert "user" in messages
     assert "password" not in messages or "redact" in messages or "$encrypted$" in messages
 
 
@@ -79,7 +81,8 @@ def test_audit_log_user_delete(no_log_messages):
             u.delete()
     log_auth_event.assert_called_once()
     msg = log_auth_event.call_args[0][0].lower()
-    assert "delete" in msg and "user" in msg
+    assert "delete" in msg
+    assert "user" in msg
 
 
 @pytest.mark.django_db
@@ -91,7 +94,8 @@ def test_audit_log_organization_create(no_log_messages):
     try:
         log_auth_event.assert_called_once()
         msg = log_auth_event.call_args[0][0].lower()
-        assert "create" in msg and "organization" in msg
+        assert "create" in msg
+        assert "organization" in msg
     finally:
         org.delete()
 
@@ -105,7 +109,8 @@ def test_audit_log_organization_update(no_log_messages, organization):
             organization.save()
     log_auth_event.assert_called_once()
     msg = log_auth_event.call_args[0][0].lower()
-    assert "update" in msg and "organization" in msg
+    assert "update" in msg
+    assert "organization" in msg
 
 
 @pytest.mark.django_db
@@ -117,7 +122,8 @@ def test_audit_log_organization_delete(no_log_messages):
             org.delete()
     log_auth_event.assert_called_once()
     msg = log_auth_event.call_args[0][0].lower()
-    assert "delete" in msg and "organization" in msg
+    assert "delete" in msg
+    assert "organization" in msg
 
 
 @pytest.mark.django_db
@@ -129,7 +135,8 @@ def test_audit_log_team_create(no_log_messages, organization):
     try:
         log_auth_event.assert_called_once()
         msg = log_auth_event.call_args[0][0].lower()
-        assert "create" in msg and "team" in msg
+        assert "create" in msg
+        assert "team" in msg
     finally:
         team.delete()
 
@@ -143,7 +150,8 @@ def test_audit_log_team_update(no_log_messages, team):
             team.save()
     log_auth_event.assert_called_once()
     msg = log_auth_event.call_args[0][0].lower()
-    assert "update" in msg and "team" in msg
+    assert "update" in msg
+    assert "team" in msg
 
 
 @pytest.mark.django_db
@@ -155,7 +163,8 @@ def test_audit_log_team_delete(no_log_messages, organization):
             team.delete()
     log_auth_event.assert_called_once()
     msg = log_auth_event.call_args[0][0].lower()
-    assert "delete" in msg and "team" in msg
+    assert "delete" in msg
+    assert "team" in msg
 
 
 @pytest.mark.django_db

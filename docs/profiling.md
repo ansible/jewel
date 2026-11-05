@@ -27,7 +27,7 @@ export GATEWAY_ANSIBLE_BASE_PROFILING_SQL_ENABLED=true
 ```
 
 For containerized deployments, add the variable to the pod spec or
-`docker-compose.yml`. For systemd, add it to the service environment file.
+`compose.yml`. For systemd, add it to the service environment file.
 
 ### Django settings file
 

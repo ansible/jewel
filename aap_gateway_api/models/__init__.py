@@ -8,7 +8,7 @@ from aap_gateway_api.models.organization import Organization  # noqa: F401
 from aap_gateway_api.models.preference import Preference  # noqa: F401
 from aap_gateway_api.models.route import Route  # noqa: F401
 from aap_gateway_api.models.service_api_route import ServiceAPIRoute  # noqa: F401
-from aap_gateway_api.models.service_auth import ServiceKey  # noqa: F401
+from aap_gateway_api.models.service_key import ServiceKey  # noqa: F401
 from aap_gateway_api.models.service_node import ServiceNode  # noqa: F401
 from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType  # noqa: F401
 from aap_gateway_api.models.team import Team  # noqa: F401

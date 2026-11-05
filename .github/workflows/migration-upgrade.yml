@@ -1,0 +1,51 @@
+---
+name: Migration Upgrade
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - devel
+      - stable-2.7
+      - stable-2.6
+    paths:
+      - ".github/workflows/migration-upgrade.yml"
+      - ".github/workflows/migration-upgrade-core.yml"
+      - ".github/workflows/migration-snapshot.yml"
+      - "aap_gateway_api/migrations/**"
+      - "aap_gateway_api/tests/ci/**"
+      - "requirements/**"
+      - "pyproject.toml"
+      - "tools/configs/migration_upgrade_policy.json"
+      - "tools/scripts/ci/**"
+      - "tools/scripts/migration_upgrade.py"
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: Branch whose upgrade path should be validated
+        type: choice
+        required: true
+        default: devel
+        options:
+          - devel
+          - stable-2.7
+          - stable-2.6
+
+permissions:
+  contents: read
+
+jobs:
+  migration-upgrade:
+    name: Validate migration upgrade path
+    # Keep this opt-in until the published release tags and stable branches
+    # required by the upgrade paths exist in this repository.
+    if: vars.MIGRATION_UPGRADE_ENABLED == 'true'
+    uses: ./.github/workflows/migration-upgrade-core.yml
+    with:
+      target_branch: >-
+        ${{ inputs.target_branch ||
+            github.event.merge_group.base_ref ||
+            github.base_ref ||
+            github.ref_name }}
+      snapshot_round_trip: false

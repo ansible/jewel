@@ -1,3 +1,3 @@
 ---
 collections:
-  - community.docker
+  - containers.podman

@@ -72,6 +72,23 @@ class SettingSectionView(AnsibleBaseView):
         updated_data = self.serializer.validate_and_save(request.data)
         return Response(updated_data)
 
+    def _category_revert_data(self, category, category_slug):
+        to_revert_data = {}
+        unchanged_data = {}
+
+        for preference in gateway_preference_registry.preferences(category):
+            if preference.read_only or preference.encrypted:
+                err_detail = 'read_only' if preference.read_only else 'encrypted'
+                logger.info(format_err_message(category_slug, preference.name, err_detail))
+                unchanged_data[preference.name] = _("%(err_detail)s") % {"err_detail": err_detail}
+                continue
+
+            default_value = get_default_value_by_preference(preference, preference.encrypted)
+            if get_preference_value_by_preference(preference, preference.encrypted) != default_value:
+                to_revert_data[preference.name] = default_value
+
+        return to_revert_data, unchanged_data
+
     @extend_schema(
         operation_id="settings_destroyer",
         extensions={'x-ai-description': 'Revert Gateway category preferences to defaults, excluding read-only and encrypted settings'},
@@ -83,28 +100,14 @@ class SettingSectionView(AnsibleBaseView):
         """
 
         self.serializer = SettingSectionSerializer(category_slug)
-
-        if self.serializer.category_slug in ["all", None]:
-            # Handle revert all settings
-            categories = get_preference_sections()
-        else:
-            categories = [category_slug]
+        categories = get_preference_sections() if self.serializer.category_slug in ["all", None] else [category_slug]
 
         to_revert_data = {}
         unchanged_data = {}
-
-        # Revert settings to their default values, don't revert read_only/ encrypted settings
         for category in categories:
-            for preference in gateway_preference_registry.preferences(category):
-                if preference.read_only or preference.encrypted:
-                    # Determine the reason for not reverting
-                    err_detail = 'read_only' if preference.read_only else 'encrypted'
-                    logger.info(format_err_message(category_slug, preference.name, err_detail))
-                    unchanged_data[preference.name] = _("%(err_detail)s") % {"err_detail": err_detail}
-                    continue
-                default_value = get_default_value_by_preference(preference, preference.encrypted)
-                if get_preference_value_by_preference(preference, preference.encrypted) != default_value:
-                    to_revert_data[preference.name] = default_value
+            category_revert_data, category_unchanged_data = self._category_revert_data(category, category_slug)
+            to_revert_data.update(category_revert_data)
+            unchanged_data.update(category_unchanged_data)
 
         if to_revert_data:
             self.serializer.validate_and_save(to_revert_data)

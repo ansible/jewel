@@ -1,9 +1,6 @@
 # User level pre-commit hooks
 pre-commit-user
 
-# Make target touch files
-.docker-compose-built
-
 # Python & setuptools
 __pycache__
 /build

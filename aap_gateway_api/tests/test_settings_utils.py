@@ -33,15 +33,13 @@ def test_load_grpc_settings_displays_proper_message(test_args, log_message, keep
             assert DYNACONF.DATABASES['default']['OPTIONS'].get('keepalives_count', 5) == keepalives_count
 
 
-def test_validate_grpc_settings_in_etc_aap_gw_override(tmp_path_factory, expected_log):
+def test_validate_grpc_settings_in_etc_aap_gw_override(tmp_path, expected_log, monkeypatch):
     expected_settings = 475
 
     # Create a temp grpc_settings.py and populate it with our expected value
-    temp_dir = tmp_path_factory.mktemp("grpc_settings_dir")
-    temp_settings = f"{temp_dir}/grpc_settings.py"
-    with open(temp_settings, 'w') as f:
-        f.write(f"DATABASES__default__OPTIONS__keepalives_count={expected_settings}")
-    environ['GATEWAY_GRPC_SETTINGS_FILE'] = temp_settings
+    temp_settings = tmp_path / "grpc_settings.py"
+    temp_settings.write_text(f"DATABASES__default__OPTIONS__keepalives_count={expected_settings}")
+    monkeypatch.setenv("GATEWAY_GRPC_SETTINGS_FILE", str(temp_settings))
 
     DYNACONF = factory(
         __name__,

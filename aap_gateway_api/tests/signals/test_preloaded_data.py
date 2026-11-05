@@ -4,6 +4,8 @@ import pytest
 
 from aap_gateway_api.models import Organization, Preference, ServiceType
 from aap_gateway_api.signals.preloaded_data import (
+    _is_rollback,
+    _run_preload_function,
     create_default_organization,
     create_preload_data,
     remove_console_service_type,
@@ -18,7 +20,17 @@ class TestCreatePreloadedData:
     def test_create_default_organization(self):
         Organization.objects.all().delete()
         assert create_default_organization() is True, "We should have created the default organization"
+        organization = Organization.objects.get(name='Default')
+        first_state = (organization.pk, organization.name, organization.description, organization.managed, organization.modified)
         assert create_default_organization() is False, "We should not have recreated the default organization"
+        organization.refresh_from_db()
+        assert (
+            organization.pk,
+            organization.name,
+            organization.description,
+            organization.managed,
+            organization.modified,
+        ) == first_state, "Default organization state should remain unchanged"
 
     @pytest.mark.django_db
     def test_set_system_user_password(self):
@@ -31,7 +43,12 @@ class TestCreatePreloadedData:
         system_user.save()
 
         assert set_system_user_password() is True, "Should set unusable password on first call"
+        system_user.refresh_from_db()
+        first_state = (system_user.pk, system_user.password, system_user.managed, system_user.modified)
+        assert system_user.has_usable_password() is False
         assert set_system_user_password() is False, "Should be a no-op when password is already unusable"
+        system_user.refresh_from_db()
+        assert (system_user.pk, system_user.password, system_user.managed, system_user.modified) == first_state, "System user state should remain unchanged"
 
     @pytest.mark.django_db
     def test_default_org_created_by_default(self):
@@ -46,13 +63,20 @@ class TestCreatePreloadedData:
         system_user.managed = False
         system_user.save()
         assert set_system_user_managed_flag() is True, "Should set managed=True when unset"
+        system_user.refresh_from_db()
+        first_state = (system_user.pk, system_user.managed, system_user.password, system_user.modified)
+        assert system_user.managed is True
         assert set_system_user_managed_flag() is False, "Should be no-op when already managed"
+        system_user.refresh_from_db()
+        assert (system_user.pk, system_user.managed, system_user.password, system_user.modified) == first_state, (
+            "Managed system user state should remain unchanged"
+        )
 
     @pytest.mark.django_db
     def test_immediate_return_if_no_plan(self):
         Organization.objects.all().delete()
         create_preload_data()
-        assert Organization.objects.count() == 0
+        assert 0 == Organization.objects.count()
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
@@ -66,7 +90,7 @@ class TestCreatePreloadedData:
         Organization.objects.all().delete()
         with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'debug', 'We are rolling back migration', assert_not_called=(not verbosity)):
             create_preload_data(verbosity=verbosity, plan=[('0000', False), ('0001', True)])
-        assert Organization.objects.count() == 0
+        assert 0 == Organization.objects.count()
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
@@ -203,7 +227,7 @@ class TestCreatePreloadedData:
         from ansible_base.rbac.models import DABContentType
 
         valid_ct = DABContentType.objects.get(service='shared', model='organization')
-        assert valid_ct.app_label == 'aap_gateway_api'
+        assert 'aap_gateway_api' == valid_ct.app_label
         assert remove_stale_shared_content_types() is False
         assert DABContentType.objects.filter(pk=valid_ct.pk).exists()
 
@@ -238,3 +262,79 @@ class TestCreatePreloadedData:
         DABContentType.objects.create(id=self._next_ct_id(), service='shared', app_label='core', model='user')
         with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'warning', 'Removing stale shared content type'):
             remove_stale_shared_content_types()
+
+
+class TestIsRollback:
+    def test_returns_true_when_rolled_back(self, expected_log):
+        plan = [('0001_initial', False), ('0002_auto', True)]
+        with expected_log(
+            'aap_gateway_api.signals.preloaded_data.logger',
+            'debug',
+            'We are rolling back migration',
+        ):
+            assert _is_rollback(plan, verbosity=1) is True
+
+    def test_returns_false_when_not_rolled_back(self):
+        plan = [('0001_initial', False), ('0002_auto', False)]
+        assert _is_rollback(plan, verbosity=1) is False
+
+    def test_returns_false_for_empty_plan(self):
+        assert _is_rollback([], verbosity=1) is False
+
+    def test_no_log_when_verbosity_zero(self, expected_log):
+        plan = [('0001_initial', True)]
+        with expected_log(
+            'aap_gateway_api.signals.preloaded_data.logger',
+            'debug',
+            'We are rolling back migration',
+            assert_not_called=True,
+        ):
+            assert _is_rollback(plan, verbosity=0) is True
+
+
+class TestRunPreloadFunction:
+    def test_successful_function_with_created_true(self, expected_log):
+        func = mock.MagicMock(return_value=True)
+        func.__name__ = 'create_default_organization'
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'debug', 'Created'):
+            _run_preload_function(func, verbosity=1)
+        func.assert_called_once()
+
+    def test_successful_function_set_action(self, expected_log):
+        func = mock.MagicMock(return_value=True)
+        func.__name__ = 'set_system_user_password'
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'debug', 'Set'):
+            _run_preload_function(func, verbosity=1)
+
+    def test_successful_function_with_created_false(self, expected_log):
+        func = mock.MagicMock(return_value=False)
+        func.__name__ = 'create_default_organization'
+        with expected_log(
+            'aap_gateway_api.signals.preloaded_data.logger',
+            'debug',
+            'Created',
+            assert_not_called=True,
+        ):
+            _run_preload_function(func, verbosity=1)
+
+    def test_verbose_logging(self, expected_log):
+        func = mock.MagicMock(return_value=False)
+        func.__name__ = 'create_default_organization'
+        with expected_log(
+            'aap_gateway_api.signals.preloaded_data.logger',
+            'info',
+            'Running create_default_organization',
+        ):
+            _run_preload_function(func, verbosity=2)
+
+    def test_exception_error_log(self, expected_log):
+        func = mock.MagicMock(side_effect=Exception('boom'))
+        func.__name__ = 'create_default_organization'
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'error', 'Failed to'):
+            _run_preload_function(func, verbosity=0)
+
+    def test_exception_exception_log(self, expected_log):
+        func = mock.MagicMock(side_effect=Exception('boom'))
+        func.__name__ = 'create_default_organization'
+        with expected_log('aap_gateway_api.signals.preloaded_data.logger', 'exception', 'Failed to'):
+            _run_preload_function(func, verbosity=2)
