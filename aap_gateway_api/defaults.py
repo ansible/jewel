@@ -225,7 +225,7 @@ LOGGING = {
         },
         'ansible_base': {
             'handlers': ['console', 'file'],
-            'level': 'WARNING',
+            'level': 'DEBUG',
         },
         'dispatcherd': {
             'handlers': ['console', 'file'],

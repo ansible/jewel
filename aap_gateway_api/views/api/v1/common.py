@@ -1,3 +1,4 @@
+from ansible_base.lib.utils.auth import get_authentication_challenge
 from ansible_base.lib.utils.hashing import hash_serializer_data
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
@@ -49,6 +50,11 @@ class ResourceAllClientMixin:
         return AllServicesClient(user=self.request.user, wait_for_response=False)
 
     def get_authenticate_header(self, request):
+        """Return a Bearer challenge while suppressing browser-triggered Basic auth prompts."""
+        challenge = get_authentication_challenge(request)
+        if challenge is not None:
+            return challenge
+
         # HTTP Basic auth is insecure by default, because the basic auth
         # backend does not provide CSRF protection.
         #

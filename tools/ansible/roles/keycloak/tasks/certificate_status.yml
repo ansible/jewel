@@ -1,0 +1,12 @@
+---
+- name: Check for an existing Keycloak certificate
+  ansible.builtin.stat:
+    path: "{{ public_key_file }}"
+  register: keycloak_certificate_file
+
+- name: Inspect the existing Keycloak certificate
+  ansible.builtin.command: >-
+    openssl x509 -in {{ public_key_file }} -noout -text
+  register: keycloak_existing_certificate
+  changed_when: false
+  when: keycloak_certificate_file.stat.exists

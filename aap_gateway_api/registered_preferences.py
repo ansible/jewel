@@ -1,3 +1,4 @@
+from ansible_base.authentication.jwk_client import DEFAULT_JWKS_REFRESH_COOLDOWN_SECONDS, MAX_JWKS_REFRESH_COOLDOWN_SECONDS
 from django.conf import settings
 from django.utils.translation import gettext as _
 
@@ -169,6 +170,22 @@ register(
     min_value=100,
     max_value=10000,
     label=_('Trusted Header Timeout'),
+)
+
+register(
+    section="authentication",
+    preference_name="jwks_refresh_cooldown_seconds",
+    default=DEFAULT_JWKS_REFRESH_COOLDOWN_SECONDS,
+    required=True,
+    preference_type="int_range",
+    min_value=0,
+    max_value=MAX_JWKS_REFRESH_COOLDOWN_SECONDS,
+    help_text=_(
+        "Minimum time, in seconds, between forced JWKS refreshes after a JWT signature failure. "
+        "Set to 0 to disable cooldown and allow every failed signature to request fresh keys."
+    ),
+    encrypted=False,
+    label=_('JWKS Refresh Cooldown (seconds)'),
 )
 
 register(
@@ -398,6 +415,17 @@ register(
     ),
     encrypted=False,
     label=_('Allow External Users to Create OAuth2 Tokens'),
+)
+
+register(
+    section="oauth2_provider",
+    preference_name="allow_local_pat_creation",
+    default=True,
+    required=False,
+    preference_type="bool",
+    help_text=_("When enabled, users can create local Personal Access Tokens (PATs). When disabled, local PAT creation is blocked for all users."),
+    encrypted=False,
+    label=_('Allow Local PAT Creation'),
 )
 
 register(
