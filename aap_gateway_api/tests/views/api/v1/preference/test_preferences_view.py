@@ -581,4 +581,5 @@ def test_allow_local_pat_creation_change_is_audited(admin_api_client):
 
     new_entries = list(Entry.objects.filter(**entry_filter).order_by("id")[baseline:])
     assert [entry.operation for entry in new_entries] == ["update", "update"]
+    assert [entry.changes["changed_fields"].get("raw_value") for entry in new_entries] == [["True", "False"], ["False", "True"]]
     assert Preference.objects.get(pk=preference.pk).value is True
