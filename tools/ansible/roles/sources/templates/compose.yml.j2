@@ -14,7 +14,11 @@ services:
     container_name: aap_gw_{{ container_id }}
     hostname: gateway{{ container_id }}
     depends_on:
+{% if gateway_database_is_mssql | bool %}
+      - mssql
+{% else %}
       - db
+{% endif %}
 {% for i in range(redis_node_count|int) %}
 {% set container_id = loop.index %}
       - redis{{ container_id }}
@@ -23,28 +27,31 @@ services:
     expose:
       - "{{ exposed_port }}"
     environment:
-      - DJANGO_SETTINGS_MODULE=aap_gateway_api.settings
-      - SECRET_KEY=${SECRET_KEY:-somesecret}
-      - DATABASE_NAME=gateway
-      - DATABASE_USER={{ db_username }}
-      - DATABASE_PASSWORD={{ db_password }}
-      - DATABASE_HOST=db
-      - PYTHONBREAKPOINT=remote_pdb.set_trace
-      - REMOTE_PDB_HOST=127.0.0.1
-      - REMOTE_PDB_PORT=4444
-      - REDIS_URL=rediss://{{ redis_username }}:{{ redis_password }}@{{ redis_node_prefix }}1:{{ redis_exposed_port }}
-      - REDIS_MODE={{ redis_mode }}
-      - REDIS_HOSTS={{ ",".join(redis_hosts) }}
-      - REDIS_TLS={{ redis_uses_tls }}
-      - CACHE_KEY_PREFIX={{ cache_key_prefix }}
+      DJANGO_SETTINGS_MODULE: aap_gateway_api.settings
+      SECRET_KEY: ${SECRET_KEY:-somesecret}
+      DATABASE_ENGINE: "{{ gateway_database_engine }}"
+      DATABASE_NAME: "{{ gateway_database_name }}"
+      DATABASE_USER: "{{ gateway_database_user }}"
+      DATABASE_PASSWORD: "{{ gateway_database_password | replace('$', '$$') }}"
+      DATABASE_HOST: "{{ gateway_database_host }}"
+      DATABASE_PORT: "{{ gateway_database_port }}"
+      DATABASE_OPTIONS: '{{ gateway_database_options_json }}'
+      PYTHONBREAKPOINT: remote_pdb.set_trace
+      REMOTE_PDB_HOST: 127.0.0.1
+      REMOTE_PDB_PORT: "4444"
+      REDIS_URL: "rediss://{{ redis_username }}:{{ redis_password }}@{{ redis_node_prefix }}1:{{ redis_exposed_port }}"
+      REDIS_MODE: "{{ redis_mode }}"
+      REDIS_HOSTS: "{{ ",".join(redis_hosts) }}"
+      REDIS_TLS: "{{ redis_uses_tls }}"
+      CACHE_KEY_PREFIX: "{{ cache_key_prefix }}"
       # TODO: What is this used for and how do we handle multiple proxies?
-      - ENVOY_HOSTNAME=proxy1
-      - ENVOY_VERIFY_HTTPS_CERTIFICATES=false
-      - DJANGO_DEBUG_TOOL_BAR={{ ddt_enabled }}
-      - CONTAINER_NUMBER={{ container_id }}
+      ENVOY_HOSTNAME: proxy1
+      ENVOY_VERIFY_HTTPS_CERTIFICATES: "false"
+      DJANGO_DEBUG_TOOL_BAR: "{{ ddt_enabled }}"
+      CONTAINER_NUMBER: "{{ container_id }}"
 {% if enabled_containers['otel_collector'] | bool %}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:{{ otel_collector_grpc_port }}
-      - OTEL_SERVICE_NAME=aap-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:{{ otel_collector_grpc_port }}"
+      OTEL_SERVICE_NAME: aap-gateway
 {% endif %}
     networks:
       - dbnet
@@ -213,6 +220,33 @@ services:
       - "{{ db_port }}:5432"
     volumes:
       - "aap_gw_db:/var/lib/pgsql/data"
+
+{% if gateway_database_is_mssql | bool %}
+  mssql:
+    container_name: aap_gw_db_mssql_1
+    hostname: mssql
+    image: {{ sqlserver_image }}
+    entrypoint: ["/bin/bash", "/usr/local/bin/launch-mssql"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: "{{ sqlserver_sa_password | replace('$', '$$') }}"
+      MSSQL_MEMORY_LIMIT_MB: "{{ sqlserver_memory_limit_mb }}"
+    ports:
+      - "{{ sqlserver_port }}:1433"
+    volumes:
+      - "aap_gw_mssql_data:/var/opt/mssql"
+      - $PWD/tools/scripts/launch-mssql:/usr/local/bin/launch-mssql:ro,z
+      - $PWD/tools/scripts/check-mssql:/usr/local/bin/check-mssql:ro,z
+    networks:
+      - dbnet
+    healthcheck:
+      test: ["CMD", "/bin/bash", "/usr/local/bin/check-mssql"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+{% endif %}
 
 {% if not enabled_containers['haproxy']|bool %}
 {# If we are not enabling haproxy then we will just run with 1 envoy server #}
@@ -472,6 +506,10 @@ networks:
 volumes:
   aap_gw_db:
     name: aap_gw_db
+{% if gateway_database_is_mssql | bool %}
+  aap_gw_mssql_data:
+    name: aap_gw_mssql_data
+{% endif %}
   aap_gw_cprofiling:
     name: aap_gw_cprofiling
   grpc_server_cprofiling:

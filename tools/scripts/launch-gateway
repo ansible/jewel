@@ -100,4 +100,7 @@ if [ $? != 0 ] ; then
     exit 255
 fi
 
+DISPATCHERD_AUTOSTART=$(${GATEWAY_PYTHON} -c 'from django.conf import settings; print("false" if settings.DATABASES["default"]["ENGINE"] == "ansible_base.backends.mssql" else "true")')
+export DISPATCHERD_AUTOSTART
+
 exec supervisord -n

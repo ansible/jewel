@@ -5,7 +5,7 @@ import pytest
 
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
 from aap_gateway_api.models import Organization, Route, Team
-from aap_gateway_api.tests.service_test_app.launch import launch_service
+from aap_gateway_api.tests.service_test_app.launch import launch_service, stop_service
 
 SEP_CHAR = "_"
 
@@ -46,8 +46,7 @@ def launch_test_service(svc_route: Route, fixture: str, svc_type: str = "awx", p
 
 
 def kill_test_service(proc):
-    proc.kill()
-    stdout, stderr = proc.communicate()
+    stdout, stderr = stop_service(proc)
     if stdout:
         print('')
         print('standard out:')
