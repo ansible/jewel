@@ -15,7 +15,11 @@ class Organization(UsersMembersMixin, AbstractOrganization, AuditableModel):
 
     class Meta:
         app_label = 'aap_gateway_api'
-        permissions = [('member_organization', 'User is a member of this organization')]
+        permissions = [
+            ('member_organization', 'User is a member of this organization'),
+            ('view_automation_dashboard', 'Can view the automation dashboard for this organization'),
+            ('change_automation_dashboard', 'Can edit automation dashboard settings for this organization'),
+        ]
 
     admin_rd_name = OrganizationAdmin.name
     member_rd_name = OrganizationMember.name
