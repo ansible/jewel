@@ -4,17 +4,14 @@
 
 Gateway evaluates API authentication mechanisms in the following order:
 
-1. Bearer authentication, which handles trusted external bearer tokens and local OAuth2 tokens.
-2. Session authentication.
+1. Service-token authentication, restricted to its authorized service endpoints.
+2. Bearer authentication, which handles trusted external bearer tokens and local OAuth2 tokens.
 3. Basic authentication.
-4. Service-token authentication, restricted to its authorized service endpoints.
+4. Session authentication.
 
-This is Gateway's current DAB-integrated compatibility order. The unified
-Bearer authenticator replaces the previous local OAuth2 authenticator while
-retaining Bearer/OAuth2 precedence ahead of session authentication; Basic and
-Service Token authentication are evaluated after a valid session. A future
-change, after an appropriate deprecation period, may adopt a credential-first
-order.
+Explicit credentials take precedence over an ambient browser session. This
+ensures API clients can use an explicitly supplied service token, bearer token,
+or Basic credential even when the browser also has a Gateway session.
 
 ## Basic Auth
 
