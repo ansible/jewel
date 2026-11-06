@@ -54,20 +54,19 @@ def test_service_key_warning_header_is_only_on_collection_route(admin_api_client
     assert "Warning" not in detail_response
 
 
-def test_service_key_openapi_deprecates_only_post(admin_api_client):
+def test_service_key_openapi_all_operations_deprecated(admin_api_client):
     schema = admin_api_client.get(reverse("schema")).data
     service_keys_path = get_relative_url("service_key-list")
     service_key_detail_path = f"{service_keys_path}{{id}}/"
 
     assert service_keys_path in schema["paths"]
     assert service_key_detail_path in schema["paths"]
-    operations = schema["paths"][service_keys_path]
 
-    assert operations["post"]["deprecated"] is True
-    assert operations["get"].get("deprecated") is not True
+    for method in ("get", "post"):
+        assert schema["paths"][service_keys_path][method]["deprecated"] is True
 
-    for method in ("get", "delete", "put", "patch"):
-        assert schema["paths"][service_key_detail_path][method].get("deprecated") is not True
+    for method in ("get", "put", "patch", "delete"):
+        assert schema["paths"][service_key_detail_path][method]["deprecated"] is True
 
     for method in ("post", "put", "patch"):
         request_schema = schema["paths"][service_key_detail_path if method != "post" else service_keys_path][method]["requestBody"]["content"][
