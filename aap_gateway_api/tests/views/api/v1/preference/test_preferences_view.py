@@ -3,9 +3,11 @@ from types import NoneType
 from unittest import mock
 
 import pytest
+from ansible_base.activitystream.models import Entry
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from ansible_base.lib.utils.response import get_relative_url
 from cryptography.fernet import InvalidToken
+from django.contrib.contenttypes.models import ContentType
 from dynamic_preferences.serializers import SerializationError
 
 from aap_gateway_api.models import Preference
@@ -565,3 +567,19 @@ def test_get_single_preference_returns_500_on_corrupt_data(admin_api_client, reg
     assert response.status_code == 500
     assert "corrupt or undecryptable data" in response.data["detail"]
     assert "corrupt_single" in response.data["detail"]
+
+
+def test_allow_local_pat_creation_change_is_audited(admin_api_client):
+    """Disabling and re-enabling local PAT creation each write an audit entry (ANSTRAT-1611 TC-9 items 9 and 11)."""
+    url = get_relative_url("setting-section-list", kwargs={"category_slug": "oauth2_provider"})
+    preference = Preference.objects.get(section="oauth2_provider", name="allow_local_pat_creation")
+    entry_filter = {"content_type": ContentType.objects.get_for_model(Preference), "object_id": str(preference.pk)}
+    baseline = Entry.objects.filter(**entry_filter).count()
+
+    assert admin_api_client.put(url, data={"allow_local_pat_creation": False}).status_code == 200
+    assert admin_api_client.put(url, data={"allow_local_pat_creation": True}).status_code == 200
+
+    new_entries = list(Entry.objects.filter(**entry_filter).order_by("id")[baseline:])
+    assert [entry.operation for entry in new_entries] == ["update", "update"]
+    assert [entry.changes["changed_fields"].get("raw_value") for entry in new_entries] == [["True", "False"], ["False", "True"]]
+    assert Preference.objects.get(pk=preference.pk).value is True
