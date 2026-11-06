@@ -25,39 +25,19 @@
       register: pg_initialization
       when: "'0 rows' in db_check.stdout"
 
-    - name: Create keycloak certs directory
-      file:
-        path: "{{ keycloak_certs_dir }}"
-        state: directory
-        mode: '0755'
+    - name: Migrate the Keycloak development certificate
+      include_tasks: migrate_certificate.yml
 
-    - name: Generate certificates for keycloak
-      command: 'openssl req -new -x509 -days 365 -nodes -out {{ public_key_file }} -keyout {{ private_key_file }} -subj "{{ cert_subject }}"'
-      args:
-        creates: "{{ public_key_file }}"
-
-    - name: Generate public cert for keycloak
-      command: 'openssl pkey -pubout -in {{ private_key_file }} -out {{ public_key_cert }}'
-      args:
-        creates: "{{ public_key_cert }}"
+    - name: Prepare the gateway realm
+      include_tasks: render_realm.yml
 
     - name: Start keycloak
       shell:
         cmd: "{{ compose_cmd }} up --detach keycloak"
 
-    - name: Load certs, existing and new SAML settings
-      set_fact:
-        private_key: "{{ private_key_content }}"
-        public_key: "{{ public_key_content }}"
-        public_key_trimmed: "{{ public_key_content | regex_replace('-----BEGIN CERTIFICATE-----\\\\n', '') | regex_replace('\\\\n-----END CERTIFICATE-----', '') }}"
-      vars:
-        # We add the extra \\ in here so that when jinja is templating out the files we end up with \n in the strings.
-        public_key_content: "{{ lookup('file', public_key_file) | regex_replace('\n', '\\\\n') }}"
-        private_key_content: "{{ lookup('file', private_key_file) | regex_replace('\n', '\\\\n') }}"
-
     - name: Get a keycloak token
       uri:
-        url: "https://localhost:{{ keycloak_exposed_port }}/auth/realms/master/protocol/openid-connect/token"
+        url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/realms/master/protocol/openid-connect/token"
         method: POST
         body_format: form-urlencoded
         body:
@@ -65,16 +45,12 @@
           username: "{{ keycloak_username }}"
           password: "{{ keycloak_password }}"
           grant_type: "password"
-        validate_certs: False
+        ca_path: "{{ public_key_file }}"
+        validate_certs: true
       register: keycloak_response
       until: "keycloak_response is successful"
       retries: 50
       delay: 6
-
-    - name: Template the gateway realm
-      template:
-        src: keycloak.gateway.realm.json.j2
-        dest: "{{ keycloak_realm_template }}"
 
     # Sometimes the API is up and running and we can get a key but things are fully initialized so we get a Loading... message
     - name: See if the gateway realm already exists
@@ -87,11 +63,12 @@
     # We want to see if we can make a call to the keycloak realm to see if the gateway realm exists and not do this step if so
     - name: Create the gateway realm if it does not exists
       uri:
-        url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms"
+        url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms"
         method: POST
         body_format: json
         body: "{{ lookup('file', keycloak_realm_template) }}"
-        validate_certs: False
+        ca_path: "{{ public_key_file }}"
+        validate_certs: true
         headers:
           Authorization: "Bearer {{ keycloak_response.json.access_token }}"
         # 409 conflict is returned if the realm already exists
@@ -100,16 +77,20 @@
       register: realm_status
       changed_when: realm_status.status == 201
 
+    - name: Reconcile the Keycloak development realm
+      include_tasks: reconcile.yml
+
     - name: Set passwords for gateway realm users
       uri:
-        url: "https://localhost:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/users/{{ item.id }}/reset-password"
+        url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/users/{{ item.id }}/reset-password"
         method: PUT
         body_format: json
         body:
           type: password
           value: "{{ keycloak_password }}"
           temporary: false
-        validate_certs: False
+        ca_path: "{{ public_key_file }}"
+        validate_certs: true
         headers:
           Authorization: "Bearer {{ keycloak_response.json.access_token }}"
         status_code: [204]

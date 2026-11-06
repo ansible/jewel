@@ -1,5 +1,18 @@
 # Authentication
 
+## Gateway API authentication precedence
+
+Gateway evaluates API authentication mechanisms in the following order:
+
+1. Service-token authentication, restricted to its authorized service endpoints.
+2. Bearer authentication, which handles trusted external bearer tokens and local OAuth2 tokens.
+3. Basic authentication.
+4. Session authentication.
+
+Explicit credentials take precedence over an ambient browser session. This
+ensures API clients can use an explicitly supplied service token, bearer token,
+or Basic credential even when the browser also has a Gateway session.
+
 ## Basic Auth
 
 If a basic auth header is passed to the proxy the following logic applies.
@@ -136,6 +149,23 @@ https://oauth.net/2/
 
 OAuth 2.0 is an industry-standard protocol for authorization, designed to enable secure, third-party access to user data without exposing user credentials. It specifies a process by which users can grant web and desktop applications permission to act on their behalf without sharing their password. Essentially, OAuth 2.0 allows an application (the client) to access resources (such as user data stored on a web server) through a series of interactions involving the resource owner (the user), the client, the authorization server, and the resource server. The protocol defines several grant types for different scenarios, including authorization code, implicit, password, and client credentials, each catering to specific types of client applications and security requirements. OAuth 2.0's flexibility and security have made it the foundation for numerous standards and frameworks, such as OpenID Connect for authentication. For technical documentation writers and quality engineers (QEs) tasked with setting up client configurations for OAuth, understanding these grant types, the flow of tokens, and the roles of different endpoints is crucial. Documentation must clearly articulate how to register applications with the authorization server, how to handle redirections and capture tokens, and how to securely store and use these tokens to access APIs, ensuring that the integration adheres to best practices for security and user privacy.
 
+### Allow Local PAT Creation
+
+Gateway preference `oauth2_provider.allow_local_pat_creation` (label: **Allow Local PAT Creation**, default `true`) controls whether users can create local Personal Access Tokens (PATs) through the API and UI.
+
+When the preference is set to `false`:
+
+- PAT creation via Gateway API token endpoints is rejected.
+- Existing PATs and OAuth2 application tokens continue to authenticate unless revoked.
+- Operators can still create PATs with the Django management command `create_oauth2_token` (including during installation). This exception is intentional so install and recovery workflows are not blocked by the preference.
+
+### External OAuth bearer tokens
+
+Gateway can authenticate API requests with JWT access tokens issued by a
+trusted external OAuth or OpenID Connect provider. See [External OAuth bearer
+token authentication](oauth_bearer_authentication.md) for the authenticator
+configuration, token validation rules, scope behavior, JWKS operations, and
+local Keycloak development workflow.
 
 ## Github OAuth2
 
@@ -286,6 +316,107 @@ An example authenticator payload ...
         "SECRET": "MY_SECRET",
     }
 }
+```
+
+## Keycloak development environment
+
+The local development stack includes an optional Keycloak sidecar for exercising
+the OIDC, SAML, and OAuth Bearer authenticator paths. Enable it before
+starting the stack:
+
+```yaml
+# container-startup.yml
+keycloak_enabled: True
+```
+
+Then start the environment as usual:
+
+```bash
+make podman-compose
+```
+
+When Keycloak is enabled, the development plumbing creates these separate
+Gateway authenticators:
+
+- `Dev Keycloak OIDC` for browser-based Keycloak login;
+- `Dev Keycloak SAML` for SAML login; and
+- `Dev Keycloak OAuth Bearer Token` for bearer-token API authentication work.
+
+The OAuth Bearer authenticator uses the Keycloak service hostname on the
+container network for its issuer and JWKS endpoints. It is intentionally
+separate from the browser-login OIDC authenticator.
+
+The development setup creates superuser, auditor, and default-organization
+authenticator maps for the OAuth Bearer authenticator, matching the maps
+provided for the Keycloak OIDC authenticator.
+
+### Development tokens
+
+Run the token helper without arguments to choose both a configured test subject
+and a high-level token scope interactively:
+
+```bash
+make token
+```
+
+Mint a user token non-interactively by supplying its username and scope:
+
+```bash
+make token gateway_admin write
+make token gateway_admin none
+```
+
+Mint a client-credentials token with the listed client identifier, or its
+`service-account-` alias. Use `read` or `write` as the final argument, or use
+`none` to omit both development API scopes:
+
+```bash
+make token gateway_oidc_client read
+make token service-account-gateway_oidc_client write
+```
+
+The final output line is a shell-ready `export BEARER_TOKEN=<token>` statement;
+copy and paste that line before making authenticated API requests. For a
+non-interactive request, it can also be evaluated directly:
+
+```bash
+eval "$(make token gateway_admin write)"
+```
+
+The helper
+reads credentials from the generated local realm import rather than duplicating
+them in the Makefile or script. The development realm exposes `read` and `write` as optional client
+scopes; `write` permits unsafe HTTP methods, while Gateway RBAC still decides
+whether the authenticated user may perform a specific action.
+`none` can be used to test the valid-token path with neither API scope. Standard
+OIDC scopes such as `openid`, `profile`, and `email` may still appear in the
+Keycloak token and do not grant Gateway API access.
+
+The helper derives its endpoint and host header from the rendered Keycloak
+configuration, so `container_reference` and `keycloak_exposed_port` are set
+only once in the Ansible configuration.
+
+`token` depends on the generated Keycloak realm. If the realm
+template or Keycloak role changes, Make renders a fresh import before looking
+up the subject. When minting a token, it also reconciles the existing Keycloak
+client configuration before making the request. Rendering and reconciliation do
+not start or stop the Keycloak or database containers. The target requires
+`keycloak_enabled: True`; the Keycloak sidecar must already be running when a
+token is requested.
+
+For an already-created realm, apply the development client configuration without
+restarting containers or deleting Keycloak data:
+
+```bash
+make keycloak-reconcile
+```
+
+Token minting automatically reconciles once for each running Keycloak container
+and again when Keycloak configuration changes. To reconcile a running realm
+again without changing its configuration, run:
+
+```bash
+make keycloak-reconcile-force
 ```
 
 ## RADIUS

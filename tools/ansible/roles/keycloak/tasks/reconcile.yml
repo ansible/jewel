@@ -1,0 +1,145 @@
+---
+- name: Get a Keycloak admin token for reconciliation
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: admin-cli
+      username: "{{ keycloak_username }}"
+      password: "{{ keycloak_password }}"
+      grant_type: password
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+  register: keycloak_reconcile_token_response
+  until: keycloak_reconcile_token_response is successful
+  retries: 50
+  delay: 6
+
+- name: Get the Keycloak OIDC client
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients?clientId=gateway_oidc_client"
+    method: GET
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_oidc_client
+
+- name: Verify the Keycloak OIDC client exists
+  ansible.builtin.assert:
+    that:
+      - keycloak_oidc_client.json | length == 1
+    fail_msg: "The gateway_oidc_client client does not exist in the Keycloak gateway realm."
+
+- name: Get Keycloak OIDC client protocol mappers
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}/protocol-mappers/models"
+    method: GET
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_oidc_client_mappers
+
+- name: Add the subject mapper to the Keycloak OIDC client
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}/protocol-mappers/models"
+    method: POST
+    body_format: json
+    body:
+      name: subject
+      protocol: openid-connect
+      protocolMapper: oidc-sub-mapper
+      consentRequired: false
+      config:
+        access.token.claim: "true"
+        introspection.token.claim: "true"
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [201]
+  when: keycloak_oidc_client_mappers.json | selectattr('protocolMapper', 'equalto', 'oidc-sub-mapper') | list | length == 0
+
+- name: Get Keycloak development token client scopes
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
+    method: GET
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_token_client_scopes
+
+- name: Create missing Keycloak development token client scopes
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ item }}"
+      description: "Gateway development {{ item }} access scope"
+      protocol: openid-connect
+      attributes:
+        include.in.token.scope: "true"
+        display.on.consent.screen: "false"
+      protocolMappers: []
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [201]
+  loop:
+    - "{{ keycloak_token_read_scope_name }}"
+    - "{{ keycloak_token_write_scope_name }}"
+  when: keycloak_token_client_scopes.json | selectattr('name', 'equalto', item) | list | length == 0
+
+- name: Refresh Keycloak development token client scopes
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/client-scopes"
+    method: GET
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [200]
+  register: keycloak_token_client_scopes
+
+- name: Verify Keycloak development token client scopes exist
+  ansible.builtin.assert:
+    that:
+      - keycloak_token_client_scopes.json | selectattr('name', 'equalto', item) | list | length == 1
+    fail_msg: "The Keycloak {{ item }} client scope does not exist."
+  loop:
+    - "{{ keycloak_token_read_scope_name }}"
+    - "{{ keycloak_token_write_scope_name }}"
+
+- name: Attach Keycloak development token scopes to the OIDC client
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}/optional-client-scopes/{{ item.id }}"
+    method: PUT
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [204]
+  loop: "{{ keycloak_token_client_scopes.json | selectattr('name', 'in', [keycloak_token_read_scope_name, keycloak_token_write_scope_name]) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Enable service accounts for the Keycloak OIDC client
+  ansible.builtin.uri:
+    url: "https://{{ container_reference }}:{{ keycloak_exposed_port }}/auth/admin/realms/gateway/clients/{{ keycloak_oidc_client.json[0].id }}"
+    method: PUT
+    body_format: json
+    body: "{{ keycloak_oidc_client.json[0] | combine({'serviceAccountsEnabled': true}) }}"
+    ca_path: "{{ public_key_file }}"
+    validate_certs: true
+    headers:
+      Authorization: "Bearer {{ keycloak_reconcile_token_response.json.access_token }}"
+    status_code: [204]
+  when: not (keycloak_oidc_client.json[0].serviceAccountsEnabled | default(false) | bool)

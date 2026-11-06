@@ -113,6 +113,11 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   This installs `ansible`, `tox`, `ruff`, and `podman-compose` into the active virtual environment. When `container-startup.yml` is first created, the Makefile selects port 443 for confirmed rootful Podman and 8443 otherwise; set `proxy_port` in that file to override it.
 
+  To use the local Keycloak development provider, set `keycloak_enabled: True` in
+  `container-startup.yml` before running `make podman-compose`. See the
+  [Keycloak development environment](docs/authentication.md#keycloak-development-environment)
+  for the configured authenticators and token helper.
+
 ## Code quality
 
 Jewel uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting.
