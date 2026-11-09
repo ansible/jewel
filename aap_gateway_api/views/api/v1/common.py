@@ -52,7 +52,7 @@ class ResourceAllClientMixin:
     def get_authenticate_header(self, request):
         """Return a Bearer challenge while suppressing browser-triggered Basic auth prompts."""
         challenge = get_authentication_challenge(request)
-        if challenge is not None:
+        if challenge is not None and not challenge.lower().startswith("basic "):
             return challenge
 
         # HTTP Basic auth is insecure by default, because the basic auth

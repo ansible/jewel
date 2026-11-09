@@ -39,6 +39,17 @@ def test_resource_views_keep_generic_challenge_without_bearer_credential(admin_u
 
 
 @pytest.mark.django_db
+def test_resource_views_suppress_recorded_basic_challenge(admin_user, unauthenticated_api_client):
+    """Invalid Basic credentials must not prompt browsers to save credentials."""
+    url = get_relative_url("user-detail", kwargs={"pk": admin_user.pk})
+
+    response = unauthenticated_api_client.get(url, headers={"Authorization": "Basic invalid"})
+
+    assert response.status_code == 401
+    assert response["WWW-Authenticate"] == "Bearer realm=api authorization_url=/o/authorize/"
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("reason", "detail", "challenge"),
     [
