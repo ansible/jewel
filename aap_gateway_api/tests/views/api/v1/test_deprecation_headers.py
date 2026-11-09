@@ -91,10 +91,10 @@ class TestDeprecatedRelatedUserEndpoints:
     )
     def test_related_user_endpoint_returns_deprecation_headers(self, admin_api_client, url_name, parent_fixture, organization_factory, team_factory):
         if parent_fixture == "organization":
-            parent = organization_factory()
+            parent = organization_factory("test-org")
         else:
-            org = organization_factory()
-            parent = team_factory(organization=org)
+            org = organization_factory("test-org")
+            parent = team_factory("test-team", organization=org)
         url = get_relative_url(url_name, kwargs={"pk": parent.pk})
         response = admin_api_client.get(url)
         assert response.status_code == 200
