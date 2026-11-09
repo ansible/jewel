@@ -38,7 +38,17 @@ jobs:
       - name: Install multi-architecture build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes buildah qemu-user-static
+          # Ubuntu 26.04 (current ubuntu-latest) only publishes
+          # qemu-user-static as a virtual package provided by
+          # qemu-user-binfmt, which registers statically linked QEMU
+          # binaries for cross-architecture container builds. Older
+          # runner images still ship the real qemu-user-static package.
+          if apt-get install --simulate --yes qemu-user-static >/dev/null 2>&1; then
+            qemu_package=qemu-user-static
+          else
+            qemu_package=qemu-user-binfmt
+          fi
+          sudo apt-get install --yes buildah "$qemu_package"
 
       - name: Generate container build files
         run: |
