@@ -64,3 +64,4 @@ Please read the [Contributor Guide](CONTRIBUTING.md) before opening a pull reque
 **This project was substantially coded by Large Language Models (LLMs) with human review.**
 
 - **[AI Attribution](https://aiattribution.github.io/):** AIA PAI SeCeNc Hin R Claude Code (Opus, Sonnet & Haiku) v1.0
+<!-- sync Mon Nov  9 04:22:58 PM UTC 2026 -->
