@@ -30,7 +30,9 @@ Configure the following fields in the authenticator's `configuration`:
 | `JWKS_URI` or `OIDC_ENDPOINT` | Yes | HTTPS key endpoint, supplied directly or discovered from the issuer. |
 | `ALLOWED_ALGORITHMS` | No | Accepted asymmetric signing algorithms; defaults to `RS256`. |
 | `GROUPS_CLAIM` | No | Group-membership claim used by authenticator maps; defaults to `groups`. |
-| `SCOPE_KEY`, `READ_SCOPE_NAME`, `WRITE_SCOPE_NAME` | No | Token-scope mapping; defaults are `scope`, `read`, and `write`. |
+| `SCOPE_KEY` | Yes | JWT claim containing token scope values, for example `scope` or `scp`. |
+| `READ_SCOPE_NAME` | Yes | Value in `SCOPE_KEY` that grants read access, for example `read`. |
+| `WRITE_SCOPE_NAME` | Yes | Value in `SCOPE_KEY` that grants both read and write access, for example `write`. |
 | `USERINFO_URL` | No | Supplemental profile and group-claim endpoint. |
 | `EMAIL_KEY`, `FIRST_NAME_KEY`, `LAST_NAME_KEY`, `USERNAME_KEY` | No | Optional mappings from validated claims to local user fields. |
 | `VERIFY_SSL` | No | Verifies TLS certificates for JWKS, OIDC discovery, and UserInfo requests; defaults to `true`. |
@@ -49,6 +51,9 @@ Example configuration:
   "AUDIENCE": "gateway-api",
   "ID_KEY": "sub",
   "GROUPS_CLAIM": "groups",
+  "SCOPE_KEY": "scope",
+  "READ_SCOPE_NAME": "read",
+  "WRITE_SCOPE_NAME": "write",
   "ALLOWED_ALGORITHMS": ["RS256"],
   "VERIFY_SSL": true
 }
@@ -87,9 +92,10 @@ validated access-token claims are used in that case.
 ## JWKS caching and rotation
 
 Gateway caches provider key sets for `JWKS_CACHE_TIMEOUT` seconds (default
-3600; minimum 60). On a signature failure, it can refresh the JWKS once to
-handle a provider key rotation. `JWKS_URL_TIMEOUT` controls the request timeout
-for the provider key endpoint.
+3600; minimum 0; no maximum). Set it to `0` to disable caching, which makes a
+JWKS request for every token validation. On a signature failure, Gateway can
+refresh the JWKS once to handle a provider key rotation. `JWKS_URL_TIMEOUT`
+controls the request timeout for the provider key endpoint.
 
 The Gateway preference `authentication.jwks_refresh_cooldown_seconds` controls
 how often this forced refresh can occur for a provider. It defaults to 60
