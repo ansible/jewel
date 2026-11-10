@@ -84,6 +84,8 @@ compile_requirements() {
 
   ensure_tmp_dir
   local resolved_file="${TMP_DIR}/requirements.resolved.txt"
+  # Seed the output file so uv treats the current pins as version preferences;
+  # otherwise run --only would resolve the whole closure at the latest versions.
   cp "${SCRIPT_DIR}/requirements.txt" "${resolved_file}"
   ${uv_compile} \
     --no-emit-package django-ansible-base \
@@ -106,6 +108,8 @@ compile_requirements() {
     echo "ERROR: selective update produced incompatible requirements; ${output_file} was not changed" >&2
     return 1
   fi
+  # Write the curated merge, not validated_file: validation may re-resolve
+  # packages outside the selected update.
   cp "${filtered_file}" "${output_file}"
 }
 

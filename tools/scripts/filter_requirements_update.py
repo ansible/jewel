@@ -98,6 +98,9 @@ def filter_update(current_text, resolved_text, package):
     updated = transitive_dependencies(resolved_graph, package)
     updated |= transitive_dependencies(current_graph, package)
 
+    # Follow resolved edges from every package selected for replacement,
+    # including ones retained from the current graph, so dependencies newly
+    # introduced by the replacement are not omitted from the merged file.
     pending = list(updated)
     while pending:
         for dependency in resolved_graph.get(pending.pop(), ()):
