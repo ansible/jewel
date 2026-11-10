@@ -1,0 +1,15 @@
+---
+- name: Inspect the Keycloak certificate for migration
+  ansible.builtin.include_tasks: certificate_status.yml
+
+- name: Remove a legacy Keycloak certificate without the required hostnames
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ public_key_file }}"
+    - "{{ public_key_cert }}"
+  when: >-
+    keycloak_certificate_file.stat.exists and
+    (not (keycloak_existing_certificate.stdout | regex_search('DNS:' ~ (container_reference | regex_escape) ~ '(,|\\s|$)')) or
+    not (keycloak_existing_certificate.stdout | regex_search('DNS:' ~ (keycloak_internal_hostname | regex_escape) ~ '(,|\\s|$)')))
