@@ -1,3 +1,12 @@
+import sys
+
+try:
+    import sqlean
+except ImportError:
+    pass
+else:
+    sys.modules['sqlite3'] = sqlean
+
 from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_standard_settings_files
 
 DYNACONF = factory(
