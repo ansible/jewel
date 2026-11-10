@@ -15,3 +15,4 @@ openapi-spec-validator   # Used for OpenAPI schema validation in CI/CD
 setuptools>=78.1.1      # Needed for the plumbing of the side cars
 setuptools_scm          # Needed for proper version string on /api/gateway/v1/ping
 PyYAML                  # Collection tests
+sqlean.py
