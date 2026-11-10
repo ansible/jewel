@@ -20,7 +20,7 @@ def canonicalize_name(name):
 
 
 def parse_blocks(text):
-    """Split a compiled requirements file into {canonical name: lines}."""
+    """Split a compiled requirements file into all lines for each canonical package name."""
     blocks = {}
     current = []
     for line in text.splitlines(keepends=True):
@@ -41,7 +41,7 @@ def _store_block(blocks, lines):
         lines.pop()
     match = PACKAGE_RE.match(lines[0])
     if match:
-        blocks[canonicalize_name(match.group(1))] = lines
+        blocks.setdefault(canonicalize_name(match.group(1)), []).extend(lines)
 
 
 def via_parents(lines):
@@ -51,29 +51,29 @@ def via_parents(lines):
     for line in lines[1:]:
         stripped = line.strip()
         if not stripped.startswith("#"):
+            in_via = False
             continue
         comment = stripped[1:].strip()
         if comment == "via":
             in_via = True
         elif comment.startswith("via "):
             parents.append(comment[4:].strip())
-        elif in_via and not comment.startswith("-"):
+        elif in_via and comment and not comment.startswith("-"):
             parents.append(comment.split()[0])
     return parents
 
 
 def dependency_graph(blocks):
     """Map each package to the packages it depends on."""
-    graph = {}
+    graph = {name: set() for name in blocks}
     for name, lines in blocks.items():
         for parent in via_parents(lines):
             graph.setdefault(canonicalize_name(parent), set()).add(name)
     return graph
 
 
-def transitive_dependencies(blocks, package):
+def transitive_dependencies(graph, package):
     """Return package plus everything it transitively depends on."""
-    graph = dependency_graph(blocks)
     seen = {package}
     pending = [package]
     while pending:
@@ -89,12 +89,21 @@ def filter_update(current_text, resolved_text, package):
     current = parse_blocks(current_text)
     resolved = parse_blocks(resolved_text)
     package = canonicalize_name(package)
+    current_graph = dependency_graph(current)
+    resolved_graph = dependency_graph(resolved)
 
-    if package not in resolved:
+    if package not in resolved_graph:
         raise ValueError(f"package {package!r} not found in resolved requirements")
 
-    updated = transitive_dependencies(resolved, package)
-    updated |= transitive_dependencies(current, package)
+    updated = transitive_dependencies(resolved_graph, package)
+    updated |= transitive_dependencies(current_graph, package)
+
+    pending = list(updated)
+    while pending:
+        for dependency in resolved_graph.get(pending.pop(), ()):
+            if dependency not in updated:
+                updated.add(dependency)
+                pending.append(dependency)
 
     merged = dict(current)
     for name in updated:
@@ -107,6 +116,7 @@ def filter_update(current_text, resolved_text, package):
 
 
 def main(argv=None):
+    """Write the filtered requirements file to the requested output path."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("current", type=Path, help="Current requirements file")
     parser.add_argument("resolved", type=Path, help="Newly resolved requirements file")

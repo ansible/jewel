@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DAB_DIR="${REPO_ROOT}/django-ansible-base"
 
 ONLY_PACKAGE=""
+ONLY_SET=0
 USE_LOCAL_DAB=0
 TMP_DIR=""
 
@@ -40,7 +41,17 @@ git_requirements_file() {
   fi
   ensure_tmp_dir
   local local_file="${TMP_DIR}/requirements_git.txt"
-  sed -E "s|@ .*|@ file://${DAB_DIR}|" "${SCRIPT_DIR}/requirements_git.txt" > "${local_file}"
+  local dab_uri
+  dab_uri="$(
+    python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_uri())' "${DAB_DIR}"
+  )"
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" == *" @ "* ]]; then
+      printf '%s @ %s\n' "${line%% @ *}" "${dab_uri}"
+    else
+      printf '%s\n' "${line}"
+    fi
+  done < "${SCRIPT_DIR}/requirements_git.txt" > "${local_file}"
   echo "Using local django-ansible-base from ${DAB_DIR}" >&2
   echo "${local_file}"
 }
@@ -56,6 +67,9 @@ compile_requirements() {
   fi
   local output_file="$1"
   local git_requirements
+  if [[ "${USE_LOCAL_DAB}" == "1" ]]; then
+    ensure_tmp_dir
+  fi
   git_requirements="$(git_requirements_file)"
   cd "${SCRIPT_DIR}"
 
@@ -76,11 +90,23 @@ compile_requirements() {
     --output-file "${resolved_file}" \
     requirements.in \
     "${git_requirements}"
+  local filtered_file="${TMP_DIR}/requirements.filtered.txt"
   python3 "${REPO_ROOT}/tools/scripts/filter_requirements_update.py" \
     "${SCRIPT_DIR}/requirements.txt" \
     "${resolved_file}" \
     "${ONLY_PACKAGE}" \
-    "${output_file}"
+    "${filtered_file}"
+  local validated_file="${TMP_DIR}/requirements.validated.txt"
+  if ! ${uv_compile} \
+    --no-emit-package django-ansible-base \
+    --constraints "${filtered_file}" \
+    --output-file "${validated_file}" \
+    requirements.in \
+    "${git_requirements}"; then
+    echo "ERROR: selective update produced incompatible requirements; ${output_file} was not changed" >&2
+    return 1
+  fi
+  cp "${filtered_file}" "${output_file}"
 }
 
 usage() {
@@ -117,15 +143,17 @@ while [[ $# -gt 0 ]]; do
       shift
     ;;
     --only)
-      if [[ $# -lt 2 ]]; then
+      if [[ $# -lt 2 || "$2" == -* ]]; then
         echo "ERROR: --only requires a package name" >&2
         exit 1
       fi
       ONLY_PACKAGE="$2"
+      ONLY_SET=1
       shift 2
     ;;
     --only=*)
       ONLY_PACKAGE="${1#*=}"
+      ONLY_SET=1
       shift
     ;;
     --local-dab)
@@ -149,12 +177,12 @@ if [[ -z "${COMMAND}" ]]; then
   exit 1
 fi
 
-if [[ -n "${ONLY_PACKAGE}" && -z "${ONLY_PACKAGE// }" ]]; then
+if [[ "${ONLY_SET}" == "1" && "${ONLY_PACKAGE}" =~ ^[[:space:]]*$ ]]; then
   echo "ERROR: --only requires a package name" >&2
   exit 1
 fi
 
-if [[ "${COMMAND}" == "check" && ( -n "${ONLY_PACKAGE}" || "${USE_LOCAL_DAB}" == "1" ) ]]; then
+if [[ "${COMMAND}" == "check" && ( "${ONLY_SET}" == "1" || "${USE_LOCAL_DAB}" == "1" ) ]]; then
   echo "ERROR: --only and --local-dab only apply to run and upgrade" >&2
   exit 1
 fi
