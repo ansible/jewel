@@ -5,8 +5,6 @@ try:
 except ImportError:
     pass
 else:
-    # CentOS Stream 9 ships SQLite 3.34, which lacks INSERT ... RETURNING (3.35+)
-    # that django-ansible-base RBAC relies on. Use the bundled newer SQLite if available.
     sys.modules['sqlite3'] = sqlean
 
 from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_standard_settings_files
