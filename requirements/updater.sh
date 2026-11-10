@@ -197,4 +197,9 @@ case "${COMMAND}" in
   "check")
     python3 "${SCRIPT_DIR}/../tools/scripts/check_requirements.py"
   ;;
+  *)
+    echo "ERROR: unexpected command: ${COMMAND}" >&2
+    usage >&2
+    exit 1
+  ;;
 esac
