@@ -1,7 +1,9 @@
 import logging
 
 from django.core.cache import cache
-from django.db.models import Max, Prefetch
+from django.db import connection
+from django.db.models import F, Max, Prefetch, Window
+from django.db.models.functions import RowNumber
 from envoy.config.cluster.v3.cluster_pb2 import Cluster
 from envoy.config.listener.v3.listener_pb2 import Listener
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryResponse
@@ -70,9 +72,24 @@ class XDSView(APIView):
     permission_classes = []
 
     def get_qs(self, request, model_class, name_field):
-        # DISTINCT ON is PostgreSQL-specific; it gives us one row per unique
-        # value of name_field (e.g. one Route per envoy_cluster_name).
-        qs = model_class.objects.order_by(name_field).distinct(name_field)
+        if connection.vendor == "microsoft":
+            # SQL Server doesn't support PostgreSQL's DISTINCT ON. Select the
+            # first row per resource name with a portable window function.
+            qs = (
+                model_class.objects.annotate(
+                    _resource_name_row=Window(
+                        expression=RowNumber(),
+                        partition_by=[F(name_field)],
+                        order_by=F("pk").asc(),
+                    )
+                )
+                .filter(_resource_name_row=1)
+                .order_by(name_field, "pk")
+            )
+        else:
+            # Keep DISTINCT ON on PostgreSQL, with a primary-key tie-breaker
+            # so the selected resource is deterministic.
+            qs = model_class.objects.order_by(name_field, "pk").distinct(name_field)
 
         if names := request.POST.get("resource_names"):
             if len(names) == 1 and names[0] == "*":

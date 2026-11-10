@@ -1,11 +1,16 @@
+from copy import deepcopy
+
 import psycopg
 import pytest
+from django.conf import settings as django_settings
+from django.db import connection
 from django.test import override_settings
 
 from aap_gateway_api.dispatch.config import get_dispatcherd_config
 
 
 @pytest.mark.django_db
+@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 def test_config_structure():
     config = get_dispatcherd_config()
     assert config["version"] == 2
@@ -17,7 +22,27 @@ def test_config_structure():
     assert config["producers"] == {}
 
 
+def test_config_is_disabled_for_mssql():
+    databases = deepcopy(django_settings.DATABASES)
+    databases["default"].update(
+        {
+            "ENGINE": "ansible_base.backends.mssql",
+            "NAME": "gateway",
+            "USER": "sa",
+            "PASSWORD": "YourStrong!Passw0rd",
+            "HOST": "mssql",
+            "PORT": 1433,
+            "TIME_ZONE": None,
+            "OPTIONS": {"driver": "ODBC Driver 18 for SQL Server"},
+        }
+    )
+
+    with override_settings(DATABASES=databases):
+        assert get_dispatcherd_config() is None
+
+
 @pytest.mark.django_db
+@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 def test_config_service_settings():
     config = get_dispatcherd_config()
     service = config["service"]
@@ -28,6 +53,7 @@ def test_config_service_settings():
 
 
 @pytest.mark.django_db
+@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 def test_config_broker_settings():
     config = get_dispatcherd_config()
     broker = config["brokers"]["pg_notify"]
@@ -38,6 +64,7 @@ def test_config_broker_settings():
 
 
 @pytest.mark.django_db
+@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @override_settings(CLUSTER_HOST_ID="test-node-1")
 def test_config_uses_cluster_host_id():
     config = get_dispatcherd_config()
@@ -47,6 +74,7 @@ def test_config_uses_cluster_host_id():
 
 
 @pytest.mark.django_db
+@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @override_settings(DISPATCHERD_MIN_WORKERS=1, DISPATCHERD_MAX_WORKERS=8)
 def test_config_worker_settings_override():
     config = get_dispatcherd_config()
@@ -55,6 +83,7 @@ def test_config_worker_settings_override():
 
 
 @pytest.mark.django_db
+@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 def test_conninfo_is_parseable():
     """The generated conninfo string must be parseable by psycopg."""
     config = get_dispatcherd_config()

@@ -113,6 +113,12 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   This installs `ansible`, `tox`, `ruff`, and `podman-compose` into the active virtual environment. When `container-startup.yml` is first created, the Makefile selects port 443 for confirmed rootful Podman and 8443 otherwise; set `proxy_port` in that file to override it.
 
+### Local SQL Server mode
+
+The local Compose stack can run Gateway against SQL Server for single-node development. Set `mssql_enabled: true` in the workspace's `container-startup.yml`, optionally override `mssql_sa_password`, then start the stack with `make podman-compose` (or the `make docker-compose` alias). The SQL Server 2025 Developer container creates the `gateway` database before Gateway starts. PostgreSQL remains available for Keycloak and other development services; it remains Gateway's database when `mssql_enabled` is false.
+
+The Gateway development image installs Microsoft ODBC Driver 18. SQL Server's self-signed certificate is trusted only in local development and test settings. The default SQL Server memory limit is 2048 MB and can be changed with `mssql_memory_limit_mb` in `container-startup.yml`.
+
 ## Code quality
 
 Jewel uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting.

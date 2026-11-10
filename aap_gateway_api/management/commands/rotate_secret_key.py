@@ -37,7 +37,7 @@ from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection, transaction
+from django.db import transaction
 from django.db.models import JSONField
 
 from aap_gateway_api.utils.encryption import decrypt_with_key, encrypt_with_key
@@ -151,21 +151,15 @@ class Command(BaseCommand):
                 except FieldDoesNotExist:
                     logger.warning("Model %s declares encrypted field %r but has no such DB column", model.__name__, field_name)
                     continue
-                is_jsonb = isinstance(field_obj, JSONField)
-                total += self._reencrypt_column(model, field_obj.column, dry_run, is_jsonb=is_jsonb)
+                is_json_field = isinstance(field_obj, JSONField)
+                total += self._reencrypt_column(model, field_obj.name, dry_run, is_json_field=is_json_field)
         return total
 
     # ── Authenticator.configuration encrypted sub-fields ─────────────────
 
     def _rotate_authenticator_configs(self, dry_run: bool) -> int:
         total = 0
-        select_sql = self._build_authenticator_select_sql()
-        update_sql = self._build_authenticator_update_sql()
-
-        with connection.cursor() as cur:
-            cur.execute(select_sql)
-            rows = cur.fetchall()
-
+        rows = list(Authenticator.objects.values_list("pk", "type", "configuration"))
         for pk, auth_type, config in rows:
             config = self._parse_config(config)
             if config is None:
@@ -173,8 +167,7 @@ class Command(BaseCommand):
             changed, field_count = self._reencrypt_authenticator_fields(pk, auth_type, config)
             total += field_count
             if changed and not dry_run:
-                with connection.cursor() as ucur:
-                    ucur.execute(update_sql, [json.dumps(config), pk])
+                Authenticator.objects.filter(pk=pk).update(configuration=config)
         return total
 
     @staticmethod
@@ -216,89 +209,12 @@ class Command(BaseCommand):
             count += 1
         return changed, count
 
-    @staticmethod
-    def _build_authenticator_select_sql() -> str:
-        """Build SELECT for authenticator config scanning.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        return "SELECT {pk}, {type}, {config} FROM {table}".format(
-            pk=qn(Authenticator._meta.pk.column),
-            type=qn(Authenticator._meta.get_field('type').column),
-            config=qn(Authenticator._meta.get_field('configuration').column),
-            table=qn(Authenticator._meta.db_table),
-        )
-
-    @staticmethod
-    def _build_authenticator_update_sql() -> str:
-        """Build UPDATE for authenticator config re-encryption.
-
-        Uses the PostgreSQL-specific ``::jsonb`` cast to ensure the text
-        parameter is stored correctly in the ``jsonb`` column.  This is
-        not portable to SQLite or MySQL, but the gateway requires
-        PostgreSQL in both production and test environments.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        return "UPDATE {table} SET {config} = %s::jsonb WHERE {pk} = %s".format(
-            table=qn(Authenticator._meta.db_table),
-            config=qn(Authenticator._meta.get_field('configuration').column),
-            pk=qn(Authenticator._meta.pk.column),
-        )
-
     # ── Preference rows (encrypted=True) ─────────────────────────────────
 
     def _rotate_preferences(self, dry_run: bool) -> int:
         from aap_gateway_api.models import Preference
 
-        first_page_sql = self._build_preference_select_sql(Preference, with_pk_bound=False)
-        next_page_sql = self._build_preference_select_sql(Preference, with_pk_bound=True)
-        update_sql = self._build_preference_update_sql(Preference)
-        return self._paginated_reencrypt(first_page_sql, next_page_sql, update_sql, dry_run, label="Preference")
-
-    @staticmethod
-    def _build_preference_select_sql(model, *, with_pk_bound: bool) -> str:
-        """Build paginated SELECT for preference scanning.
-
-        When *with_pk_bound* is ``True`` the query includes a
-        ``WHERE ... AND pk > %s`` predicate for keyset pagination.
-        The first page is fetched without this predicate so no
-        assumption about the PK type is needed.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        pk = qn(model._meta.pk.column)
-        val = qn('raw_value')
-        table = qn(model._meta.db_table)
-
-        pk_clause = "AND {pk} > %s ".format(pk=pk) if with_pk_bound else ""
-        return "SELECT {pk}, {val} FROM {table} WHERE {val} IS NOT NULL {pk_clause}ORDER BY {pk} LIMIT {limit}".format(
-            pk=pk,
-            val=val,
-            table=table,
-            pk_clause=pk_clause,
-            limit=_FETCH_BATCH_SIZE,
-        )
-
-    @staticmethod
-    def _build_preference_update_sql(model) -> str:
-        """Build UPDATE for preference re-encryption.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        return "UPDATE {table} SET {val} = %s WHERE {pk} = %s".format(
-            table=qn(model._meta.db_table),
-            val=qn('raw_value'),
-            pk=qn(model._meta.pk.column),
-        )
+        return self._paginated_reencrypt(Preference, "raw_value", dry_run, label="Preference")
 
     # ── Cache flush ──────────────────────────────────────────────────────
 
@@ -333,40 +249,31 @@ class Command(BaseCommand):
             self._skipped_count += 1
             return None
 
-    def _paginated_reencrypt(self, first_page_sql: str, next_page_sql: str, update_sql: str, dry_run: bool, *, label: str, is_jsonb: bool = False) -> int:
-        """Paginate through rows and re-encrypt values.
-
-        Used by both ``_reencrypt_column`` and ``_rotate_preferences``
-        to avoid duplicating the pagination and per-row re-encryption
-        logic.
-        """
+    def _paginated_reencrypt(self, model, field_name: str, dry_run: bool, *, label: str, is_json_field: bool = False) -> int:
+        """Paginate through a model field and re-encrypt its values."""
         count = 0
         last_pk = None
         while True:
-            with connection.cursor() as cur:
-                if last_pk is None:
-                    cur.execute(first_page_sql)
-                else:
-                    cur.execute(next_page_sql, [last_pk])
-                rows = cur.fetchall()
+            page = model.objects.filter(**{f"{field_name}__isnull": False}).order_by("pk")
+            if last_pk is not None:
+                page = page.filter(pk__gt=last_pk)
+            rows = list(page.values_list("pk", field_name)[:_FETCH_BATCH_SIZE])
             if not rows:
                 break
             last_pk = rows[-1][0]
-            count += self._reencrypt_rows(rows, update_sql, dry_run, label=label, is_jsonb=is_jsonb)
+            count += self._reencrypt_rows(model, field_name, rows, dry_run, label=label, is_json_field=is_json_field)
         return count
 
-    def _reencrypt_rows(self, rows: list, update_sql: str, dry_run: bool, *, label: str, is_jsonb: bool) -> int:
+    def _reencrypt_rows(self, model, field_name: str, rows: list, dry_run: bool, *, label: str, is_json_field: bool) -> int:
         """Normalise, re-encrypt, and persist a batch of rows."""
         count = 0
         for pk, raw in rows:
-            normalised = self._normalise_if_jsonb_value(raw)
+            normalised = self._normalise_if_jsonb_value(raw) if is_json_field else raw
             new_val = self._reencrypt_value(normalised, label=f"{label} pk={pk}")
             if new_val is None:
                 continue
             if not dry_run:
-                write_val = json.dumps(new_val) if is_jsonb else new_val
-                with connection.cursor() as ucur:
-                    ucur.execute(update_sql, [write_val, pk])
+                model.objects.filter(pk=pk).update(**{field_name: new_val})
             count += 1
         return count
 
@@ -412,54 +319,6 @@ class Command(BaseCommand):
 
     # ── SQL builders ─────────────────────────────────────────────────────
 
-    @staticmethod
-    def _build_column_select_sql(model, column_name, *, with_pk_bound: bool) -> str:
-        """Build a paginated SELECT for encrypted column scanning.
-
-        When *with_pk_bound* is ``True`` the query includes a
-        ``WHERE pk > %s`` predicate for keyset pagination.  The first
-        page is fetched without this predicate so no assumption about
-        the PK type (integer vs UUID) is needed.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        pk = qn(model._meta.pk.column)
-        col = qn(column_name)
-        table = qn(model._meta.db_table)
-
-        pk_clause = "AND {pk} > %s ".format(pk=pk) if with_pk_bound else ""
-        return "SELECT {pk}, {col} FROM {table} WHERE {col} IS NOT NULL {pk_clause}ORDER BY {pk} LIMIT {limit}".format(
-            pk=pk,
-            col=col,
-            table=table,
-            pk_clause=pk_clause,
-            limit=_FETCH_BATCH_SIZE,
-        )
-
-    @staticmethod
-    def _build_column_update_sql(model, column_name, *, is_jsonb: bool = False) -> str:
-        """Build an UPDATE query for re-encrypting a single row.
-
-        When *is_jsonb* is ``True``, the value parameter is cast to
-        ``jsonb`` so PostgreSQL correctly stores it in a jsonb column.
-
-        Safe from SQL injection: all identifiers originate from Django
-        model metadata and are quoted via the database backend.
-        """
-        qn = connection.ops.quote_name
-        cast = "::jsonb" if is_jsonb else ""
-        return "UPDATE {table} SET {col} = %s{cast} WHERE {pk} = %s".format(
-            table=qn(model._meta.db_table),
-            col=qn(column_name),
-            pk=qn(model._meta.pk.column),
-            cast=cast,
-        )
-
-    def _reencrypt_column(self, model, column_name: str, dry_run: bool, *, is_jsonb: bool = False) -> int:
-        first_page_sql = self._build_column_select_sql(model, column_name, with_pk_bound=False)
-        next_page_sql = self._build_column_select_sql(model, column_name, with_pk_bound=True)
-        update_sql = self._build_column_update_sql(model, column_name, is_jsonb=is_jsonb)
-        label = f"{model.__name__}.{column_name}"
-        return self._paginated_reencrypt(first_page_sql, next_page_sql, update_sql, dry_run, label=label, is_jsonb=is_jsonb)
+    def _reencrypt_column(self, model, field_name: str, dry_run: bool, *, is_json_field: bool = False) -> int:
+        label = f"{model.__name__}.{field_name}"
+        return self._paginated_reencrypt(model, field_name, dry_run, label=label, is_json_field=is_json_field)

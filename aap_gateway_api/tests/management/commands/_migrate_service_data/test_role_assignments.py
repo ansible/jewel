@@ -9,6 +9,8 @@ from unittest.mock import Mock, patch
 import pytest
 from ansible_base.rbac.models import RemoteObject, RoleTeamAssignment, RoleUserAssignment
 from django.core.management import call_command
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
@@ -82,6 +84,16 @@ class TestPaginateAndCreate:
         cmd.stderr = Mock()
         cmd._progress_thresholds = {}
         return cmd
+
+    @pytest.mark.skipif(connection.vendor != "microsoft", reason="SQL Server cursor DDL is backend-specific")
+    def test_cursor_store_persists_progress_on_sql_server(self):
+        service_slug = f"mssql-cursor-{uuid.uuid4()}"
+        cursor = CursorStore(service_slug, "user")
+        assert cursor.last_pk == 0
+
+        cursor.advance(42)
+
+        assert CursorStore(service_slug, "user").last_pk == 42
 
     def test_first_run_creates_all(self):
         """With cursor at 0, all assignments are fetched and created."""
@@ -655,8 +667,8 @@ class TestBulkResolveAndCreatePage:
         assert created == 2
         assert len(obj_roles) > 0
 
-    def test_idempotent_via_ignore_conflicts(self):
-        """Calling twice with the same data does not duplicate object-scoped rows."""
+    def test_bulk_create_db_safe_ignores_conflicts(self):
+        """Repeated conflict-tolerant migration calls do not duplicate rows."""
         from ansible_base.rbac.models import DABContentType
 
         from aap_gateway_api.models import Organization, User
@@ -683,6 +695,30 @@ class TestBulkResolveAndCreatePage:
         created2, _ = cmd._bulk_resolve_and_create_page(results, "user")
         assert created2 in {0, 1}
         assert RoleUserAssignment.objects.filter(user__username="bulk-idempotent-user").count() == 1
+
+    def test_object_role_lookup_chunks_more_than_700_keys(self, monkeypatch):
+        """SQL Server role lookups split disjunctions below the 2100 parameter limit."""
+        from ansible_base.rbac.models import ObjectRole
+
+        from aap_gateway_api.management.commands._migrate_service_data import role_assignments
+
+        keys = [(1, 1, f"object-{index}") for index in range(701)]
+        assignments = [
+            (1, Mock(id=1, name="Test Role"), content_type_id, object_id, f"actor-{index}") for index, (_, content_type_id, object_id) in enumerate(keys)
+        ]
+        cmd = self._make_cmd()
+
+        # Isolate the lookup query from inserts; the real SQL Server path is
+        # exercised by test_bulk_create_db_safe_ignores_conflicts.
+        monkeypatch.setattr(role_assignments, "_bulk_create_conflict_safe", lambda model, objects, **kwargs: 0)
+
+        with CaptureQueriesContext(connection) as captured_queries:
+            created, object_roles = cmd._bulk_create_object_assignments(assignments, "user")
+
+        role_queries = [query for query in captured_queries.captured_queries if ObjectRole._meta.db_table in query["sql"]]
+        assert len(role_queries) == 2
+        assert created == 0
+        assert object_roles == set()
 
 
 # =============================================================================

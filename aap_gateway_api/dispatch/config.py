@@ -2,7 +2,13 @@ from ansible_base.lib.utils.db import psycopg_conn_string_from_settings_dict
 from django.conf import settings
 
 
-def get_dispatcherd_config():
+def get_dispatcherd_config() -> dict | None:
+    if settings.DATABASES["default"]["ENGINE"] == "ansible_base.backends.mssql":
+        # Dispatcherd's current Gateway broker uses PostgreSQL pg_notify.
+        # SQL Server Service Broker support is not ready for this single-node
+        # deployment profile, so do not initialize a broker.
+        return None
+
     return {
         "version": 2,
         "service": {
