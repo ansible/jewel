@@ -1,11 +1,36 @@
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 import requests
 
 services = {"awx", "galaxy", "eda"}
+
+DEFAULT_STARTUP_TIMEOUT_SECONDS = 60
+
+
+def print_service_output(proc):
+    log_file = getattr(proc, "_service_log", None)
+    if log_file is None:
+        return
+    log_file.flush()
+    log_file.seek(0)
+    output = log_file.read()
+    if output:
+        print(output.decode("utf-8", errors="replace"))
+
+
+def stop_service(proc):
+    if proc.poll() is None:
+        proc.kill()
+    proc.wait()
+    print_service_output(proc)
+    log_file = getattr(proc, "_service_log", None)
+    if log_file is not None:
+        log_file.close()
+        proc._service_log = None
 
 
 def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secret_key=None, save_std=True, user_prefix='controller', page_size=None):
@@ -63,37 +88,38 @@ def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secre
     # Threading has to be disable because we're using an in memory database that doesn't get shared
     # between threads.
     if save_std:
-        pipe = subprocess.PIPE
+        log_file = tempfile.TemporaryFile()
+        output = log_file
     else:
-        pipe = subprocess.DEVNULL
+        log_file = None
+        output = subprocess.DEVNULL
 
     proc = subprocess.Popen(
         ["python3", "manage.py", "runserver", "--nothreading", "--noreload", str(port)],
         cwd=dir_path,
         env=env,
-        stderr=pipe,
-        stdout=pipe,
+        stderr=subprocess.STDOUT,
+        stdout=output,
     )
+    proc._service_log = log_file
 
-    count = 0
-    max_count = 20
+    startup_timeout = float(os.environ.get("SERVICE_TEST_APP_STARTUP_TIMEOUT", DEFAULT_STARTUP_TIMEOUT_SECONDS))
+    deadline = time.monotonic() + startup_timeout
     while True:
         try:
-            requests.get(f"http://localhost:{port}/ping/")
+            requests.get(f"http://localhost:{port}/ping/", timeout=1)
             break
-        except requests.ConnectionError:
+        except (requests.ConnectionError, requests.Timeout):
             pass
 
-        if count >= max_count:
-            proc.kill()
-            stdout, stderr = proc.communicate()
-            if stdout:
-                print(str(stdout, encoding='utf-8'))
-            if stderr:
-                print(str(stderr, encoding='utf-8'))
-            raise Exception(f"service_test_app for service {service_type} on port {port} failed to come online")
-        count += 1
-        time.sleep(0.5)
+        if proc.poll() is not None:
+            stop_service(proc)
+            raise Exception(f"service_test_app for service {service_type} on port {port} exited with code {proc.returncode} before coming online")
+
+        if time.monotonic() >= deadline:
+            stop_service(proc)
+            raise Exception(f"service_test_app for service {service_type} on port {port} failed to come online within {startup_timeout:g} seconds")
+        time.sleep(0.1)
 
     return proc
 
@@ -112,12 +138,7 @@ def main():
         try:
             time.sleep(5)
         except:  # noqa E722
-            proc.kill()
-            stdout, stderr = proc.communicate()
-            if stdout:
-                print(str(stdout, encoding='utf-8'))
-            if stderr:
-                print(str(stderr, encoding='utf-8'))
+            stop_service(proc)
             break
 
 

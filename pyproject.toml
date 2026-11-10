@@ -144,6 +144,7 @@ legacy_tox_ini = """
         DB_PORT
         GATEWAY_TEST_DIRS
         PYTEST_NUM_PROCESSES
+        SERVICE_TEST_APP_STARTUP_TIMEOUT
     ## The CFLAGS env variable below is a workaround for issue:
     ## https://github.com/xmlsec/python-xmlsec/issues/323
     setenv =
