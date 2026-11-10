@@ -31,6 +31,16 @@
     - name: Prepare the gateway realm
       include_tasks: render_realm.yml
 
+    - name: Make keycloak certs world readable for rootless podman
+      file:
+        path: "{{ item }}"
+        state: file
+        mode: '0644'
+      loop:
+        - "{{ private_key_file }}"
+        - "{{ public_key_file }}"
+        - "{{ public_key_cert }}"
+
     - name: Start keycloak
       shell:
         cmd: "{{ compose_cmd }} up --detach keycloak"
