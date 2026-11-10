@@ -38,7 +38,13 @@ jobs:
       - name: Install multi-architecture build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes buildah qemu-user-static
+          sudo apt-get install --yes buildah qemu-user-binfmt
+          # Ubuntu 26.04's qemu-user-binfmt package only installs
+          # /usr/lib/binfmt.d snippets; systemd-binfmt applies them at boot.
+          # Restart it so the qemu-aarch64 handler is registered before
+          # buildah executes any arm64 build steps.
+          sudo systemctl restart systemd-binfmt
+          test -f /proc/sys/fs/binfmt_misc/qemu-aarch64
 
       - name: Generate container build files
         run: |

@@ -5,6 +5,7 @@ pytest-xdist
 pytest-cov
 pytest-django
 pytest-subtests
+sqlean.py
 colorama
 logutils
 django-debug-toolbar==5.2  # Required by test_urls.py; pinned because 6.x has cache panel bug (AAP-64316)
