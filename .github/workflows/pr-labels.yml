@@ -24,8 +24,13 @@ jobs:
     if: >-
       github.event_name != 'check_suite'
       || github.event.check_suite.app.slug != 'github-actions'
+    # pull_request_target runs get their own group so check_suite/workflow_run
+    # runs can never cancel them — the pull_request_target run is the only one
+    # that reports a check run on the PR head SHA, and cancelling it leaves a
+    # permanent red X on the "label" check. The auto-triggered runs keep
+    # cancel-in-progress dedup among themselves.
     concurrency:
-      group: pr-labels-${{ github.event.check_suite.head_sha || github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.run_id }}
+      group: pr-labels-${{ github.event_name == 'pull_request_target' && 'pr' || 'auto' }}-${{ github.event.check_suite.head_sha || github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.run_id }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
