@@ -39,21 +39,27 @@ def test_explicit_basic_credentials_take_precedence_over_an_existing_session(use
 
 
 @pytest.mark.parametrize(
-    ("first_credential", "second_credential", "expected_credential"),
+    ("credentials", "expected_credential"),
     [
-        pytest.param("basic", "oauth", "oauth", id="basic-and-oauth"),
-        pytest.param("basic", "session", "basic", id="basic-and-session"),
-        pytest.param("oauth", "session", "oauth", id="oauth-and-session"),
-        pytest.param("service_token", "oauth", "service_token", id="service-token-and-oauth"),
-        pytest.param("service_token", "session", "service_token", id="service-token-and-session"),
-        pytest.param("service_token", "basic", "service_token", id="service-token-and-basic"),
+        pytest.param(("basic", "oauth"), "oauth", id="basic-and-oauth"),
+        pytest.param(("basic", "session"), "basic", id="basic-and-session"),
+        pytest.param(("oauth", "session"), "oauth", id="oauth-and-session"),
+        pytest.param(("service_token", "oauth"), "service_token", id="service-token-and-oauth"),
+        pytest.param(("service_token", "session"), "service_token", id="service-token-and-session"),
+        pytest.param(("service_token", "basic"), "service_token", id="service-token-and-basic"),
+        pytest.param(("basic", "oauth", "session"), "oauth", id="basic-oauth-and-session"),
+        pytest.param(("basic", "service_token", "session"), "service_token", id="basic-service-token-and-session"),
+        pytest.param(("oauth", "service_token", "session"), "service_token", id="oauth-service-token-and-session"),
+        pytest.param(("basic", "oauth", "service_token"), "service_token", id="basic-oauth-and-service-token"),
+        pytest.param(("basic", "oauth", "service_token", "session"), "service_token", id="all-authentication-mechanisms"),
     ],
 )
-def test_authentication_order_selects_the_highest_precedence_credential(first_credential, second_credential, expected_credential, monkeypatch):
-    """Verify pairwise precedence when more than one authenticator can authenticate a request."""
+def test_authentication_order_selects_the_highest_precedence_credential(credentials, expected_credential, monkeypatch):
+    """Verify precedence when more than one authenticator can authenticate a request."""
 
     class AuthenticationPrecedenceView(APIView):
         authentication_classes = api_settings.DEFAULT_AUTHENTICATION_CLASSES
+        permission_classes = []
 
         def get(self, request):
             return Response({"username": request.user.username})
@@ -65,10 +71,7 @@ def test_authentication_order_selects_the_highest_precedence_credential(first_cr
         "basic": authenticators["LoggedBasicAuthentication"],
         "session": authenticators["SessionAuthentication"],
     }
-    users = {
-        first_credential: SimpleNamespace(username=f"{first_credential}-user", is_authenticated=True),
-        second_credential: SimpleNamespace(username=f"{second_credential}-user", is_authenticated=True),
-    }
+    users = {credential: SimpleNamespace(username=f"{credential}-user", is_authenticated=True) for credential in credentials}
 
     for credential, user in users.items():
         monkeypatch.setattr(
