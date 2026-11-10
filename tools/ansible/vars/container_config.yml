@@ -48,11 +48,16 @@ cache_key_prefix: 'gateway'
 
 # Keycloak settings
 keycloak_exposed_port: 8443
+keycloak_internal_hostname: keycloak
+keycloak_internal_port: 8443
 keycloak_image: quay.io/keycloak/keycloak
 keycloak_image_version: 26.0
 keycloak_username: admin
 keycloak_password: admin
-cert_subject: "/C=US/ST=NC/L=Durham/O=gateway/CN=devenv"
+certificate_subject_base: "/C=US/ST=NC/L=Durham/O=gateway"
+keycloak_cert_subject: "{{ certificate_subject_base }}/CN={{ container_reference }}"
+redis_ca_cert_subject: "{{ certificate_subject_base }}/CN=Redis CA"
+redis_cert_subject: "{{ certificate_subject_base }}/CN=localhost"
 oidc_reference:
 
 # LDAP Podman Compose settings

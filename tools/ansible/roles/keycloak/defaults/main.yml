@@ -10,13 +10,47 @@ oidc_auth_map_name: "Dev Keycloak OIDC Map"
 url_base: "https://{{ (oidc_reference == '') | ternary(oidc_reference, container_reference) }}:{{ keycloak_exposed_port }}"
 
 oidc_configuration:
-  ACCESS_TOKEN_URL: "https://keycloak:{{ keycloak_exposed_port }}/auth/realms/gateway/protocol/openid-connect/token"
+  ACCESS_TOKEN_URL: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway/protocol/openid-connect/token"
   AUTHORIZATION_URL: "{{ url_base }}/auth/realms/gateway/protocol/openid-connect/auth"
   KEY: "gateway_oidc_client"
   PUBLIC_KEY: "{{ oidc_public_key }}"
   SECRET: "7b1c3527-8702-4742-af69-2b74ee5742e8"
   ADDITIONAL_UNVERIFIED_ARGS:
     VERIFY_SSL: "{{ gateway_validate_certs }}"
+
+oauth_bearer_adapter_name: "Dev Keycloak OAuth Bearer Token"
+oauth_bearer_slug: "keycloak_oauth_bearer_dev"
+oauth_bearer_auth_map_name: "Dev Keycloak OAuth Bearer Map"
+# Keycloak writes requested client scopes to the standard OIDC `scope` claim.
+# A token with the write scope is permitted to perform write operations in addition to read operations.
+# A token with the read scope is permitted to perform read operations only.
+# A token with neither scope is not allowed to perform any operations.
+keycloak_token_scope_attribute_name: "scope"
+keycloak_token_read_scope_name: "read"
+keycloak_token_write_scope_name: "write"
+oauth_bearer_configuration:
+  ADDITIONAL_UNVERIFIED_ARGS: {}
+  ALLOWED_ALGORITHMS:
+    - RS256
+  AUDIENCE: "gateway_oidc_client"
+  EMAIL_KEY: "email"
+  FIRST_NAME_KEY: "given_name"
+  GROUPS_CLAIM: Group
+  ID_KEY: "sub"
+  ISSUER_URL: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway"
+  JWKS_CACHE_TIMEOUT: 3600
+  JWKS_URI: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway/protocol/openid-connect/certs"
+  JWKS_URL_TIMEOUT: 30
+  JWT_CLOCK_SKEW_TOLERANCE_SECONDS: 0
+  LAST_NAME_KEY: "family_name"
+  OIDC_ENDPOINT: ""
+  READ_SCOPE_NAME: "{{ keycloak_token_read_scope_name }}"
+  SCOPE_KEY: "{{ keycloak_token_scope_attribute_name }}"
+  USERINFO_URL: "https://{{ keycloak_internal_hostname }}:{{ keycloak_internal_port }}/auth/realms/gateway/protocol/openid-connect/userinfo"
+  USERINFO_URL_TIMEOUT: 30
+  USERNAME_KEY: "preferred_username"
+  VERIFY_SSL: false
+  WRITE_SCOPE_NAME: "{{ keycloak_token_write_scope_name }}"
 
 saml_adapter_name: "Dev Keycloak SAML"
 saml_slug: "keycloak_saml_dev"
