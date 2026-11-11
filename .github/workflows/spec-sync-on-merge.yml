@@ -49,8 +49,12 @@ jobs:
 
       - name: Configure faster xDS refresh for CI
         run: |
-          sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
-          echo "Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
+          if grep -qF 'xds_refresh_delay_seconds: 60' tools/configs/container-startup.yml; then
+            sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
+            echo "✅ Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
+          else
+            echo "⚠️ xds_refresh_delay_seconds is not 60, skipping override"
+          fi
 
       - name: Start the dev environment
         env:
