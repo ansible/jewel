@@ -46,6 +46,7 @@ jobs:
       - name: Install test dependencies
         run: |
           pip3.12 install --upgrade -r requirements/requirements_dev.txt -r ansible.platform/requirements/requirements_dev.txt
+          pip3.12 install openapi-spec-validator
 
       - name: Configure faster xDS refresh for CI
         run: |
@@ -98,12 +99,21 @@ jobs:
             exit 1
           fi
 
-          # Verify it's actually an OpenAPI schema
-          if ! jq -e '.openapi' gateway-schema.json > /dev/null 2>&1; then
-            echo "❌ Schema doesn't appear to be a valid OpenAPI spec (missing .openapi field)"
-            cat gateway-schema.json
-            exit 1
-          fi
+          # Validate the complete document, not just the presence of the version
+          # field (same validator as .github/workflows/dev-environment.yml)
+          python3 -c "
+          import json
+          from openapi_spec_validator import validate
+          from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
+          from openapi_spec_validator.validation.validators import OpenAPIV30SpecValidator
+
+          try:
+              with open('gateway-schema.json') as f:
+                  validate(json.load(f), cls=OpenAPIV30SpecValidator)
+          except OpenAPIValidationError as e:
+              print(f'❌ Generated schema is not a valid OpenAPI 3.0 document: {e.message}')
+              raise SystemExit(1)
+          "
 
           echo "✅ Generated OpenAPI schema"
           echo "Schema size: $(wc -c < gateway-schema.json) bytes"
