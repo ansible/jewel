@@ -293,8 +293,10 @@ PING_PAGE_CHECK_TIMEOUT = 3
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
         'aap_gateway_api.authentication.service_token_auth.ServiceTokenAuthentication',
+        'ansible_base.authentication.bearer_authentication.BearerAuthentication',
+        'aap_gateway_api.authentication.basic_auth.LoggedBasicAuthentication',
+        'ansible_base.authentication.session.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'ansible_base.oauth2_provider.permissions.OAuth2ScopePermission',
