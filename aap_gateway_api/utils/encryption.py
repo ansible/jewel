@@ -19,6 +19,7 @@ from typing import Any
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import algorithms
 from django.utils.encoding import smart_bytes, smart_str
 
 ENCRYPTED_MARKER = '$encrypted$'
@@ -34,6 +35,9 @@ class _Fernet256(Fernet):
         key = h.digest()
         self._signing_key = key[:32]
         self._encryption_key = key[32:]
+        # Required for cryptography >=50: Fernet's internal methods expect
+        # self._aes to be initialized (see cryptography.fernet.Fernet.__init__).
+        self._aes = algorithms.AES(self._encryption_key)
         self._backend = default_backend()
 
 
