@@ -292,7 +292,7 @@ class TestRoute:
                     "typed_config": {"@type": "type.googleapis.com/envoy.extensions.retry.host.previous_hosts.v3.PreviousHostsPredicate"},
                 }
             ],
-            "host_selection_retry_max_attempts": 10,
+            "host_selection_retry_max_attempts": 5,
         }
 
     @pytest.mark.parametrize(
