@@ -1,0 +1,276 @@
+---
+# Sync OpenAPI Spec on Merge (Standalone)
+#
+# This workflow runs when code is merged to the protected devel branch.
+# It generates the OpenAPI spec using a minimal environment, then syncs it to
+# the central spec repository.
+#
+# FLOW: PR merged → push to branch → minimal env → spec generated → synced to central repo
+name: Sync OpenAPI Spec on Merge (Standalone)
+env:
+  LC_ALL: "C.UTF-8"
+on:
+  push:
+    branches:
+      - devel
+  workflow_dispatch:  # Allow manual triggering for testing
+jobs:
+  generate-and-sync-spec:
+    name: Generate and sync OpenAPI spec
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      HEADLESS: "yes"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout dependencies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos ansible/django-ansible-base \
+            --always-clone-repos ansible/ansible.platform
+
+      - name: Install Podman
+        uses: redhat-actions/podman-install@072203a124c069d8fc8621c1a33f9fa9510ae2e1 # v1.1.1
+
+      - name: Install python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install test dependencies
+        run: |
+          pip3.12 install --upgrade -r requirements/requirements_dev.txt -r ansible.platform/requirements/requirements_dev.txt
+          pip3.12 install openapi-spec-validator
+
+      - name: Configure faster xDS refresh for CI
+        run: |
+          if grep -qF 'xds_refresh_delay_seconds: 60' tools/configs/container-startup.yml; then
+            sed -i 's/xds_refresh_delay_seconds: 60/xds_refresh_delay_seconds: 5/' tools/configs/container-startup.yml
+            echo "✅ Set xds_refresh_delay_seconds to 5 seconds for faster CI feedback"
+          else
+            echo "⚠️ xds_refresh_delay_seconds is not 60, skipping override"
+          fi
+
+      - name: Start the dev environment
+        env:
+          COMPOSE_UP_OPTS: "-d"
+        run: make podman-compose-basic
+
+      - name: Wait for gateway to be ready
+        run: |
+          echo "Waiting for gateway to be ready..."
+          max_attempts=60
+          attempt=0
+          response=""
+          while [ $attempt -lt $max_attempts ]; do
+            # -k is safe here: the dev environment serves a self-signed cert on localhost only.
+            if response=$(curl -k -s -f --max-time 10 https://localhost:8000/api/gateway/v1/ping/ 2>&1); then
+              echo "✅ Gateway is ready"
+              break
+            fi
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt/$max_attempts - waiting..."
+            sleep 5
+          done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "❌ Gateway did not become ready in time"
+            echo "Last response: ${response}"
+            podman-compose --in-pod false -f tools/generated/compose.yml logs | tail -200
+            exit 1
+          fi
+
+      - name: Generate OpenAPI schema
+        run: |
+          # Fetch the schema from the running server (-k: local self-signed cert)
+          curl -k --max-time 120 https://localhost:8000/api/gateway/v1/docs/schema/?format=json \
+            -o gateway-schema.json
+
+          # Verify it's valid JSON
+          if ! jq empty gateway-schema.json 2>/dev/null; then
+            echo "❌ Generated schema is not valid JSON"
+            cat gateway-schema.json
+            exit 1
+          fi
+
+          # Validate the complete document, not just the presence of the version
+          # field (same validator as .github/workflows/dev-environment.yml)
+          python3 -c "
+          import json
+          from openapi_spec_validator import validate
+          from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
+          from openapi_spec_validator.validation.validators import OpenAPIV30SpecValidator
+
+          try:
+              with open('gateway-schema.json') as f:
+                  validate(json.load(f), cls=OpenAPIV30SpecValidator)
+          except OpenAPIValidationError as e:
+              print(f'❌ Generated schema is not a valid OpenAPI 3.0 document: {e.message}')
+              raise SystemExit(1)
+          "
+
+          echo "✅ Generated OpenAPI schema"
+          echo "Schema size: $(wc -c < gateway-schema.json) bytes"
+
+      - name: Checkout spec repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.OPENAPI_SPEC_REPO }}
+          ref: ${{ github.ref_name }}
+          path: spec-repo
+          token: ${{ secrets.OPENAPI_SPEC_SYNC_TOKEN }}
+          persist-credentials: true
+
+      - name: Compare specs
+        id: compare
+        run: |
+          COMPONENT_SPEC="./gateway-schema.json"
+          SPEC_REPO_FILE="spec-repo/gateway.json"
+
+          # Compare files (or detect if file doesn't exist)
+          if [ ! -f "$SPEC_REPO_FILE" ]; then
+            echo "📝 Spec file doesn't exist in spec repo - will create"
+            echo "has_diff=true" >> $GITHUB_OUTPUT
+          elif diff -q "$COMPONENT_SPEC" "$SPEC_REPO_FILE" > /dev/null; then
+            echo "✅ No differences found - specs are identical"
+            echo "has_diff=false" >> $GITHUB_OUTPUT
+          else
+            echo "📝 Differences found - spec has changed"
+            echo "has_diff=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update spec file
+        if: steps.compare.outputs.has_diff == 'true'
+        run: |
+          cp "./gateway-schema.json" "spec-repo/gateway.json"
+          echo "✅ Updated spec-repo/gateway.json"
+
+      - name: Create or update PR in spec repo
+        if: steps.compare.outputs.has_diff == 'true'
+        working-directory: spec-repo
+        env:
+          GH_TOKEN: ${{ secrets.OPENAPI_SPEC_SYNC_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.OPENAPI_SPEC_SYNC_GPG_PRIVATE_KEY }}
+          SPEC_REPO: ${{ secrets.OPENAPI_SPEC_REPO }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          HEAD_COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          # Import GPG key and configure git for signed commits
+          if ! gpg --batch --import <(printf '%s' "$GPG_PRIVATE_KEY") 2>/dev/null; then
+            echo "❌ Failed to import GPG key"
+            exit 1
+          fi
+          GPG_KEY_ID=$(gpg --list-secret-keys --keyid-format long 2>/dev/null | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
+          if [ ${#GPG_KEY_ID} -lt 8 ]; then
+            echo "❌ Failed to extract a valid GPG key ID"
+            exit 1
+          fi
+          git config user.name "aap-api-bot"
+          git config user.email "aap-api-bot@redhat.com"
+          git config commit.gpgsign true
+          git config user.signingkey "$GPG_KEY_ID"
+
+          # Validate SPEC_REPO before embedding it in a remote URL
+          if [[ ! "$SPEC_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "❌ Invalid SPEC_REPO format"
+            exit 1
+          fi
+
+          # Configure git to use the token for push
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${SPEC_REPO}.git"
+
+          # Use a stable branch name so we can reuse it across runs
+          BRANCH_NAME="auto/update-gateway-${SOURCE_BRANCH}"
+
+          # Check if there's already an open PR from this branch
+          EXISTING_PR=$(gh pr list \
+            --repo "$SPEC_REPO" \
+            --head "$BRANCH_NAME" \
+            --base "$SOURCE_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "📝 Found existing PR #${EXISTING_PR} - will update it"
+          else
+            echo "📝 No existing PR found - will create a new one"
+            # Clean up a stale remote branch from a previously merged PR
+            if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
+              git push origin --delete "$BRANCH_NAME"
+            fi
+          fi
+
+          git checkout -b "$BRANCH_NAME"
+
+          # Add and commit changes
+          git add "gateway.json"
+
+          git commit -m "Update gateway OpenAPI spec for $SOURCE_BRANCH"
+
+          # Force push to update the branch (safe because this is an automation-only branch).
+          # This intentionally keeps only a single commit on the PR branch.
+          git push --force origin "$BRANCH_NAME"
+
+          # Drop the token from .git/config now that the push is done
+          git remote set-url origin "https://github.com/${SPEC_REPO}.git"
+
+          # Build the body in a file and pass it with --body-file to avoid a large shell argument.
+          cat > pr-body.md <<EOF
+          ## Summary
+          Automated OpenAPI spec sync from component repository merge.
+
+          **Source:** ${SOURCE_REPO}@${SOURCE_SHA}
+          **Branch:** \`${SOURCE_BRANCH}\`
+          **Component:** \`gateway\`
+          **Spec File:** \`gateway.json\`
+
+          ## Changes
+          - 📝 Spec file updated with latest changes
+
+          ## Source Commit
+          \`\`\`
+          ${HEAD_COMMIT_MSG}
+          \`\`\`
+
+          ---
+          🤖 This PR was automatically generated by the OpenAPI spec sync workflow.
+          EOF
+
+          if [ -n "$EXISTING_PR" ]; then
+            gh pr edit "$EXISTING_PR" \
+              --repo "$SPEC_REPO" \
+              --body-file pr-body.md
+            echo "✅ Updated existing PR #${EXISTING_PR}"
+          else
+            gh pr create \
+              --repo "$SPEC_REPO" \
+              --title "[${SOURCE_BRANCH}] Update gateway spec from merged commit" \
+              --body-file pr-body.md \
+              --base "$SOURCE_BRANCH" \
+              --head "$BRANCH_NAME"
+            echo "✅ Created PR in spec repo"
+          fi
+
+      - name: Report results
+        if: always()
+        env:
+          HAS_DIFF: ${{ steps.compare.outputs.has_diff }}
+        run: |
+          if [ "$HAS_DIFF" == "true" ]; then
+            echo "📝 Spec sync completed - PR created or updated in spec repo"
+          else
+            echo "✅ Spec sync completed - no changes needed"
+          fi
+
+      - name: Dump the container logs on failure
+        if: failure()
+        run: podman-compose --in-pod false -f tools/generated/compose.yml logs | tail -200
