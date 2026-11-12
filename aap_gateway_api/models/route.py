@@ -16,6 +16,24 @@ API_PREFIX = "/api/"
 TYPE_KEY = "@type"
 _UNSET = object()
 
+# Retrying a failed upstream TCP connect is safe for every request method because
+# nothing was sent upstream, so the request cannot be applied twice. This masks the
+# active-health-check ejection window (~3 checks x 30s) after a node goes down hard.
+# previous_hosts keeps each retry off the node that just failed. The explicit
+# typed_config is required: envoy rejects the name-only predicate form with
+# "Didn't find a registered implementation" even though the extension is loaded.
+RETRY_ON_CONNECT_FAILURE = {
+    "retry_on": "connect-failure",
+    "num_retries": 2,
+    "retry_host_predicate": [
+        {
+            "name": "envoy.retry_host_predicates.previous_hosts",
+            "typed_config": {"@type": "type.googleapis.com/envoy.extensions.retry.host.previous_hosts.v3.PreviousHostsPredicate"},
+        }
+    ],
+    "host_selection_retry_max_attempts": 10,
+}
+
 
 class Route(UniqueNamedCommonModel, AuditableModel):
     """
@@ -276,6 +294,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                 "cluster": self.envoy_cluster_name,
                 "timeout": f"{timeout}s",
                 "idle_timeout": f"{idle_timeout}s",
+                "retry_policy": RETRY_ON_CONNECT_FAILURE,
             },
             "metadata": {
                 "typed_filter_metadata": {},
@@ -372,6 +391,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     "route": {
                         "prefix_rewrite": login_url,
                         "cluster": envoy_cluster_name,
+                        "retry_policy": RETRY_ON_CONNECT_FAILURE,
                     },
                     'metadata': {},
                     'typed_per_filter_config': {
@@ -399,6 +419,7 @@ class Route(UniqueNamedCommonModel, AuditableModel):
                     "route": {
                         "prefix_rewrite": logout_url,
                         "cluster": envoy_cluster_name,
+                        "retry_policy": RETRY_ON_CONNECT_FAILURE,
                     },
                     'metadata': {},
                     'typed_per_filter_config': {
