@@ -274,6 +274,57 @@ class TestRoute:
         assert routes[0]["route"]["host_rewrite_literal"] == "example.com"
 
     @pytest.mark.django_db
+    def test_xds_route_config_includes_connect_failure_retry_policy(self, service_cluster_eda):
+        """Routes must retry refused upstream connects on a different node.
+
+        A failed TCP connect never reached the upstream, so the retry is safe for
+        every request method and masks the active health check ejection window
+        after a node goes down hard.
+        """
+        route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
+        routes = route.get_xds_route_config()
+        assert routes[0]["route"]["retry_policy"] == {
+            "retry_on": "connect-failure",
+            "num_retries": 2,
+            "retry_host_predicate": [
+                {
+                    "name": "envoy.retry_host_predicates.previous_hosts",
+                    "typed_config": {"@type": "type.googleapis.com/envoy.extensions.retry.host.previous_hosts.v3.PreviousHostsPredicate"},
+                }
+            ],
+            "host_selection_retry_max_attempts": 5,
+        }
+
+    @pytest.mark.parametrize(
+        "service",
+        [
+            ('controller'),
+            ('eda'),
+            ('hub'),
+        ],
+    )
+    @pytest.mark.django_db
+    def test_xds_login_logout_routes_include_connect_failure_retry_policy(
+        self,
+        service,
+        service_api_route_gateway,
+        service_api_route_controller,
+        service_api_route_eda,
+        service_api_route_hub,
+    ):
+        routes = []
+        if service == 'controller':
+            routes = service_api_route_controller.get_xds_login_logout_routes()
+        elif service == 'eda':
+            routes = service_api_route_eda.get_xds_login_logout_routes()
+        elif service == 'hub':
+            routes = service_api_route_hub.get_xds_login_logout_routes()
+
+        assert len(routes) == 2
+        for route in routes:
+            assert route["route"]["retry_policy"]["retry_on"] == "connect-failure"
+
+    @pytest.mark.django_db
     def test_xds_cluster_config_host_sni(self, service_cluster_eda):
         service_cluster_eda.upstream_hostname = "example.com"
         route = ServiceAPIRoute(gateway_path='/', service_path='/path', envoy_cluster_name='testing', service_cluster=service_cluster_eda)
