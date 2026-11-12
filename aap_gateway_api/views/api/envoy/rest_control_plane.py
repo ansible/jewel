@@ -25,6 +25,7 @@ from envoy.extensions.filters.http.lua.v3 import lua_pb2  # noqa: F401
 from envoy.extensions.access_loggers.stream.v3 import stream_pb2  # noqa: F401
 from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: F401
 from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: F401
+from envoy.extensions.retry.host.previous_hosts.v3 import previous_hosts_pb2  # noqa: F401
 from envoy.service.secret.v3 import sds_pb2, sds_pb2_grpc  # noqa: F401
 from envoy.extensions.transport_sockets.tls.v3.secret_pb2 import Secret
 from aap_gateway_api.models.ca_certificate import CACertificate
