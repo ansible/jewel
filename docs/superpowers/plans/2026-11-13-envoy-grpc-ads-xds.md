@@ -383,7 +383,7 @@ git commit -m "NO_JIRA: Register ADS servicer and xDS watcher in the gRPC server
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `Deprecation: true` header on all three REST xDS responses; OpenAPI marks them deprecated.
+- Produces: `Deprecation: true` header on all three REST xDS responses; docstrings state the deprecation. (The views stay `exclude=True` in the OpenAPI schema — they are machine-facing Envoy endpoints deliberately kept out of the API schema, so `deprecated=True` there would be invisible dead code.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -402,7 +402,7 @@ Expected: FAIL with `KeyError: 'Deprecation'` (assertion on missing header)
 
 - [ ] **Step 3: Implement**
 
-Add a small mixin on `XDSView` overriding `finalize_response` to set `response["Deprecation"] = "true"`, and change the three views' `@extend_schema(exclude=True)` to `@extend_schema(exclude=True, deprecated=True)`. Update each view's docstring to state the REST xDS endpoints are deprecated in favor of ADS.
+Add a small mixin on `XDSView` overriding `finalize_response` to set `response["Deprecation"] = "true"`. Keep the three views' `@extend_schema(exclude=True)` as-is (no `deprecated=True` — excluded operations never appear in the schema, so the flag would be dead code; the deprecation signal is the header and docstrings). Update each view's docstring to state the REST xDS endpoints are deprecated in favor of ADS.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
