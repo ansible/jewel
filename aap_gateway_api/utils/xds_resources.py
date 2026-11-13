@@ -43,9 +43,30 @@ from envoy.extensions.transport_sockets.tls.v3.secret_pb2 import Secret
 
 logger = logging.getLogger("aap_gateway_api.utils.xds_resources")
 
-XDS_CACHE_KEY_CDS = "xds:cds"
-XDS_CACHE_KEY_LDS = "xds:lds"
-XDS_CACHE_KEY_SDS = "xds:sds"
+# The cached values are pickled ResourceSet objects.  Gateway versions before
+# ADS cached MessageToDict dicts under "xds:cds"/"xds:lds"/"xds:sds" on the
+# same shared redis; the "v2" namespace keeps the two formats from ever
+# sharing a key during a rolling upgrade or downgrade (an old node failing to
+# unpickle a ResourceSet would make DABCacheWithFallback fail over and, on
+# recovery, clear the shared redis for every node).
+XDS_CACHE_KEY_CDS = "xds:v2:cds"
+XDS_CACHE_KEY_LDS = "xds:v2:lds"
+XDS_CACHE_KEY_SDS = "xds:v2:sds"
+
+# Pre-ADS cache keys, mapped from their current counterparts.  Invalidating a
+# current key also deletes its legacy key so stale entries written by old
+# nodes do not linger (and old nodes still mid-upgrade see the invalidation).
+XDS_LEGACY_CACHE_KEYS = {
+    XDS_CACHE_KEY_CDS: "xds:cds",
+    XDS_CACHE_KEY_LDS: "xds:lds",
+    XDS_CACHE_KEY_SDS: "xds:sds",
+}
+
+# Explicit TTL for cached ResourceSets.  The production cache
+# (DABCacheWithFallback) defaults to no expiry, so without this an
+# invalidate-then-stale-rebuild race, or a change path that bypasses the
+# invalidation signals, would be cached forever.
+XDS_CACHE_TIMEOUT = 300
 
 
 @dataclass
@@ -57,8 +78,13 @@ class ResourceSet:
 
 
 def invalidate_xds_cache(*keys: str) -> None:
-    """Delete one or more xDS cache keys."""
-    cache.delete_many(keys)
+    """Delete one or more xDS cache keys, plus their legacy (pre-ADS) counterparts."""
+    cache.delete_many([*keys, *(XDS_LEGACY_CACHE_KEYS[key] for key in keys if key in XDS_LEGACY_CACHE_KEYS)])
+
+
+def as_resource_set(value) -> ResourceSet | None:
+    """Return a cached value if it is a ResourceSet; anything else is a cache miss."""
+    return value if isinstance(value, ResourceSet) else None
 
 
 def resource_digest(resources) -> str:
@@ -95,7 +121,7 @@ def _apply_resource_names(qs, name_field, resource_names):
 
 def collect_clusters(resource_names: list[str] | None = None) -> ResourceSet:
     """CDS -- an Envoy Cluster definition for every Route."""
-    cached = cache.get(XDS_CACHE_KEY_CDS)
+    cached = as_resource_set(cache.get(XDS_CACHE_KEY_CDS))
     if cached is not None:
         logger.debug("CDS cache hit")
         return cached
@@ -121,15 +147,17 @@ def collect_clusters(resource_names: list[str] | None = None) -> ResourceSet:
     clusters = [x.get_xds_cluster_config() for x in routes]
     resources = _pack_resources(Cluster, clusters)
     resource_set = ResourceSet(version=resource_digest(resources), resources=resources)
-    # Only cache if we have resources; empty responses during bootstrap should not be cached
-    if clusters:
-        cache.set(XDS_CACHE_KEY_CDS, resource_set)
+    # Only cache the full, unfiltered set (a filtered subset under the shared
+    # key would be served to -- and pushed to -- every Envoy), and only if it
+    # is non-empty; empty responses during bootstrap should not be cached.
+    if clusters and resource_names is None:
+        cache.set(XDS_CACHE_KEY_CDS, resource_set, timeout=XDS_CACHE_TIMEOUT)
     return resource_set
 
 
 def collect_listeners(resource_names: list[str] | None = None) -> ResourceSet:
     """LDS -- an Envoy Listener for every HTTPPort."""
-    cached = cache.get(XDS_CACHE_KEY_LDS)
+    cached = as_resource_set(cache.get(XDS_CACHE_KEY_LDS))
     if cached is not None:
         logger.debug("LDS cache hit")
         return cached
@@ -154,15 +182,17 @@ def collect_listeners(resource_names: list[str] | None = None) -> ResourceSet:
 
     resources = _pack_resources(Listener, listeners)
     resource_set = ResourceSet(version=resource_digest(resources), resources=resources)
-    # Only cache if we have resources; empty responses during bootstrap should not be cached
-    if listeners:
-        cache.set(XDS_CACHE_KEY_LDS, resource_set)
+    # Only cache the full, unfiltered set (a filtered subset under the shared
+    # key would be served to -- and pushed to -- every Envoy), and only if it
+    # is non-empty; empty responses during bootstrap should not be cached.
+    if listeners and resource_names is None:
+        cache.set(XDS_CACHE_KEY_LDS, resource_set, timeout=XDS_CACHE_TIMEOUT)
     return resource_set
 
 
 def collect_secrets() -> ResourceSet:
     """SDS -- a single Secret containing all trusted CA certificates."""
-    cached = cache.get(XDS_CACHE_KEY_SDS)
+    cached = as_resource_set(cache.get(XDS_CACHE_KEY_SDS))
     if cached is not None:
         logger.debug("SDS cache hit")
         return cached
@@ -170,7 +200,7 @@ def collect_secrets() -> ResourceSet:
     secret_resource = _collect_db_ca_certs()
     resources = _pack_resources(Secret, [secret_resource])
     resource_set = ResourceSet(version=resource_digest(resources), resources=resources)
-    cache.set(XDS_CACHE_KEY_SDS, resource_set)
+    cache.set(XDS_CACHE_KEY_SDS, resource_set, timeout=XDS_CACHE_TIMEOUT)
     return resource_set
 
 

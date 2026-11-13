@@ -46,9 +46,13 @@
 - Consumes: nothing new (moves code from `rest_control_plane.py`).
 - Produces (later tasks rely on these exact names):
   ```python
-  XDS_CACHE_KEY_CDS = "xds:cds"
-  XDS_CACHE_KEY_LDS = "xds:lds"
-  XDS_CACHE_KEY_SDS = "xds:sds"
+  # Amended (final review C1): a "v2" namespace so pickled ResourceSets never
+  # share a key with the pre-ADS dict format on the shared redis.  The legacy
+  # "xds:cds"/"xds:lds"/"xds:sds" keys are also deleted by invalidate_xds_cache
+  # (hence by the startup clear and the signals), via XDS_LEGACY_CACHE_KEYS.
+  XDS_CACHE_KEY_CDS = "xds:v2:cds"
+  XDS_CACHE_KEY_LDS = "xds:v2:lds"
+  XDS_CACHE_KEY_SDS = "xds:v2:sds"
 
   @dataclass
   class ResourceSet:
@@ -157,7 +161,7 @@ git commit -m "NO_JIRA: Extract shared xDS resource collectors from REST views"
       def __init__(self, registry: StreamRegistry | None = None) -> None
       def StreamAggregatedResources(self, request_iterator, context) -> Iterator[DiscoveryResponse]
   ```
-  Internal `_Stream` shape Task 3 relies on: `stream.events` is a `queue.Queue` of `("request", DiscoveryRequest)` and `("push", (type_url, ResourceSet))` tuples, and `stream.context` exposes `is_active()`.
+  Internal `_Stream` shape Task 3 relies on: `stream.events` is a `queue.Queue` of `("request", DiscoveryRequest)` and `("push", type_url)` tuples (amended in the final review: a push is a "type changed" hint, not a payload), and `stream.context` exposes `is_active()`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -219,13 +223,13 @@ Expected: FAIL with `ModuleNotFoundError` / `ImportError` on `aap_gateway_api.pr
 
 Structure:
 
-- `_Stream`: holds `context`, `events: queue.Queue`, `subscribed: set[str]`, `last_versions: dict[str, str]`, and a `threading.Lock`. `read_requests(request_iterator)` drains the iterator forever, putting `("request", req)` on the queue (daemon thread target; iterator exhaustion or a grpc error ends it silently).
+- `_Stream`: holds `context`, `events: queue.Queue`, `subscribed: set[str]`, and `last_versions: dict[str, str]` — no lock: both are only touched on the generator thread (amended in the final review). `read_requests(request_iterator)` drains the iterator forever, putting `("request", req)` on the queue (daemon thread target; iterator exhaustion or a grpc error ends it, logged at DEBUG with `exc_info`).
 - `StreamRegistry`: list + lock; `broadcast` puts the event on each stream's queue.
 - `AggregatedDiscoveryService.StreamAggregatedResources(self, request_iterator, context)`:
   1. Create `_Stream`, `registry.add`, start the daemon reader thread.
   2. Generator loop: `while context.is_active():` block on `stream.events.get(timeout=0.5)` (re-loop on `queue.Empty`).
-  3. On `("request", req)`: `type_url` not in `{CDS_TYPE_URL, LDS_TYPE_URL}` → `logger.warning`, skip. If `req.error_detail.code != 0` → `logger.warning` with `error_detail.message` (NACK, log-and-drop: send nothing). If it's an ACK whose `version_info` equals the current version for that type → skip. Otherwise fetch the current `ResourceSet` via the Task 1 collector, record the version, yield `DiscoveryResponse(version_info=rs.version, nonce=uuid4().hex, resources=rs.resources, type_url=type_url)`.
-  4. On `("push", (type_url, rs))`: if `rs.version == stream.last_versions.get(type_url)` skip; record and yield the same response shape.
+  3. On `("request", req)`: `type_url` not in `{CDS_TYPE_URL, LDS_TYPE_URL}` → `logger.warning`, skip. If `req.error_detail.code != 0` → `logger.warning` with `error_detail.message` (NACK, log-and-drop: send nothing). If it's an ACK whose `version_info` equals the current version for that type → skip. Otherwise call `django.db.close_old_connections()` (pooled gRPC thread), fetch the current `ResourceSet` via the Task 1 collector (a collector exception is logged at WARNING and re-raised, ending the stream), record the version, yield `DiscoveryResponse(version_info=rs.version, nonce=uuid4().hex, resources=rs.resources, type_url=type_url)`.
+  4. On `("push", type_url)` (amended in the final review): skip if the stream never subscribed to `type_url`; otherwise re-collect current state the same way as a request (normally a cache hit — never send the broadcast-time state, which can be older than what a request on this stream already sent); if `rs.version == stream.last_versions.get(type_url)` skip; record and yield the same response shape.
   5. `finally: registry.remove(stream)`.
 - Collectors map: a module-level dict `{CDS_TYPE_URL: collect_clusters, LDS_TYPE_URL: collect_listeners}`.
 
@@ -258,6 +262,8 @@ git commit -m "NO_JIRA: Add ADS servicer for Envoy CDS/LDS streaming"
       def tick(self) -> None    # one poll cycle; also the test entry point
       def stop(self) -> None
   ```
+
+> **Amended in the final review (m2/I4/m1):** the sketches below reflect the original silent-prime design. As implemented, the first tick with a registered stream broadcasts one `("push", type_url)` hint per type (no silent prime; `test_first_tick_hints_current_state`, `test_tick_warm_cache_first_tick_then_change`, `test_tick_empty_db_broadcasts_only_first_observation`), pushes carry only the `type_url`, `tick()` is a no-op with zero registered streams (`test_tick_is_noop_without_streams`), and the startup race is covered end-to-end (`test_stream_subscribed_before_first_tick_gets_intervening_change`). See `aap_gateway_api/tests/proxy/test_xds_watcher.py`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -323,12 +329,13 @@ Expected: FAIL with import error
 
 `XDSWatcher(threading.Thread, daemon=True)` with a `threading.Event` stop flag; `run()` loops `tick()` + `stop_event.wait(interval)`. `tick()`:
 
+0. (Amended in the final review.) Return immediately if `registry.streams()` is empty — no polling cost in workers without ADS streams.
 1. `django.db.close_old_connections()` (long-lived thread; connections are never recycled by request signals).
 2. `cached = cache.get_many([XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS])`.
-3. For each `(type_url, key, collector)` in a CDS-first ordered list: `rs = cached.get(key)`; if `rs is None`, `rs = collector()` (which re-caches non-empty results). The digest comparison runs on EVERY tick, hit or miss — the cache is shared by all forked workers and every node, so the cache miss is not a reliable per-worker change signal: if `rs.version != self._last_versions.get(type_url)`, update `_last_versions` and `registry.broadcast(("push", (type_url, rs)))`.
+3. For each `(type_url, key, collector)` in a CDS-first ordered list: `rs = cached.get(key)`, treating a value that is not a `ResourceSet` as a miss; if it is a miss, `rs = collector()` (which re-caches non-empty results). The digest comparison runs on EVERY tick, hit or miss — the cache is shared by all forked workers and every node, so the cache miss is not a reliable per-worker change signal: if `rs.version != self._last_versions.get(type_url)`, update `_last_versions` and `registry.broadcast(("push", type_url))`. This includes the first observation of a type (amended in the final review: no silent prime — a stream that subscribed before the first tick may be stale; streams suppress versions they already hold).
 4. The whole body is wrapped in `try/except Exception: logger.exception(...)` so a transient DB/redis error degrades one tick instead of silently killing the watcher thread.
 
-Note in a code comment why empty configs re-collect every tick (the no-cache-empty rule) and why that's accepted: no broadcast fires, and truly-empty deployments are transitional.
+Note in a code comment why empty configs re-collect every tick (the no-cache-empty rule) and why that's accepted: after the first observation no broadcast fires, and truly-empty deployments are transitional.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -355,7 +362,7 @@ git commit -m "NO_JIRA: Add xDS cache watcher that pushes ADS updates on invalid
 
 - [ ] **Step 1: Implement the wiring**
 
-In `_run_server`: create one `StreamRegistry`, one `XDSWatcher(registry)`, register `AggregatedDiscoveryService(registry)` via `add_AggregatedDiscoveryServiceServicer_to_server`, and `watcher.start()` — all inside `_run_server` (post-fork; see Global Constraints). In debug mode the watcher still runs (single process, interval unchanged).
+In `_run_server`: create one `StreamRegistry`, one `XDSWatcher(registry)`, register `AggregatedDiscoveryService(registry)` via `add_AggregatedDiscoveryServiceServicer_to_server`, and `watcher.start()` — all inside `_run_server` (post-fork; see Global Constraints). In debug mode the watcher still runs (single process, interval unchanged). Amended in the final review: debug mode sizes the `ThreadPoolExecutor` at 2 threads (was 1), because an ADS stream holds its worker thread for its lifetime and would otherwise starve ext_authz.
 
 - [ ] **Step 2: Verify the existing suite is unaffected**
 
@@ -468,7 +475,7 @@ git commit -m "NO_JIRA: Switch dev Envoy bootstrap to ADS for CDS/LDS"
 
 - [ ] **Step 1: Update `docs/configuring_envoy.md`**
 
-Add a "Control plane configuration" section: CDS/LDS are delivered over gRPC ADS from the gateway's gRPC server (port 50051, same server as ext_authz), pushed on config change; SDS remains on REST polling for now; the REST xDS endpoints (`/v3/discovery:*`) are deprecated but functional and serve as the bootstrap-rollback path; rollback = revert the Envoy bootstrap to REST `api_config_source` blocks and restart Envoy.
+Add a "Control Plane Configuration" section: CDS/LDS are delivered over gRPC ADS when the Envoy bootstrap uses `ads_config` (the dev environment today) from the gateway's gRPC server (port 50051, same server as ext_authz), pushed on config change; SDS remains on REST polling for now; the REST xDS endpoints (`/v3/discovery:*`) are deprecated but functional and serve as the bootstrap-rollback path; rollback = revert the Envoy bootstrap to REST `api_config_source` blocks and restart Envoy.
 
 - [ ] **Step 2: Commit**
 

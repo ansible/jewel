@@ -28,7 +28,10 @@ os.environ["GRPC_VERBOSITY"] = getattr(settings, "GRPC_VERBOSITY", "ERROR")
 def _run_server(bind_address, debug):
     setup_observability(service_name="gateway-grpc")
     if debug:
-        _THREAD_CONCURRENCY = 1
+        # Single process, but at least 2 threads: an ADS stream holds its
+        # worker thread for the stream's lifetime, so a single thread would
+        # let one connected Envoy starve every ext_authz check.
+        _THREAD_CONCURRENCY = 2
         try:
             import debugpy
 
@@ -67,7 +70,7 @@ class Command(BaseCommand):
     help = "Launch gRPC auth service for envoy."
 
     def add_arguments(self, parser):
-        parser.add_argument('--debug', action='store_true', help='Run GRPC in debug mode (single threaded)')
+        parser.add_argument('--debug', action='store_true', help='Run GRPC in debug mode (single process)')
 
     def handle(self, *args, **options):
         if options['debug']:

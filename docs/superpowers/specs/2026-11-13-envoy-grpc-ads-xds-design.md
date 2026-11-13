@@ -141,7 +141,8 @@ Resource collection is refactored out of the REST views into shared
 functions (query + `get_xds_*_config` assembly, including the
 `_max_route_timeout` pre-computation and the empty-response no-cache rule)
 so the REST views and the ADS servicer call the same code. The REST views
-keep their cache keys and behavior unchanged.
+keep their response behavior unchanged (the cache keys move to a new
+namespace; see "Cache key namespace" below).
 
 ### Versioning and push
 
@@ -150,10 +151,12 @@ keep their cache keys and behavior unchanged.
   resources.
 - There is **no separate version key**. Each gRPC worker process runs a
   lightweight watcher (a daemon thread) that checks the *existing* payload
-  cache keys (`xds:cds`, `xds:lds`) via `cache.get_many` roughly
-  once per second — a single redis round-trip, not a request through Django.
+  cache keys (`xds:v2:cds`, `xds:v2:lds`; see "Cache key namespace" below)
+  via `cache.get_many` roughly once per second, and only while the worker has
+  at least one connected ADS stream (with none, the tick returns immediately) — a single redis round-trip, not a request through Django.
   On a hit the watcher uses the cached `ResourceSet` (its digest travels
-  inside the payload); on a miss (invalidation or TTL expiry) it rebuilds
+  inside the payload; a cached value that is not a `ResourceSet` is treated
+  as a miss); on a miss (invalidation or TTL expiry) it rebuilds
   that type's resources — which re-caches them — and uses the fresh set.
   **The change signal is the digest comparison against the watcher's own
   last-seen version, evaluated on every tick — not the cache miss.** The
@@ -161,27 +164,57 @@ keep their cache keys and behavior unchanged.
   whichever worker rebuilds first re-caches the entry and the rest see
   hits; only comparing versions on every tick makes every worker's watcher
   push to its own streams. When a type's digest changed, the watcher
-  pushes a `DiscoveryResponse` to each connected stream subscribed to that
-  type. When both CDS and LDS changed, CDS is pushed before LDS (the
-  ordering benefit of ADS).
-- The first observation of a type (hit or miss, empty or not) primes the
-  watcher's baseline silently — streams already receive current state on
-  subscription from the servicer, so re-pushing it is redundant.
+  broadcasts a `("push", type_url)` hint to every connected stream; each
+  stream subscribed to that type re-collects the current state (normally a
+  cache hit) and sends a `DiscoveryResponse` unless it already holds that
+  version. Re-collecting, rather than sending the state the watcher saw,
+  prevents a late push from rolling a stream back to a version older than
+  one a request on the same stream just sent. When both CDS and LDS changed
+  within a tick, CDS is pushed before LDS (the ordering benefit of ADS); the
+  two cache reads are not atomic, so an LDS change can occasionally be pushed
+  one tick before its CDS change.
+- The first observation of a type (hit or miss, empty or not) also
+  broadcasts. A stream that subscribed before the watcher's first tick, with
+  a change landing in between, would otherwise stay stale until the next
+  change. Streams that already hold the current version suppress the push
+  (the servicer compares against its last-sent version), so this costs at
+  most one re-collection per stream.
 - This reuses the exact propagation machinery REST polling relies on today:
   `invalidate_xds_cache` deletes the shared-redis key centrally, and every
   node's watcher observes the rebuilt version on its next tick. Introducing
-  a new version key was
-  considered and rejected: `DABRedisCache.set`/`delete` broadcast
-  invalidation to peer nodes (whose handler deletes the key from the shared
-  cache), so a `cache.set(version_key)` would be deleted by peers almost
-  immediately. Watching the payload keys avoids that interplay entirely.
-- **Self-heal backstop**: the cache entries carry the default ~300s TTL
-  (no `TIMEOUT` override in `CACHES`), so any change path that bypasses
-  `post_save`/`post_delete` signals self-heals within ~5 minutes — the same
-  guarantee REST polling provides today. One such path exists today
+  a separate version key was considered and rejected: the digest already
+  travels inside the cached payload, so the watcher gets it from the same
+  single `get_many` round-trip, and there is no second key whose writes and
+  invalidations must be kept coherent with the payload keys. (jewel's
+  default cache is `DABCacheWithFallback` over plain django_redis, which
+  does not broadcast invalidations, so cross-node propagation relies solely
+  on the shared redis.)
+- **Self-heal backstop**: the collectors cache with an explicit
+  `timeout=300` (`XDS_CACHE_TIMEOUT`). This must be explicit:
+  `DABCacheWithFallback.set` defaults to `timeout=None` (never expires).
+  With the TTL, a worker that rebuilds pre-change state after an
+  invalidation (an invalidate-then-stale-set race), or any change path that
+  bypasses `post_save`/`post_delete` signals, self-heals within ~5 minutes —
+  the same guarantee REST polling is meant to provide. One such path exists today
   (`aap_gateway_api/utils/service_id_sync.py` uses a queryset `.update()`
   on ServiceCluster, which fires no signals); this is a pre-existing latent
   issue affecting the REST views equally and is noted, not fixed, here.
+- **Cache key namespace**: the cached values are pickled `ResourceSet`
+  objects under `xds:v2:cds` / `xds:v2:lds` / `xds:v2:sds`. Pre-ADS gateway
+  versions cached `MessageToDict` dicts under `xds:cds` / `xds:lds` /
+  `xds:sds` on the same shared redis; sharing those keys during a rolling
+  upgrade or downgrade would make old nodes fail to unpickle (which
+  `DABCacheWithFallback` treats as an outage: fail over, then clear the
+  shared redis on recovery) and new nodes read dicts. `invalidate_xds_cache`
+  also deletes each key's legacy counterpart, so the startup clear and the
+  signal invalidations remove stale legacy entries.
+- **Filtered REST requests are not cached**: the REST views pass
+  `resource_names` through to the collectors; a filtered collection is
+  returned but never written under the shared unfiltered key (which the
+  watchers would otherwise push to every Envoy).
+- **Debug mode** (`start_grpc_server --debug`) runs a single process with a
+  2-thread executor: an ADS stream holds its sync gRPC worker thread for the
+  stream's lifetime, so a single thread would starve ext_authz.
 - Dispatcherd broadcast into the 5 forked workers was considered and
   rejected as the trigger mechanism: wiring subscriptions into forked
   gRPC workers is awkward, and the cache-key watch achieves the same

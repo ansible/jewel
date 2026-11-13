@@ -151,11 +151,11 @@ Additional routes encompass every other potential API route in the gateway. This
 - API Endpoint: `/api/gateway/v1/routes/`
 - Django Model: `aap_gateway_api.models.AdditionalRoute`
 
-## Control plane configuration
+## Control Plane Configuration
 
 The gateway generates the Envoy configuration from these models and delivers it to Envoy through its xDS control plane. Envoy's bootstrap config determines how each resource type is fetched:
 
-- **CDS and LDS** (clusters and listeners) are delivered over gRPC Aggregated Discovery Service (ADS). ADS is served by the gateway's gRPC server on port 50051, the same server that serves external authorization. Configuration is pushed to connected Envoys when it changes. Envoy does not poll for these resources.
+- **CDS and LDS** (clusters and listeners) are delivered over gRPC Aggregated Discovery Service (ADS) when the Envoy bootstrap config uses `ads_config` (the development environment does today; other installers still use REST polling until their bootstrap templates are updated). ADS is served by the gateway's gRPC server on port 50051, the same server that serves external authorization. Configuration is pushed to connected Envoys when it changes, and Envoy does not poll for these resources.
 - **SDS** (secrets) still uses REST polling.
 - **REST xDS endpoints** (`/v3/discovery:*`) are deprecated but still functional. Responses from these endpoints include a `Deprecation: true` header. They remain available for compatibility, for example when a newer gateway runs with an older Envoy bootstrap.
 

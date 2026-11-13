@@ -1,12 +1,18 @@
 """Unit tests for the shared xDS resource collectors (no HTTP)."""
 
+from unittest import mock
+
 import pytest
 from django.core.cache import cache
 
+from aap_gateway_api.utils import xds_resources
 from aap_gateway_api.utils.xds_resources import (
     XDS_CACHE_KEY_CDS,
     XDS_CACHE_KEY_LDS,
     XDS_CACHE_KEY_SDS,
+    XDS_CACHE_TIMEOUT,
+    XDS_LEGACY_CACHE_KEYS,
+    ResourceSet,
     collect_clusters,
     collect_listeners,
     collect_secrets,
@@ -79,3 +85,62 @@ def test_collect_clusters_caching_rule():
         assert cache.get(XDS_CACHE_KEY_CDS) is None
     else:
         assert cache.get(XDS_CACHE_KEY_CDS) is not None
+
+
+def test_cache_keys_do_not_collide_with_legacy_keys():
+    # Pre-ADS gateway versions cached MessageToDict dicts under "xds:cds" etc.
+    # on the same shared redis; ResourceSets must never share those keys.
+    current = {XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS}
+    assert set(XDS_LEGACY_CACHE_KEYS.values()) == {"xds:cds", "xds:lds", "xds:sds"}
+    assert current.isdisjoint(XDS_LEGACY_CACHE_KEYS.values())
+
+
+def test_invalidate_also_deletes_legacy_counterpart():
+    cache.set("xds:cds", {"clusters": []})
+    cache.set("xds:lds", {"listeners": []})
+    invalidate_xds_cache(XDS_CACHE_KEY_CDS)
+    assert cache.get("xds:cds") is None
+    # Only the counterpart of the invalidated key is deleted.
+    assert cache.get("xds:lds") == {"listeners": []}
+    invalidate_xds_cache(XDS_CACHE_KEY_LDS)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "collector,key",
+    [(collect_clusters, XDS_CACHE_KEY_CDS), (collect_listeners, XDS_CACHE_KEY_LDS), (collect_secrets, XDS_CACHE_KEY_SDS)],
+)
+def test_non_resource_set_cached_value_is_a_miss(full_service_hierarchy_controller, collector, key):
+    # A foreign-format value (e.g. a legacy dict) under the key is rebuilt
+    # rather than returned.
+    cache.set(key, {"legacy": "dict"})
+    rs = collector()
+    assert isinstance(rs, ResourceSet)
+    assert isinstance(cache.get(key), ResourceSet)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "collector,key",
+    [(collect_clusters, XDS_CACHE_KEY_CDS), (collect_listeners, XDS_CACHE_KEY_LDS), (collect_secrets, XDS_CACHE_KEY_SDS)],
+)
+def test_collectors_cache_with_explicit_timeout(full_service_hierarchy_controller, collector, key):
+    # The production cache defaults to no expiry; the TTL must be explicit so
+    # a stale rebuild cannot be cached forever.
+    with mock.patch.object(xds_resources.cache, "set", wraps=xds_resources.cache.set) as mock_set:
+        collector()
+    mock_set.assert_called_once()
+    assert mock_set.call_args.args[0] == key
+    assert mock_set.call_args.kwargs["timeout"] == XDS_CACHE_TIMEOUT == 300
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("collector,key", [(collect_clusters, XDS_CACHE_KEY_CDS), (collect_listeners, XDS_CACHE_KEY_LDS)])
+def test_filtered_collection_is_not_cached(full_service_hierarchy_controller, collector, key):
+    # A filtered subset under the shared unfiltered key would be served to,
+    # and pushed to, every Envoy.
+    full = collector()
+    assert full.resources
+    invalidate_xds_cache(key)
+    collector(resource_names=["no-such-resource"])
+    assert cache.get(key) is None

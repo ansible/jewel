@@ -5,9 +5,10 @@ import queue
 from unittest import mock
 
 import pytest
+from envoy.service.discovery.v3.discovery_pb2 import DiscoveryRequest
 
 import aap_gateway_api.proxy.xds_watcher as xds_watcher_module
-from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, StreamRegistry, _Stream
+from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
 from aap_gateway_api.proxy.xds_watcher import XDSWatcher
 from aap_gateway_api.utils.xds_resources import (
     XDS_CACHE_KEY_CDS,
@@ -20,10 +21,13 @@ from aap_gateway_api.utils.xds_resources import (
 
 
 class FakeContext:
-    """Minimal grpc ServicerContext stand-in; the watcher never touches it."""
+    """Minimal grpc ServicerContext stand-in with a settable active flag."""
+
+    def __init__(self):
+        self.active = True
 
     def is_active(self):
-        return True
+        return self.active
 
 
 def make_fake_stream(registry):
@@ -45,7 +49,15 @@ def drain(events):
 
 def pushed_types(events):
     """The (kind, type_url) pairs of the events drained from a stream queue."""
-    return [(kind, payload[0]) for kind, payload in drain(events)]
+    return drain(events)
+
+
+def prime(watcher, stream):
+    """Run the watcher's first tick, which hints every type once (the current
+    state, which a subscribed stream suppresses if it already holds it), and
+    discard those hints."""
+    watcher.tick()
+    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL)]
 
 
 def change_cds_config(route):
@@ -73,8 +85,35 @@ def _mock_close_old_connections():
     # would instead close pytest-django's transaction-wrapped test connection
     # (same treatment as tests/proxy/test_proxy.py and
     # tests/views/api/v1/ping/test_ping.py).
-    with mock.patch("aap_gateway_api.proxy.xds_watcher.close_old_connections"):
+    with mock.patch("aap_gateway_api.proxy.xds_watcher.close_old_connections"), mock.patch("aap_gateway_api.proxy.ads.close_old_connections"):
         yield
+
+
+def test_tick_is_noop_without_streams():
+    # No connected ADS streams in the worker: no cache reads, no DB rebuilds.
+    watcher = XDSWatcher(StreamRegistry())
+    with mock.patch.object(xds_watcher_module.cache, "get_many") as get_many, mock.patch.object(xds_watcher_module, "close_old_connections") as close:
+        watcher.tick()
+    get_many.assert_not_called()
+    close.assert_not_called()
+    assert watcher._last_versions == {}
+
+
+@pytest.mark.django_db
+def test_first_tick_hints_current_state(full_service_hierarchy_controller):
+    # The first observation of each type broadcasts once (no silent prime),
+    # recording the current state; streams that already hold it suppress the
+    # push (AggregatedDiscoveryService._handle_push, see test_ads.py).
+    registry = StreamRegistry()
+    stream = make_fake_stream(registry)
+    watcher = XDSWatcher(registry)
+    watcher.tick()
+    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL)]
+    assert watcher._last_versions[CDS_TYPE_URL] == collect_clusters().version
+    assert watcher._last_versions[LDS_TYPE_URL] == collect_listeners().version
+
+    watcher.tick()  # unchanged: no further pushes
+    assert stream.events.empty()
 
 
 @pytest.mark.django_db
@@ -82,13 +121,13 @@ def test_tick_pushes_on_model_change(full_service_hierarchy_controller):
     registry = StreamRegistry()
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
-    watcher.tick()  # primes baseline (first observation, silently)
-    assert stream.events.empty()  # nothing pushed without a change
+    prime(watcher, stream)
 
     change_cds_config(full_service_hierarchy_controller.route)
     watcher.tick()
-    kind, (type_url, rs) = stream.events.get(timeout=1)
-    assert kind == "push" and type_url == CDS_TYPE_URL and rs.version != ""
+    kind, type_url = stream.events.get(timeout=1)
+    assert kind == "push" and type_url == CDS_TYPE_URL
+    assert watcher._last_versions[CDS_TYPE_URL] == collect_clusters().version
     # and no LDS push followed a CDS-only change
     assert stream.events.empty()
 
@@ -102,8 +141,7 @@ def test_tick_no_push_when_digest_unchanged(full_service_hierarchy_controller):
     registry = StreamRegistry()
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
-    watcher.tick()  # prime
-    assert pushed_types(stream.events) == []
+    prime(watcher, stream)
 
     change_cds_config(full_service_hierarchy_controller.route)
     watcher.tick()
@@ -115,12 +153,12 @@ def test_tick_no_push_when_digest_unchanged(full_service_hierarchy_controller):
 
 
 @pytest.mark.django_db
-def test_tick_empty_db_no_broadcast():
+def test_tick_empty_db_broadcasts_only_first_observation():
     registry = StreamRegistry()
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
-    watcher.tick()  # collects empty (uncached) — must not broadcast
-    watcher.tick()  # still empty — must not broadcast
+    prime(watcher, stream)  # collects (possibly empty, uncached) state, hints once
+    watcher.tick()  # unchanged — must not broadcast again
     assert stream.events.empty()
 
 
@@ -131,8 +169,7 @@ def test_tick_pushes_cds_before_lds(full_service_hierarchy_controller):
     registry = StreamRegistry()
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
-    watcher.tick()  # prime
-    assert pushed_types(stream.events) == []
+    prime(watcher, stream)
 
     route = full_service_hierarchy_controller.route
     route.is_service_https = not route.is_service_https  # CDS-affecting
@@ -140,28 +177,65 @@ def test_tick_pushes_cds_before_lds(full_service_hierarchy_controller):
     route.save()
     invalidate_xds_cache(XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS)
     watcher.tick()
-    pushed = drain(stream.events)
-    assert [kind for kind, _ in pushed] == ["push", "push"]
-    assert [payload[0] for _, payload in pushed] == [CDS_TYPE_URL, LDS_TYPE_URL]
+    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL)]
 
 
 @pytest.mark.django_db
-def test_tick_warm_cache_prime_is_silent(full_service_hierarchy_controller):
-    # Pre-warm the cache (run another watcher's tick, or call the collector
-    # directly), then start a NEW watcher: its first tick observes the cached
-    # version and must not push; a subsequent model change + invalidate must
-    # push (the warm-start case for workers started after the first)
+def test_tick_warm_cache_first_tick_then_change(full_service_hierarchy_controller):
+    # Pre-warm the cache, then start a NEW watcher (the warm-start case for
+    # workers started after the first): its first tick observes the cached
+    # version and hints it once; a subsequent model change + invalidate must
+    # push.
     collect_clusters()
     collect_listeners()
     registry = StreamRegistry()
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
-    watcher.tick()
-    assert pushed_types(stream.events) == []
+    prime(watcher, stream)
 
     change_cds_config(full_service_hierarchy_controller.route)
     watcher.tick()
     assert pushed_types(stream.events) == [("push", CDS_TYPE_URL)]
+
+
+@pytest.mark.django_db
+def test_tick_treats_foreign_cached_value_as_miss(full_service_hierarchy_controller):
+    # A value that is not a ResourceSet under the key (foreign format) is a
+    # miss: the watcher re-collects instead of raising.
+    registry = StreamRegistry()
+    stream = make_fake_stream(registry)
+    watcher = XDSWatcher(registry)
+    xds_watcher_module.cache.set(XDS_CACHE_KEY_CDS, {"clusters": []})
+    prime(watcher, stream)
+    assert watcher._last_versions[CDS_TYPE_URL] == collect_clusters().version
+
+
+@pytest.mark.django_db
+def test_stream_subscribed_before_first_tick_gets_intervening_change(full_service_hierarchy_controller):
+    # Startup race: a stream subscribes before the watcher's first tick and a
+    # change lands in between.  The first tick must deliver the change; the
+    # unchanged type is suppressed by the servicer.
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    gen = servicer.StreamAggregatedResources(iter([DiscoveryRequest(type_url=CDS_TYPE_URL), DiscoveryRequest(type_url=LDS_TYPE_URL)]), ctx)
+    cds1 = next(gen)
+    lds1 = next(gen)
+    assert (cds1.type_url, lds1.type_url) == (CDS_TYPE_URL, LDS_TYPE_URL)
+
+    change_cds_config(full_service_hierarchy_controller.route)
+    watcher = XDSWatcher(registry)
+    watcher.tick()  # first observation: hints CDS and LDS
+
+    cds2 = next(gen)
+    assert cds2.type_url == CDS_TYPE_URL
+    assert cds2.version_info != cds1.version_info
+    assert cds2.version_info == collect_clusters().version
+    # The LDS hint is suppressed (stream already holds the current LDS);
+    # nothing else is sent before the stream ends.
+    ctx.active = False
+    with pytest.raises(StopIteration):
+        next(gen)
 
 
 @pytest.mark.django_db
@@ -176,10 +250,8 @@ def test_two_watchers_share_one_cache(full_service_hierarchy_controller):
     stream_b = make_fake_stream(registry_b)
     watcher_a = XDSWatcher(registry_a)
     watcher_b = XDSWatcher(registry_b)
-    watcher_a.tick()
-    watcher_b.tick()
-    assert pushed_types(stream_a.events) == []
-    assert pushed_types(stream_b.events) == []
+    prime(watcher_a, stream_a)
+    prime(watcher_b, stream_b)
 
     change_cds_config(full_service_hierarchy_controller.route)
     watcher_a.tick()  # sees the miss, rebuilds, re-caches, pushes
@@ -196,8 +268,7 @@ def test_tick_survives_collector_error(full_service_hierarchy_controller, caplog
     registry = StreamRegistry()
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
-    watcher.tick()  # prime
-    assert pushed_types(stream.events) == []
+    prime(watcher, stream)
 
     change_cds_config(full_service_hierarchy_controller.route)
 
