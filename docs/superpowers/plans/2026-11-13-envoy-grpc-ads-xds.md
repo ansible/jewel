@@ -263,21 +263,25 @@ git commit -m "NO_JIRA: Add ADS servicer for Envoy CDS/LDS streaming"
 
 ```python
 @pytest.mark.django_db
-def test_tick_pushes_on_invalidation(full_service_hierarchy_controller):
+def test_tick_pushes_on_model_change(full_service_hierarchy_controller):
     registry = StreamRegistry()
     stream = make_fake_stream()  # register a bare _Stream with a FakeContext via registry.add
     watcher = XDSWatcher(registry)
-    watcher.tick()  # primes cache and last_versions
-    assert stream.events.empty() or drain(stream.events) == []  # nothing pushed without a change
-    invalidate_xds_cache(XDS_CACHE_KEY_CDS)
+    watcher.tick()  # primes baseline (first observation, silently)
+    assert stream.events.empty()  # nothing pushed without a change
+    # make a real CDS-affecting model change (e.g. flip is_service_https on a Service),
+    # then invalidate_xds_cache(XDS_CACHE_KEY_CDS) — on_commit receivers don't fire in tests
     watcher.tick()
     kind, (type_url, rs) = stream.events.get(timeout=1)
     assert kind == "push" and type_url == CDS_TYPE_URL and rs.version != ""
+    # and no LDS push followed a CDS-only change
 
 @pytest.mark.django_db
 def test_tick_no_push_when_digest_unchanged(full_service_hierarchy_controller):
-    # Prime, invalidate, tick (pushes once), invalidate again without any model change, tick
-    # → queue must stay empty (spurious invalidation, identical rebuild)
+    # Prime, model change + invalidate, tick (pushes once), invalidate again
+    # WITHOUT any model change, tick → queue must stay empty
+    # (identical rebuild produces the same digest — the digest, not the
+    # cache miss, is the change signal)
     ...
 
 @pytest.mark.django_db
@@ -291,8 +295,23 @@ def test_tick_empty_db_no_broadcast():
 
 @pytest.mark.django_db
 def test_tick_pushes_cds_before_lds(full_service_hierarchy_controller):
-    # Invalidate both keys; one tick must queue CDS push before LDS push
+    # Make CDS- and LDS-affecting model changes, invalidate both keys; one
+    # tick must queue CDS push before LDS push
     ...
+
+@pytest.mark.django_db
+def test_tick_warm_cache_prime_is_silent(full_service_hierarchy_controller):
+    # Pre-warm the cache (run another watcher's tick, or call the collector
+    # directly), then start a NEW watcher: its first tick observes the cached
+    # version and must not push; a subsequent model change + invalidate must
+    # push (the warm-start case for workers started after the first)
+
+@pytest.mark.django_db
+def test_two_watchers_share_one_cache(full_service_hierarchy_controller):
+    # Two watchers with separate registries on one cache (the 5-forked-worker
+    # topology): a model change + invalidate → BOTH watchers push to their
+    # own streams (the first to rebuild re-caches; the other must see the
+    # new version on its cache hit and still push)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -304,8 +323,10 @@ Expected: FAIL with import error
 
 `XDSWatcher(threading.Thread, daemon=True)` with a `threading.Event` stop flag; `run()` loops `tick()` + `stop_event.wait(interval)`. `tick()`:
 
-1. `cached = cache.get_many([XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS])`.
-2. For each `(type_url, key, collector)` in a CDS-first ordered list: if `cached.get(key) is None`, `rs = collector()`; if `rs.version != self._last_versions.get(type_url)`, update `_last_versions` and `registry.broadcast(("push", (type_url, rs)))`.
+1. `django.db.close_old_connections()` (long-lived thread; connections are never recycled by request signals).
+2. `cached = cache.get_many([XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS])`.
+3. For each `(type_url, key, collector)` in a CDS-first ordered list: `rs = cached.get(key)`; if `rs is None`, `rs = collector()` (which re-caches non-empty results). The digest comparison runs on EVERY tick, hit or miss — the cache is shared by all forked workers and every node, so the cache miss is not a reliable per-worker change signal: if `rs.version != self._last_versions.get(type_url)`, update `_last_versions` and `registry.broadcast(("push", (type_url, rs)))`.
+4. The whole body is wrapped in `try/except Exception: logger.exception(...)` so a transient DB/redis error degrades one tick instead of silently killing the watcher thread.
 
 Note in a code comment why empty configs re-collect every tick (the no-cache-empty rule) and why that's accepted: no broadcast fires, and truly-empty deployments are transitional.
 

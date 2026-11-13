@@ -150,16 +150,27 @@ keep their cache keys and behavior unchanged.
   resources.
 - There is **no separate version key**. Each gRPC worker process runs a
   lightweight watcher (a daemon thread) that checks the *existing* payload
-  cache keys (`xds:cds`, `xds:lds`, `xds:sds`) via `cache.get_many` roughly
+  cache keys (`xds:cds`, `xds:lds`) via `cache.get_many` roughly
   once per second — a single redis round-trip, not a request through Django.
-  A cache miss means invalidation (or TTL expiry): the watcher rebuilds that
-  type's resources, re-caches them, compares the digest against the last
-  pushed version, and pushes a `DiscoveryResponse` to each connected stream
-  subscribed to that type if it changed. When both CDS and LDS changed, CDS
-  is pushed before LDS (the ordering benefit of ADS).
+  On a hit the watcher uses the cached `ResourceSet` (its digest travels
+  inside the payload); on a miss (invalidation or TTL expiry) it rebuilds
+  that type's resources — which re-caches them — and uses the fresh set.
+  **The change signal is the digest comparison against the watcher's own
+  last-seen version, evaluated on every tick — not the cache miss.** The
+  cache is shared by all 5 forked gRPC workers and every gateway node, so
+  whichever worker rebuilds first re-caches the entry and the rest see
+  hits; only comparing versions on every tick makes every worker's watcher
+  push to its own streams. When a type's digest changed, the watcher
+  pushes a `DiscoveryResponse` to each connected stream subscribed to that
+  type. When both CDS and LDS changed, CDS is pushed before LDS (the
+  ordering benefit of ADS).
+- The first observation of a type (hit or miss, empty or not) primes the
+  watcher's baseline silently — streams already receive current state on
+  subscription from the servicer, so re-pushing it is redundant.
 - This reuses the exact propagation machinery REST polling relies on today:
   `invalidate_xds_cache` deletes the shared-redis key centrally, and every
-  node's watcher observes the miss. Introducing a new version key was
+  node's watcher observes the rebuilt version on its next tick. Introducing
+  a new version key was
   considered and rejected: `DABRedisCache.set`/`delete` broadcast
   invalidation to peer nodes (whose handler deletes the key from the shared
   cache), so a `cache.set(version_key)` would be deleted by peers almost
