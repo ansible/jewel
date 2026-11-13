@@ -68,7 +68,7 @@ class XDSView(XDSDeprecationMixin, APIView):
         return MessageToDict(response)
 
 
-@extend_schema(exclude=True, deprecated=True)
+@extend_schema(exclude=True)
 class ClusterDiscoverServiceView(XDSView):
     """CDS -- returns an Envoy Cluster definition for every Route.
 
@@ -79,7 +79,7 @@ class ClusterDiscoverServiceView(XDSView):
         return Response(self.get_xds_response(collect_clusters(self.get_resource_names(request))))
 
 
-@extend_schema(exclude=True, deprecated=True)
+@extend_schema(exclude=True)
 class ListenerDiscoverServiceView(XDSView):
     """LDS -- returns an Envoy Listener for every HTTPPort.
 
@@ -93,7 +93,7 @@ class ListenerDiscoverServiceView(XDSView):
         return Response(self.get_xds_response(collect_listeners(self.get_resource_names(request))))
 
 
-@extend_schema(exclude=True, deprecated=True)
+@extend_schema(exclude=True)
 class SecretDiscoverServiceView(XDSView):
     """SDS -- returns a single Secret containing all trusted CA certificates.
 
