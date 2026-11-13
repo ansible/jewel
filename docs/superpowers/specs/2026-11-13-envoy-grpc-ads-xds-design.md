@@ -86,9 +86,12 @@ rollback path that is a bootstrap-template change only.
   stream fails fast (UNIMPLEMENTED) and Envoy retries across the other
   `gateway_control_plane` endpoints, converging on an upgraded pod.
   Transient and self-healing; no mitigation needed beyond verification.
-- **Existing cache semantics must be preserved**: shared redis cache with
-  cross-node invalidation broadcast (AAP-65886), and the rule that empty
-  bootstrap-time responses are not cached.
+- **Existing cache semantics must be preserved**: shared redis cache whose
+  xDS keys are deleted centrally on invalidation (AAP-65886), and the rule
+  that empty bootstrap-time responses are not cached. The default
+  `DABCacheWithFallback` over plain django_redis does not broadcast
+  invalidations; propagation relies on the shared key itself, which every
+  node's watcher observes on its next tick.
 
 ## Approaches considered
 
