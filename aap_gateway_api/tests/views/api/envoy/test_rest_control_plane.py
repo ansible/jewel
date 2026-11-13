@@ -258,3 +258,18 @@ def test_collect_db_ca_certs_skips_empty_mixed_with_valid(randname):
     )
     secret = _collect_db_ca_certs()
     assert secret["validation_context"]["trusted_ca"]["inline_string"] == pem
+
+
+@pytest.mark.django_db
+def test_cds_response_carries_deprecation_header(unauthenticated_api_client, full_service_hierarchy_controller):
+    resp = unauthenticated_api_client.post(reverse("cds"), data={})
+    assert resp.status_code == 200
+    assert resp["Deprecation"] == "true"
+
+
+@pytest.mark.parametrize("url_name", ["lds", "sds"])
+@pytest.mark.django_db
+def test_lds_and_sds_responses_carry_deprecation_header(unauthenticated_api_client, full_service_hierarchy_controller, url_name):
+    resp = unauthenticated_api_client.post(reverse(url_name), data={})
+    assert resp.status_code == 200
+    assert resp["Deprecation"] == "true"

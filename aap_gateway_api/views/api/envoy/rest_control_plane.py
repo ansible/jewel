@@ -20,6 +20,11 @@ from aap_gateway_api.utils.xds_resources import collect_clusters, collect_listen
 # None of these endpoints require authentication because they are only
 # reachable from Envoy on the loopback interface.
 #
+# DEPRECATED: these REST endpoints are superseded by the gRPC ADS control
+# plane (aap_gateway_api/proxy/ads.py), which is the primary xDS transport.  They
+# remain functional as a rollback/compatibility path, and every response
+# carries a `Deprecation: true` header.
+#
 # The resource collection itself (queries, protobuf packing, caching) lives
 # in aap_gateway_api/utils/xds_resources.py and is shared with the gRPC ADS
 # control plane.  Responses are cached and invalidated by model signals (see
@@ -28,8 +33,19 @@ from aap_gateway_api.utils.xds_resources import collect_clusters, collect_listen
 # ---------------------------------------------------------------------------
 
 
+class XDSDeprecationMixin:
+    """Marks every response from a REST xDS view with a `Deprecation` header."""
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Deprecation"] = "true"
+        return response
+
+
 @extend_schema(exclude=True)
-class XDSView(APIView):
+class XDSView(XDSDeprecationMixin, APIView):
+    """Base for the deprecated REST xDS views; superseded by gRPC ADS."""
+
     authentication_classes = []
     permission_classes = []
 
@@ -52,15 +68,23 @@ class XDSView(APIView):
         return MessageToDict(response)
 
 
+@extend_schema(exclude=True, deprecated=True)
 class ClusterDiscoverServiceView(XDSView):
-    """CDS -- returns an Envoy Cluster definition for every Route."""
+    """CDS -- returns an Envoy Cluster definition for every Route.
+
+    Deprecated: superseded by gRPC ADS. Kept as a rollback path.
+    """
 
     def post(self, request, format=None):
         return Response(self.get_xds_response(collect_clusters(self.get_resource_names(request))))
 
 
+@extend_schema(exclude=True, deprecated=True)
 class ListenerDiscoverServiceView(XDSView):
-    """LDS -- returns an Envoy Listener for every HTTPPort."""
+    """LDS -- returns an Envoy Listener for every HTTPPort.
+
+    Deprecated: superseded by gRPC ADS. Kept as a rollback path.
+    """
 
     authentication_classes = []
     permission_classes = []
@@ -69,8 +93,12 @@ class ListenerDiscoverServiceView(XDSView):
         return Response(self.get_xds_response(collect_listeners(self.get_resource_names(request))))
 
 
+@extend_schema(exclude=True, deprecated=True)
 class SecretDiscoverServiceView(XDSView):
-    """SDS -- returns a single Secret containing all trusted CA certificates."""
+    """SDS -- returns a single Secret containing all trusted CA certificates.
+
+    Deprecated: superseded by gRPC ADS. Kept as a rollback path.
+    """
 
     # No authentication by design -- only reachable from Envoy on loopback.
     authentication_classes = []
