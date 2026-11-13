@@ -210,7 +210,11 @@ namespace; see "Cache key namespace" below).
   `DABCacheWithFallback` treats as an outage: fail over, then clear the
   shared redis on recovery) and new nodes read dicts. `invalidate_xds_cache`
   also deletes each key's legacy counterpart, so the startup clear and the
-  signal invalidations remove stale legacy entries.
+  signal invalidations remove stale legacy entries. The cleanup is one
+  directional: an old node still mid-upgrade invalidates only the legacy
+  keys, so a change saved through it leaves new nodes' `xds:v2:*` entries
+  stale until their 300s TTL expires — bounded and transitional, and one
+  more reason to rehearse a mixed-version window before rollout.
 - **Filtered REST requests are not cached**: the REST views pass
   `resource_names` through to the collectors; a filtered collection is
   returned but never written under the shared unfiltered key (which the
