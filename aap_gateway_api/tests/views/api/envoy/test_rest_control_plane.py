@@ -7,12 +7,7 @@ from django.urls import reverse
 
 from aap_gateway_api.models.ca_certificate import CACertificate
 from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
-from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, SecretDiscoverServiceView
-
-
-@pytest.fixture
-def secret_view():
-    return SecretDiscoverServiceView()
+from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, _collect_db_ca_certs
 
 
 @pytest.mark.django_db
@@ -139,10 +134,10 @@ def test_cds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     # Response now has resources
     assert "resources" in populated_response.data
     assert len(populated_response.data.get("resources", [])) > 0
-    # Cache should now be populated
+    # Cache should now be populated with the ResourceSet that was served
     cached = cache.get(XDS_CACHE_KEY_CDS)
     assert cached is not None
-    assert cached == populated_response.data
+    assert cached.version == populated_response.data["versionInfo"]
 
 
 @pytest.mark.django_db
@@ -190,10 +185,10 @@ def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     # Response now has resources
     assert "resources" in populated_response.data
     assert len(populated_response.data.get("resources", [])) > 0
-    # Cache should now be populated
+    # Cache should now be populated with the ResourceSet that was served
     cached = cache.get(XDS_CACHE_KEY_LDS)
     assert cached is not None
-    assert cached == populated_response.data
+    assert cached.version == populated_response.data["versionInfo"]
 
 
 @pytest.mark.parametrize(
@@ -219,17 +214,17 @@ def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     ],
 )
 @pytest.mark.django_db
-def test_collect_db_ca_certs_no_usable_pem(secret_view, randname, setup_certs):
+def test_collect_db_ca_certs_no_usable_pem(randname, setup_certs):
     CACertificate.objects.all().delete()
     setup_certs(randname)
-    secret = secret_view._collect_db_ca_certs()
+    secret = _collect_db_ca_certs()
     assert secret["name"] == SDS_SECRET_CONFIG_NAME
     vc = secret["validation_context"]
     assert "trusted_ca" not in vc
 
 
 @pytest.mark.django_db
-def test_collect_db_ca_certs_with_pem_data(secret_view, randname):
+def test_collect_db_ca_certs_with_pem_data(randname):
     CACertificate.objects.all().delete()
     pem_a = "-----BEGIN CERTIFICATE-----\naaa\n-----END CERTIFICATE-----"
     pem_b = "-----BEGIN CERTIFICATE-----\nbbb\n-----END CERTIFICATE-----"
@@ -243,12 +238,12 @@ def test_collect_db_ca_certs_with_pem_data(secret_view, randname):
         pem_data=pem_b,
         sha256=hashlib.sha256(pem_b.encode()).hexdigest(),
     )
-    secret = secret_view._collect_db_ca_certs()
+    secret = _collect_db_ca_certs()
     assert secret["validation_context"]["trusted_ca"]["inline_string"] == f"{pem_a}\n{pem_b}"
 
 
 @pytest.mark.django_db
-def test_collect_db_ca_certs_skips_empty_mixed_with_valid(secret_view, randname):
+def test_collect_db_ca_certs_skips_empty_mixed_with_valid(randname):
     CACertificate.objects.all().delete()
     pem = "-----BEGIN CERTIFICATE-----\nccc\n-----END CERTIFICATE-----"
     CACertificate.objects.create(
@@ -261,5 +256,5 @@ def test_collect_db_ca_certs_skips_empty_mixed_with_valid(secret_view, randname)
         pem_data=pem,
         sha256=hashlib.sha256(pem.encode()).hexdigest(),
     )
-    secret = secret_view._collect_db_ca_certs()
+    secret = _collect_db_ca_certs()
     assert secret["validation_context"]["trusted_ca"]["inline_string"] == pem
