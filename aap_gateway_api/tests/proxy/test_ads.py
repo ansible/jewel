@@ -7,7 +7,7 @@ import pytest
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryRequest
 from google.rpc import status_pb2
 
-from aap_gateway_api.proxy.ads import CDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
+from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
 from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, ResourceSet, invalidate_xds_cache
 
 UNKNOWN_TYPE_URL = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
@@ -82,7 +82,7 @@ def test_ack_with_current_version_sends_nothing(full_service_hierarchy_controlle
 
 
 @pytest.mark.django_db
-def test_nack_is_logged(full_service_hierarchy_controller, caplog):
+def test_nack_is_logged_and_sends_nothing(full_service_hierarchy_controller, caplog):
     registry = StreamRegistry()
     servicer = AggregatedDiscoveryService(registry=registry)
     ctx = FakeContext()
@@ -90,19 +90,24 @@ def test_nack_is_logged(full_service_hierarchy_controller, caplog):
     resp1 = next(gen)
 
     stream = registry.streams()[0]
+    # Envoy rejects resp1 and holds no ACKed version yet, so version_info is
+    # empty -- a mishandled NACK would fall through and re-send a response.
     nack = DiscoveryRequest(
         type_url=CDS_TYPE_URL,
-        version_info=resp1.version_info,
         response_nonce=resp1.nonce,
         error_detail=status_pb2.Status(code=13, message="invalid cluster config"),
     )
-    stream.events.put(("request", nack))
     with caplog.at_level(logging.WARNING, logger="aap_gateway_api.proxy.ads"):
-        resp2 = next(gen)
+        stream.events.put(("request", nack))
+        # Give the stream a moment before tearing it down; the queued NACK is
+        # consumed inside next(gen) below, ahead of the inactive-context check.
+        time.sleep(0.5)
+        ctx.active = False
+        # A NACK is logged and dropped; if it had produced a response,
+        # next(gen) would return it here.
+        with pytest.raises(StopIteration):
+            next(gen)
     assert "invalid cluster config" in caplog.text
-    # The current state is re-sent in response to the NACK.
-    assert resp2.version_info == resp1.version_info
-    assert resp2.nonce != resp1.nonce
 
 
 def test_unknown_type_url_logged_and_ignored(caplog):
@@ -132,6 +137,45 @@ def test_stream_removed_from_registry_on_context_inactive(full_service_hierarchy
     with pytest.raises(StopIteration):
         next(gen)  # generator loop sees inactive context, cleans up, returns
     assert len(registry.streams()) == 0
+
+
+@pytest.mark.django_db
+def test_push_for_unsubscribed_type_sends_nothing(full_service_hierarchy_controller):
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    # This stream subscribes to CDS only.
+    gen = servicer.StreamAggregatedResources(iter([DiscoveryRequest(type_url=CDS_TYPE_URL)]), ctx)
+    next(gen)
+
+    stream = registry.streams()[0]
+    stream.events.put(("push", (LDS_TYPE_URL, ResourceSet(version="pushed-lds", resources=[]))))
+    # Give the stream a moment before tearing it down; the queued LDS push is
+    # consumed inside next(gen) below, ahead of the inactive-context check.
+    time.sleep(0.5)
+    ctx.active = False
+    # The stream never subscribed to LDS, so the push must not produce a
+    # response; if it had, next(gen) would return it here.
+    with pytest.raises(StopIteration):
+        next(gen)
+
+
+@pytest.mark.django_db
+def test_push_for_subscribed_type_sends_response(full_service_hierarchy_controller):
+    # Complement of test_push_for_unsubscribed_type_sends_nothing.
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    gen = servicer.StreamAggregatedResources(iter([DiscoveryRequest(type_url=CDS_TYPE_URL)]), ctx)
+    resp1 = next(gen)
+
+    stream = registry.streams()[0]
+    pushed = ResourceSet(version=f"pushed-{resp1.version_info}", resources=resp1.resources)
+    stream.events.put(("push", (CDS_TYPE_URL, pushed)))
+    resp2 = next(gen)
+
+    assert resp2.type_url == CDS_TYPE_URL
+    assert resp2.version_info == pushed.version
 
 
 @pytest.mark.django_db

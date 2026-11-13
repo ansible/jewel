@@ -5,7 +5,9 @@ all xDS resource types (CDS, LDS, ...) over it.  This module implements the
 server side of that stream: each connected stream is registered in a
 StreamRegistry (which the cache-invalidation watcher broadcasts pushes to),
 new subscriptions are answered with the current state from the shared xDS
-collectors, and pushes for a version a stream already holds are suppressed.
+collectors, NACKs are logged and dropped, and pushes are sent only for
+resource types the stream subscribed to and only for versions it does not
+already hold.
 """
 
 import logging
@@ -124,9 +126,14 @@ class AggregatedDiscoveryService(ads_pb2_grpc.AggregatedDiscoveryServiceServicer
             return None
         stream.subscribed.add(type_url)
         if request.error_detail.code != 0:
-            # NACK: Envoy rejected the last update; log it and re-send the current state.
+            # NACK: Envoy rejected the configuration we last sent.  Log and drop --
+            # re-sending the same config would loop NACKs at network speed against
+            # a real Envoy client.  Nothing is lost: the next push with a new
+            # version still goes out because _handle_push compares against the
+            # last-sent version.
             logger.warning("Envoy NACK for %s: %s", type_url, request.error_detail.message)
-        elif request.version_info and request.version_info == stream.last_versions.get(type_url):
+            return None
+        if request.version_info and request.version_info == stream.last_versions.get(type_url):
             # ACK of the version we last sent; nothing to send.
             return None
         # Always collect the full resource set and ignore request.resource_names:
@@ -138,6 +145,10 @@ class AggregatedDiscoveryService(ads_pb2_grpc.AggregatedDiscoveryServiceServicer
 
     def _handle_push(self, stream: _Stream, payload: tuple) -> DiscoveryResponse | None:
         type_url, resource_set = payload
+        if type_url not in stream.subscribed:
+            # The stream never subscribed to this resource type; an unsolicited
+            # response is something Envoy does not expect.
+            return None
         if resource_set.version == stream.last_versions.get(type_url):
             return None
         return self._build_response(stream, type_url, resource_set)
