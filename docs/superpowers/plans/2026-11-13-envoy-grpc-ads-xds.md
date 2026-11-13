@@ -185,7 +185,7 @@ def test_ack_with_current_version_sends_nothing(full_service_hierarchy_controlle
 
 @pytest.mark.django_db
 def test_nack_is_logged(full_service_hierarchy_controller, caplog):
-    # DiscoveryRequest with error_detail set → logged at WARNING, current state re-sent
+    # DiscoveryRequest with error_detail set → logged at WARNING, no response (log-and-drop)
     ...
 
 def test_unknown_type_url_logged_and_ignored(caplog):
@@ -224,7 +224,7 @@ Structure:
 - `AggregatedDiscoveryService.StreamAggregatedResources(self, request_iterator, context)`:
   1. Create `_Stream`, `registry.add`, start the daemon reader thread.
   2. Generator loop: `while context.is_active():` block on `stream.events.get(timeout=0.5)` (re-loop on `queue.Empty`).
-  3. On `("request", req)`: `type_url` not in `{CDS_TYPE_URL, LDS_TYPE_URL}` → `logger.warning`, skip. If `req.error_detail.code != 0` → `logger.warning` with `error_detail.message` (NACK). If it's an ACK whose `version_info` equals the current version for that type → skip. Otherwise fetch the current `ResourceSet` via the Task 1 collector, record the version, yield `DiscoveryResponse(version_info=rs.version, nonce=uuid4().hex, resources=rs.resources, type_url=type_url)`.
+  3. On `("request", req)`: `type_url` not in `{CDS_TYPE_URL, LDS_TYPE_URL}` → `logger.warning`, skip. If `req.error_detail.code != 0` → `logger.warning` with `error_detail.message` (NACK, log-and-drop: send nothing). If it's an ACK whose `version_info` equals the current version for that type → skip. Otherwise fetch the current `ResourceSet` via the Task 1 collector, record the version, yield `DiscoveryResponse(version_info=rs.version, nonce=uuid4().hex, resources=rs.resources, type_url=type_url)`.
   4. On `("push", (type_url, rs))`: if `rs.version == stream.last_versions.get(type_url)` skip; record and yield the same response shape.
   5. `finally: registry.remove(stream)`.
 - Collectors map: a module-level dict `{CDS_TYPE_URL: collect_clusters, LDS_TYPE_URL: collect_listeners}`.

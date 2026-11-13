@@ -131,7 +131,9 @@ The handler:
 - Tracks per-stream subscribed types (CDS and LDS; SDS is not served here
   in this phase). ACKs are consumed and ignored;
   NACKs (requests with `error_detail`) are logged with the detail and
-  otherwise treated as a re-subscription.
+  produce no response — re-sending a rejected version would loop NACKs at
+  network speed. The next push with a new version still goes out because
+  pushes compare against the last-sent version.
 - Sends `version_info` on every response (see versioning below) and a
   `nonce` per response.
 
