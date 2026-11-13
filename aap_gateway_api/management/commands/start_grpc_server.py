@@ -9,8 +9,11 @@ from ansible_base.observability import setup_observability
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from envoy.service.auth.v3 import external_auth_pb2_grpc
+from envoy.service.discovery.v3 import ads_pb2_grpc
 
+from aap_gateway_api.proxy.ads import AggregatedDiscoveryService, StreamRegistry
 from aap_gateway_api.proxy.control_plane import ExternalAuth
+from aap_gateway_api.proxy.xds_watcher import XDSWatcher
 
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
@@ -47,8 +50,16 @@ def _run_server(bind_address, debug):
         options=options,
     )
     external_auth_pb2_grpc.add_AuthorizationServicer_to_server(ExternalAuth(), server)
+
+    # Each worker process gets its own registry and watcher; the watchers
+    # converge via the shared cache's digests.
+    registry = StreamRegistry()
+    ads_pb2_grpc.add_AggregatedDiscoveryServiceServicer_to_server(AggregatedDiscoveryService(registry), server)
+    watcher = XDSWatcher(registry)
+
     server.add_insecure_port(bind_address)
     server.start()
+    watcher.start()
     server.wait_for_termination()
 
 
