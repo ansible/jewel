@@ -1,44 +1,10 @@
-import logging
-
-from django.core.cache import cache
-from django.db.models import Max, Prefetch
-from envoy.config.cluster.v3.cluster_pb2 import Cluster
-from envoy.config.listener.v3.listener_pb2 import Listener
+from drf_spectacular.utils import extend_schema
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryResponse
-from google.protobuf import symbol_database
-from google.protobuf.any_pb2 import Any
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import MessageToDict
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from aap_gateway_api.models import HTTPPort, Route
-from aap_gateway_api.models.service_cluster import ServiceCluster
-from aap_gateway_api.models.service_type import DefaultServiceType
-
-# These modules must be imported so their protobuf message types get registered
-# with symbol_database.Default().pool.  Without this, ParseDict() will fail to
-# resolve the @type URLs embedded in the xDS resources Envoy expects.
-# isort: off
-from envoy.extensions.transport_sockets.tls.v3 import tls_pb2  # noqa: F401
-from envoy.extensions.filters.http.router.v3 import router_pb2  # noqa: F401
-from envoy.extensions.filters.http.lua.v3 import lua_pb2  # noqa: F401
-from envoy.extensions.access_loggers.stream.v3 import stream_pb2  # noqa: F401
-from envoy.extensions.filters.http.ext_authz.v3 import ext_authz_pb2  # noqa: F401
-from envoy.extensions.filters.network.http_connection_manager.v3 import http_connection_manager_pb2  # noqa: F401
-from envoy.extensions.retry.host.previous_hosts.v3 import previous_hosts_pb2  # noqa: F401
-from envoy.service.secret.v3 import sds_pb2, sds_pb2_grpc  # noqa: F401
-from envoy.extensions.transport_sockets.tls.v3.secret_pb2 import Secret
-from aap_gateway_api.models.ca_certificate import CACertificate
-from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
-from drf_spectacular.utils import extend_schema
-
-# isort: on
-
-logger = logging.getLogger("aap_gateway_api.views.api.envoy.rest_control_plane")
-
-XDS_CACHE_KEY_CDS = "xds:cds"
-XDS_CACHE_KEY_LDS = "xds:lds"
-XDS_CACHE_KEY_SDS = "xds:sds"
+from aap_gateway_api.utils.xds_resources import collect_clusters, collect_listeners, collect_secrets
 
 # ---------------------------------------------------------------------------
 # Envoy xDS REST control plane views
@@ -54,135 +20,89 @@ XDS_CACHE_KEY_SDS = "xds:sds"
 # None of these endpoints require authentication because they are only
 # reachable from Envoy on the loopback interface.
 #
-# Responses are cached and invalidated by model signals (see
+# DEPRECATED: these REST endpoints are superseded by the gRPC ADS control
+# plane (aap_gateway_api/proxy/ads.py), which is the primary xDS transport.  They
+# remain functional as a rollback/compatibility path, and every response
+# carries a `Deprecation: true` header.
+#
+# The resource collection itself (queries, protobuf packing, caching) lives
+# in aap_gateway_api/utils/xds_resources.py and is shared with the gRPC ADS
+# control plane.  Responses are cached and invalidated by model signals (see
 # aap_gateway_api/signals/xds_cache.py) so that the ~5-second Envoy
 # polling interval does not trigger full DB rebuilds every time.
 # ---------------------------------------------------------------------------
 
 
-def invalidate_xds_cache(*keys):
-    """Delete one or more xDS cache keys."""
-    cache.delete_many(keys)
+class XDSDeprecationMixin:
+    """Marks every response from a REST xDS view with a `Deprecation` header."""
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Deprecation"] = "true"
+        return response
 
 
 @extend_schema(exclude=True)
-class XDSView(APIView):
+class XDSView(XDSDeprecationMixin, APIView):
+    """Base for the deprecated REST xDS views; superseded by gRPC ADS."""
+
     authentication_classes = []
     permission_classes = []
 
-    def get_qs(self, request, model_class, name_field):
-        # DISTINCT ON is PostgreSQL-specific; it gives us one row per unique
-        # value of name_field (e.g. one Route per envoy_cluster_name).
-        qs = model_class.objects.order_by(name_field).distinct(name_field)
+    def get_resource_names(self, request):
+        # Parse resource_names from the POST body, preserving the semantics of
+        # the filtering the views historically applied to their querysets:
+        # a missing value means all resources, a lone "*" also means all.
+        names = request.POST.get("resource_names")
+        if not names:
+            return None
+        if len(names) == 1 and names[0] == "*":
+            return None
+        # request.POST may yield a bare string (form-encoded body); listing it
+        # keeps the historical name__in filtering behavior for that case.
+        return list(names)
 
-        if names := request.POST.get("resource_names"):
-            if len(names) == 1 and names[0] == "*":
-                return qs
-            qs = qs.filter(**{f"{name_field}__in": names})
-
-        return qs
-
-    def get_xds_response(self, resource_type, resources):
-        """Wrap a list of resource dicts into a protobuf DiscoveryResponse."""
-        response = DiscoveryResponse()
-        for resource in resources:
-            c = resource_type()
-            ParseDict(resource, c, descriptor_pool=symbol_database.Default().pool)
-
-            a = Any()
-            a.Pack(c)
-
-            response.resources.append(a)
-
+    def get_xds_response(self, resource_set):
+        """Wrap a ResourceSet into a protobuf DiscoveryResponse."""
+        response = DiscoveryResponse(version_info=resource_set.version, resources=resource_set.resources)
         return MessageToDict(response)
 
 
+@extend_schema(exclude=True)
 class ClusterDiscoverServiceView(XDSView):
-    """CDS -- returns an Envoy Cluster definition for every Route."""
+    """CDS -- returns an Envoy Cluster definition for every Route.
+
+    Deprecated: superseded by gRPC ADS. Kept as a rollback path.
+    """
 
     def post(self, request, format=None):
-        cached = cache.get(XDS_CACHE_KEY_CDS)
-        if cached is not None:
-            logger.debug("CDS cache hit")
-            return Response(cached)
-
-        routes = list(
-            self.get_qs(request, Route, "envoy_cluster_name")
-            .select_related('service_cluster')
-            .prefetch_related('service_cluster__nodes', 'service_cluster__service_type')
-        )
-
-        # Pre-compute the maximum per-route request_timeout_seconds for each
-        # ServiceCluster in a single query.  We stash the result as the
-        # _max_route_timeout attribute so that
-        # ServiceCluster.get_effective_health_check_timeout_seconds() can use
-        # it instead of issuing a per-cluster aggregate (N+1).
-        cluster_ids = {r.service_cluster_id for r in routes}
-        max_timeouts = dict(ServiceCluster.objects.filter(pk__in=cluster_ids).annotate(_max=Max('routes__request_timeout_seconds')).values_list('pk', '_max'))
-        for route in routes:
-            route.service_cluster._max_route_timeout = max_timeouts.get(route.service_cluster_id)
-
-        clusters = [x.get_xds_cluster_config() for x in routes]
-        response_data = self.get_xds_response(Cluster, clusters)
-        # Only cache if we have resources; empty responses during bootstrap should not be cached
-        if clusters:
-            cache.set(XDS_CACHE_KEY_CDS, response_data)
-        return Response(response_data)
+        return Response(self.get_xds_response(collect_clusters(self.get_resource_names(request))))
 
 
+@extend_schema(exclude=True)
 class ListenerDiscoverServiceView(XDSView):
-    """LDS -- returns an Envoy Listener for every HTTPPort."""
+    """LDS -- returns an Envoy Listener for every HTTPPort.
+
+    Deprecated: superseded by gRPC ADS. Kept as a rollback path.
+    """
 
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, format=None):
-        cached = cache.get(XDS_CACHE_KEY_LDS)
-        if cached is not None:
-            return Response(cached)
-
-        ports = self.get_qs(request, HTTPPort, "envoy_listener_name").prefetch_related(
-            Prefetch('routes', queryset=Route.objects.select_related('service_cluster__service_type').order_by('order')),
-            'routes__service_cluster__nodes',
-        )
-
-        gw_cluster_name = None
-        sc = ServiceCluster.objects.filter(service_type__name=DefaultServiceType.GATEWAY.value).first()
-        if sc:
-            gw_route = Route.objects.filter(service_cluster=sc).first()
-            if gw_route:
-                gw_cluster_name = gw_route.envoy_cluster_name
-
-        listeners = [x.get_xds_listener_config(gateway_cluster_name=gw_cluster_name) for x in ports]
-
-        response_data = self.get_xds_response(Listener, listeners)
-        # Only cache if we have resources; empty responses during bootstrap should not be cached
-        if listeners:
-            cache.set(XDS_CACHE_KEY_LDS, response_data)
-        return Response(response_data)
+        return Response(self.get_xds_response(collect_listeners(self.get_resource_names(request))))
 
 
+@extend_schema(exclude=True)
 class SecretDiscoverServiceView(XDSView):
-    """SDS -- returns a single Secret containing all trusted CA certificates."""
+    """SDS -- returns a single Secret containing all trusted CA certificates.
+
+    Deprecated: superseded by gRPC ADS. Kept as a rollback path.
+    """
 
     # No authentication by design -- only reachable from Envoy on loopback.
     authentication_classes = []
     permission_classes = []
 
     def post(self, request, format=None):
-        cached = cache.get(XDS_CACHE_KEY_SDS)
-        if cached is not None:
-            return Response(cached)
-
-        secret_resource = self._collect_db_ca_certs()
-        response_data = self.get_xds_response(Secret, [secret_resource])
-        cache.set(XDS_CACHE_KEY_SDS, response_data)
-        return Response(response_data)
-
-    def _collect_db_ca_certs(self) -> dict:
-        pem_blocks = [(cert.pem_data or "").strip() for cert in CACertificate.objects.all()]
-        pem_blocks = [p for p in pem_blocks if p]
-        secret = {"name": SDS_SECRET_CONFIG_NAME, "validation_context": {}}
-        if pem_blocks:
-            secret["validation_context"]["trusted_ca"] = {"inline_string": "\n".join(pem_blocks)}
-        return secret
+        return Response(self.get_xds_response(collect_secrets()))

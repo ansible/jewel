@@ -9,8 +9,11 @@ from ansible_base.observability import setup_observability
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from envoy.service.auth.v3 import external_auth_pb2_grpc
+from envoy.service.discovery.v3 import ads_pb2_grpc
 
+from aap_gateway_api.proxy.ads import AggregatedDiscoveryService, StreamRegistry
 from aap_gateway_api.proxy.control_plane import ExternalAuth
+from aap_gateway_api.proxy.xds_watcher import XDSWatcher
 
 logger = logging.getLogger('aap.gateway.proxy.control_plane')
 
@@ -25,7 +28,10 @@ os.environ["GRPC_VERBOSITY"] = getattr(settings, "GRPC_VERBOSITY", "ERROR")
 def _run_server(bind_address, debug):
     setup_observability(service_name="gateway-grpc")
     if debug:
-        _THREAD_CONCURRENCY = 1
+        # Single process, but at least 2 threads: an ADS stream holds its
+        # worker thread for the stream's lifetime, so a single thread would
+        # let one connected Envoy starve every ext_authz check.
+        _THREAD_CONCURRENCY = 2
         try:
             import debugpy
 
@@ -47,8 +53,16 @@ def _run_server(bind_address, debug):
         options=options,
     )
     external_auth_pb2_grpc.add_AuthorizationServicer_to_server(ExternalAuth(), server)
+
+    # Each worker process gets its own registry and watcher; the watchers
+    # converge via the shared cache's digests.
+    registry = StreamRegistry()
+    ads_pb2_grpc.add_AggregatedDiscoveryServiceServicer_to_server(AggregatedDiscoveryService(registry), server)
+    watcher = XDSWatcher(registry)
+
     server.add_insecure_port(bind_address)
     server.start()
+    watcher.start()
     server.wait_for_termination()
 
 
@@ -56,7 +70,7 @@ class Command(BaseCommand):
     help = "Launch gRPC auth service for envoy."
 
     def add_arguments(self, parser):
-        parser.add_argument('--debug', action='store_true', help='Run GRPC in debug mode (single threaded)')
+        parser.add_argument('--debug', action='store_true', help='Run GRPC in debug mode (single process)')
 
     def handle(self, *args, **options):
         if options['debug']:

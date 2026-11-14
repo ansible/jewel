@@ -50,3 +50,30 @@ def test_run_server_debug_mode(mock_server_factory, mock_add_servicer):
 
         # Verify debugpy.listen was called in debug mode
         mock_debugpy.listen.assert_called_once_with(("0.0.0.0", 3001))
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("debug", [True, False])
+@patch('envoy.service.auth.v3.external_auth_pb2_grpc.add_AuthorizationServicer_to_server')
+@patch('grpc.server')
+def test_run_server_thread_pool_size(mock_server_factory, mock_add_servicer, debug, settings):
+    """Debug mode needs >= 2 threads: an ADS stream holds its worker thread for
+    its lifetime and would otherwise starve ext_authz.  Production keeps the
+    configured per-process thread count."""
+    from aap_gateway_api.management.commands import start_grpc_server
+
+    mock_grpc_server = MagicMock()
+    mock_server_factory.return_value = mock_grpc_server
+    mock_grpc_server.wait_for_termination.side_effect = KeyboardInterrupt()
+
+    with patch.dict('sys.modules', {'debugpy': MagicMock()}), patch.object(start_grpc_server.futures, 'ThreadPoolExecutor') as mock_executor:
+        try:
+            start_grpc_server._run_server(bind_address="[::]:50051", debug=debug)
+        except KeyboardInterrupt:
+            pass
+
+    max_workers = mock_executor.call_args.kwargs['max_workers']
+    if debug:
+        assert max_workers >= 2
+    else:
+        assert max_workers == settings.GRPC_SERVER_MAX_THREADS_PER_PROCESS
