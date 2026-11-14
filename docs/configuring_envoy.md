@@ -159,6 +159,8 @@ The gateway generates the Envoy configuration from these models and delivers it 
 - **SDS** (secrets) still uses REST polling.
 - **REST xDS endpoints** (`/v3/discovery:*`) are deprecated but still functional. Responses from these endpoints include a `Deprecation: true` header. They remain available for compatibility, for example when a newer gateway runs with an older Envoy bootstrap.
 
+To inspect the configuration the control plane would deliver (regardless of transport), run `manage.py dump_xds` inside the gateway container. It prints the current CDS/LDS/SDS resources with their version digests as JSON; pass `--type lds` (repeatable) to limit the output.
+
 ### Rolling back to REST xDS
 
 To switch CDS and LDS back to REST polling, revert the Envoy bootstrap config so that the `cds_config` and `lds_config` entries use REST `api_config_source` blocks pointing at the `/v3/discovery:*` endpoints, then restart Envoy.
