@@ -80,6 +80,7 @@ class XDSWatcher(threading.Thread):
             # request signals, so close stale ones here.
             close_old_connections()
             cached = cache.get_many([key for _, key, _ in WATCHED_TYPES])
+            changed: set[str] = set()
             for type_url, key, collector in WATCHED_TYPES:
                 # A value that is not a ResourceSet (e.g. a foreign format) is
                 # treated as a miss.
@@ -96,7 +97,18 @@ class XDSWatcher(threading.Thread):
                 # (AggregatedDiscoveryService._handle_push).
                 if rs.version != self._last_versions.get(type_url):
                     self._last_versions[type_url] = rs.version
+                    changed.add(type_url)
                     logger.info("Pushing %s version %s", type_url, rs.version)
+                    self.registry.broadcast(("push", type_url))
+            if changed:
+                # Re-hint types some stream NACKed: a listener is often
+                # rejected only because its cluster had not arrived yet, and
+                # the change just broadcast may be exactly that cluster.
+                # Streams that already hold the current version suppress
+                # these hints, so the cost is one cache-hit collect per
+                # stream per change.
+                for type_url in self.registry.nacked_types() - changed:
+                    logger.info("Re-hinting NACKed %s after %s changed", type_url, sorted(changed))
                     self.registry.broadcast(("push", type_url))
             for type_url in self.registry.take_repush_requests():
                 # A NACK asked for one re-push of this type: broadcast it even

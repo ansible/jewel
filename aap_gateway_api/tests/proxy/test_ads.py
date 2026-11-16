@@ -157,9 +157,11 @@ def test_nack_forgets_version_and_requests_one_repush(full_service_hierarchy_con
     resp1 = next(gen)
 
     stream = registry.streams()[0]
+    # Per the xDS protocol a NACK's version_info is the last ACCEPTED
+    # version (empty here -- nothing was accepted yet) and response_nonce
+    # identifies the rejected response.
     nack = DiscoveryRequest(
         type_url=CDS_TYPE_URL,
-        version_info=resp1.version_info,
         response_nonce=resp1.nonce,
         error_detail=status_pb2.Status(code=13, message="unknown cluster"),
     )
@@ -184,6 +186,49 @@ def test_nack_forgets_version_and_requests_one_repush(full_service_hierarchy_con
     stream.events.put(("request", nack))
     assert_stream_sends_nothing_more(gen, ctx)
     assert registry.take_repush_requests() == set()
+
+
+@pytest.mark.django_db
+def test_nack_after_new_version_requests_repush_again(full_service_hierarchy_controller):
+    # Two different rejected responses following the same accepted state
+    # must each get their re-push: the dedup key is the version that was
+    # rejected (the last one we sent), NOT the NACK's version_info -- the
+    # protocol sets that to the last accepted version, so both NACKs carry
+    # the same (here: empty) version_info.
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    gen = servicer.StreamAggregatedResources(iter([DiscoveryRequest(type_url=CDS_TYPE_URL)]), ctx)
+    resp1 = next(gen)
+
+    stream = registry.streams()[0]
+    nack1 = DiscoveryRequest(
+        type_url=CDS_TYPE_URL,
+        response_nonce=resp1.nonce,
+        error_detail=status_pb2.Status(code=13, message="unknown cluster"),
+    )
+    stream.events.put(("request", nack1))
+    stream.events.put(("push", CDS_TYPE_URL))
+    resp2 = next(gen)  # the re-push of the same version
+    assert registry.take_repush_requests() == {CDS_TYPE_URL}  # drained
+
+    # A new version is sent (model change + hint) and rejected in turn.
+    change_cds_config(full_service_hierarchy_controller.route)
+    stream.events.put(("push", CDS_TYPE_URL))
+    resp3 = next(gen)
+    assert resp3.version_info not in (resp1.version_info, resp2.version_info)
+
+    nack2 = DiscoveryRequest(
+        type_url=CDS_TYPE_URL,
+        response_nonce=resp3.nonce,
+        error_detail=status_pb2.Status(code=13, message="still unknown cluster"),
+    )
+    stream.events.put(("request", nack2))
+    ctx.active = False
+    with pytest.raises(StopIteration):
+        next(gen)  # processes the NACK; a NACK produces no response
+    # The second rejected version gets its own re-push request.
+    assert registry.take_repush_requests() == {CDS_TYPE_URL}
 
 
 def test_unknown_type_url_logged_and_ignored(caplog):

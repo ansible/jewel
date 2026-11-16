@@ -139,9 +139,16 @@ The handler:
   cluster arrives in the CDS response that follows), so the stream forgets
   the rejected version and asks the watcher to re-push that type once on
   its next tick (~1s), which re-sends the same version with the dependency
-  now present. A repeated NACK of the same version asks for nothing
-  further (a genuinely bad config must not loop); the next version change
-  is pushed normally.
+  now present. Per the xDS protocol the NACK's `version_info` is the last
+  accepted version, so the rejected version is identified from the last
+  response the server sent, not from the request; each distinct rejected
+  version gets its own re-push, and a repeated NACK of the same version
+  asks for nothing further (a genuinely bad config must not loop). The
+  NACKed type is also marked in the stream registry: whenever the other
+  watched type's digest changes, the watcher re-hints the NACKed type too,
+  so a listener rejected because its cluster had not arrived is resent
+  once the cluster change lands (streams that already hold the current
+  version suppress the extra hint).
 - Sends `version_info` on every response (see versioning below) and a
   `nonce` per response.
 

@@ -126,7 +126,8 @@ def test_tick_pushes_on_model_change(full_service_hierarchy_controller):
     change_cds_config(full_service_hierarchy_controller.route)
     watcher.tick()
     kind, type_url = stream.events.get(timeout=1)
-    assert kind == "push" and type_url == CDS_TYPE_URL
+    assert kind == "push"
+    assert type_url == CDS_TYPE_URL
     assert watcher._last_versions[CDS_TYPE_URL] == collect_clusters().version
     # and no LDS push followed a CDS-only change
     assert stream.events.empty()
@@ -236,6 +237,26 @@ def test_stream_subscribed_before_first_tick_gets_intervening_change(full_servic
     ctx.active = False
     with pytest.raises(StopIteration):
         next(gen)
+
+
+@pytest.mark.django_db
+def test_tick_rehints_nacked_type_when_other_type_changes(full_service_hierarchy_controller):
+    # A NACKed type is re-hinted when the OTHER type changes, even though
+    # its own digest did not: a listener is often rejected only because its
+    # cluster had not arrived yet, and the CDS change delivers the cluster.
+    registry = StreamRegistry()
+    stream = make_fake_stream(registry)
+    watcher = XDSWatcher(registry)
+    prime(watcher, stream)
+
+    registry.mark_nacked(LDS_TYPE_URL)
+    change_cds_config(full_service_hierarchy_controller.route)
+    watcher.tick()
+    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL)]
+
+    # Nothing changed on the next tick: no further hints.
+    watcher.tick()
+    assert stream.events.empty()
 
 
 @pytest.mark.django_db

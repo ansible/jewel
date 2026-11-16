@@ -68,6 +68,7 @@ class StreamRegistry:
     def __init__(self) -> None:
         self._streams: list[_Stream] = []
         self._repush_requests: set[str] = set()
+        self._nacked: set[str] = set()
         self._lock = threading.Lock()
 
     def request_repush(self, type_url: str) -> None:
@@ -81,6 +82,17 @@ class StreamRegistry:
             requests = self._repush_requests
             self._repush_requests = set()
             return requests
+
+    def mark_nacked(self, type_url: str) -> None:
+        """Mark a type as NACKed by some stream: the watcher re-hints it
+        whenever another watched type changes, so a listener rejected only
+        because its cluster had not arrived is resent once it does."""
+        with self._lock:
+            self._nacked.add(type_url)
+
+    def nacked_types(self) -> set[str]:
+        with self._lock:
+            return set(self._nacked)
 
     def add(self, stream: _Stream) -> None:
         with self._lock:
@@ -147,14 +159,22 @@ class AggregatedDiscoveryService(ads_pb2_grpc.AggregatedDiscoveryServiceServicer
             # speed.  The rejection is often an ordering artifact (e.g. a
             # listener whose cluster arrives in the CDS response that
             # follows), so forget the rejected version and ask the watcher
-            # for one re-push of this type on its next tick: the re-send
-            # then finds the dependency present.  Only the first NACK of a
-            # version asks -- a repeated NACK of the same version means the
-            # config is genuinely bad for this Envoy and must not loop.
+            # for one re-push of this type on its next tick.  The NACKed
+            # response is by construction the last one sent for this type:
+            # per the xDS protocol the request's version_info is the last
+            # ACCEPTED version, so the rejected version is read from our own
+            # last-sent state, not from the request.  Only the first NACK of
+            # a version asks -- a repeated NACK of the same version means
+            # the config is genuinely bad for this Envoy and must not loop.
+            # The type is also marked NACKed in the registry so the watcher
+            # re-hints it when the other type changes (its missing
+            # dependency arriving).
             logger.warning("Envoy NACK for %s: %s", type_url, request.error_detail.message)
+            rejected_version = stream.last_versions.get(type_url)
             stream.last_versions.pop(type_url, None)
-            if stream.last_nacked.get(type_url) != request.version_info:
-                stream.last_nacked[type_url] = request.version_info
+            self.registry.mark_nacked(type_url)
+            if stream.last_nacked.get(type_url) != rejected_version:
+                stream.last_nacked[type_url] = rejected_version
                 self.registry.request_repush(type_url)
             return None
         if request.version_info and request.version_info == stream.last_versions.get(type_url):
