@@ -134,9 +134,14 @@ The handler:
 - Tracks per-stream subscribed types (CDS and LDS; SDS is not served here
   in this phase). ACKs are consumed and ignored;
   NACKs (requests with `error_detail`) are logged with the detail and
-  produce no response — re-sending a rejected version would loop NACKs at
-  network speed. The next push with a new version still goes out because
-  pushes compare against the last-sent version.
+  produce no immediate response — re-sending at network speed would loop
+  NACKs. A NACK is often an ordering artifact (e.g. a listener whose
+  cluster arrives in the CDS response that follows), so the stream forgets
+  the rejected version and asks the watcher to re-push that type once on
+  its next tick (~1s), which re-sends the same version with the dependency
+  now present. A repeated NACK of the same version asks for nothing
+  further (a genuinely bad config must not loop); the next version change
+  is pushed normally.
 - Sends `version_info` on every response (see versioning below) and a
   `nonce` per response.
 

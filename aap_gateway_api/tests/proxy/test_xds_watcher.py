@@ -239,6 +239,24 @@ def test_stream_subscribed_before_first_tick_gets_intervening_change(full_servic
 
 
 @pytest.mark.django_db
+def test_tick_rebroadcasts_repush_requests(full_service_hierarchy_controller):
+    # A NACK asks the registry for one re-push of its type; the watcher
+    # broadcasts it on the next tick even though the digest is unchanged,
+    # and drains the request (one broadcast per request).
+    registry = StreamRegistry()
+    stream = make_fake_stream(registry)
+    watcher = XDSWatcher(registry)
+    prime(watcher, stream)
+
+    registry.request_repush(LDS_TYPE_URL)
+    watcher.tick()
+    assert pushed_types(stream.events) == [("push", LDS_TYPE_URL)]
+
+    watcher.tick()  # the request was drained: no further pushes
+    assert stream.events.empty()
+
+
+@pytest.mark.django_db
 def test_two_watchers_share_one_cache(full_service_hierarchy_controller):
     # Two watchers with separate registries on one cache (the 5-forked-worker
     # topology): a model change + invalidate → BOTH watchers push to their

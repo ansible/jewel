@@ -142,6 +142,50 @@ def test_nack_is_logged_and_sends_nothing(full_service_hierarchy_controller, cap
     assert "invalid cluster config" in caplog.text
 
 
+@pytest.mark.django_db
+def test_nack_forgets_version_and_requests_one_repush(full_service_hierarchy_controller):
+    # A NACK means Envoy does not hold the version we sent -- often an
+    # ordering artifact (a listener whose cluster arrives in the CDS response
+    # that follows).  The rejected version is forgotten so a later hint
+    # re-sends it, and the watcher is asked to re-push the type once.  The
+    # same version NACKed again asks for nothing: a genuinely bad config
+    # must not loop.
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    gen = servicer.StreamAggregatedResources(iter([DiscoveryRequest(type_url=CDS_TYPE_URL)]), ctx)
+    resp1 = next(gen)
+
+    stream = registry.streams()[0]
+    nack = DiscoveryRequest(
+        type_url=CDS_TYPE_URL,
+        version_info=resp1.version_info,
+        response_nonce=resp1.nonce,
+        error_detail=status_pb2.Status(code=13, message="unknown cluster"),
+    )
+    # The NACK itself produces no response; the re-push it requests (the
+    # watcher broadcasts one on its next tick) re-sends the SAME version
+    # because the rejected one was forgotten.
+    stream.events.put(("request", nack))
+    stream.events.put(("push", CDS_TYPE_URL))
+    ctx.active = False
+    try:
+        resp2 = next(gen)
+    except StopIteration:
+        resp2 = None
+    assert resp2 is not None
+    assert resp2.version_info == resp1.version_info
+    assert resp2.nonce != resp1.nonce
+    # The first NACK of a version asked the watcher for exactly one re-push.
+    assert registry.take_repush_requests() == {CDS_TYPE_URL}
+    assert registry.take_repush_requests() == set()
+
+    # The same version NACKed again: nothing re-requested, nothing sent.
+    stream.events.put(("request", nack))
+    assert_stream_sends_nothing_more(gen, ctx)
+    assert registry.take_repush_requests() == set()
+
+
 def test_unknown_type_url_logged_and_ignored(caplog):
     registry = StreamRegistry()
     servicer = AggregatedDiscoveryService(registry=registry)

@@ -98,6 +98,12 @@ class XDSWatcher(threading.Thread):
                     self._last_versions[type_url] = rs.version
                     logger.info("Pushing %s version %s", type_url, rs.version)
                     self.registry.broadcast(("push", type_url))
+            for type_url in self.registry.take_repush_requests():
+                # A NACK asked for one re-push of this type: broadcast it even
+                # though the digest is unchanged (the stream that NACKed
+                # forgot the version and will re-send it).
+                logger.info("Re-pushing %s after NACK", type_url)
+                self.registry.broadcast(("push", type_url))
         except Exception:
             # A transient DB/redis error degrades this one tick instead of
             # silently killing the watcher thread.

@@ -41,10 +41,11 @@ class _Stream:
         self.context = context
         # ("request", DiscoveryRequest) and ("push", type_url) tuples.
         self.events: queue.Queue = queue.Queue()
-        # subscribed and last_versions are only touched on the generator
-        # thread (StreamAggregatedResources), so they need no lock.
+        # subscribed, last_versions and last_nacked are only touched on the
+        # generator thread (StreamAggregatedResources), so they need no lock.
         self.subscribed: set[str] = set()
         self.last_versions: dict[str, str] = {}
+        self.last_nacked: dict[str, str] = {}
 
     def read_requests(self, request_iterator) -> None:
         """Drain the gRPC request iterator onto the event queue.
@@ -66,7 +67,20 @@ class StreamRegistry:
 
     def __init__(self) -> None:
         self._streams: list[_Stream] = []
+        self._repush_requests: set[str] = set()
         self._lock = threading.Lock()
+
+    def request_repush(self, type_url: str) -> None:
+        """Ask the watcher to re-broadcast a push hint for a type on its next tick."""
+        with self._lock:
+            self._repush_requests.add(type_url)
+
+    def take_repush_requests(self) -> set[str]:
+        """Return the pending re-push requests and clear them."""
+        with self._lock:
+            requests = self._repush_requests
+            self._repush_requests = set()
+            return requests
 
     def add(self, stream: _Stream) -> None:
         with self._lock:
@@ -128,12 +142,20 @@ class AggregatedDiscoveryService(ads_pb2_grpc.AggregatedDiscoveryServiceServicer
             return None
         stream.subscribed.add(type_url)
         if request.error_detail.code != 0:
-            # NACK: Envoy rejected the configuration we last sent.  Log and drop --
-            # re-sending the same config would loop NACKs at network speed against
-            # a real Envoy client.  Nothing is lost: the next push with a new
-            # version still goes out because _handle_push compares against the
-            # last-sent version.
+            # NACK: Envoy rejected the configuration we last sent.  Log and
+            # drop -- re-sending immediately would loop NACKs at network
+            # speed.  The rejection is often an ordering artifact (e.g. a
+            # listener whose cluster arrives in the CDS response that
+            # follows), so forget the rejected version and ask the watcher
+            # for one re-push of this type on its next tick: the re-send
+            # then finds the dependency present.  Only the first NACK of a
+            # version asks -- a repeated NACK of the same version means the
+            # config is genuinely bad for this Envoy and must not loop.
             logger.warning("Envoy NACK for %s: %s", type_url, request.error_detail.message)
+            stream.last_versions.pop(type_url, None)
+            if stream.last_nacked.get(type_url) != request.version_info:
+                stream.last_nacked[type_url] = request.version_info
+                self.registry.request_repush(type_url)
             return None
         if request.version_info and request.version_info == stream.last_versions.get(type_url):
             # ACK of the version we last sent; nothing to send.
