@@ -16,7 +16,7 @@ class TestServiceClusterSerializer:
     @pytest.fixture
     def service_type(self):
         """Create a service type for testing."""
-        return ServiceType.objects.create(name="Controller", login_path="/api/login/", logout_path="/api/logout/", ping_url="/api/ping/")
+        return ServiceType.objects.create(name="Test Controller Service", login_path="/api/login/", logout_path="/api/logout/", ping_url="/api/ping/")
 
     def test_serializer_meta_fields_includes_all_cluster_fields(self):
         """Test that serializer Meta.fields includes all necessary fields."""

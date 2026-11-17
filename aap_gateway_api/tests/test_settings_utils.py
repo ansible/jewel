@@ -5,7 +5,13 @@ from unittest.mock import patch
 import pytest
 from ansible_base.lib.dynamic_config import factory
 
-from aap_gateway_api.settings_utils import _CUSTOM_ENVVAR_MAPPINGS, load_custom_envvars, load_grpc_settings, load_oidc_provider_settings
+from aap_gateway_api.settings_utils import (
+    _CUSTOM_ENVVAR_MAPPINGS,
+    load_custom_envvars,
+    load_grpc_settings,
+    load_healthcheck_settings,
+    load_oidc_provider_settings,
+)
 
 
 @pytest.mark.parametrize(
@@ -56,6 +62,109 @@ def test_validate_grpc_settings_in_etc_aap_gw_override(tmp_path, expected_log, m
         with patch.object(sys, 'argv', ['start_grpc_server']):
             load_grpc_settings(DYNACONF)
             assert DYNACONF.DATABASES['default']['OPTIONS'].get('keepalives_count', 0) == expected_settings
+
+
+def test_load_grpc_settings_skips_postgres_defaults_for_mssql(tmp_path, monkeypatch):
+    temp_settings = tmp_path / "grpc_settings.py"
+    temp_settings.write_text('DATABASES__default__OPTIONS__extra_params="TrustServerCertificate=yes"')
+    monkeypatch.setenv("GATEWAY_GRPC_SETTINGS_FILE", str(temp_settings))
+
+    dynaconf_settings = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+    dynaconf_settings.set("DATABASES__default__ENGINE", "ansible_base.backends.mssql")
+
+    with patch.object(sys, 'argv', ['start_grpc_server']):
+        load_grpc_settings(dynaconf_settings)
+
+    options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
+    assert "keepalives" not in options
+    assert "keepalives_count" not in options
+    assert options["extra_params"] == "TrustServerCertificate=yes"
+
+
+def test_load_healthcheck_settings_uses_connection_timeout_for_mssql():
+    dynaconf_settings = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+    dynaconf_settings.set(
+        "DATABASES",
+        {
+            "default": {
+                "ENGINE": "ansible_base.backends.mssql",
+                "HOST": "mssql",
+                "PORT": 1433,
+                "NAME": "gateway",
+                "USER": "sa",
+                "PASSWORD": "local-test-password",
+                "OPTIONS": {"driver": "ODBC Driver 18 for SQL Server"},
+            }
+        },
+    )
+
+    load_healthcheck_settings(dynaconf_settings)
+
+    options = dynaconf_settings.DATABASES["healthcheck"]["OPTIONS"]
+    assert options["connection_timeout"] == 3
+    assert "connect_timeout" not in options
+
+
+def test_load_healthcheck_settings_keeps_connect_timeout_for_postgres():
+    dynaconf_settings = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+
+    load_healthcheck_settings(dynaconf_settings)
+
+    options = dynaconf_settings.DATABASES["healthcheck"]["OPTIONS"]
+    assert options["connect_timeout"] == 3
+    assert "connection_timeout" not in options
+
+
+def test_mssql_settings_disable_cache_auto_invalidation():
+    settings_with_mssql = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+    settings_with_mssql.set("ANSIBLE_BASE_REDIS_AUTO_INVALIDATE", True)
+
+    with patch.dict(environ, {"DATABASE_ENGINE": "ansible_base.backends.mssql"}, clear=False):
+        load_custom_envvars(settings_with_mssql)
+
+    assert settings_with_mssql.ANSIBLE_BASE_REDIS_AUTO_INVALIDATE is False
+
+
+def test_load_custom_envvars_database_options():
+    settings_with_options = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+    default_options = dict(settings_with_options.DATABASES["default"]["OPTIONS"])
+
+    with patch.dict(environ, {}, clear=False):
+        environ.pop("DATABASE_OPTIONS", None)
+        load_custom_envvars(settings_with_options)
+    assert dict(settings_with_options.DATABASES["default"]["OPTIONS"]) == default_options
+
+    with patch.dict(
+        environ,
+        {"DATABASE_OPTIONS": '{"driver": "ODBC Driver 18 for SQL Server", "extra_params": "TrustServerCertificate=yes"}'},
+        clear=False,
+    ):
+        load_custom_envvars(settings_with_options)
+
+    assert dict(settings_with_options.DATABASES["default"]["OPTIONS"]) == {
+        "driver": "ODBC Driver 18 for SQL Server",
+        "extra_params": "TrustServerCertificate=yes",
+    }
 
 
 def test_load_oidc_provider_settings_enabled(expected_log):
@@ -204,7 +313,7 @@ class TestLoadCustomEnvvars:
 
     def test_mapping_table_completeness(self):
         """Verify the mapping table has the expected number of entries."""
-        assert len(_CUSTOM_ENVVAR_MAPPINGS) == 27
+        assert len(_CUSTOM_ENVVAR_MAPPINGS) == 28
 
     def test_mapping_table_entry_structure(self):
         """Verify all mapping entries have valid structure (2 or 3 elements)."""

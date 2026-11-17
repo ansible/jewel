@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+/opt/mssql/bin/sqlservr &
+sqlserver_pid=$!
+
+stop_sqlserver() {
+    if kill -0 "$sqlserver_pid" 2>/dev/null; then
+        kill -TERM "$sqlserver_pid" 2>/dev/null || true
+        wait "$sqlserver_pid" 2>/dev/null || true
+    fi
+}
+trap stop_sqlserver EXIT
+trap 'exit 0' INT TERM
+
+sqlcmd=(/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -o /dev/null)
+attempt=0
+while (( attempt < 120 )); do
+    if "${sqlcmd[@]}" -Q "SELECT 1" >/dev/null 2>&1; then
+        break
+    fi
+    if ! kill -0 "$sqlserver_pid" 2>/dev/null; then
+        wait "$sqlserver_pid"
+        exit 1
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+done
+
+if (( attempt >= 120 )); then
+    echo "SQL Server did not become ready within 120 seconds" >&2
+    exit 1
+fi
+
+"${sqlcmd[@]}" -Q "IF DB_ID(N'gateway') IS NULL CREATE DATABASE [gateway]"
+wait "$sqlserver_pid"

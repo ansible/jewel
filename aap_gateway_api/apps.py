@@ -48,7 +48,9 @@ class MyAppConfig(AppConfig):
 
         from aap_gateway_api.dispatch.config import get_dispatcherd_config
 
-        dispatcherd_setup(get_dispatcherd_config())
+        dispatcherd_config = get_dispatcherd_config()
+        if dispatcherd_config is not None:
+            dispatcherd_setup(dispatcherd_config)
 
         if not MyAppConfig._xds_cache_cleared and self._is_server_startup():
             _clear_xds_cache_on_startup()

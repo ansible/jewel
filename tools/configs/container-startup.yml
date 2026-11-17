@@ -12,6 +12,15 @@ container_reference: 'localhost'
 xds_refresh_delay_seconds: 60
 # enable_django_debug_toolbar: True
 
+### SQL Server (single-node development profile)
+### This leaves PostgreSQL available for optional services such as Keycloak.
+mssql_enabled: false
+mssql_image: 'mcr.microsoft.com/mssql/server:2025-latest'
+# Development-only sample. Override this for local use and never reuse it elsewhere.
+mssql_sa_password: 'YourStrong!Passw0rd'
+mssql_port: 55433
+mssql_memory_limit_mb: 2048
+
 # What services are enabled in your local environment
 # Note: If you have a service specified but its not functional the UI will be broken
 enabled_services:

@@ -1,13 +1,18 @@
 """Unit tests for Envoy REST control plane helpers (no HTTP)."""
 
 import hashlib
+from unittest.mock import patch
 
 import pytest
+from django.db import connection
+from django.db.utils import NotSupportedError
+from django.test import RequestFactory
 from django.urls import reverse
 
+from aap_gateway_api.models import Route
 from aap_gateway_api.models.ca_certificate import CACertificate
 from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
-from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, SecretDiscoverServiceView
+from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, SecretDiscoverServiceView, XDSView
 
 
 @pytest.fixture
@@ -95,6 +100,30 @@ def test_lds_empty_response_not_cached_during_bootstrap(unauthenticated_api_clie
     assert first.status_code == 200
     # Cache should be empty since there are no ports
     assert cache.get(XDS_CACHE_KEY_LDS) is None
+
+
+@pytest.mark.django_db
+def test_get_qs_returns_one_deterministic_row_per_name_on_mssql(full_service_hierarchy_controller, randname, monkeypatch):
+    route = full_service_hierarchy_controller.route
+    duplicate_route = Route.objects.create(
+        name=randname("same-cluster"),
+        http_port=route.http_port,
+        service_cluster=route.service_cluster,
+        service_port=route.service_port,
+        is_service_https=route.is_service_https,
+        service_path=route.service_path,
+        gateway_path=randname("duplicate-gateway-path"),
+        node_tags=route.node_tags,
+    )
+    assert duplicate_route.envoy_cluster_name == route.envoy_cluster_name
+
+    request = RequestFactory().post("/", {"resource_names": "*"})
+    monkeypatch.setattr(connection, "vendor", "microsoft")
+    with patch.object(connection.ops, "distinct_sql", side_effect=NotSupportedError("DISTINCT ON is not supported")) as distinct_sql:
+        rows = list(XDSView().get_qs(request, Route, "envoy_cluster_name").filter(envoy_cluster_name=route.envoy_cluster_name))
+
+    assert [item.pk for item in rows] == [min(route.pk, duplicate_route.pk)]
+    distinct_sql.assert_not_called()
 
 
 @pytest.mark.django_db

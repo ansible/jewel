@@ -50,6 +50,9 @@ class Command(BaseCommand):
         expected_replies = options.pop("expected_replies", 1)
 
         config = get_dispatcherd_config()
+        if config is None:
+            raise CommandError("dispatcherd is disabled for the SQL Server database backend")
+
         dispatcherd_setup(config)
 
         schema_namespace = argparse.Namespace(**options)

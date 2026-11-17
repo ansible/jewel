@@ -2,15 +2,19 @@ import logging
 import traceback
 from typing import Any, Dict, List, Tuple
 
+from ansible_base.lib.utils.db import bulk_create_db_safe
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource
+from django.db import connection, transaction
 from django.db.models import Q
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore
 from aap_gateway_api.models.service_type import DefaultServiceType
 
 logger = logging.getLogger('aap.gateway.management.commands.migrate_service_data')
+_OBJECT_ROLE_LOOKUP_BATCH_SIZE = 500
+_SQLSERVER_INSERT_PARAMETER_LIMIT = 2000
 
 
 class RoleAssignmentsMixin:
@@ -237,8 +241,11 @@ class RoleAssignmentsMixin:
             for actor_pk, rd, _, _, _ in new_assignments
         ]
 
-        result = AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True)
-        return len(result)
+        return _bulk_create_conflict_safe(
+            AssignmentModel,
+            assignment_objs,
+            match_fields=(assignment_type, 'role_definition', 'object_role'),
+        )
 
     def _bulk_create_object_assignments(self, assignments: List[Tuple], assignment_type: str) -> Tuple[int, set]:
         """Bulk-create ObjectRoles and object-scoped role assignments."""
@@ -247,16 +254,9 @@ class RoleAssignmentsMixin:
             unique_or_keys.add((rd.id, content_type_id, object_id))
 
         or_objs_to_create = [ObjectRole(role_definition_id=rd_id, content_type_id=ct_id, object_id=obj_id) for rd_id, ct_id, obj_id in unique_or_keys]
-        ObjectRole.objects.bulk_create(or_objs_to_create, ignore_conflicts=True)
+        _bulk_create_conflict_safe(ObjectRole, or_objs_to_create, match_fields=('role_definition', 'content_type', 'object_id'))
 
-        or_query = Q()
-        for rd_id, ct_id, obj_id in unique_or_keys:
-            or_query |= Q(role_definition_id=rd_id, content_type_id=ct_id, object_id=obj_id)
-
-        or_map: Dict[Tuple, ObjectRole] = {}
-        for obj_role in ObjectRole.objects.filter(or_query):
-            key = (obj_role.role_definition_id, obj_role.content_type_id, obj_role.object_id)
-            or_map[key] = obj_role
+        or_map = self._get_object_role_map(unique_or_keys)
 
         AssignmentModel = RoleUserAssignment if assignment_type == 'user' else RoleTeamAssignment  # NOSONAR
         actor_field = 'user_id' if assignment_type == 'user' else 'team_id'
@@ -283,8 +283,32 @@ class RoleAssignmentsMixin:
                 )
             )
 
-        result = AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True)
-        return len(result), set(or_map.values())
+        created = _bulk_create_conflict_safe(
+            AssignmentModel,
+            assignment_objs,
+            match_fields=(assignment_type, 'object_role'),
+        )
+        return created, set(or_map.values())
+
+    @staticmethod
+    def _get_object_role_map(unique_keys: set[tuple[int, int, str]]) -> Dict[Tuple, ObjectRole]:
+        """Load matching object roles without exceeding SQL Server's parameter limit."""
+        if not unique_keys:
+            return {}
+
+        keys = sorted(unique_keys, key=lambda key: (key[0], key[1], key[2]))
+        object_role_map: Dict[Tuple, ObjectRole] = {}
+        for start in range(0, len(keys), _OBJECT_ROLE_LOOKUP_BATCH_SIZE):
+            batch = keys[start : start + _OBJECT_ROLE_LOOKUP_BATCH_SIZE]
+            query = Q()
+            for role_definition_id, content_type_id, object_id in batch:
+                query |= Q(role_definition_id=role_definition_id, content_type_id=content_type_id, object_id=object_id)
+
+            for object_role in ObjectRole.objects.filter(query):
+                key = (object_role.role_definition_id, object_role.content_type_id, object_role.object_id)
+                object_role_map[key] = object_role
+
+        return object_role_map
 
     def migrate_role_assignments(self, service_slug: str, service_type_name: str) -> None:
         """Migrate role assignments from a service using bulk queries.
@@ -326,3 +350,68 @@ class RoleAssignmentsMixin:
                     self._log(f"Warning: RBAC cache rebuild failed, it will be rebuilt on next request\n{traceback.format_exc()}", logging.WARNING)
 
         self._log(f"Role assignment migration for {service_slug} completed ({total_created} total created)", logging.INFO)
+
+
+def _bulk_create_conflict_safe(model_class, objects, *, match_fields: Tuple[str, ...]) -> int:
+    """Insert conflict-tolerant batches without per-row SQL on SQL Server.
+
+    DAB's portable helper uses one savepoint and insert per object when the
+    backend cannot ignore conflicts natively. SQL Server supports a set-based
+    ``MERGE`` with a serializable target lock, which keeps role migration query
+    counts bounded while retaining idempotent inserts. PostgreSQL continues to
+    use DAB's helper unchanged.
+    """
+    if not objects:
+        return 0
+
+    if connection.vendor != 'microsoft':
+        return len(bulk_create_db_safe(model_class, objects, ignore_conflicts=True))
+
+    fields = [field for field in model_class._meta.concrete_fields if not field.auto_created]
+    key_fields = [model_class._meta.get_field(name) for name in match_fields]
+    columns = [connection.ops.quote_name(field.column) for field in fields]
+    source_columns = ', '.join(columns)
+    quoted_table = connection.ops.quote_name(model_class._meta.db_table)
+    target_match = ' AND '.join(
+        f"(target.{connection.ops.quote_name(field.column)} = source.{connection.ops.quote_name(field.column)}"
+        f" OR (target.{connection.ops.quote_name(field.column)} IS NULL AND source.{connection.ops.quote_name(field.column)} IS NULL))"
+        for field in key_fields
+    )
+    max_batch_size = min(1000, max(1, _SQLSERVER_INSERT_PARAMETER_LIMIT // len(fields)))
+
+    # MERGE cannot safely process duplicate source keys in one statement. Keep
+    # the last object for each key; all duplicates have the same persisted data.
+    unique_objects = {}
+    for obj in objects:
+        key = tuple(getattr(obj, field.attname) for field in key_fields)
+        unique_objects[key] = obj
+    objects = list(unique_objects.values())
+
+    created = 0
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            for start in range(0, len(objects), max_batch_size):
+                batch = objects[start : start + max_batch_size]
+                values = []
+                params = []
+                for obj in batch:
+                    row = []
+                    for field in fields:
+                        value = field.pre_save(obj, add=True)
+                        row.append(field.get_db_prep_save(value, connection))
+                    values.append(f"({', '.join(['%s'] * len(fields))})")
+                    params.extend(row)
+
+                source = ', '.join(values)
+                cursor.execute(
+                    f"MERGE {quoted_table} WITH (HOLDLOCK) AS target "
+                    f"USING (VALUES {source}) AS source ({source_columns}) "
+                    f"ON {target_match} "
+                    f"WHEN NOT MATCHED BY TARGET THEN INSERT ({source_columns}) "
+                    f"VALUES ({', '.join(f'source.{column}' for column in columns)}) "
+                    "OUTPUT $action;",
+                    params,
+                )
+                created += sum(action == 'INSERT' for (action,) in cursor.fetchall())
+
+    return created

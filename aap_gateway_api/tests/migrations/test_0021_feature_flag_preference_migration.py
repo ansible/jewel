@@ -16,7 +16,7 @@ TARGET_NAME = "RUNTIME_FEATURE_FLAGS_UI"
 
 def create_preference(section, name, value):
     row = Preference(section=section, name=name, raw_value=value)
-    Preference.objects.bulk_create([row])
+    row.save()
     return row
 
 
