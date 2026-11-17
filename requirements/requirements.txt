@@ -1429,4 +1429,4 @@ xmlsec==1.3.13 \
     # via
     #   django-ansible-base
     #   python3-saml
-# MS SQL Server support (will be auto-included once DAB PR #1242 merges)
+# MS SQL Server support (tracked by AAP-98732; mssql extra from the DAB git requirement)

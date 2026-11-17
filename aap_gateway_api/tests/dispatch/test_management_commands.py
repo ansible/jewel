@@ -67,7 +67,10 @@ def test_dispatcherctl_alive_command(mock_setup, mock_get_control):
     mock_setup.assert_called_once()
     config = mock_setup.call_args[0][0]
     assert config["version"] == 2
-    assert "pg_notify" in config["brokers"]
+    if connection.vendor == "microsoft":
+        assert "sql_server" in config["brokers"]
+    else:
+        assert "pg_notify" in config["brokers"]
     mock_ctl.control_with_reply.assert_called_once()
     assert "alive" in out.getvalue()
 

@@ -12,8 +12,8 @@ container_reference: 'localhost'
 xds_refresh_delay_seconds: 60
 # enable_django_debug_toolbar: True
 
-### SQL Server (single-node development profile)
-### This leaves PostgreSQL available for optional services such as Keycloak.
+### SQL Server development profile. When enabled, Gateway runs on SQL Server
+### and Keycloak uses its embedded dev database, so no PostgreSQL container runs.
 mssql_enabled: false
 mssql_image: 'mcr.microsoft.com/mssql/server:2025-latest'
 # Development-only sample. Override this for local use and never reuse it elsewhere.
