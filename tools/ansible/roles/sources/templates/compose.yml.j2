@@ -204,6 +204,7 @@ services:
 {% endfor %}
 {% endif %}
 
+{% if not gateway_database_is_mssql | bool %}
   db:
     container_name: aap_gw_db_pgsql_1
     command: run-postgresql -c log_destination=stderr -c log_min_messages=info
@@ -220,6 +221,7 @@ services:
       - "{{ db_port }}:5432"
     volumes:
       - "aap_gw_db:/var/lib/pgsql/data"
+{% endif %}
 
 {% if gateway_database_is_mssql | bool %}
   mssql:
@@ -346,12 +348,14 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: "{{ keycloak_username }}"
       KC_BOOTSTRAP_ADMIN_PASSWORD: "{{ keycloak_password }}"
+{% if not gateway_database_is_mssql | bool %}
       KC_DB: postgres
       KC_DB_URL_HOST: db
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: {{ db_username }}
       KC_DB_PASSWORD: {{ db_password }}
       KC_DB_URL_PORT: "5432"
+{% endif %}
       KC_HTTPS_PORT: "{{ keycloak_internal_port }}"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/tls.crt
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/tls.key
@@ -359,14 +363,20 @@ services:
       KC_HEALTH_ENABLED: "true"
     volumes:
       - {{ sources_dest }}/keycloak_certs:/opt/keycloak/certs:ro,z
+      # With mssql_enabled, Keycloak falls back to its embedded H2 dev
+      # database (start-dev without KC_DB); persist it so the realm
+      # survives container recreation without a PostgreSQL container.
+      - aap_gw_keycloak_data:/opt/keycloak/data:z
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost:9000"]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 15s
+{% if not gateway_database_is_mssql | bool %}
     depends_on:
       - db
+{% endif %}
     networks:
       dbnet:
         aliases:
@@ -507,12 +517,16 @@ networks:
     name: service-mesh
 
 volumes:
+{% if not gateway_database_is_mssql | bool %}
   aap_gw_db:
     name: aap_gw_db
+{% endif %}
 {% if gateway_database_is_mssql | bool %}
   aap_gw_mssql_data:
     name: aap_gw_mssql_data
 {% endif %}
+  aap_gw_keycloak_data:
+    name: aap_gw_keycloak_data
   aap_gw_cprofiling:
     name: aap_gw_cprofiling
   grpc_server_cprofiling:
