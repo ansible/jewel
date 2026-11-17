@@ -87,6 +87,21 @@ def _patch_jwt_keygen(request):
         yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _mssql_service_broker(django_db_setup):
+    """Provision Service Broker objects before tests when running on SQL Server.
+
+    Every xdist worker runs this; Broker.setup_database serializes concurrent
+    installers with an application lock, and each step is idempotent.
+    """
+    from django.db import connection
+
+    if connection.vendor == "microsoft":
+        from aap_gateway_api.management.commands.setup_service_broker import provision_service_broker
+
+        provision_service_broker(stdout=lambda message: None)
+
+
 @pytest.fixture(autouse=True)
 def ensure_settings_bound_preferences():
     """Ensure all settings-bound preferences have their Django settings set."""
