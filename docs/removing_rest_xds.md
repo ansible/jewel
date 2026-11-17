@@ -72,7 +72,6 @@ uses it.
 ## 5. Docs and CI
 
 - `docs/configuring_envoy.md`: drop the REST endpoint and rollback text.
-- The design spec in `docs/superpowers/specs/` can be left as history.
 - `xds_refresh_delay_seconds` is only consumed by REST `refresh_delay`. Delete
   the variable from `tools/configs/container-startup.yml` and the `sed`
   overrides in `.github/workflows/dev-environment.yml` and
