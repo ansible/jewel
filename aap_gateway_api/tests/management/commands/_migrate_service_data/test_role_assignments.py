@@ -667,7 +667,7 @@ class TestBulkResolveAndCreatePage:
         assert created == 2
         assert len(obj_roles) > 0
 
-    def test_bulk_create_db_safe_ignores_conflicts(self):
+    def test_bulk_create_ignores_conflicts(self):
         """Repeated conflict-tolerant migration calls do not duplicate rows."""
         from ansible_base.rbac.models import DABContentType
 
@@ -696,29 +696,34 @@ class TestBulkResolveAndCreatePage:
         assert created2 in {0, 1}
         assert RoleUserAssignment.objects.filter(user__username="bulk-idempotent-user").count() == 1
 
-    def test_object_role_lookup_chunks_more_than_700_keys(self, monkeypatch):
-        """SQL Server role lookups split disjunctions below the 2100 parameter limit."""
-        from ansible_base.rbac.models import ObjectRole
+    def test_object_role_lookup_handles_more_than_700_keys(self):
+        """Object-role lookups chunk below SQL Server's parameter limit and stay a single query on PostgreSQL."""
+        from ansible_base.rbac.models import DABContentType, ObjectRole
 
-        from aap_gateway_api.management.commands._migrate_service_data import role_assignments
+        from aap_gateway_api.models import Organization, User
 
-        keys = [(1, 1, f"object-{index}") for index in range(701)]
-        assignments = [
-            (1, Mock(id=1, name="Test Role"), content_type_id, object_id, f"actor-{index}") for index, (_, content_type_id, object_id) in enumerate(keys)
-        ]
+        user = User.objects.create(username="chunk-lookup-user")
+        org_ct = DABContentType.objects.get_for_model(Organization)
+        rd, _ = RoleDefinition.objects.get_or_create(name="Test Chunk Lookup Role", defaults={"managed": False, "content_type": org_ct})
+
+        keys = [(rd.id, org_ct.id, f"object-{index}") for index in range(701)]
+        assignments = [(user.id, Mock(id=rd_id, name="Test Role"), ct_id, object_id, str(user.id)) for rd_id, ct_id, object_id in keys]
         cmd = self._make_cmd()
-
-        # Isolate the lookup query from inserts; the real SQL Server path is
-        # exercised by test_bulk_create_db_safe_ignores_conflicts.
-        monkeypatch.setattr(role_assignments, "_bulk_create_conflict_safe", lambda model, objects, **kwargs: 0)
 
         with CaptureQueriesContext(connection) as captured_queries:
             created, object_roles = cmd._bulk_create_object_assignments(assignments, "user")
 
-        role_queries = [query for query in captured_queries.captured_queries if ObjectRole._meta.db_table in query["sql"]]
-        assert len(role_queries) == 2
-        assert created == 0
-        assert object_roles == set()
+        role_selects = [
+            query
+            for query in captured_queries.captured_queries
+            if ObjectRole._meta.db_table in query["sql"] and query["sql"].lstrip().upper().startswith("SELECT")
+        ]
+        if connection.vendor == "microsoft":
+            assert len(role_selects) > 1  # chunked below the 2100-parameter limit
+        else:
+            assert len(role_selects) == 1  # in_chunks yields a single chunk on PostgreSQL
+        assert created == 701
+        assert len(object_roles) == 701
 
 
 # =============================================================================
