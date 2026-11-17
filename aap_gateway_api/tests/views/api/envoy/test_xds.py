@@ -6,6 +6,16 @@ from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, S
 API_PORT_NAME = "port-9080"
 
 
+def _first_matching_route(routes, path):
+    for route in routes:
+        match = route["match"]
+        if "prefix" in match and path.startswith(match["prefix"]):
+            return route
+        if "path" in match and path == match["path"]:
+            return route
+    raise AssertionError(f"No route matched {path}")
+
+
 def test_xds_listener_discover_service_httpport_count(unauthenticated_api_client):
     """
     There should be as many listeners as HTTPPorts.
@@ -91,6 +101,39 @@ def test_xds_api_port_deduplicates_api_redirect(admin_api_client, service_api_ro
     assert len(api_redirects) == 1
 
 
+@pytest.mark.parametrize(
+    "path",
+    ["/v3/discovery:listeners", "/v3/discovery:clusters", "/v3/discovery:secrets"],
+)
+def test_xds_listener_does_not_proxy_discovery_requests(admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache, path):
+    """Envoy must not forward xDS discovery requests to the gateway API.
+
+    The gateway API route is a catch-all ("/"), so without an explicit deny
+    route Envoy would proxy discovery requests through the public listener.
+    """
+    ServiceAPIRoute.objects.create(
+        name="Gateway API catch-all",
+        http_port=http_api_port_factory(),
+        is_service_https=False,
+        service_cluster=service_cluster_gateway,
+        service_port=8000,
+        service_path="/",
+        envoy_cluster_name="gateway-api",
+        api_slug="gateway",
+    )
+
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+
+    route = _first_matching_route(routes, path)
+    assert "route" not in route
+    assert route["directResponse"]["status"] == 404
+    assert route["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
+
+
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
     """Verify that configured service routes are included in the listener."""
     url = reverse("lds")
@@ -160,7 +203,8 @@ def test_lds_listener_discover_service_service_type_auth_type(admin_api_client, 
     response = admin_api_client.post(lds_url, data={})
     assert response.status_code == 200
 
-    route_config = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"][1]
+    routes = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    route_config = next(route for route in routes if route.get("route", {}).get("cluster") == full_service_hierarchy_controller.route.envoy_cluster_name)
     assert route_config["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["checkSettings"]["contextExtensions"]["service_type"] == "hub"
     assert route_config["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["checkSettings"]["contextExtensions"]["auth_type"] == "TOKEN"
 

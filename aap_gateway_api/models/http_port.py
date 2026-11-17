@@ -20,6 +20,12 @@ from aap_gateway_api.utils.xds_configs import (
 
 logger = logging.getLogger("aap_gateway_api.models.http_port")
 
+# Envoy fetches its own xDS configuration over the dedicated
+# ``gateway-control-plane-rest`` cluster. Discovery requests must never be
+# routed through a listener to the gateway API, where the catch-all gateway
+# service route would otherwise proxy them.
+XDS_DISCOVERY_PREFIX = "/v3/discovery:"
+
 
 class HTTPPort(UniqueNamedCommonModel, AuditableModel):
     """
@@ -88,6 +94,14 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }
         routes.append(up_route)
+        # Envoy talks to the control plane directly, so no listener should
+        # forward xDS discovery requests to the gateway API.
+        xds_route = {
+            "match": {"prefix": XDS_DISCOVERY_PREFIX},
+            "direct_response": {"status": 404},
+            "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
+        }
+        routes.append(xds_route)
         if self.is_api_port:
             redirects = {"/api": "/api/"}
             redirects.update(
