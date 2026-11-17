@@ -6,6 +6,21 @@ proxy_port: 443
 db_username: gateway
 db_password: gateway
 db_port: 5440
+
+gateway_database_is_mssql: "{{ mssql_enabled | default(False) | bool }}"
+gateway_database_engine: "{{ 'ansible_base.backends.mssql' if gateway_database_is_mssql else 'django.db.backends.postgresql' }}"
+gateway_database_name: gateway
+gateway_database_user: "{{ 'sa' if gateway_database_is_mssql else db_username }}"
+gateway_database_password: "{{ sqlserver_sa_password if gateway_database_is_mssql else db_password }}"
+gateway_database_host: "{{ 'mssql' if gateway_database_is_mssql else 'db' }}"
+gateway_database_port: "{{ '1433' if gateway_database_is_mssql else '5432' }}"
+gateway_database_options_json: >-
+  {{ '{"driver":"ODBC Driver 18 for SQL Server","extra_params":"Encrypt=yes;TrustServerCertificate=yes"}' if gateway_database_is_mssql else '{"application_name":"Django API"}' }}
+sqlserver_image: "{{ mssql_image | default('mcr.microsoft.com/mssql/server:2025-latest') }}"
+sqlserver_sa_password: "{{ mssql_sa_password | default('YourStrong!Passw0rd') }}"
+sqlserver_port: "{{ mssql_port | default(55433) }}"
+sqlserver_memory_limit_mb: "{{ mssql_memory_limit_mb | default(2048) }}"
+
 container_reference: localhost
 # This is where to put generated container source files relative to the Ansible directory
 sources_dest: '{{ playbook_dir | dirname }}/generated'

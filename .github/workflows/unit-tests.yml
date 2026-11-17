@@ -141,16 +141,94 @@ jobs:
           name: junit-${{ steps.artifact.outputs.suffix }}
           path: junit-${{ steps.artifact.outputs.suffix }}.xml
 
+  unit-test-mssql:
+    name: SQL Server
+    needs: ci-image-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
+    if: github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug'
+    services:
+      redis:
+        image: mirror.gcr.io/library/redis:8.10.2
+        ports:
+          - 6379:6379
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2025-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+          MSSQL_MEMORY_LIMIT_MB: "2048"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -Q 'SELECT 1' -b -o /dev/null"
+          --health-interval 10s --health-timeout 5s --health-retries 12 --health-start-period 20s
+    permissions:
+      packages: write
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Checkout dependencies
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base'
+
+      - name: Install Microsoft ODBC Driver 18
+        run: |
+          dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+          ACCEPT_EULA=Y dnf install -y msodbcsql18 unixODBC
+
+      - name: Run SQL Server Django checks
+        env:
+          ANSIBLE_GW_TEST_DB_HOST: mssql
+          DB_PORT: 1433
+        run: |
+          tox -e py312-mssql-check \
+            -x testenv:py312-mssql-check.podman=
+
+      - name: Run SQL Server unit tests
+        env:
+          PYTEST_NUM_PROCESSES: 4
+          ANSIBLE_GW_TEST_DB_HOST: mssql
+          DB_PORT: 1433
+        run: |
+          tox -e py312-mssql \
+            -x testenv:py312-mssql.podman= \
+            -- -m "not perf" \
+            --cov-report=xml:coverage-mssql.xml \
+            --junit-xml=junit-mssql.xml
+
+      - name: Upload SQL Server coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-mssql
+          path: coverage-mssql.xml
+
+      - name: Upload SQL Server junit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-mssql
+          path: junit-mssql.xml
+
   merge-and-upload:
     name: Merge junit and upload results
     runs-on: ubuntu-latest
     container:
       image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
-    needs: [ci-image-tag, unit-test]
+    needs: [ci-image-tag, unit-test, unit-test-mssql]
     # Run even if some jobs failed, but only if at least one job completed
     if: |
       always() &&
       (needs.unit-test.result == 'success' || needs.unit-test.result == 'failure') &&
+      (needs.unit-test-mssql.result == 'success' || needs.unit-test-mssql.result == 'failure') &&
       (github.repository == 'ansible/jewel' || github.repository == 'ansible/jewel-debug')
     steps:
       - uses: actions/checkout@v5

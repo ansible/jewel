@@ -106,6 +106,7 @@ legacy_tox_ini = """
         test = py312
         312 = py312
         311 = py311
+        mssql = py312-mssql, py312-mssql-check
         check = check, check-migrations, check-oauth2-permissions, check-help-text
         lint = ruff-check, ruff-format
 
@@ -127,6 +128,24 @@ legacy_tox_ini = """
     healthcheck_start_period = 3
     expose =
         DB_PORT=5432/tcp
+    host_var = ANSIBLE_GW_TEST_DB_HOST
+
+    [podman:mssql]
+
+    image = mcr.microsoft.com/mssql/server:2025-latest
+    environment =
+        ACCEPT_EULA=Y
+        MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+        MSSQL_PID=Developer
+    healthcheck_cmd = /opt/mssql-tools18/bin/sqlcmd \
+        -S localhost -U sa -P "YourStrong!Passw0rd" -C \
+        -Q "SELECT 1" -b -o /dev/null
+    healthcheck_timeout = 5
+    healthcheck_retries = 10
+    healthcheck_interval = 10
+    healthcheck_start_period = 10
+    expose =
+        DB_PORT=1433/tcp
     host_var = ANSIBLE_GW_TEST_DB_HOST
 
     [testenv]
@@ -154,6 +173,50 @@ legacy_tox_ini = """
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
         ./tools/scripts/run_tests.sh {posargs}
+
+    [testenv:py312-mssql]
+    allowlist_externals =
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
+        ./tools/scripts/run_tests.sh
+    podman = mssql
+    passenv =
+        ANSIBLE_GW_TEST_DB_HOST
+        DB_PORT
+        GATEWAY_TEST_DIRS
+        PYTEST_NUM_PROCESSES
+    setenv =
+        PYTHONPATH = {toxinidir}/django-ansible-base/
+        DJANGO_SETTINGS_MODULE = aap_gateway_api.tests.mssql_settings
+        GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
+        MSSQL_SA_PASSWORD = YourStrong!Passw0rd
+        PYTEST_NUM_PROCESSES = {env:PYTEST_NUM_PROCESSES:4}
+        CFLAGS="-Wno-error=incompatible-pointer-types"
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
+    commands =
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
+        ./tools/scripts/run_tests.sh {posargs}
+
+    [testenv:py312-mssql-check]
+    allowlist_externals =
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh
+        ./tools/scripts/ci/install_django_venv.sh
+    podman = mssql
+    passenv =
+        ANSIBLE_GW_TEST_DB_HOST
+        DB_PORT
+        GATEWAY_TEST_DIRS
+    setenv =
+        PYTHONPATH = {toxinidir}/django-ansible-base/
+        DJANGO_SETTINGS_MODULE = aap_gateway_api.tests.mssql_settings
+        GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
+        MSSQL_SA_PASSWORD = YourStrong!Passw0rd
+        CFLAGS="-Wno-error=incompatible-pointer-types"
+    install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
+    commands =
+        ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
+        python3 -m aap_gateway_api check
+        python3 -m aap_gateway_api makemigrations --check
 
     [testenv:check]
     allowlist_externals =

@@ -1,11 +1,49 @@
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 import requests
 
 services = {"awx", "galaxy", "eda"}
+_SERVICE_START_TIMEOUT_SECONDS = 60
+_SERVICE_START_POLL_INTERVAL_SECONDS = 0.25
+
+
+def _collect_process_output(proc):
+    output_files = getattr(proc, "_service_test_output_files", None)
+    if not output_files:
+        return None, None
+
+    output = []
+    for stream in output_files:
+        stream.flush()
+        stream.seek(0)
+        output.append(stream.read())
+        stream.close()
+    proc._service_test_output_files = None
+    return output
+
+
+def stop_service(proc):
+    """Stop a test service and return captured stdout/stderr, if enabled."""
+    if proc.poll() is None:
+        proc.kill()
+    proc.wait()
+    stdout, stderr = _collect_process_output(proc)
+    return stdout, stderr
+
+
+def _print_process_output(stdout, stderr):
+    if stdout:
+        print('')
+        print('standard out:')
+        print(str(stdout, encoding='utf-8'))
+    if stderr:
+        print('')
+        print('standard err:')
+        print(str(stderr, encoding='utf-8'))
 
 
 def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secret_key=None, save_std=True, user_prefix='controller', page_size=None):
@@ -63,37 +101,47 @@ def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secre
     # Threading has to be disable because we're using an in memory database that doesn't get shared
     # between threads.
     if save_std:
-        pipe = subprocess.PIPE
+        stdout_stream = tempfile.TemporaryFile()
+        stderr_stream = tempfile.TemporaryFile()
     else:
-        pipe = subprocess.DEVNULL
+        stdout_stream = stderr_stream = subprocess.DEVNULL
 
-    proc = subprocess.Popen(
-        ["python3", "manage.py", "runserver", "--nothreading", "--noreload", str(port)],
-        cwd=dir_path,
-        env=env,
-        stderr=pipe,
-        stdout=pipe,
-    )
+    try:
+        proc = subprocess.Popen(
+            ["python3", "manage.py", "runserver", "--nothreading", "--noreload", str(port)],
+            cwd=dir_path,
+            env=env,
+            stderr=stderr_stream,
+            stdout=stdout_stream,
+        )
+    except Exception:
+        if save_std:
+            stdout_stream.close()
+            stderr_stream.close()
+        raise
 
-    count = 0
-    max_count = 20
+    proc._service_test_output_files = (stdout_stream, stderr_stream) if save_std else None
+
+    deadline = time.monotonic() + _SERVICE_START_TIMEOUT_SECONDS
+    url = f"http://localhost:{port}/ping/"
     while True:
         try:
-            requests.get(f"http://localhost:{port}/ping/")
+            requests.get(url, timeout=1)
             break
-        except requests.ConnectionError:
+        except requests.RequestException:
             pass
 
-        if count >= max_count:
-            proc.kill()
-            stdout, stderr = proc.communicate()
-            if stdout:
-                print(str(stdout, encoding='utf-8'))
-            if stderr:
-                print(str(stderr, encoding='utf-8'))
-            raise Exception(f"service_test_app for service {service_type} on port {port} failed to come online")
-        count += 1
-        time.sleep(0.5)
+        if proc.poll() is not None:
+            stdout, stderr = stop_service(proc)
+            _print_process_output(stdout, stderr)
+            raise Exception(f"service_test_app for service {service_type} on port {port} exited with code {proc.returncode} before becoming ready")
+
+        if time.monotonic() >= deadline:
+            stdout, stderr = stop_service(proc)
+            _print_process_output(stdout, stderr)
+            raise Exception(f"service_test_app for service {service_type} on port {port} failed to come online within {_SERVICE_START_TIMEOUT_SECONDS} seconds")
+
+        time.sleep(_SERVICE_START_POLL_INTERVAL_SECONDS)
 
     return proc
 
@@ -112,12 +160,8 @@ def main():
         try:
             time.sleep(5)
         except:  # noqa E722
-            proc.kill()
-            stdout, stderr = proc.communicate()
-            if stdout:
-                print(str(stdout, encoding='utf-8'))
-            if stderr:
-                print(str(stderr, encoding='utf-8'))
+            stdout, stderr = stop_service(proc)
+            _print_process_output(stdout, stderr)
             break
 
 

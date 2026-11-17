@@ -373,6 +373,7 @@ class SettingPreferenceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(field=OpenApiTypes.ANY)
     def get_value(self, obj):
-        if obj.preference.encrypted:
+        # Check for encrypted attribute - Fallback preferences don't have it
+        if hasattr(obj.preference, 'encrypted') and obj.preference.encrypted:
             return ENCRYPTED_STRING
         return obj.value

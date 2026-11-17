@@ -22,7 +22,7 @@ class TestServiceTypeSerializer:
     def test_create_service_type_via_serializer(self):
         """Test creating a service type through the serializer."""
         data = {
-            'name': 'Controller',
+            'name': 'Test Controller Service',
             'login_path': '/api/login/',
             'logout_path': '/api/logout/',
             'ping_url': '/api/ping/',
@@ -31,7 +31,7 @@ class TestServiceTypeSerializer:
         serializer = ServiceTypeSerializer(data=data, context={'request': Mock(query_params={})})
         assert serializer.is_valid(), serializer.errors
         service_type = serializer.save()
-        assert service_type.name == 'Controller'
+        assert service_type.name == 'Test Controller Service'
         assert service_type.login_path == '/api/login/'
         assert service_type.logout_path == '/api/logout/'
         assert service_type.ping_url == '/api/ping/'
@@ -40,7 +40,7 @@ class TestServiceTypeSerializer:
     def test_create_service_type_minimal_fields(self):
         """Test creating a service type with only required fields."""
         data = {
-            'name': 'Hub',
+            'name': 'Test Hub Service',
             'login_path': '/api/v3/auth/login/',
             'logout_path': '/api/v3/auth/logout/',
             'ping_url': '/api/v3/',
@@ -48,13 +48,13 @@ class TestServiceTypeSerializer:
         serializer = ServiceTypeSerializer(data=data, context={'request': Mock(query_params={})})
         assert serializer.is_valid(), serializer.errors
         service_type = serializer.save()
-        assert service_type.name == 'Hub'
+        assert service_type.name == 'Test Hub Service'
         assert service_type.login_path == '/api/v3/auth/login/'
 
     def test_update_service_type_via_serializer(self):
         """Test updating a service type through the serializer."""
         service_type = ServiceType.objects.create(
-            name="EDA", login_path="/api/eda/v1/auth/login/", logout_path="/api/eda/v1/auth/logout/", ping_url="/api/eda/v1/"
+            name="Test EDA Service", login_path="/api/eda/v1/auth/login/", logout_path="/api/eda/v1/auth/logout/", ping_url="/api/eda/v1/"
         )
 
         data = {

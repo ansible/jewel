@@ -38,13 +38,32 @@ class CursorStore:
         "  PRIMARY KEY (service_slug, assignment_type)"
         ")"
     )
+    _SQL_CREATE_MSSQL = (
+        f"IF OBJECT_ID(N'dbo.{_TABLE}', N'U') IS NULL "
+        f"CREATE TABLE dbo.{_TABLE} ("
+        "  service_slug NVARCHAR(255) NOT NULL,"
+        "  assignment_type NVARCHAR(16) NOT NULL,"
+        "  last_pk BIGINT NOT NULL DEFAULT 0,"
+        "  PRIMARY KEY (service_slug, assignment_type)"
+        ")"
+    )
     _SQL_LOAD = f"SELECT last_pk FROM {_TABLE} WHERE service_slug = %s AND assignment_type = %s"
+    _SQL_LOAD_MSSQL = f"SELECT last_pk FROM dbo.{_TABLE} WHERE service_slug = %s AND assignment_type = %s"
     _SQL_UPSERT = (
         f"INSERT INTO {_TABLE}"
         " (service_slug, assignment_type, last_pk)"
         " VALUES (%s, %s, %s)"
         " ON CONFLICT (service_slug, assignment_type)"
         " DO UPDATE SET last_pk = EXCLUDED.last_pk"
+    )
+    _SQL_UPSERT_MSSQL = (
+        f"MERGE dbo.{_TABLE} WITH (HOLDLOCK) AS target "
+        "USING (VALUES (%s, %s, %s)) AS source (service_slug, assignment_type, last_pk) "
+        "ON target.service_slug = source.service_slug "
+        "AND target.assignment_type = source.assignment_type "
+        "WHEN MATCHED THEN UPDATE SET last_pk = source.last_pk "
+        "WHEN NOT MATCHED THEN INSERT (service_slug, assignment_type, last_pk) "
+        "VALUES (source.service_slug, source.assignment_type, source.last_pk);"
     )
 
     def __init__(self, service_slug, assignment_type, log_fn=None):
@@ -59,14 +78,16 @@ class CursorStore:
     def _ensure_table(self):
         """Create the cursor table if it does not already exist."""
         with connection.cursor() as cur:
-            cur.execute(self._SQL_CREATE)
+            sql = self._SQL_CREATE_MSSQL if connection.vendor == "microsoft" else self._SQL_CREATE
+            cur.execute(sql)
 
     def _load(self) -> int:
         """Read current cursor value from DB, returning 0 on any failure."""
         try:
             self._ensure_table()
             with connection.cursor() as cur:
-                cur.execute(self._SQL_LOAD, [self.service_slug, self.assignment_type])
+                sql = self._SQL_LOAD_MSSQL if connection.vendor == "microsoft" else self._SQL_LOAD
+                cur.execute(sql, [self.service_slug, self.assignment_type])
                 row = cur.fetchone()
                 return row[0] if row else 0
         except Exception:
@@ -88,7 +109,8 @@ class CursorStore:
         """
         try:
             with connection.cursor() as cur:
-                cur.execute(self._SQL_UPSERT, [self.service_slug, self.assignment_type, pk])
+                sql = self._SQL_UPSERT_MSSQL if connection.vendor == "microsoft" else self._SQL_UPSERT
+                cur.execute(sql, [self.service_slug, self.assignment_type, pk])
         except Exception:
             msg = f"Failed to advance cursor for {self.service_slug}/{self.assignment_type} to {pk}; next run will reprocess from the old position"
             if self._log_fn:

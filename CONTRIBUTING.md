@@ -113,7 +113,7 @@ See [Reporting Bugs](#reporting-bugs) above.
   ```
   This installs `ansible`, `tox`, `ruff`, and `podman-compose` into the active virtual environment. When `container-startup.yml` is first created, the Makefile selects port 443 for confirmed rootful Podman and 8443 otherwise; set `proxy_port` in that file to override it.
 
-  To use the local Keycloak development provider, set `keycloak_enabled: True` in
+To use the local Keycloak development provider, set `keycloak_enabled: True` in
   `container-startup.yml` before running `make podman-compose`. See the
   [Keycloak development environment](docs/authentication.md#keycloak-development-environment)
   for the configured authenticators and token helper.
@@ -141,6 +141,11 @@ If your change modifies the API surface, also add a changelog fragment under
 `changelogs/fragments/` describing the change. CI warns when a spec change has
 no fragment and uploads a skeleton fragment as an artifact that you can fill
 in.
+### Local SQL Server mode
+
+The local Compose stack can run Gateway against SQL Server. Set `mssql_enabled: true` in the workspace's `container-startup.yml`, optionally override `mssql_sa_password`, then start the stack with `make podman-compose` (or the `make docker-compose` alias). The SQL Server 2025 Developer container creates the `gateway` database before Gateway starts, and Keycloak runs on its embedded development database so the stack needs no PostgreSQL container. PostgreSQL remains Gateway's database when `mssql_enabled` is false.
+
+The Gateway development image installs Microsoft ODBC Driver 18. SQL Server's self-signed certificate is trusted only in local development and test settings. The default SQL Server memory limit is 2048 MB and can be changed with `mssql_memory_limit_mb` in `container-startup.yml`.
 
 ## Code quality
 
