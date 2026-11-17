@@ -234,6 +234,9 @@ services:
       MSSQL_PID: Developer
       MSSQL_SA_PASSWORD: "{{ sqlserver_sa_password | replace('$', '$$') }}"
       MSSQL_MEMORY_LIMIT_MB: "{{ sqlserver_memory_limit_mb }}"
+      # Match DAB's SQL Server matrix: case-sensitive collation is required
+      # for unique constraints and exact lookups.
+      MSSQL_COLLATION: "Latin1_General_100_CS_AS"
     ports:
       - "{{ sqlserver_port }}:1433"
     volumes:

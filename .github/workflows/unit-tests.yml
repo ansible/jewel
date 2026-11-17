@@ -161,6 +161,9 @@ jobs:
           MSSQL_PID: Developer
           MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
           MSSQL_MEMORY_LIMIT_MB: "2048"
+          # Match DAB's SQL Server matrix: case-sensitive collation is
+          # required for unique constraints and exact lookups.
+          MSSQL_COLLATION: "Latin1_General_100_CS_AS"
         ports:
           - 1433:1433
         options: >-
