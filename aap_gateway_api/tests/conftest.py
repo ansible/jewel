@@ -88,18 +88,21 @@ def _patch_jwt_keygen(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _mssql_service_broker(django_db_setup):
+def _mssql_service_broker(django_db_setup, django_db_blocker):
     """Provision Service Broker objects before tests when running on SQL Server.
 
     Every xdist worker runs this; Broker.setup_database serializes concurrent
-    installers with an application lock, and each step is idempotent.
+    installers with an application lock, and each step is idempotent. The
+    blocker is lifted because provisioning happens outside any django_db test
+    context.
     """
     from django.db import connection
 
     if connection.vendor == "microsoft":
         from aap_gateway_api.management.commands.setup_service_broker import provision_service_broker
 
-        provision_service_broker(stdout=lambda message: None)
+        with django_db_blocker.unblock():
+            provision_service_broker(stdout=lambda message: None)
 
 
 @pytest.fixture(autouse=True)
