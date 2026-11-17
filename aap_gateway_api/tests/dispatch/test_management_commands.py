@@ -1,17 +1,13 @@
-from copy import deepcopy
 from io import StringIO
 from unittest import mock
 
 import pytest
-from django.conf import settings as django_settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import override_settings
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.run_dispatcherd_service")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.dispatcherd_setup")
 def test_dispatcherd_command_calls_run_service(mock_setup, mock_run_service):
@@ -24,7 +20,6 @@ def test_dispatcherd_command_calls_run_service(mock_setup, mock_run_service):
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.run_dispatcherd_service")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.dispatcherd_setup")
 def test_dispatcherd_command_passes_config(mock_setup, mock_run_service):
@@ -32,35 +27,13 @@ def test_dispatcherd_command_passes_config(mock_setup, mock_run_service):
 
     config = mock_setup.call_args[0][0]
     assert config["version"] == 2
-    assert "pg_notify" in config["brokers"]
-
-
-@mock.patch("aap_gateway_api.management.commands.dispatcherd.run_dispatcherd_service")
-@mock.patch("aap_gateway_api.management.commands.dispatcherd.dispatcherd_setup")
-def test_dispatcherd_command_skips_service_when_disabled(mock_setup, mock_run_service):
-    databases = deepcopy(django_settings.DATABASES)
-    databases["default"].update(
-        {
-            "ENGINE": "ansible_base.backends.mssql",
-            "NAME": "gateway",
-            "USER": "sa",
-            "PASSWORD": "YourStrong!Passw0rd",
-            "HOST": "mssql",
-            "PORT": 1433,
-            "TIME_ZONE": None,
-            "OPTIONS": {"driver": "ODBC Driver 18 for SQL Server"},
-        }
-    )
-
-    with override_settings(DATABASES=databases):
-        call_command("dispatcherd")
-
-    mock_setup.assert_not_called()
-    mock_run_service.assert_not_called()
+    if connection.vendor == "microsoft":
+        assert "sql_server" in config["brokers"]
+    else:
+        assert "pg_notify" in config["brokers"]
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.run_dispatcherd_service", side_effect=KeyboardInterrupt)
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.dispatcherd_setup")
 def test_dispatcherd_command_handles_keyboard_interrupt(mock_setup, mock_run_service):
@@ -71,7 +44,6 @@ def test_dispatcherd_command_handles_keyboard_interrupt(mock_setup, mock_run_ser
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.run_dispatcherd_service")
 @mock.patch("aap_gateway_api.management.commands.dispatcherd.dispatcherd_setup")
 def test_dispatcherd_command_verbosity_zero_suppresses_output(mock_setup, mock_run_service):
@@ -82,7 +54,6 @@ def test_dispatcherd_command_verbosity_zero_suppresses_output(mock_setup, mock_r
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @mock.patch("aap_gateway_api.management.commands.dispatcherctl.get_control_from_settings")
 @mock.patch("aap_gateway_api.management.commands.dispatcherctl.dispatcherd_setup")
 def test_dispatcherctl_alive_command(mock_setup, mock_get_control):
@@ -102,7 +73,6 @@ def test_dispatcherctl_alive_command(mock_setup, mock_get_control):
 
 
 @pytest.mark.django_db
-@pytest.mark.skipif(connection.vendor == "microsoft", reason="SQL Server dispatcherd support is not ready")
 @mock.patch("aap_gateway_api.management.commands.dispatcherctl.get_control_from_settings")
 @mock.patch("aap_gateway_api.management.commands.dispatcherctl.dispatcherd_setup")
 def test_dispatcherctl_fewer_replies_raises_error(mock_setup, mock_get_control):
@@ -112,26 +82,6 @@ def test_dispatcherctl_fewer_replies_raises_error(mock_setup, mock_get_control):
 
     with pytest.raises(CommandError, match="fewer replies"):
         call_command("dispatcherctl", "alive")
-
-
-def test_dispatcherctl_reports_disabled_for_mssql():
-    databases = deepcopy(django_settings.DATABASES)
-    databases["default"].update(
-        {
-            "ENGINE": "ansible_base.backends.mssql",
-            "NAME": "gateway",
-            "USER": "sa",
-            "PASSWORD": "YourStrong!Passw0rd",
-            "HOST": "mssql",
-            "PORT": 1433,
-            "TIME_ZONE": None,
-            "OPTIONS": {"driver": "ODBC Driver 18 for SQL Server"},
-        }
-    )
-
-    with override_settings(DATABASES=databases):
-        with pytest.raises(CommandError, match="disabled for the SQL Server"):
-            call_command("dispatcherctl", "alive")
 
 
 @pytest.mark.django_db
