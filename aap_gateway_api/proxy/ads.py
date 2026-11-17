@@ -211,7 +211,7 @@ class AggregatedDiscoveryService(ads_pb2_grpc.AggregatedDiscoveryServiceServicer
         # DB connections first, since no request signals do it here.
         close_old_connections()
         try:
-            return COLLECTORS[type_url](resource_names=None)
+            return COLLECTORS[type_url]()
         except Exception:
             # Re-raised, which ends the stream (Envoy reconnects and
             # re-subscribes); log so the stream's death is not invisible.

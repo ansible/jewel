@@ -216,13 +216,8 @@ def collect_listeners(resource_names: list[str] | None = None, sds_transport: st
     return resource_set
 
 
-def collect_secrets(resource_names=None) -> ResourceSet:
-    """SDS -- a single Secret containing all trusted CA certificates.
-
-    ``resource_names`` exists for interface parity with the other collectors
-    (the ADS servicer calls every collector with it); there is exactly one
-    secret, so it has no effect.
-    """
+def collect_secrets() -> ResourceSet:
+    """SDS -- a single Secret containing all trusted CA certificates."""
     cached = as_resource_set(cache.get(XDS_CACHE_KEY_SDS))
     if cached is not None:
         logger.debug("SDS cache hit")

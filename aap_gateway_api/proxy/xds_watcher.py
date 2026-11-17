@@ -47,8 +47,8 @@ logger = logging.getLogger("aap_gateway_api.proxy.xds_watcher")
 # rejects listeners whose clusters it does not yet hold.  (The ordering holds
 # within a tick; the two cache reads are not atomic, so an LDS change can
 # occasionally be pushed one tick before its CDS change.)  Collectors are
-# always called with resource_names=None (full state) because they cache
-# under a shared unfiltered key.
+# always called with no filter (full state) because they cache under a
+# shared unfiltered key.
 WATCHED_TYPES = (
     (CDS_TYPE_URL, XDS_CACHE_KEY_CDS, collect_clusters),
     (LDS_TYPE_URL, XDS_CACHE_KEY_LDS, collect_listeners),
@@ -98,7 +98,7 @@ class XDSWatcher(threading.Thread):
                     # Cache miss: invalidated since it was cached, or empty /
                     # never-cached (the no-cache-empty rule re-collects here
                     # every tick; see module docstring).
-                    rs = collector(resource_names=None)
+                    rs = collector()
                 # The first observation of a type also broadcasts: a stream
                 # that subscribed before this tick may hold an older version
                 # if a change landed in between.  Streams that already hold

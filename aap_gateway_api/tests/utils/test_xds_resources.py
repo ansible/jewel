@@ -92,13 +92,6 @@ def test_rest_listener_variant_has_its_own_cache_key(full_service_hierarchy_cont
 
 
 @pytest.mark.django_db
-def test_collect_secrets_accepts_resource_names():
-    # The ADS servicer calls every collector with resource_names=None; SDS has
-    # a single known secret, so the argument has no effect.
-    assert collect_secrets(resource_names=None).version == collect_secrets().version
-
-
-@pytest.mark.django_db
 def test_collect_secrets_round_trips_through_cache():
     first = collect_secrets()
     # SDS always caches, even when there are no CA certificates.
