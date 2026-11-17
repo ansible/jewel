@@ -302,6 +302,23 @@ collection:
 	fi;
 	pip install requests
 
+## Regenerate the committed OpenAPI spec using the jewel-ci container
+genschema:
+	@if [ ! -d django-ansible-base ]; then \
+		echo "Cloning django-ansible-base..."; \
+		git clone --depth 1 -b devel https://github.com/ansible/django-ansible-base.git django-ansible-base; \
+	fi
+	$(PODMAN) run --rm \
+		--security-opt label=disable \
+		-v $$(pwd):/jewel \
+		-w /jewel \
+		-e PYTHONPATH="./:./django-ansible-base/" \
+		-e GATEWAY_SECRET_KEY_FILE="./tools/configs/dev_secret_key" \
+		-e DATABASE_ENGINE="django.db.backends.sqlite3" \
+		-e DATABASE_NAME="/tmp/gateway_schema.db" \
+		quay.io/ansible/jewel-ci:devel \
+		python3 tools/scripts/genschema.py
+
 ## Canonical Podman Compose build target
 podman-compose-build: compose-build
 
