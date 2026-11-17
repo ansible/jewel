@@ -79,16 +79,6 @@ def load_custom_envvars(settings):
             loader_identifier="settings:load_custom_envvars",
             merge=False,
         )
-    apply_database_backend_settings(settings)
-
-
-def apply_database_backend_settings(settings: Dynaconf) -> None:
-    """Apply Gateway settings that depend on the selected database backend."""
-    default_db = settings.DATABASES.get("default")
-    if default_db and default_db.get("ENGINE") == "ansible_base.backends.mssql":
-        # The SQL Server single-node profile does not use DAB's distributed
-        # cache invalidation until the dispatcherd Service Broker is ready.
-        settings.set("ANSIBLE_BASE_REDIS_AUTO_INVALIDATE", False, loader_identifier="settings:database_backend")
 
 
 def set_secret_key(settings):
@@ -117,14 +107,30 @@ def load_grpc_settings(settings: Dynaconf) -> None:
 
     logger.debug('Loading GRPC settings')
 
-    default_db = settings.DATABASES.get("default", {})
-    database_engine = os.getenv("DATABASE_ENGINE") or default_db.get("ENGINE")
-    if database_engine != "ansible_base.backends.mssql":
-        settings.load_file("grpc_defaults.py")
+    settings.load_file("grpc_defaults.py")
 
     # Load settings for the GRPC server
     settings_file_path = os.environ.get('GATEWAY_GRPC_SETTINGS_FILE', f'{_GATEWAY_ETC_DIRECTORY}/grpc_settings.py')
     load_python_file_with_injected_context(settings_file_path, settings=settings)
+
+    default_db = settings.DATABASES.get("default", {})
+    database_engine = os.getenv("DATABASE_ENGINE") or default_db.get("ENGINE")
+    if database_engine == "ansible_base.backends.mssql":
+        _normalize_grpc_options_for_sql_server(settings)
+
+
+def _normalize_grpc_options_for_sql_server(settings: Dynaconf) -> None:
+    """Make the PostgreSQL-oriented gRPC connection options usable on SQL Server.
+
+    grpc_defaults.py sets psycopg keepalive options and application_name; an
+    ODBC connection string rejects unknown keywords, so drop the keepalives and
+    pass the application name as the ODBC APP keyword instead.
+    """
+    options = dict(settings.DATABASES.get("default", {}).get("OPTIONS") or {})
+    normalized = {key: value for key, value in options.items() if not key.startswith("keepalives")}
+    if "application_name" in normalized:
+        normalized["APP"] = normalized.pop("application_name")
+    settings.set("DATABASES__default__OPTIONS", normalized, loader_identifier="settings:grpc_sql_server_options", merge=False)
 
 
 def load_healthcheck_settings(settings: Dynaconf) -> None:

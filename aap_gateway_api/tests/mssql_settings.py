@@ -31,7 +31,3 @@ DATABASES["healthcheck"] = {
     "CONN_MAX_AGE": 0,
     "TEST": {"MIRROR": "default"},
 }
-
-# This test profile exercises single-node SQL Server mode; Service Broker
-# cache broadcasts are intentionally not part of the current integration.
-ANSIBLE_BASE_REDIS_AUTO_INVALIDATE = False
