@@ -45,11 +45,16 @@ def provision_service_broker(using: str = "default", stdout=print) -> None:
 
     Broker.setup_database({"connection_string": get_sql_server_notify_conn_string(alias=using)})
 
-    db_user = connection.settings_dict["USER"]
+    # Resolve the database principal the connection's login maps to (e.g. the
+    # 'sa' login maps to the 'dbo' user) and skip the grant for sysadmins —
+    # they already hold every permission in the database.
     with connection.cursor() as cursor:
-        cursor.execute(_ROLE_MEMBERSHIP_SQL, [db_user])
-        if cursor.fetchone() is None:
-            cursor.execute(f"ALTER ROLE dispatcherd_runtime ADD MEMBER {connection.ops.quote_name(db_user)}")
+        cursor.execute("SELECT USER_NAME(), IS_SRVROLEMEMBER('sysadmin')")
+        db_principal, is_sysadmin = cursor.fetchone()
+        if not is_sysadmin:
+            cursor.execute(_ROLE_MEMBERSHIP_SQL, [db_principal])
+            if cursor.fetchone() is None:
+                cursor.execute(f"ALTER ROLE dispatcherd_runtime ADD MEMBER {connection.ops.quote_name(db_principal)}")
 
     stdout(f"Service Broker enabled and dispatcherd runtime objects installed for database {db_name}.")
 

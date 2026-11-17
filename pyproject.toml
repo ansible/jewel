@@ -186,7 +186,10 @@ legacy_tox_ini = """
         GATEWAY_TEST_DIRS
         PYTEST_NUM_PROCESSES
     setenv =
-        PYTHONPATH = {toxinidir}/django-ansible-base/
+        # Interim: sql_server broker has no dispatcherd release yet; CI clones it
+        # to {toxinidir}/dispatcherd and local dev keeps it at ../components/dispatcherd.
+        # Drop the extra entries when a dispatcherd release ships the broker.
+        PYTHONPATH = {toxinidir}/django-ansible-base/:{toxinidir}/dispatcherd:{toxinidir}/../components/dispatcherd
         DJANGO_SETTINGS_MODULE = aap_gateway_api.tests.mssql_settings
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         MSSQL_SA_PASSWORD = YourStrong!Passw0rd
@@ -207,7 +210,10 @@ legacy_tox_ini = """
         DB_PORT
         GATEWAY_TEST_DIRS
     setenv =
-        PYTHONPATH = {toxinidir}/django-ansible-base/
+        # Interim: sql_server broker has no dispatcherd release yet; CI clones it
+        # to {toxinidir}/dispatcherd and local dev keeps it at ../components/dispatcherd.
+        # Drop the extra entries when a dispatcherd release ships the broker.
+        PYTHONPATH = {toxinidir}/django-ansible-base/:{toxinidir}/dispatcherd:{toxinidir}/../components/dispatcherd
         DJANGO_SETTINGS_MODULE = aap_gateway_api.tests.mssql_settings
         GATEWAY_SECRET_KEY_FILE = {toxinidir}/tools/configs/dev_secret_key
         MSSQL_SA_PASSWORD = YourStrong!Passw0rd

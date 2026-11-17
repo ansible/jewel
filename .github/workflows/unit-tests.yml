@@ -179,7 +179,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           python tools/scripts/get_pr_checkout.py \
-            --always-clone-repos 'ansible/django-ansible-base'
+            --always-clone-repos 'ansible/django-ansible-base' \
+            --always-clone-repos 'ansible/dispatcherd'
 
       - name: Install Microsoft ODBC Driver 18
         run: |
