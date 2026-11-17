@@ -40,11 +40,6 @@ rollback path that is a bootstrap-template change only.
 - Health Discovery Service (HDS). Deferred; see "HDS accommodation" below.
 - Removing the REST xDS views. Follow-up once gRPC ADS is proven in the
   field.
-- Switching SDS to ADS. SDS is rarely used, its config source lives in the
-  gateway image (`_rest_sds_config()` in `xds_configs.py`, not the
-  bootstrap), and moving it would couple the rollback story to gateway
-  image versions. SDS moves to ADS in a later phase, together with REST-view
-  removal, when an image+template coordinated change is acceptable.
 - Any change to ext_authz behavior.
 
 ## Anti-goals
@@ -73,10 +68,16 @@ rollback path that is a bootstrap-template change only.
   both transports, so a merged jewel PR is inert until a bootstrap
   template opts in to ADS.
 - **SDS is configured inside the generated listener config**, not the
-  bootstrap: `_rest_sds_config()` in `aap_gateway_api/utils/xds_configs.py`
-  emits a REST `api_config_source` referencing `SDS_CLUSTER_NAMES`. SDS
-  stays on REST in this phase (see non-goals), so `_rest_sds_config()` and
-  the `gateway-control-plane-rest` bootstrap cluster are unchanged.
+  bootstrap (it was added later and is never mentioned there): the gateway
+  image decides each listener's SDS config source in
+  `aap_gateway_api/utils/xds_configs.py`.  SDS is polled by every Envoy
+  every 5 s (the secret is normally empty; only deployments using
+  secret-dependent EDA features carry content), so it is the most frequent
+  xDS poll and moves to ADS with CDS/LDS.  Because the image, not the
+  bootstrap, picks the source, the source is matched to the transport the
+  listener is delivered over (see "SDS source follows the listener
+  transport").  The `gateway-control-plane-rest` bootstrap cluster stays for
+  the REST path.
 - **The gRPC server is 5 forked worker processes** (`GRPC_SERVER_PROCESSES`),
   each a synchronous grpc server with a `ThreadPoolExecutor`
   (`GRPC_SERVER_MAX_THREADS_PER_PROCESS`, currently 10). Stream state and
@@ -131,8 +132,10 @@ The handler:
 - Reads `DiscoveryRequest`s from the stream. On a request with no
   `version_info` (initial subscription), responds with current state for
   that `type_url` from the same cache the REST views use.
-- Tracks per-stream subscribed types (CDS and LDS; SDS is not served here
-  in this phase). ACKs are consumed and ignored;
+- Tracks per-stream subscribed types (CDS, LDS and SDS). CDS and LDS are
+  wildcard subscriptions; SDS is a named subscription for the single
+  validation-context secret, so the full (one-element) set is the answer.
+  ACKs are consumed and ignored;
   NACKs (requests with `error_detail`) are logged with the detail and
   produce no immediate response — re-sending at network speed would loop
   NACKs. A NACK is often an ordering artifact (e.g. a listener whose
@@ -166,7 +169,7 @@ namespace; see "Cache key namespace" below).
   resources.
 - There is **no separate version key**. Each gRPC worker process runs a
   lightweight watcher (a daemon thread) that checks the *existing* payload
-  cache keys (`xds:v2:cds`, `xds:v2:lds`; see "Cache key namespace" below)
+  cache keys (`xds:v2:cds`, `xds:v2:lds`, `xds:v2:sds`; see "Cache key namespace" below)
   via `cache.get_many` roughly once per second, and only while the worker has
   at least one connected ADS stream (with none, the tick returns immediately) — a single redis round-trip, not a request through Django.
   On a hit the watcher uses the cached `ResourceSet` (its digest travels
@@ -226,7 +229,12 @@ namespace; see "Cache key namespace" below).
   directional: an old node still mid-upgrade invalidates only the legacy
   keys, so a change saved through it leaves new nodes' `xds:v2:*` entries
   stale until their 300s TTL expires — bounded and transitional, and one
-  more reason to rehearse a mixed-version window before rollout.
+  more reason to rehearse a mixed-version window before rollout. (This
+  matters for the operator, whose Deployment uses the default RollingUpdate
+  so old and new pods coexist on the shared Redis; the containerized
+  installer replaces all containers together.) The REST view's listeners
+  (REST SDS source) live under their own `xds:v2:lds:rest` key, dropped
+  whenever `xds:v2:lds` is invalidated.
 - **Filtered REST requests are not cached**: the REST views pass
   `resource_names` through to the collectors; a filtered collection is
   returned but never written under the shared unfiltered key (which the
@@ -248,8 +256,25 @@ namespace; see "Cache key namespace" below).
 - `cds_config` and `lds_config` become `ads: {}` (with
   `resource_api_version: V3`); their REST `api_config_source` blocks are
   removed from the templates. The `gateway-control-plane-rest` cluster
-  **stays** — SDS still references it.
-- SDS: unchanged (see non-goals).
+  **stays** — the REST rollback path and REST-polling gateways use it.
+- SDS needs no bootstrap change: listeners delivered over ADS carry an `ads`
+  SDS source, which resolves against the same `ads_config`.
+
+### SDS source follows the listener transport
+
+A listener's SDS config source must match the transport the listener arrives
+on.  An Envoy that polls LDS over REST has no `ads_config`, and Envoy rejects
+(on every poll; verified against Envoy 1.36.6) a listener whose SDS source is
+`ads` with `ADS must be configured to support an ADS config source`.  The
+gateway cannot see the bootstrap, but it knows which transport each Envoy used
+to ask, so the REST view serves listeners with the REST SDS source and the ADS
+servicer serves them with an `ads` source.  The two variants differ in content,
+so they are cached under separate keys (`xds:v2:lds` and `xds:v2:lds:rest`);
+invalidating the LDS key drops both.  This keeps an image/bootstrap version
+split harmless (a new image with an old REST bootstrap, as can occur with a
+stale installer collection or CR image overrides) and keeps rollback a
+bootstrap-only revert.  The REST variant is removed with the REST views; see
+`docs/removing_rest_xds.md`.
 
 ### REST views: keep, mark deprecated
 
@@ -267,10 +292,10 @@ Deprecation is documentation-only; there is no near-term removal.
 
 Rollback is a bootstrap change only: revert the envoy template (operator
 configmap or installer) to the REST `api_config_source` blocks for
-CDS/LDS and restart Envoy. SDS never moved, and the
-`gateway-control-plane-rest` cluster was never removed, so nothing in the
-gateway image depends on the new bootstrap. No gateway code or image
-rollback is involved.
+CDS/LDS and restart Envoy. SDS follows automatically (listeners fetched over
+REST carry a REST SDS source), and the `gateway-control-plane-rest` cluster
+was never removed, so nothing in the gateway image depends on the new
+bootstrap. No gateway code or image rollback is involved.
 
 ### Release coordination
 

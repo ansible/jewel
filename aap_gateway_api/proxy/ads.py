@@ -20,15 +20,17 @@ from django.db import close_old_connections
 from envoy.service.discovery.v3 import ads_pb2_grpc
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryRequest, DiscoveryResponse
 
-from aap_gateway_api.utils.xds_resources import ResourceSet, collect_clusters, collect_listeners
+from aap_gateway_api.utils.xds_resources import ResourceSet, collect_clusters, collect_listeners, collect_secrets
 
 CDS_TYPE_URL = "type.googleapis.com/envoy.config.cluster.v3.Cluster"
 LDS_TYPE_URL = "type.googleapis.com/envoy.config.listener.v3.Listener"
+SDS_TYPE_URL = "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret"
 
 # The xDS resource types this servicer serves, mapped to their collectors.
 COLLECTORS = {
     CDS_TYPE_URL: collect_clusters,
     LDS_TYPE_URL: collect_listeners,
+    SDS_TYPE_URL: collect_secrets,
 }
 
 logger = logging.getLogger("aap_gateway_api.proxy.ads")
@@ -183,7 +185,9 @@ class AggregatedDiscoveryService(ads_pb2_grpc.AggregatedDiscoveryServiceServicer
         # Always collect the full resource set and ignore request.resource_names.
         # CDS and LDS use wildcard subscriptions (Envoy sends no resource
         # names), and state-of-the-world responses for them must carry the
-        # full set; the collectors also only cache the unfiltered set.
+        # full set; the collectors also only cache the unfiltered set.  SDS is
+        # a named subscription, but there is exactly one secret and every
+        # subscriber requests it, so the full (one-element) set is the answer.
         resource_set = self._collect(type_url)
         return self._build_response(stream, type_url, resource_set)
 

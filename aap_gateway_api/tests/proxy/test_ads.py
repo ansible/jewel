@@ -1,15 +1,19 @@
 """Unit tests for the gRPC Aggregated Discovery Service (ADS) servicer."""
 
+import hashlib
 import logging
 import time
 from unittest import mock
 
 import pytest
+from envoy.extensions.transport_sockets.tls.v3.secret_pb2 import Secret
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryRequest
 from google.rpc import status_pb2
 
 import aap_gateway_api.proxy.ads as ads_module
-from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
+from aap_gateway_api.models.ca_certificate import CACertificate
+from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, SDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
+from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
 from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, collect_clusters, invalidate_xds_cache
 
 UNKNOWN_TYPE_URL = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration"
@@ -91,6 +95,49 @@ def test_initial_subscription_returns_current_state(full_service_hierarchy_contr
     assert resp.nonce != ""
     assert len(resp.resources) > 0
     ctx.active = False
+
+
+@pytest.mark.django_db
+def test_sds_subscription_returns_validation_context_secret():
+    # SDS is a named subscription (Envoy asks for the secret by name once a
+    # listener references it), served over the same stream as CDS/LDS.
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    request = DiscoveryRequest(type_url=SDS_TYPE_URL, resource_names=[SDS_SECRET_CONFIG_NAME])
+    gen = servicer.StreamAggregatedResources(iter([request]), ctx)
+    resp = next(gen)
+    assert resp.type_url == SDS_TYPE_URL
+    assert resp.version_info != ""
+    assert resp.nonce != ""
+    assert len(resp.resources) == 1
+    secret = Secret()
+    resp.resources[0].Unpack(secret)
+    assert secret.name == SDS_SECRET_CONFIG_NAME
+    ctx.active = False
+
+
+@pytest.mark.django_db
+def test_ca_certificate_change_pushes_new_secret(randname):
+    registry = StreamRegistry()
+    servicer = AggregatedDiscoveryService(registry=registry)
+    ctx = FakeContext()
+    request = DiscoveryRequest(type_url=SDS_TYPE_URL, resource_names=[SDS_SECRET_CONFIG_NAME])
+    gen = servicer.StreamAggregatedResources(iter([request]), ctx)
+    resp1 = next(gen)
+
+    pem = "-----BEGIN CERTIFICATE-----\naaa\n-----END CERTIFICATE-----"
+    CACertificate.objects.create(name=randname("ads_ca"), pem_data=pem, sha256=hashlib.sha256(pem.encode()).hexdigest())
+    # on_commit invalidation does not fire inside pytest-django's transaction.
+    invalidate_xds_cache(XDS_CACHE_KEY_SDS)
+    registry.streams()[0].events.put(("push", SDS_TYPE_URL))
+    resp2 = next(gen)
+
+    assert resp2.type_url == SDS_TYPE_URL
+    assert resp2.version_info != resp1.version_info
+    secret = Secret()
+    resp2.resources[0].Unpack(secret)
+    assert pem in secret.validation_context.trusted_ca.inline_string
 
 
 @pytest.mark.django_db

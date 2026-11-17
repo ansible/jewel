@@ -1,5 +1,6 @@
 """Unit tests for the xDS cache watcher (ADS pushes on config change)."""
 
+import hashlib
 import logging
 import queue
 from unittest import mock
@@ -8,7 +9,8 @@ import pytest
 from envoy.service.discovery.v3.discovery_pb2 import DiscoveryRequest
 
 import aap_gateway_api.proxy.xds_watcher as xds_watcher_module
-from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
+from aap_gateway_api.models.ca_certificate import CACertificate
+from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, SDS_TYPE_URL, AggregatedDiscoveryService, StreamRegistry, _Stream
 from aap_gateway_api.proxy.xds_watcher import XDSWatcher
 from aap_gateway_api.utils.xds_resources import (
     XDS_CACHE_KEY_CDS,
@@ -16,6 +18,7 @@ from aap_gateway_api.utils.xds_resources import (
     XDS_CACHE_KEY_SDS,
     collect_clusters,
     collect_listeners,
+    collect_secrets,
     invalidate_xds_cache,
 )
 
@@ -57,7 +60,7 @@ def prime(watcher, stream):
     state, which a subscribed stream suppresses if it already holds it), and
     discard those hints."""
     watcher.tick()
-    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL)]
+    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL), ("push", SDS_TYPE_URL)]
 
 
 def change_cds_config(route):
@@ -108,9 +111,10 @@ def test_first_tick_hints_current_state(full_service_hierarchy_controller):
     stream = make_fake_stream(registry)
     watcher = XDSWatcher(registry)
     watcher.tick()
-    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL)]
+    assert pushed_types(stream.events) == [("push", CDS_TYPE_URL), ("push", LDS_TYPE_URL), ("push", SDS_TYPE_URL)]
     assert watcher._last_versions[CDS_TYPE_URL] == collect_clusters().version
     assert watcher._last_versions[LDS_TYPE_URL] == collect_listeners().version
+    assert watcher._last_versions[SDS_TYPE_URL] == collect_secrets().version
 
     watcher.tick()  # unchanged: no further pushes
     assert stream.events.empty()
@@ -131,6 +135,22 @@ def test_tick_pushes_on_model_change(full_service_hierarchy_controller):
     assert watcher._last_versions[CDS_TYPE_URL] == collect_clusters().version
     # and no LDS push followed a CDS-only change
     assert stream.events.empty()
+
+
+@pytest.mark.django_db
+def test_tick_pushes_on_ca_certificate_change(randname):
+    registry = StreamRegistry()
+    stream = make_fake_stream(registry)
+    watcher = XDSWatcher(registry)
+    prime(watcher, stream)
+
+    pem = "-----BEGIN CERTIFICATE-----\naaa\n-----END CERTIFICATE-----"
+    CACertificate.objects.create(name=randname("watcher_ca"), pem_data=pem, sha256=hashlib.sha256(pem.encode()).hexdigest())
+    # on_commit invalidation does not fire inside pytest-django's transaction.
+    invalidate_xds_cache(XDS_CACHE_KEY_SDS)
+    watcher.tick()
+    assert pushed_types(stream.events) == [("push", SDS_TYPE_URL)]
+    assert watcher._last_versions[SDS_TYPE_URL] == collect_secrets().version
 
 
 @pytest.mark.django_db

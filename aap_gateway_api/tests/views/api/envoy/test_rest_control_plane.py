@@ -7,7 +7,7 @@ from django.urls import reverse
 
 from aap_gateway_api.models.ca_certificate import CACertificate
 from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
-from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, _collect_db_ca_certs
+from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS_REST, XDS_CACHE_KEY_SDS, _collect_db_ca_certs
 
 
 @pytest.mark.django_db
@@ -32,10 +32,24 @@ def test_lds_cache_hit_returns_cached_response(unauthenticated_api_client, full_
     url = reverse("lds")
     first = unauthenticated_api_client.post(url, data={})
     assert first.status_code == 200
-    assert cache.get(XDS_CACHE_KEY_LDS) is not None
+    assert cache.get(XDS_CACHE_KEY_LDS_REST) is not None
     second = unauthenticated_api_client.post(url, data={})
     assert second.status_code == 200
     assert second.data == first.data
+
+
+@pytest.mark.django_db
+def test_lds_serves_rest_sds_source(unauthenticated_api_client, full_service_hierarchy_controller):
+    """An Envoy polling LDS over REST has a REST bootstrap, so its listeners must
+    fetch SDS over REST too (an `ads` source would be rejected by that Envoy)."""
+    response = unauthenticated_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+    listener = response.data["resources"][0]
+    tls = listener["filterChains"][0]["transportSocket"]["typedConfig"]["commonTlsContext"]
+    sds_config = tls["validationContextSdsSecretConfig"]["sdsConfig"]
+    assert "ads" not in sds_config
+    assert sds_config["apiConfigSource"]["apiType"] == "REST"
+    assert sds_config["apiConfigSource"]["clusterNames"] == ["gateway-control-plane-rest"]
 
 
 @pytest.mark.django_db
@@ -89,7 +103,7 @@ def test_lds_empty_response_not_cached_during_bootstrap(unauthenticated_api_clie
     first = unauthenticated_api_client.post(url, data={})
     assert first.status_code == 200
     # Cache should be empty since there are no ports
-    assert cache.get(XDS_CACHE_KEY_LDS) is None
+    assert cache.get(XDS_CACHE_KEY_LDS_REST) is None
 
 
 @pytest.mark.django_db
@@ -157,7 +171,7 @@ def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     # Step 1: Poll with empty DB (bootstrap phase)
     empty_response = unauthenticated_api_client.post(url, data={})
     assert empty_response.status_code == 200
-    assert cache.get(XDS_CACHE_KEY_LDS) is None  # Empty response NOT cached
+    assert cache.get(XDS_CACHE_KEY_LDS_REST) is None  # Empty response NOT cached
     # Verify response is truly empty (no resources)
     assert "resources" not in empty_response.data or len(empty_response.data.get("resources", [])) == 0
 
@@ -186,7 +200,7 @@ def test_lds_bootstrap_recovery_path(unauthenticated_api_client, full_service_hi
     assert "resources" in populated_response.data
     assert len(populated_response.data.get("resources", [])) > 0
     # Cache should now be populated with the ResourceSet that was served
-    cached = cache.get(XDS_CACHE_KEY_LDS)
+    cached = cache.get(XDS_CACHE_KEY_LDS_REST)
     assert cached is not None
     assert cached.version == populated_response.data["versionInfo"]
 

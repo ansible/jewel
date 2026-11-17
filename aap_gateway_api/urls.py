@@ -72,7 +72,7 @@ urlpatterns = [
         views.SettingPreferenceView.as_view(),
         name='setting-detail',
     ),
-    # xDS
+    # xDS (REST-XDS-REMOVAL: delete these three routes and the import above)
     path('v3/discovery:listeners', ListenerDiscoverServiceView.as_view(), name='lds'),
     path('v3/discovery:clusters', ClusterDiscoverServiceView.as_view(), name='cds'),
     path('v3/discovery:secrets', SecretDiscoverServiceView.as_view(), name='sds'),

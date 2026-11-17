@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-13-envoy-grpc-ads-xds-design.md`
 
+> **Addendum (2026-11-17): SDS moved to ADS.** After the tasks below were done, SDS was brought onto ADS (it is the most frequent poller: 5 s, every Envoy). Wherever this plan says "SDS stays on REST", read the spec's "SDS source follows the listener transport": the ADS servicer and watcher serve SDS, listeners delivered over ADS carry an `ads` SDS source, and the REST view keeps serving listeners with a REST SDS source (cached under `xds:v2:lds:rest`), so an image/bootstrap version split stays harmless and rollback stays a bootstrap revert. REST-only code is tagged `REST-XDS-REMOVAL`; see `docs/removing_rest_xds.md`.
+
 ## Global Constraints
 
 - No new dependencies — `xds-protos==1.68.1` already provides the ADS servicer stubs.

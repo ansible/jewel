@@ -29,8 +29,16 @@ import threading
 from django.core.cache import cache
 from django.db import close_old_connections
 
-from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, StreamRegistry
-from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, as_resource_set, collect_clusters, collect_listeners
+from aap_gateway_api.proxy.ads import CDS_TYPE_URL, LDS_TYPE_URL, SDS_TYPE_URL, StreamRegistry
+from aap_gateway_api.utils.xds_resources import (
+    XDS_CACHE_KEY_CDS,
+    XDS_CACHE_KEY_LDS,
+    XDS_CACHE_KEY_SDS,
+    as_resource_set,
+    collect_clusters,
+    collect_listeners,
+    collect_secrets,
+)
 
 logger = logging.getLogger("aap_gateway_api.proxy.xds_watcher")
 
@@ -44,6 +52,7 @@ logger = logging.getLogger("aap_gateway_api.proxy.xds_watcher")
 WATCHED_TYPES = (
     (CDS_TYPE_URL, XDS_CACHE_KEY_CDS, collect_clusters),
     (LDS_TYPE_URL, XDS_CACHE_KEY_LDS, collect_listeners),
+    (SDS_TYPE_URL, XDS_CACHE_KEY_SDS, collect_secrets),
 )
 
 

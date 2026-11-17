@@ -112,20 +112,43 @@ class TestXdsConfigsUseConstants:
     def test_transport_socket_uses_downstream_tls_context(self, mock_settings):
         mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
         mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
-        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
-        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
         from aap_gateway_api.utils.xds_configs import transport_socket
 
         result = transport_socket()
         assert result["typed_config"]["@type"] == DOWNSTREAM_TLS_CONTEXT
+
+    @patch("aap_gateway_api.utils.xds_configs.settings")
+    def test_transport_socket_sds_uses_ads_config_source(self, mock_settings):
+        mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
+        mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
+        from aap_gateway_api.utils.xds_configs import transport_socket
+
+        sds = transport_socket()["typed_config"]["common_tls_context"]["validation_context_sds_secret_config"]
+        assert sds["sds_config"] == {"ads": {}, "resource_api_version": "V3"}
+
+    @patch("aap_gateway_api.utils.xds_configs.settings")
+    def test_transport_socket_sds_rest_transport_uses_rest_config_source(self, mock_settings):
+        mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
+        mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
+        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
+        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
+        from aap_gateway_api.utils.xds_configs import transport_socket
+
+        sds = transport_socket(sds_transport="rest")["typed_config"]["common_tls_context"]["validation_context_sds_secret_config"]
+        assert sds["sds_config"] == {
+            "api_config_source": {
+                "api_type": "REST",
+                "transport_api_version": "V3",
+                "cluster_names": ["sds_cluster"],
+                "refresh_delay": "30s",
+            }
+        }
 
     @patch("aap_gateway_api.utils.xds_configs.default_backend")
     @patch("aap_gateway_api.utils.xds_configs.settings")
     def test_transport_socket_ecdh_curves(self, mock_settings, mock_default_backend):
         mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
         mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
-        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
-        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
         fake_backend = MagicMock()
         fake_backend._fips_enabled = False
         mock_default_backend.return_value = fake_backend
@@ -140,8 +163,6 @@ class TestXdsConfigsUseConstants:
     def test_transport_socket_ecdh_curves_fips(self, mock_settings, mock_default_backend):
         mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
         mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
-        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
-        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
         fake_backend = MagicMock()
         fake_backend._fips_enabled = True
         mock_default_backend.return_value = fake_backend
@@ -155,8 +176,6 @@ class TestXdsConfigsUseConstants:
     def test_transport_socket_ecdh_curves_no_fips_attr(self, mock_settings, mock_default_backend):
         mock_settings.GATEWAY_CERT_FILE = "/tmp/cert.pem"
         mock_settings.GATEWAY_KEY_FILE = "/tmp/key.pem"
-        mock_settings.SDS_CLUSTER_NAMES = ["sds_cluster"]
-        mock_settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION = "30s"
         fake_backend = MagicMock()
         mock_default_backend.return_value = fake_backend
         from aap_gateway_api.utils.xds_configs import transport_socket

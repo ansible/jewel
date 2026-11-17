@@ -156,14 +156,14 @@ Additional routes encompass every other potential API route in the gateway. This
 The gateway generates the Envoy configuration from these models and delivers it to Envoy through its xDS control plane. Envoy's bootstrap config determines how each resource type is fetched:
 
 - **CDS and LDS** (clusters and listeners) are delivered over gRPC Aggregated Discovery Service (ADS) when the Envoy bootstrap config uses `ads_config` (the development environment does today; other installers still use REST polling until their bootstrap templates are updated). ADS is served by the gateway's gRPC server on port 50051, the same server that serves external authorization. Configuration is pushed to connected Envoys when it changes, and Envoy does not poll for these resources.
-- **SDS** (secrets) still uses REST polling.
-- **REST xDS endpoints** (`/v3/discovery:*`) are deprecated but still functional. Responses from these endpoints include a `Deprecation: true` header. They remain available for compatibility, for example when a newer gateway runs with an older Envoy bootstrap.
+- **SDS** (secrets) follows the transport of the listeners that reference it. The gateway generates listeners with an ADS secret source for Envoys that receive them over ADS, and with a REST secret source (polled every 5 seconds) for Envoys that poll LDS over REST. SDS needs no bootstrap setting of its own.
+- **REST xDS endpoints** (`/v3/discovery:*`) are deprecated but still functional. Responses from these endpoints include a `Deprecation: true` header. They remain available for compatibility, for example when a newer gateway runs with an older Envoy bootstrap. See [Removing the REST xDS control plane](removing_rest_xds.md) for how to retire them.
 
 To inspect the configuration the control plane would deliver (regardless of transport), run `manage.py dump_xds` inside the gateway container. It prints the current CDS/LDS/SDS resources with their version digests as JSON; pass `--type lds` (repeatable) to limit the output.
 
 ### Rolling back to REST xDS
 
-To switch CDS and LDS back to REST polling, revert the Envoy bootstrap config so that the `cds_config` and `lds_config` entries use REST `api_config_source` blocks pointing at the `/v3/discovery:*` endpoints, then restart Envoy.
+To switch CDS and LDS back to REST polling, revert the Envoy bootstrap config so that the `cds_config` and `lds_config` entries use REST `api_config_source` blocks pointing at the `/v3/discovery:*` endpoints, then restart Envoy. SDS follows automatically: listeners fetched over REST carry a REST secret source, so no gateway change or image rollback is needed.
 
 ## Putting it All together
 

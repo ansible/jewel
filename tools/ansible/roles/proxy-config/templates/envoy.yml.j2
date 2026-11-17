@@ -20,6 +20,7 @@ dynamic_resources:
 
 static_resources:
   clusters:
+  {# REST-XDS-REMOVAL: this cluster only serves the REST rollback path; delete it with the REST views. #}
   - type: STRICT_DNS
     typed_extension_protocol_options:
       envoy.extensions.upstreams.http.v3.HttpProtocolOptions:

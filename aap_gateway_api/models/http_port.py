@@ -62,7 +62,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
 
         return super().save(*args, **kwargs)
 
-    def get_xds_listener_config(self, **kwargs):
+    def get_xds_listener_config(self, sds_transport="ads", **kwargs):
         """
         Return the Envoy listener configuration for this port.
 
@@ -70,6 +70,9 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         trailing-slash forms without invoking external authorization.
 
         Args:
+            sds_transport: ``"ads"`` or ``"rest"``; how the listener's TLS
+                validation-context secret is fetched.  Must match the transport
+                the listener itself is delivered over.
             **kwargs: Keyword arguments forwarded to each route's XDS
                 configuration builder.
         """
@@ -117,7 +120,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
             cfg['address']['socket_address'] = {"address": "0.0.0.0", "port_value": self.number}
 
         if self.use_https:
-            cfg["filter_chains"][0]["transport_socket"] = transport_socket()
+            cfg["filter_chains"][0]["transport_socket"] = transport_socket(sds_transport)
 
         return cfg
 

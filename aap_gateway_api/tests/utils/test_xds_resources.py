@@ -4,11 +4,15 @@ from unittest import mock
 
 import pytest
 from django.core.cache import cache
+from envoy.config.core.v3.config_source_pb2 import ApiVersion
+from envoy.config.listener.v3.listener_pb2 import Listener
+from envoy.extensions.transport_sockets.tls.v3.tls_pb2 import DownstreamTlsContext
 
 from aap_gateway_api.utils import xds_resources
 from aap_gateway_api.utils.xds_resources import (
     XDS_CACHE_KEY_CDS,
     XDS_CACHE_KEY_LDS,
+    XDS_CACHE_KEY_LDS_REST,
     XDS_CACHE_KEY_SDS,
     XDS_CACHE_TIMEOUT,
     XDS_LEGACY_CACHE_KEYS,
@@ -41,6 +45,57 @@ def test_collect_listeners_round_trips_through_cache(full_service_hierarchy_cont
     assert cache.get(XDS_CACHE_KEY_LDS) is not None
     second = collect_listeners()
     assert second.version == first.version
+
+
+@pytest.mark.django_db
+def test_listener_sds_source_is_ads(full_service_hierarchy_controller):
+    # Listeners fetch their validation-context secret over the same ADS stream
+    # as CDS/LDS rather than polling the REST control plane.
+    resource_set = collect_listeners()
+    listener = Listener()
+    resource_set.resources[0].Unpack(listener)
+    tls = DownstreamTlsContext()
+    listener.filter_chains[0].transport_socket.typed_config.Unpack(tls)
+    sds_config = tls.common_tls_context.validation_context_sds_secret_config.sds_config
+    assert sds_config.HasField("ads")
+    assert not sds_config.HasField("api_config_source")
+    assert sds_config.resource_api_version == ApiVersion.V3
+
+
+@pytest.mark.django_db
+def test_listener_sds_source_is_rest_for_rest_transport(full_service_hierarchy_controller):
+    # The REST views serve Envoys whose bootstrap predates ADS; their listeners
+    # keep the REST SDS source so nothing depends on the bootstrap having ads_config.
+    resource_set = collect_listeners(sds_transport="rest")
+    listener = Listener()
+    resource_set.resources[0].Unpack(listener)
+    tls = DownstreamTlsContext()
+    listener.filter_chains[0].transport_socket.typed_config.Unpack(tls)
+    sds_config = tls.common_tls_context.validation_context_sds_secret_config.sds_config
+    assert sds_config.HasField("api_config_source")
+    assert not sds_config.HasField("ads")
+
+
+@pytest.mark.django_db
+def test_rest_listener_variant_has_its_own_cache_key(full_service_hierarchy_controller):
+    ads = collect_listeners()
+    rest = collect_listeners(sds_transport="rest")
+    # Different content (SDS source), so different digests, cached separately.
+    assert ads.version != rest.version
+    assert cache.get(XDS_CACHE_KEY_LDS).version == ads.version
+    assert cache.get(XDS_CACHE_KEY_LDS_REST).version == rest.version
+
+    # Invalidating the LDS key also drops the REST variant.
+    invalidate_xds_cache(XDS_CACHE_KEY_LDS)
+    assert cache.get(XDS_CACHE_KEY_LDS) is None
+    assert cache.get(XDS_CACHE_KEY_LDS_REST) is None
+
+
+@pytest.mark.django_db
+def test_collect_secrets_accepts_resource_names():
+    # The ADS servicer calls every collector with resource_names=None; SDS has
+    # a single known secret, so the argument has no effect.
+    assert collect_secrets(resource_names=None).version == collect_secrets().version
 
 
 @pytest.mark.django_db

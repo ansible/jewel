@@ -25,6 +25,9 @@ from aap_gateway_api.utils.xds_resources import collect_clusters, collect_listen
 # remain functional as a rollback/compatibility path, and every response
 # carries a `Deprecation: true` header.
 #
+# REST-XDS-REMOVAL: this whole module goes when the REST path is removed; see
+# docs/removing_rest_xds.md for the checklist and `grep -rn REST-XDS-REMOVAL`.
+#
 # The resource collection itself (queries, protobuf packing, caching) lives
 # in aap_gateway_api/utils/xds_resources.py and is shared with the gRPC ADS
 # control plane.  Responses are cached and invalidated by model signals (see
@@ -90,7 +93,8 @@ class ListenerDiscoverServiceView(XDSView):
     permission_classes = []
 
     def post(self, request, format=None):
-        return Response(self.get_xds_response(collect_listeners(self.get_resource_names(request))))
+        # A REST-polling Envoy has a REST bootstrap, so its listeners fetch SDS over REST too.
+        return Response(self.get_xds_response(collect_listeners(self.get_resource_names(request), sds_transport="rest")))
 
 
 @extend_schema(exclude=True)

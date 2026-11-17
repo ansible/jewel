@@ -53,9 +53,19 @@ XDS_CACHE_KEY_CDS = "xds:v2:cds"
 XDS_CACHE_KEY_LDS = "xds:v2:lds"
 XDS_CACHE_KEY_SDS = "xds:v2:sds"
 
+# The REST views serve listeners whose SDS source is REST (the ADS ones use an
+# `ads` source), so that variant is a different payload and is cached apart.
+# Invalidating XDS_CACHE_KEY_LDS drops it too (see XDS_COMPANION_CACHE_KEYS).
+# REST-XDS-REMOVAL: delete this key and its entry in XDS_COMPANION_CACHE_KEYS.
+XDS_CACHE_KEY_LDS_REST = "xds:v2:lds:rest"
+XDS_COMPANION_CACHE_KEYS = {
+    XDS_CACHE_KEY_LDS: (XDS_CACHE_KEY_LDS_REST,),
+}
+
 # Pre-ADS cache keys, mapped from their current counterparts.  Invalidating a
 # current key also deletes its legacy key so stale entries written by old
 # nodes do not linger (and old nodes still mid-upgrade see the invalidation).
+# LEGACY-XDS-KEYS-REMOVAL: delete once no supported release writes these keys.
 XDS_LEGACY_CACHE_KEYS = {
     XDS_CACHE_KEY_CDS: "xds:cds",
     XDS_CACHE_KEY_LDS: "xds:lds",
@@ -78,8 +88,13 @@ class ResourceSet:
 
 
 def invalidate_xds_cache(*keys: str) -> None:
-    """Delete one or more xDS cache keys, plus their legacy (pre-ADS) counterparts."""
-    cache.delete_many([*keys, *(XDS_LEGACY_CACHE_KEYS[key] for key in keys if key in XDS_LEGACY_CACHE_KEYS)])
+    """Delete one or more xDS cache keys, plus their companion variants and legacy (pre-ADS) counterparts."""
+    doomed = list(keys)
+    for key in keys:
+        doomed.extend(XDS_COMPANION_CACHE_KEYS.get(key, ()))
+        if key in XDS_LEGACY_CACHE_KEYS:
+            doomed.append(XDS_LEGACY_CACHE_KEYS[key])
+    cache.delete_many(doomed)
 
 
 def as_resource_set(value) -> ResourceSet | None:
@@ -155,9 +170,20 @@ def collect_clusters(resource_names: list[str] | None = None) -> ResourceSet:
     return resource_set
 
 
-def collect_listeners(resource_names: list[str] | None = None) -> ResourceSet:
-    """LDS -- an Envoy Listener for every HTTPPort."""
-    cached = as_resource_set(cache.get(XDS_CACHE_KEY_LDS))
+# REST-XDS-REMOVAL: with the REST views gone only "ads" remains; drop the
+# sds_transport parameter of collect_listeners and use XDS_CACHE_KEY_LDS directly.
+_LDS_CACHE_KEYS = {"ads": XDS_CACHE_KEY_LDS, "rest": XDS_CACHE_KEY_LDS_REST}
+
+
+def collect_listeners(resource_names: list[str] | None = None, sds_transport: str = "ads") -> ResourceSet:
+    """LDS -- an Envoy Listener for every HTTPPort.
+
+    ``sds_transport`` is how the listeners' validation-context secret is
+    fetched and must match the transport the listeners are delivered over:
+    "ads" for the ADS servicer, "rest" for the (deprecated) REST view.
+    """
+    cache_key = _LDS_CACHE_KEYS[sds_transport]
+    cached = as_resource_set(cache.get(cache_key))
     if cached is not None:
         logger.debug("LDS cache hit")
         return cached
@@ -178,7 +204,7 @@ def collect_listeners(resource_names: list[str] | None = None) -> ResourceSet:
         if gw_route:
             gw_cluster_name = gw_route.envoy_cluster_name
 
-    listeners = [x.get_xds_listener_config(gateway_cluster_name=gw_cluster_name) for x in ports]
+    listeners = [x.get_xds_listener_config(sds_transport=sds_transport, gateway_cluster_name=gw_cluster_name) for x in ports]
 
     resources = _pack_resources(Listener, listeners)
     resource_set = ResourceSet(version=resource_digest(resources), resources=resources)
@@ -186,12 +212,17 @@ def collect_listeners(resource_names: list[str] | None = None) -> ResourceSet:
     # key would be served to -- and pushed to -- every Envoy), and only if it
     # is non-empty; empty responses during bootstrap should not be cached.
     if listeners and resource_names is None:
-        cache.set(XDS_CACHE_KEY_LDS, resource_set, timeout=XDS_CACHE_TIMEOUT)
+        cache.set(cache_key, resource_set, timeout=XDS_CACHE_TIMEOUT)
     return resource_set
 
 
-def collect_secrets() -> ResourceSet:
-    """SDS -- a single Secret containing all trusted CA certificates."""
+def collect_secrets(resource_names=None) -> ResourceSet:
+    """SDS -- a single Secret containing all trusted CA certificates.
+
+    ``resource_names`` exists for interface parity with the other collectors
+    (the ADS servicer calls every collector with it); there is exactly one
+    secret, so it has no effect.
+    """
     cached = as_resource_set(cache.get(XDS_CACHE_KEY_SDS))
     if cached is not None:
         logger.debug("SDS cache hit")

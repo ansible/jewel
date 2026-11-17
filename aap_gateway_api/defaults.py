@@ -423,6 +423,7 @@ RESOURCE_SERVER_SYNC_ENABLED = False
 # Runtime feature flag settings
 RUNTIME_FEATURE_FLAGS = True
 
+# REST-XDS-REMOVAL: only used by the REST SDS source (utils/xds_configs.py); delete with it.
 SDS_CLUSTER_NAMES = ["gateway-control-plane-rest"]
 SDS_REFRESH_DELAY_PROTOBUF_DURATION = "5s"
 
