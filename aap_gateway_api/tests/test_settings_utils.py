@@ -11,6 +11,7 @@ from aap_gateway_api.settings_utils import (
     load_grpc_settings,
     load_healthcheck_settings,
     load_oidc_provider_settings,
+    normalize_grpc_options_for_sql_server,
 )
 
 
@@ -68,16 +69,19 @@ def test_load_grpc_settings_normalizes_options_for_mssql(tmp_path, monkeypatch):
     temp_settings = tmp_path / "grpc_settings.py"
     temp_settings.write_text('DATABASES__default__OPTIONS__extra_params="TrustServerCertificate=yes"')
     monkeypatch.setenv("GATEWAY_GRPC_SETTINGS_FILE", str(temp_settings))
+    monkeypatch.delenv("DATABASE_ENGINE", raising=False)
 
     dynaconf_settings = factory(
         __name__,
         "GATEWAY_TEST",
         settings_files=["defaults.py", "settings_dev.py"],
     )
-    dynaconf_settings.set("DATABASES__default__ENGINE", "ansible_base.backends.mssql")
 
     with patch.object(sys, 'argv', ['start_grpc_server']):
         load_grpc_settings(dynaconf_settings)
+        # the engine arrives from a source loaded after the gRPC settings
+        dynaconf_settings.set("DATABASES__default__ENGINE", "ansible_base.backends.mssql")
+        normalize_grpc_options_for_sql_server(dynaconf_settings)
 
     options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
     assert "keepalives" not in options
@@ -89,7 +93,8 @@ def test_load_grpc_settings_normalizes_options_for_mssql(tmp_path, monkeypatch):
     assert options["extra_params"] == "TrustServerCertificate=yes"
 
 
-def test_load_grpc_settings_keeps_postgres_options():
+def test_load_grpc_settings_keeps_postgres_options(monkeypatch):
+    monkeypatch.delenv("DATABASE_ENGINE", raising=False)
     dynaconf_settings = factory(
         __name__,
         "GATEWAY_TEST",
@@ -98,6 +103,7 @@ def test_load_grpc_settings_keeps_postgres_options():
 
     with patch.object(sys, 'argv', ['start_grpc_server']):
         load_grpc_settings(dynaconf_settings)
+        normalize_grpc_options_for_sql_server(dynaconf_settings)
 
     options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
     assert options["keepalives"] == 71  # from tests/grpc_defaults.py sentinel

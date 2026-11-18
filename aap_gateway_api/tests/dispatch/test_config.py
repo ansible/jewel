@@ -112,6 +112,7 @@ def test_conninfo_is_parseable():
 
 def test_pyodbc_connection_from_config_contract(monkeypatch):
     """The sync publish factory mirrors the sqlserver broker's connect() contract."""
+    pyodbc = pytest.importorskip("pyodbc")
     calls = {}
 
     class FakeConnection:
@@ -121,7 +122,7 @@ def test_pyodbc_connection_from_config_contract(monkeypatch):
         calls["conn_string"], calls["kwargs"] = connection_string, kwargs
         return FakeConnection()
 
-    monkeypatch.setattr("aap_gateway_api.dispatch.config.pyodbc.connect", fake_connect)
+    monkeypatch.setattr(pyodbc, "connect", fake_connect)
     conn = pyodbc_connection_from_config(connection_string="SERVER=x", timeout=10)
     assert isinstance(conn, FakeConnection)
     assert calls["conn_string"] == "SERVER=x;ConnectRetryCount=0"

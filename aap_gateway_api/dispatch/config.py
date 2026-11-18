@@ -1,12 +1,16 @@
-import pyodbc
+from typing import TYPE_CHECKING
+
 from ansible_base.lib.mssql.notify import get_sql_server_notify_conn_string
 from ansible_base.lib.utils.db import psycopg_conn_string_from_settings_dict
 from django.conf import settings
 
+if TYPE_CHECKING:
+    import pyodbc
+
 MSSQL_ENGINE = "ansible_base.backends.mssql"
 
 
-def pyodbc_connection_from_config(**kwargs) -> pyodbc.Connection:
+def pyodbc_connection_from_config(**kwargs) -> "pyodbc.Connection":
     """Create a pyodbc connection from dispatcherd sql_server broker config kwargs.
 
     The sql_server broker calls its sync_connection_factory with the broker
@@ -14,7 +18,12 @@ def pyodbc_connection_from_config(**kwargs) -> pyodbc.Connection:
     everything else passes to ``pyodbc.connect``. This mirrors the broker's
     own ``connect()`` — autocommit publishing and connection resiliency
     disabled so outages surface as errors instead of silent reconnects.
+
+    ``pyodbc`` is imported here, not at module scope, so PostgreSQL-only
+    environments (no unixODBC) can load the dispatch config without it.
     """
+    import pyodbc
+
     options = dict(kwargs)
     connection_string = options.pop("connection_string")
     options.setdefault("autocommit", True)

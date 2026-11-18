@@ -32,7 +32,7 @@ services:
       DATABASE_ENGINE: "{{ gateway_database_engine }}"
       DATABASE_NAME: "{{ gateway_database_name }}"
       DATABASE_USER: "{{ gateway_database_user }}"
-      DATABASE_PASSWORD: "{{ gateway_database_password | replace('$', '$$') }}"
+      DATABASE_PASSWORD: {{ gateway_database_password | replace('$', '$$') | to_json }}
       DATABASE_HOST: "{{ gateway_database_host }}"
       DATABASE_PORT: "{{ gateway_database_port }}"
       DATABASE_OPTIONS: '{{ gateway_database_options_json }}'
@@ -232,7 +232,7 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: "{{ sqlserver_sa_password | replace('$', '$$') }}"
+      MSSQL_SA_PASSWORD: {{ sqlserver_sa_password | replace('$', '$$') | to_json }}
       MSSQL_MEMORY_LIMIT_MB: "{{ sqlserver_memory_limit_mb }}"
       # Match DAB's SQL Server matrix: case-sensitive collation is required
       # for unique constraints and exact lookups.
