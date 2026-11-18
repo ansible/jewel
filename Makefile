@@ -311,7 +311,8 @@ docker-compose-build: compose-build
 ## Build the Compose containers
 compose-build: $(SOURCES_STAMP) podman-preflight update_django_ansible_base_hash tools/generated/.has_built_api
 
-API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+DAB_REQUIREMENT_INPUTS := $(wildcard django-ansible-base/pyproject.toml django-ansible-base/requirements/*.in django-ansible-base/requirements/requirements_all.txt)
+API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt requirements/requirements_git.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(DAB_REQUIREMENT_INPUTS) $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
     API_TARGETS += tools/generated/.has_built_ui
 endif

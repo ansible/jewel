@@ -2,10 +2,19 @@
 #
 # NOTE: This script is only meant to be used by tox as part of our CI setup.
 # The purpose is to install django-ansible-base deps into the tox environment
-# iff requirements have changed.
+# when requirements have changed, or unconditionally when --force is passed.
 
-# Pass in the tox env directory as the (only) argument ({envdir}).
+# Usage: tox-reinstall-django-ansible-base.sh [--force] <envdir>
+#
+# Pass in the tox env directory as the argument ({envdir}).
 # Do not use .tox/<envname> — tox honors TOX_WORK_DIR (CI uses /opt/tox-cache).
+# Use --force to bypass the requirements cache, e.g. after installing the
+# hashed requirements.txt which may have reverted local DAB dependencies.
+FORCE=0
+if [ "${1:-}" = "--force" ]; then
+    FORCE=1
+    shift
+fi
 ENV_DIR="$1"
 
 DAB_DIR="django-ansible-base"
@@ -17,7 +26,9 @@ TOX_REQ_FILE="${ENV_DIR}/django_ansible_base_requirements.txt"
 [ ! -d "${DAB_DIR}/.git" ] && exit 0
 
 REQS_CHANGED=0
-if [ -f "$TOX_REQ_FILE" ]; then
+if [ "$FORCE" -eq 1 ]; then
+    REQS_CHANGED=1
+elif [ -f "$TOX_REQ_FILE" ]; then
     diff -q "$REQ_FILE" "$TOX_REQ_FILE" > /dev/null
     REQS_CHANGED=$?
 else
@@ -25,9 +36,17 @@ else
 fi
 
 if [ "$REQS_CHANGED" -ne 0 ]; then
-    echo "Changes detected in requirements. Installing django-ansible-base..."
-    OPTIONAL_DEEPS=`grep '^django-ansible-base\[' requirements/requirements_git.txt | sed 's:^django-ansible-base\[::' | sed 's:\] @.*::'`
-    pip install "./${DAB_DIR}/"[$OPTIONAL_DEEPS]
+    if [ "$FORCE" -eq 1 ]; then
+        echo "Installing local django-ansible-base..."
+    else
+        echo "Changes detected in requirements. Installing django-ansible-base..."
+    fi
+    OPTIONAL_DEPS=$(grep '^django-ansible-base\[' requirements/requirements_git.txt | sed 's:^django-ansible-base\[::' | sed 's:\] @.*::')
+    DAB_REQUIREMENT="./${DAB_DIR}/"
+    if [ -n "$OPTIONAL_DEPS" ]; then
+        DAB_REQUIREMENT="${DAB_REQUIREMENT}[$OPTIONAL_DEPS]"
+    fi
+    pip install --upgrade "$DAB_REQUIREMENT"
     echo "Caching requirements to avoid needlessly reinstalling..."
     mkdir -p "$ENV_DIR"
     cp "$REQ_FILE" "$TOX_REQ_FILE"
