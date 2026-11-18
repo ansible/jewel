@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 import pytest
 from ansible_base.rbac.models import RoleDefinition
+from django.db import connection
 
 from aap_gateway_api.management.commands._migrate_service_data.cursor_store import CursorStore
 from aap_gateway_api.management.commands.migrate_service_data import Command as MigrateCommand
@@ -127,6 +128,19 @@ def test_bulk_resolve_query_count_bounded_per_page():
 # =============================================================================
 
 
+# These scaling tests measure batches that mix fresh and already-existing rows
+# (each measurement re-inserts the previous one's items). PostgreSQL's native
+# ON CONFLICT DO NOTHING stays O(1) there; on SQL Server, DAB's transparent
+# conflict-tolerant bulk_create retries per-row after any batch conflict, so
+# query count and allocations scale with items. That is the accepted AAP-98732
+# tradeoff for this one-time migration — see the design's performance note.
+_MSSQL_CONFLICT_RETRY_SKIP = pytest.mark.skipif(
+    connection.vendor == "microsoft",
+    reason="mssql per-row conflict retry in DAB's bulk_create is the accepted AAP-98732 tradeoff",
+)
+
+
+@_MSSQL_CONFLICT_RETRY_SKIP
 @pytest.mark.django_db
 def test_query_count_scales_with_pages_not_items():
     """Doubling items on a page should NOT double queries.
@@ -193,6 +207,7 @@ def _measure_pagination_memory(users, orgs, num_assignments, page_size=50):
     return sum(s.size_diff for s in stats if s.size_diff > 0)
 
 
+@_MSSQL_CONFLICT_RETRY_SKIP
 @pytest.mark.django_db
 def test_pagination_memory_scales_with_page_size_not_total():
     """Memory during pagination should stay proportional to page size,
