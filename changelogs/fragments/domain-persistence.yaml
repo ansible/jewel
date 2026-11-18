@@ -1,0 +1,14 @@
+title: "Persist AAP Domains across organization, team, and user scopes"
+type:
+  - added
+breaking: false
+summary: >-
+  Added database-backed AAP Domain persistence with organization, team, and
+  user scopes. Effective domains inherit from organizations to teams to users;
+  same-name child definitions override parent definitions. User domain
+  preferences and active-domain selections persist across authenticated
+  sessions.
+endpoint:
+  - "/api/gateway/v1/organizations/{organization_id}/domains/"
+  - "/api/gateway/v1/teams/{team_id}/domains/"
+  - "/api/gateway/v1/me/preferences/domains/"
