@@ -33,7 +33,17 @@ fi
 pip install 'psycopg[binary]' ${GIT_REQUIREMENTS} "$@"
 
 if [ "$HAS_LOCAL_DAB" -eq 1 ]; then
-    # --force bypasses the cache so DAB dependencies are re-applied over the
-    # hashed requirements that were just installed.
-    ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh --force "$ENV_DIR"
+    # Re-apply the local DAB checkout only when the hashed requirements
+    # changed since the last install: they may have reverted DAB dependencies
+    # to the devel pins. Otherwise the DAB script's own requirements cache
+    # decides whether a reinstall is needed.
+    HASH_STAMP="${ENV_DIR}/gateway_requirements.sha256"
+    CURRENT_HASH=$(sha256sum requirements/requirements.txt | cut -d' ' -f 1)
+    FORCE_FLAG=""
+    if [ ! -f "$HASH_STAMP" ] || [ "$(cat "$HASH_STAMP" 2> /dev/null)" != "$CURRENT_HASH" ]; then
+        FORCE_FLAG="--force"
+    fi
+    ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh $FORCE_FLAG "$ENV_DIR"
+    mkdir -p "$ENV_DIR"
+    printf '%s\n' "$CURRENT_HASH" > "$HASH_STAMP"
 fi
