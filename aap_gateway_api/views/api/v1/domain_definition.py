@@ -34,7 +34,7 @@ class DomainDefinitionView(APIView):
         owner = self.get_owner(scope, pk)
         if not self.can_change(request, owner):
             return Response({'detail': 'You do not have permission to change this domain definition.'}, status=403)
-        serializer = DomainDefinitionSerializer(data={'scope': scope, 'domains': request.data.get('domains')})
+        serializer = DomainDefinitionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         definition, _created = DomainDefinition.objects.update_or_create(
             **{'scope': scope, scope: owner},

@@ -1,4 +1,5 @@
 from ansible_base.oauth2_provider.permissions import OAuth2ScopePermission
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import IsAuthenticated
@@ -38,17 +39,19 @@ class UserPreferenceView(APIView):
             context={'preference_name': preference_name},
         )
         serializer.is_valid(raise_exception=True)
-        preference, _created = UserPreference.objects.update_or_create(
-            user=request.user,
-            name=preference_name,
-            defaults={'value': serializer.validated_data['value']},
-        )
-        if preference_name == 'domains':
-            DomainDefinition.objects.update_or_create(
-                scope=DomainDefinition.USER,
+        with transaction.atomic():
+            preference, _created = UserPreference.objects.update_or_create(
                 user=request.user,
-                defaults={'domains': serializer.validated_data['value']['domains']},
+                name=preference_name,
+                defaults={'value': serializer.validated_data['value']},
             )
+            if preference_name == 'domains':
+                DomainDefinition.objects.update_or_create(
+                    scope=DomainDefinition.USER,
+                    user=request.user,
+                    defaults={'domains': serializer.validated_data['value']['domains']},
+                )
+        if preference_name == 'domains':
             response = UserPreferenceSerializer(preference).data
             response['value']['userDomains'] = preference.value['domains']
             response['value']['domains'] = get_effective_domains(request.user, preference.value['domains'])
@@ -57,7 +60,8 @@ class UserPreferenceView(APIView):
 
     def delete(self, request, preference_name):
         preference = get_object_or_404(UserPreference, user=request.user, name=preference_name)
-        preference.delete()
-        if preference_name == 'domains':
-            DomainDefinition.objects.filter(scope=DomainDefinition.USER, user=request.user).delete()
+        with transaction.atomic():
+            preference.delete()
+            if preference_name == 'domains':
+                DomainDefinition.objects.filter(scope=DomainDefinition.USER, user=request.user).delete()
         return Response(status=204)

@@ -1,7 +1,8 @@
+import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from aap_gateway_api.models import DomainDefinition, Organization, Team, User
+from aap_gateway_api.models import DomainDefinition, Organization, Team, User, UserPreference
 
 
 def user_preferences_url(name='domains'):
@@ -57,6 +58,22 @@ def test_user_preference_rejects_invalid_domain_value(user):
         format='json',
     )
     assert response.status_code == 400
+
+
+def test_user_preference_rolls_back_when_domain_definition_write_fails(user, monkeypatch):
+    client = APIClient()
+    client.force_authenticate(user=user)
+    value = {'domains': [{'name': 'User domain', 'labels': []}], 'activeDomains': []}
+
+    def fail_update_or_create(*args, **kwargs):
+        raise RuntimeError('simulated domain persistence failure')
+
+    monkeypatch.setattr(DomainDefinition.objects, 'update_or_create', fail_update_or_create)
+
+    with pytest.raises(RuntimeError, match='simulated domain persistence failure'):
+        client.put(user_preferences_url(), {'value': value}, format='json')
+
+    assert not UserPreference.objects.filter(user=user, name='domains').exists()
 
 
 def test_domains_inherit_organization_then_team_then_user(user):
@@ -127,6 +144,21 @@ def test_organization_domains_can_be_managed_by_an_organization_admin(user, admi
     assert response.status_code == 200
     assert response.data == {'scope': 'organization', 'domains': [{'name': 'Org domain', 'labels': []}]}
     assert DomainDefinition.objects.get(organization=organization).domains == [{'name': 'Org domain', 'labels': []}]
+
+
+def test_organization_domains_reject_non_object_request_body(user, admin_user):
+    organization = Organization.objects.create(name='Malformed domain API org')
+    organization.add_admin(admin_user)
+    client = APIClient()
+    client.force_authenticate(user=admin_user)
+
+    response = client.put(
+        reverse('organization-domain-definition', kwargs={'pk': organization.pk}),
+        [],
+        format='json',
+    )
+
+    assert response.status_code == 400
 
 
 def test_organization_domain_reads_are_private(user, admin_user):
