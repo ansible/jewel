@@ -35,6 +35,17 @@ def _xds_url_prefix():
     return "/" + reverse("lds").lstrip("/").split("/", 1)[0] + "/"
 
 
+def _drf_not_found():
+    """Return the status, body, and content type DRF uses for a 404."""
+    from rest_framework.exceptions import NotFound
+    from rest_framework.renderers import JSONRenderer
+    from rest_framework.views import exception_handler
+
+    response = exception_handler(NotFound(), {})
+    renderer = JSONRenderer()
+    return response.status_code, renderer.render(response.data), renderer.media_type
+
+
 class HTTPPort(UniqueNamedCommonModel, AuditableModel):
     """
     Represents a port that Envoy will listen for HTTP traffic on.
@@ -103,10 +114,15 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         }
         routes.append(up_route)
         # Envoy talks to the control plane directly, so no listener should
-        # forward xDS discovery requests to the gateway API.
+        # forward xDS discovery requests to the gateway API. Serve the same
+        # 404 response DRF returns for the gateway API.
+        status, body, content_type = _drf_not_found()
         xds_route = {
             "match": {"prefix": _xds_url_prefix()},
-            "direct_response": {"status": 404},
+            "direct_response": {"status": status, "body": {"inline_string": body.decode()}},
+            "response_headers_to_add": [
+                {"header": {"key": "content-type", "value": content_type}},
+            ],
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }
         routes.append(xds_route)

@@ -1,5 +1,8 @@
 import pytest
 from django.urls import reverse
+from rest_framework.exceptions import NotFound
+from rest_framework.renderers import JSONRenderer
+from rest_framework.views import exception_handler
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceNode
 
@@ -138,6 +141,10 @@ def test_xds_listener_does_not_proxy_discovery_requests(admin_api_client, http_a
     route = _first_matching_route(routes, path)
     assert "route" not in route
     assert route["directResponse"]["status"] == 404
+    drf_404 = exception_handler(NotFound(), {})
+    assert route["directResponse"]["body"]["inlineString"] == JSONRenderer().render(drf_404.data).decode()
+    response_headers = {header["header"]["key"]: header["header"]["value"] for header in route["responseHeadersToAdd"]}
+    assert response_headers["content-type"] == JSONRenderer.media_type
     assert route["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
 
 
