@@ -181,9 +181,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          python tools/scripts/get_pr_checkout.py \
-            --always-clone-repos 'ansible/django-ansible-base' \
-            --always-clone-repos 'ansible/dispatcherd'
+          python tools/scripts/get_pr_checkout.py
 
       - name: Install Microsoft ODBC Driver 18
         run: |
