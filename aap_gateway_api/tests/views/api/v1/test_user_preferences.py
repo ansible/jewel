@@ -59,6 +59,13 @@ def test_user_preference_rejects_invalid_domain_value(user):
     )
     assert response.status_code == 400
 
+    response = client.put(
+        user_preferences_url(),
+        {'value': {'domains': [{'name': 'Valid', 'labels': [{}]}], 'activeDomains': []}},
+        format='json',
+    )
+    assert response.status_code == 400
+
 
 def test_user_preference_rolls_back_when_domain_definition_write_fails(user, monkeypatch):
     client = APIClient()
@@ -146,6 +153,55 @@ def test_organization_domains_can_be_managed_by_an_organization_admin(user, admi
     assert DomainDefinition.objects.get(organization=organization).domains == [{'name': 'Org domain', 'labels': []}]
 
 
+def test_team_domains_can_be_managed_by_a_team_admin_and_read_by_a_member(user, admin_user):
+    organization = Organization.objects.create(name='Team domain API org')
+    team = Team.objects.create(name='Team domain API team', organization=organization)
+    team.add_admin(admin_user)
+    team.add_member(user)
+
+    admin_client = APIClient()
+    admin_client.force_authenticate(user=admin_user)
+    response = admin_client.put(
+        reverse('team-domain-definition', kwargs={'pk': team.pk}),
+        {'domains': [{'name': 'Team domain', 'labels': []}]},
+        format='json',
+    )
+    assert response.status_code == 200
+
+    member_client = APIClient()
+    member_client.force_authenticate(user=user)
+    response = member_client.get(reverse('team-domain-definition', kwargs={'pk': team.pk}))
+    assert response.status_code == 200
+    assert response.data == {'scope': 'team', 'domains': [{'name': 'Team domain', 'labels': []}]}
+
+
+def test_scoped_domain_endpoints_require_authentication():
+    organization = Organization.objects.create(name='Unauthenticated domain API org')
+    team = Team.objects.create(name='Unauthenticated domain API team', organization=organization)
+    client = APIClient()
+
+    for endpoint_name, owner in (
+        ('organization-domain-definition', organization),
+        ('team-domain-definition', team),
+    ):
+        response = client.get(reverse(endpoint_name, kwargs={'pk': owner.pk}))
+        assert response.status_code == 401
+
+
+def test_scoped_domain_write_requires_owner_admin(user, admin_user):
+    organization = Organization.objects.create(name='Unauthorized domain API org')
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.put(
+        reverse('organization-domain-definition', kwargs={'pk': organization.pk}),
+        {'domains': [{'name': 'Unauthorized', 'labels': []}]},
+        format='json',
+    )
+
+    assert response.status_code == 403
+
+
 def test_organization_domains_reject_non_object_request_body(user, admin_user):
     organization = Organization.objects.create(name='Malformed domain API org')
     organization.add_admin(admin_user)
@@ -187,3 +243,21 @@ def test_deleting_user_preference_removes_user_scope(user):
 
     assert response.status_code == 204
     assert not DomainDefinition.objects.filter(scope=DomainDefinition.USER, user=user).exists()
+
+
+def test_deleting_user_preference_rolls_back_when_domain_delete_fails(user, monkeypatch):
+    client = APIClient()
+    client.force_authenticate(user=user)
+    value = {'domains': [{'name': 'User domain', 'labels': []}], 'activeDomains': []}
+    client.put(user_preferences_url(), {'value': value}, format='json')
+
+    class FailingQuerySet:
+        def delete(self):
+            raise RuntimeError('simulated domain delete failure')
+
+    monkeypatch.setattr(DomainDefinition.objects, 'filter', lambda **kwargs: FailingQuerySet())
+
+    with pytest.raises(RuntimeError, match='simulated domain delete failure'):
+        client.delete(user_preferences_url())
+
+    assert UserPreference.objects.filter(user=user, name='domains').exists()
