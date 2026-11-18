@@ -12,7 +12,15 @@ def test_domains_include_organization_for_team_only_membership(user):
         domains=[{'name': 'Organization domain', 'labels': []}],
     )
 
-    assert get_effective_domains(user) == [{'name': 'Organization domain', 'labels': []}]
+    assert get_effective_domains(user) == [
+        {
+            'name': 'Organization domain',
+            'labels': [],
+            'scope': 'organization',
+            'scopeId': organization.id,
+            'scopeName': organization.name,
+        }
+    ]
 
 
 def test_domains_apply_precedence_across_multiple_organizations_and_teams(user):
@@ -44,7 +52,15 @@ def test_domains_apply_precedence_across_multiple_organizations_and_teams(user):
         domains=[{'name': 'Shared', 'labels': [{'name': 'second-team'}]}],
     )
 
-    assert get_effective_domains(user) == [{'name': 'Shared', 'labels': [{'name': 'second-team'}]}]
+    assert get_effective_domains(user) == [
+        {
+            'name': 'Shared',
+            'labels': [{'name': 'second-team'}],
+            'scope': 'team',
+            'scopeId': second_team.id,
+            'scopeName': second_team.name,
+        }
+    ]
 
 
 def test_user_domains_override_inherited_domains_without_mutating_stored_scopes(user):
@@ -64,7 +80,15 @@ def test_user_domains_override_inherited_domains_without_mutating_stored_scopes(
 
     user_domains = [{'name': 'Shared', 'labels': [{'name': 'user'}]}]
 
-    assert get_effective_domains(user, user_domains) == user_domains
+    assert get_effective_domains(user, user_domains) == [
+        {
+            'name': 'Shared',
+            'labels': [{'name': 'user'}],
+            'scope': 'user',
+            'scopeId': user.id,
+            'scopeName': user.username,
+        }
+    ]
     assert DomainDefinition.objects.get(scope=DomainDefinition.ORGANIZATION, organization=organization).domains == [
         {'name': 'Shared', 'labels': [{'name': 'organization'}]}
     ]
@@ -85,4 +109,12 @@ def test_invalid_stored_domain_entries_are_ignored(user):
         ],
     )
 
-    assert get_effective_domains(user) == [{'name': 'Valid', 'labels': []}]
+    assert get_effective_domains(user) == [
+        {
+            'name': 'Valid',
+            'labels': [],
+            'scope': 'organization',
+            'scopeId': organization.id,
+            'scopeName': organization.name,
+        }
+    ]

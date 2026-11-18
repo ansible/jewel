@@ -22,11 +22,23 @@ def test_user_preference_is_private_and_persistent(user):
     response = user_api_client.put(user_preferences_url(), {'value': value}, format='json')
 
     assert response.status_code == 200
-    assert response.data == {'name': 'domains', 'value': {**value, 'userDomains': value['domains']}}
+    effective_value = {
+        **value,
+        'domains': [
+            {
+                **value['domains'][0],
+                'scope': 'user',
+                'scopeId': user.id,
+                'scopeName': user.username,
+            }
+        ],
+        'userDomains': value['domains'],
+    }
+    assert response.data == {'name': 'domains', 'value': effective_value}
 
     response = user_api_client.get(user_preferences_url())
     assert response.status_code == 200
-    assert response.data == {'name': 'domains', 'value': {**value, 'userDomains': value['domains']}}
+    assert response.data == {'name': 'domains', 'value': effective_value}
 
     other_user = User.objects.create(username='other-user')
     other_client = APIClient()
@@ -62,6 +74,18 @@ def test_user_preference_rejects_invalid_domain_value(user):
     response = client.put(
         user_preferences_url(),
         {'value': {'domains': [{'name': 'Valid', 'labels': [{}]}], 'activeDomains': []}},
+        format='json',
+    )
+    assert response.status_code == 400
+
+    response = client.put(
+        user_preferences_url(),
+        {
+            'value': {
+                'domains': [{'name': 'Valid', 'labels': [], 'scope': 'organization'}],
+                'activeDomains': [],
+            }
+        },
         format='json',
     )
     assert response.status_code == 400
@@ -105,9 +129,27 @@ def test_domains_inherit_organization_then_team_then_user(user):
 
     assert response.status_code == 200
     assert response.data['value']['domains'] == [
-        {'name': 'Shared', 'labels': [{'name': 'team'}]},
-        {'name': 'Org only', 'labels': []},
-        {'name': 'Team only', 'labels': []},
+        {
+            'name': 'Shared',
+            'labels': [{'name': 'team'}],
+            'scope': 'team',
+            'scopeId': team.id,
+            'scopeName': team.name,
+        },
+        {
+            'name': 'Org only',
+            'labels': [],
+            'scope': 'organization',
+            'scopeId': organization.id,
+            'scopeName': organization.name,
+        },
+        {
+            'name': 'Team only',
+            'labels': [],
+            'scope': 'team',
+            'scopeId': team.id,
+            'scopeName': team.name,
+        },
     ]
     assert response.data['value']['activeDomains'] == []
     assert response.data['value']['userDomains'] == []
@@ -131,7 +173,24 @@ def test_user_domains_override_inherited_domain_without_changing_active_selectio
     response = client.put(user_preferences_url(), {'value': value}, format='json')
 
     assert response.status_code == 200
-    assert response.data['value'] == {**value, 'userDomains': value['domains']}
+    assert response.data['value'] == {
+        **value,
+        'domains': [
+            {
+                **value['domains'][0],
+                'scope': 'user',
+                'scopeId': user.id,
+                'scopeName': user.username,
+            },
+            {
+                **value['domains'][1],
+                'scope': 'user',
+                'scopeId': user.id,
+                'scopeName': user.username,
+            },
+        ],
+        'userDomains': value['domains'],
+    }
     definition = DomainDefinition.objects.get(scope=DomainDefinition.USER, user=user)
     assert definition.domains == value['domains']
 
@@ -159,7 +218,15 @@ def test_clearing_user_domains_restores_inherited_domains(user):
     )
 
     assert response.status_code == 200
-    assert response.data['value']['domains'] == [{'name': 'Inherited domain', 'labels': []}]
+    assert response.data['value']['domains'] == [
+        {
+            'name': 'Inherited domain',
+            'labels': [],
+            'scope': 'organization',
+            'scopeId': organization.id,
+            'scopeName': organization.name,
+        }
+    ]
     assert response.data['value']['userDomains'] == []
     assert DomainDefinition.objects.get(scope=DomainDefinition.USER, user=user).domains == []
 

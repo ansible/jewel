@@ -7,7 +7,7 @@ summary: >-
   user scopes. Effective domains inherit from organizations to teams to users;
   same-name child definitions override parent definitions. User domain
   preferences and active-domain selections persist across authenticated
-  sessions.
+  sessions, and effective domain responses identify the owning scope.
 endpoint:
   - "/api/gateway/v1/organizations/{organization_id}/domains/"
   - "/api/gateway/v1/teams/{team_id}/domains/"
