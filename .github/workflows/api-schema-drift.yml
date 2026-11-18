@@ -76,6 +76,8 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**To fix:** see the developer workflow in the PR description." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
+            TOTAL_LINES=$(git diff openapi.yaml | wc -l)
+            echo "Showing first 100 of $TOTAL_LINES diff lines:" >> $GITHUB_STEP_SUMMARY
             echo '```diff' >> $GITHUB_STEP_SUMMARY
             git diff openapi.yaml | head -100 >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY

@@ -303,6 +303,9 @@ collection:
 	pip install requests
 
 ## Regenerate the committed OpenAPI spec using the jewel-ci container
+## Override GENSCHEMA_TAG for stable branches: make genschema GENSCHEMA_TAG=stable-2.5
+GENSCHEMA_TAG ?= devel
+
 genschema:
 	@if [ ! -d django-ansible-base ]; then \
 		echo "Cloning django-ansible-base..."; \
@@ -316,7 +319,7 @@ genschema:
 		-e GATEWAY_SECRET_KEY_FILE="./tools/configs/dev_secret_key" \
 		-e DATABASE_ENGINE="django.db.backends.sqlite3" \
 		-e DATABASE_NAME="/tmp/gateway_schema.db" \
-		quay.io/ansible/jewel-ci:devel \
+		quay.io/ansible/jewel-ci:$(GENSCHEMA_TAG) \
 		python3 tools/scripts/genschema.py
 
 ## Canonical Podman Compose build target
