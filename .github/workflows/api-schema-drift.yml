@@ -62,6 +62,7 @@ jobs:
 
       - name: Check for drift
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           if git diff --exit-code openapi.yaml; then
             echo "No schema drift detected."
           else
