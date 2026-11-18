@@ -9,6 +9,7 @@ from .settings_utils import (
     load_grpc_settings,
     load_healthcheck_settings,
     load_oidc_provider_settings,
+    normalize_grpc_options_for_sql_server,
     set_secret_key,
 )
 
@@ -31,6 +32,7 @@ load_standard_settings_files(DYNACONF)  # /etc/ansible-automation-platform/*.yam
 
 load_custom_envvars(DYNACONF)  # load custom unprefixed envvars
 load_envvars(DYNACONF)  # load envvars prefixed with GATEWAY_
+normalize_grpc_options_for_sql_server(DYNACONF)  # after every source that can select the database engine
 set_secret_key(DYNACONF)  # set secret key based on secret key file
 load_healthcheck_settings(DYNACONF)  # create healthcheck DB alias from default
 

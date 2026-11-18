@@ -376,4 +376,9 @@ class SettingPreferenceSerializer(serializers.ModelSerializer):
         # Check for encrypted attribute - Fallback preferences don't have it
         if hasattr(obj.preference, 'encrypted') and obj.preference.encrypted:
             return ENCRYPTED_STRING
+        # Fallback rows (no registered preference) can still hold an encrypted
+        # value: Preference.from_db decrypts unconditionally and marks the
+        # instance. Never serialize the decrypted secret for those either.
+        if 'raw_value' in getattr(obj, '_encrypted_field_names', set()):
+            return ENCRYPTED_STRING
         return obj.value

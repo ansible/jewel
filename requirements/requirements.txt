@@ -1,7 +1,3 @@
-aioodbc==0.5.0 \
-    --hash=sha256:bcaf16f007855fa4bf0ce6754b1f72c6c5a3d544188849577ddd55c5dc42985e \
-    --hash=sha256:cbccd89ce595c033a49c9e6b4b55bbace7613a104b8a46e3d4c58c4bc4f25075
-    # via -r requirements.in
 argon2-cffi==23.1.0 \
     --hash=sha256:879c3e79a2729ce768ebb7d36d4609e3a78a4ca2ec3a9f12286ca057e3d0db08 \
     --hash=sha256:c670642b78ba29641818ab2e68bd4e6a78ba53b7eff7b4c3815ae16abf91c7ea
@@ -39,14 +35,6 @@ attrs==26.1.0 \
     # via
     #   jsonschema
     #   referencing
-azure-core==1.41.0 \
-    --hash=sha256:522b4011e8180b1a3dcd2024396a4e7fe9ac37fb8597db47163d230b5efe892d \
-    --hash=sha256:f46ff5dfcd230f25cf1c19e8a34b8dc08a337b2503e268bb600a16c00db8ad5a
-    # via azure-identity
-azure-identity==1.27.0 \
-    --hash=sha256:6a4c50e25e8e9a47b324a95ad024897e56cb3c6241e0094e93b126a2bf71edc5 \
-    --hash=sha256:92fd2a93c0d2f777dac6c04e5fd7d5734f6643582b983544ef66b4575844e46d
-    # via mssql-python
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \
     --hash=sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55
@@ -308,10 +296,8 @@ cryptography==50.0.2 \
     --hash=sha256:fdd28f912fccfec1846a94e2e1e8f9b0012f557f0c46fe4f3eb0d7a87afcf90b
     # via
     #   -r requirements.in
-    #   azure-identity
     #   django-ansible-base
     #   jwcrypto
-    #   msal
     #   pyjwt
     #   social-auth-core
 defusedxml==0.7.1 \
@@ -320,7 +306,7 @@ defusedxml==0.7.1 \
     # via
     #   python3-openid
     #   social-auth-core
-dispatcherd==2026.3.25 \
+dispatcherd[pg-notify]==2026.3.25 \
     --hash=sha256:417bb6d030b7617d0137db30b6d90f01521b229baa5fcca37a34fe1afe62f3ee \
     --hash=sha256:69e0eea911de26859d2dd65d8ff0d514a72a79a9137816cedc0b5dac3940d446
     # via -r requirements.in
@@ -339,7 +325,6 @@ django==5.2.9 \
     #   django-redis
     #   djangorestframework
     #   drf-spectacular
-    #   mssql-django
     #   social-auth-app-django
 django-auth-ldap==5.3.0 \
     --hash=sha256:743d8107b146240b46f7e97207dc06cb11facc0cd70dce490b7ca09dd5643d19 \
@@ -694,28 +679,6 @@ lxml==5.3.0 \
     #   django-ansible-base
     #   python3-saml
     #   xmlsec
-msal==1.39.0 \
-    --hash=sha256:2d2577886906cd7293850dffa2da29119966c213bfc6ec0cecf8bf7621e1ca77 \
-    --hash=sha256:6ab7de335e6d7f5717e2c7e1dbf86e4dda2f6acf3c56773b78dc53ebc6395b5f
-    # via
-    #   azure-identity
-    #   msal-extensions
-msal-extensions==1.3.1 \
-    --hash=sha256:96d3de4d034504e969ac5e85bae8106c8373b5c6568e4c8fa7af2eca9dbe6bca \
-    --hash=sha256:c5b0fd10f65ef62b5f1d62f4251d51cbcaf003fcedae8c91b040a488614be1a4
-    # via azure-identity
-mssql-django==2.0.0 \
-    --hash=sha256:a582b8b958032e95adba0b9af2dc67aa6ddae7562e3955672334ce7e5809ebf5
-    # via django-ansible-base
-mssql-python==1.16.0 \
-    --hash=sha256:5f705edb44bcf552c04cb229d1d433b2c67b1797d9e8d08ec0db4598c1784baf
-    # via mssql-django
-mssql-python-odbc==18.6.2.2 \
-    --hash=sha256:f5ed985f6d9854345e3e65dbc38e0b574ff13d8e04e6a58492d37bb19e714553
-    # via mssql-python
-mssql-python-rs==0.3.0 \
-    --hash=sha256:e8a73283799d57b28d26d41412d1576e574cfa84ba2c941ef58e69b884b08ab6
-    # via mssql-python
 netaddr==0.8.0 \
     --hash=sha256:9666d0232c32d2656e5e5f8d735f58fd6c7457ce52fc21c98d45f2af78f990ac \
     --hash=sha256:d6cc57c7a07b1d9d2e917aa8b36ae8ce61c35ba3fcd1b83ca31c5a0ee2b5a243
@@ -912,14 +875,7 @@ pyjwt[crypto]==2.14.0 \
     --hash=sha256:ad0cef71c756a56e74863c2919cf0985f72decbcfcb550ee2f422e7c62b5eedc
     # via
     #   -r requirements.in
-    #   msal
     #   social-auth-core
-pyodbc==5.3.0 \
-    --hash=sha256:5dd3d5e469f89a3112cf8b0658c43108a4712fad65e576071e4dd44d2bd763c7
-    # via
-    #   aioodbc
-    #   django-ansible-base
-    #   mssql-django
 pyrad==2.5.4 \
     --hash=sha256:2c75e8a5642df262071d631e4552e08d9d5bed0c62699d83c24105c4fbfc2cff \
     --hash=sha256:e039c48a026c988d49276bd7c75795f55e0e4c2788f7ddf09419ce0e191a154d
@@ -1149,10 +1105,8 @@ requests==2.34.2 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
     # via
     #   -r requirements.in
-    #   azure-core
     #   django-ansible-base
     #   django-oauth-toolkit
-    #   msal
     #   requests-oauthlib
     #   social-auth-core
 requests-oauthlib==2.0.0 \
@@ -1317,8 +1271,6 @@ typing-extensions==4.12.2 \
     --hash=sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d \
     --hash=sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8
     # via
-    #   azure-core
-    #   azure-identity
     #   django-redis
     #   jwcrypto
     #   opentelemetry-api
@@ -1327,10 +1279,6 @@ typing-extensions==4.12.2 \
     #   opentelemetry-semantic-conventions
     #   psycopg
     #   referencing
-tzdata==2026.6 \
-    --hash=sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec \
-    --hash=sha256:85d2cd9c09f81f0bb29db27759fc83af4f1e620efb814f8c5bf8b4cc4feece6d
-    # via mssql-django
 uritemplate==4.2.0 \
     --hash=sha256:480c2ed180878955863323eea31b0ede668795de182617fef9c6ca09e6ec9d0e \
     --hash=sha256:962201ba1c4edcab02e60f9a0d3821e82dfc5d2d6662a21abd533879bdb8a686
@@ -1460,4 +1408,6 @@ xmlsec==1.3.13 \
     # via
     #   django-ansible-base
     #   python3-saml
-# MS SQL Server support (tracked by AAP-98732; mssql extra from the DAB git requirement)
+
+# The following packages were excluded from the output:
+# django-ansible-base

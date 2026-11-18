@@ -199,6 +199,7 @@ legacy_tox_ini = """
     install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
+        pip install --require-hashes --no-cache-dir -r requirements/requirements_mssql.txt
         ./tools/scripts/run_tests.sh {posargs}
 
     [testenv:py312-mssql-check]
@@ -222,6 +223,7 @@ legacy_tox_ini = """
     install_command = ./tools/scripts/ci/install_django_venv.sh {envdir} {opts} {packages}
     commands =
         ./tools/scripts/ci/tox-reinstall-django-ansible-base.sh {envdir}
+        pip install --require-hashes --no-cache-dir -r requirements/requirements_mssql.txt
         python3 -m aap_gateway_api check
         python3 -m aap_gateway_api makemigrations --check
 

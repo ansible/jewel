@@ -121,6 +121,20 @@ def load_grpc_settings(settings: Dynaconf) -> None:
     settings_file_path = os.environ.get('GATEWAY_GRPC_SETTINGS_FILE', f'{_GATEWAY_ETC_DIRECTORY}/grpc_settings.py')
     load_python_file_with_injected_context(settings_file_path, settings=settings)
 
+
+def normalize_grpc_options_for_sql_server(settings: Dynaconf) -> None:
+    """Normalize the gRPC server's database OPTIONS for SQL Server.
+
+    Runs after every settings source that can select the database engine
+    (standard YAML files, environment variables) has loaded — the engine is
+    not yet final when ``load_grpc_settings`` runs. Only acts on gRPC server
+    startup, so other processes are untouched.
+    """
+    from sys import argv
+
+    if 'start_grpc_server' not in argv:
+        return
+
     default_db = settings.DATABASES.get("default", {})
     database_engine = os.getenv("DATABASE_ENGINE") or default_db.get("ENGINE")
     if database_engine == "ansible_base.backends.mssql":

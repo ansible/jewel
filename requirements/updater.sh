@@ -191,12 +191,26 @@ if [[ "${COMMAND}" == "check" && ( "${ONLY_SET}" == "1" || "${USE_LOCAL_DAB}" ==
   exit 1
 fi
 
+compile_mssql_requirements() {
+  require_uv
+  local uv_compile="uv pip compile --generate-hashes --python-version=3.12 --no-header"
+  if [[ "${UV_UPGRADE:-}" == "1" ]]; then
+    uv_compile="${uv_compile} --upgrade"
+  fi
+  cd "${SCRIPT_DIR}"
+  # Constrain to the base pins so packages shared with requirements.txt keep
+  # the exact versions every other environment installs.
+  ${uv_compile} --constraints requirements.txt --output-file requirements_mssql.txt requirements_mssql.in
+}
+
 case "${COMMAND}" in
   "run")
     compile_requirements requirements.txt
+    compile_mssql_requirements
   ;;
   "upgrade")
     UV_UPGRADE=1 compile_requirements requirements.txt
+    UV_UPGRADE=1 compile_mssql_requirements
   ;;
   "check")
     python3 "${SCRIPT_DIR}/../tools/scripts/check_requirements.py"
