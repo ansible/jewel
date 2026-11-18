@@ -6,6 +6,7 @@ from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.urls import reverse
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
@@ -20,11 +21,18 @@ from aap_gateway_api.utils.xds_configs import (
 
 logger = logging.getLogger("aap_gateway_api.models.http_port")
 
-# Envoy fetches its own xDS configuration over the dedicated
-# ``gateway-control-plane-rest`` cluster. Discovery requests must never be
-# routed through a listener to the gateway API, where the catch-all gateway
-# service route would otherwise proxy them.
-XDS_DISCOVERY_PREFIX = "/v3/discovery:"
+
+def _xds_url_prefix():
+    """Return the xDS REST route namespace (for example ``/v3/``).
+
+    Envoy fetches its own xDS configuration over the dedicated
+    ``gateway-control-plane-rest`` cluster, so no listener should forward
+    requests in this namespace to the gateway API, where the catch-all
+    gateway service route would otherwise proxy them. Derive the prefix from
+    the URL conf so new discovery routes or a version bump cannot be exposed
+    by omission.
+    """
+    return "/" + reverse("lds").lstrip("/").split("/", 1)[0] + "/"
 
 
 class HTTPPort(UniqueNamedCommonModel, AuditableModel):
@@ -97,7 +105,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         # Envoy talks to the control plane directly, so no listener should
         # forward xDS discovery requests to the gateway API.
         xds_route = {
-            "match": {"prefix": XDS_DISCOVERY_PREFIX},
+            "match": {"prefix": _xds_url_prefix()},
             "direct_response": {"status": 404},
             "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
         }

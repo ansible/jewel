@@ -103,13 +103,20 @@ def test_xds_api_port_deduplicates_api_redirect(admin_api_client, service_api_ro
 
 @pytest.mark.parametrize(
     "path",
-    ["/v3/discovery:listeners", "/v3/discovery:clusters", "/v3/discovery:secrets"],
+    [
+        "/v3/discovery:listeners",
+        "/v3/discovery:clusters",
+        "/v3/discovery:secrets",
+        "/v3/discovery%3Alisteners",
+        "/v3/any/future/discovery/path",
+    ],
 )
 def test_xds_listener_does_not_proxy_discovery_requests(admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache, path):
-    """Envoy must not forward xDS discovery requests to the gateway API.
+    """Envoy must not forward xDS REST requests to the gateway API.
 
     The gateway API route is a catch-all ("/"), so without an explicit deny
-    route Envoy would proxy discovery requests through the public listener.
+    route Envoy would proxy the whole xDS namespace through the public
+    listener.
     """
     ServiceAPIRoute.objects.create(
         name="Gateway API catch-all",
