@@ -11,7 +11,7 @@ def _merge_domains(result, definitions):
     """Merge definitions in precedence order; later scopes replace same-name domains."""
     for definition in definitions:
         for domain in definition or []:
-            if isinstance(domain, dict) and isinstance(domain.get('name'), str):
+            if isinstance(domain, dict) and isinstance(domain.get('name'), str) and domain['name']:
                 result[domain['name']] = domain
 
 
