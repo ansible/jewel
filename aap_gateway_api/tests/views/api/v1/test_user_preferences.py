@@ -136,6 +136,34 @@ def test_user_domains_override_inherited_domain_without_changing_active_selectio
     assert definition.domains == value['domains']
 
 
+def test_clearing_user_domains_restores_inherited_domains(user):
+    organization = Organization.objects.create(name='Domain fallback org')
+    organization.add_member(user)
+    DomainDefinition.objects.create(
+        scope=DomainDefinition.ORGANIZATION,
+        organization=organization,
+        domains=[{'name': 'Inherited domain', 'labels': []}],
+    )
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    client.put(
+        user_preferences_url(),
+        {'value': {'domains': [{'name': 'User domain', 'labels': []}], 'activeDomains': []}},
+        format='json',
+    )
+    response = client.put(
+        user_preferences_url(),
+        {'value': {'domains': [], 'activeDomains': []}},
+        format='json',
+    )
+
+    assert response.status_code == 200
+    assert response.data['value']['domains'] == [{'name': 'Inherited domain', 'labels': []}]
+    assert response.data['value']['userDomains'] == []
+    assert DomainDefinition.objects.get(scope=DomainDefinition.USER, user=user).domains == []
+
+
 def test_organization_domains_can_be_managed_by_an_organization_admin(user, admin_user):
     organization = Organization.objects.create(name='Domain API org')
     organization.add_admin(admin_user)
@@ -190,11 +218,21 @@ def test_scoped_domain_endpoints_require_authentication():
 
 def test_scoped_domain_write_requires_owner_admin(user, admin_user):
     organization = Organization.objects.create(name='Unauthorized domain API org')
+    team = Team.objects.create(name='Unauthorized domain API team', organization=organization)
+    team.add_member(user)
     client = APIClient()
     client.force_authenticate(user=user)
 
     response = client.put(
         reverse('organization-domain-definition', kwargs={'pk': organization.pk}),
+        {'domains': [{'name': 'Unauthorized', 'labels': []}]},
+        format='json',
+    )
+
+    assert response.status_code == 403
+
+    response = client.put(
+        reverse('team-domain-definition', kwargs={'pk': team.pk}),
         {'domains': [{'name': 'Unauthorized', 'labels': []}]},
         format='json',
     )
