@@ -13,7 +13,7 @@ from aap_gateway_api.models import AdditionalRoute, HTTPPort, Route, ServiceAPIR
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_type import ServiceType
 from aap_gateway_api.models.ui_plugin_route import UIPluginRoute
-from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, invalidate_xds_cache
+from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, invalidate_xds_cache
 
 
 def _create_service_hierarchy(cluster_count, nodes_per_cluster, routes_per_cluster):

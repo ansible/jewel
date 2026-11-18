@@ -113,7 +113,7 @@ def network_manager_filter(http_filters=[], routes=[]):
     }
 
 
-def transport_socket():
+def transport_socket(sds_transport="ads"):
     ts = {
         "name": "envoy.transport_sockets.tls",
         "typed_config": {
@@ -128,7 +128,7 @@ def transport_socket():
                 ],
                 "validation_context_sds_secret_config": {
                     "name": SDS_SECRET_CONFIG_NAME,
-                    "sds_config": _rest_sds_config(),
+                    "sds_config": _SDS_CONFIG_BUILDERS[sds_transport](),
                 },
             },
         },
@@ -148,6 +148,13 @@ def transport_socket():
     return ts
 
 
+def _ads_sds_config() -> dict:
+    # Resolves against the Envoy bootstrap's ads_config, the same aggregated
+    # stream that carries CDS and LDS.
+    return {"ads": {}, "resource_api_version": "V3"}
+
+
+# REST-XDS-REMOVAL: delete with the REST views (docs/removing_rest_xds.md).
 def _rest_sds_config() -> dict:
     return {
         "api_config_source": {
@@ -157,3 +164,10 @@ def _rest_sds_config() -> dict:
             "refresh_delay": settings.SDS_REFRESH_DELAY_PROTOBUF_DURATION,
         }
     }
+
+
+# The SDS source must match the transport the listener is delivered over: an
+# Envoy that polls LDS over REST has no ads_config in its bootstrap and rejects
+# a listener whose SDS source is `ads`.
+# REST-XDS-REMOVAL: drop the "rest" entry and the sds_transport parameter.
+_SDS_CONFIG_BUILDERS = {"ads": _ads_sds_config, "rest": _rest_sds_config}

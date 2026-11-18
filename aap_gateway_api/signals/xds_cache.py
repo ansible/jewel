@@ -10,7 +10,7 @@ from aap_gateway_api.models.service_api_route import ServiceAPIRoute
 from aap_gateway_api.models.service_cluster import ServiceCluster
 from aap_gateway_api.models.service_node import ServiceNode
 from aap_gateway_api.models.ui_plugin_route import UIPluginRoute
-from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, invalidate_xds_cache
+from aap_gateway_api.utils.xds_resources import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, invalidate_xds_cache
 
 
 @receiver(post_save, sender=Route)
