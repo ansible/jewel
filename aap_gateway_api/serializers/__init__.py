@@ -2,6 +2,7 @@ from aap_gateway_api.serializers.additional_route import AdditionalRouteSerializ
 from aap_gateway_api.serializers.app_url import AppUrlSerializer  # noqa: F401
 from aap_gateway_api.serializers.authenticator_user import AuthenticatorUserMoveSerializer, AuthenticatorUserSerializer  # noqa: F401
 from aap_gateway_api.serializers.ca_certificate import CACertificateSerializer  # noqa: F401
+from aap_gateway_api.serializers.domain_definition import DomainDefinitionSerializer  # noqa: F401
 from aap_gateway_api.serializers.http_port import HTTPPortSerializer  # noqa: F401
 from aap_gateway_api.serializers.organization import OrganizationSerializer  # noqa: F401
 from aap_gateway_api.serializers.preferences import SettingPreferenceSerializer, SettingSectionListSerializer, SettingSectionSerializer  # noqa: F401
@@ -13,4 +14,5 @@ from aap_gateway_api.serializers.service_type import ServiceTypeSerializer  # no
 from aap_gateway_api.serializers.team import TeamSerializer  # noqa: F401
 from aap_gateway_api.serializers.ui_plugin_route import UIPluginRouteSerializer  # noqa: F401
 from aap_gateway_api.serializers.user import UserSerializer  # noqa: F401
+from aap_gateway_api.serializers.user_preference import UserPreferenceSerializer  # noqa: F401
 from aap_gateway_api.serializers.workload_identity_tokens import WorkloadIdentityTokenRequestSerializer, WorkloadIdentityTokenResponseSerializer  # noqa: F401

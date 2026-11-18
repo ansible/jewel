@@ -3,6 +3,7 @@ from aap_gateway_api.models.user import User, MigratedUserMetadata  # noqa: F401
 
 from ansible_base.rbac import permission_registry
 
+from aap_gateway_api.models.domain_definition import DomainDefinition  # noqa: F401
 from aap_gateway_api.models.migrate_data import MigrateServiceDataHasRan  # noqa: F401
 from aap_gateway_api.models.organization import Organization  # noqa: F401
 from aap_gateway_api.models.preference import Preference  # noqa: F401
@@ -13,6 +14,7 @@ from aap_gateway_api.models.service_node import ServiceNode  # noqa: F401
 from aap_gateway_api.models.service_type import DefaultServiceType, ServiceType  # noqa: F401
 from aap_gateway_api.models.team import Team  # noqa: F401
 from aap_gateway_api.models.ui_plugin_route import UIPluginRoute  # noqa: F401
+from aap_gateway_api.models.user_preference import UserPreference  # noqa: F401
 from aap_gateway_api.models.user_session_membership import UserSessionMembership  # noqa: F401
 
 # Skip isort for the below to prevent circular imports caused by the alphabetical sorting of these imports.

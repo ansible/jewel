@@ -64,6 +64,23 @@ urlpatterns = [
     ),
     path(f'{API_GATEWAY_V1_PREFIX}logout/', views.LoggedLogoutView.as_view(next_page='/api/', redirect_field_name='next'), name='logout'),
     path(f'{API_GATEWAY_V1_PREFIX}me/', views.MeViewSet.as_view({'get': 'list'}), name='me-list'),
+    path(
+        f'{API_GATEWAY_V1_PREFIX}me/preferences/<str:preference_name>/',
+        views.UserPreferenceView.as_view(),
+        name='user-preference-detail',
+    ),
+    path(
+        f'{API_GATEWAY_V1_PREFIX}organizations/<int:pk>/domains/',
+        views.DomainDefinitionView.as_view(),
+        {'scope': 'organization'},
+        name='organization-domain-definition',
+    ),
+    path(
+        f'{API_GATEWAY_V1_PREFIX}teams/<int:pk>/domains/',
+        views.DomainDefinitionView.as_view(),
+        {'scope': 'team'},
+        name='team-domain-definition',
+    ),
     path(f'{API_GATEWAY_V1_PREFIX}session/', views.SessionView.as_view(), name='session-view'),
     # settings
     re_path(rf'{API_GATEWAY_V1_PREFIX}settings/(?P<category_slug>[a-z0-9_]+)/$', views.SettingSectionView.as_view(), name='setting-section-list'),
@@ -82,15 +99,21 @@ urlpatterns = [
     path(API_GATEWAY_V1_PREFIX, include(rbac_service_urls)),
     # JWT claims endpoint
     path(f'{API_GATEWAY_V1_PREFIX}jwt_claims/<str:user_ansible_id>/', views.JWTClaimsView.as_view(), name='jwt-claims-view'),
-    # OIDC Workload Identity endpoints (behind feature flag)
-    flagged_path(
-        'FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED',
-        f'{API_GATEWAY_V1_PREFIX}workload_identity_tokens/',
-        views.WorkloadIdentityTokensView.as_view(),
-        name='workload-identity-tokens-view',
-        state=True,
-    ),
 ]
+
+# OIDC Workload Identity is not available in older Gateway images used by
+# local demo environments. Keep the URL optional so the rest of the API can
+# still start while the feature is absent.
+if hasattr(views, 'WorkloadIdentityTokensView'):
+    urlpatterns.append(
+        flagged_path(
+            'FEATURE_OIDC_WORKLOAD_IDENTITY_ENABLED',
+            f'{API_GATEWAY_V1_PREFIX}workload_identity_tokens/',
+            views.WorkloadIdentityTokensView.as_view(),
+            name='workload-identity-tokens-view',
+            state=True,
+        )
+    )
 
 if getattr(settings, 'ENABLE_DJANGO_DEBUG_TOOLBAR', False):
     from debug_toolbar.toolbar import debug_toolbar_urls

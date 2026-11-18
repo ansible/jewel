@@ -24,6 +24,7 @@ from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
 from aap_gateway_api.views.api.v1.app_url import AppUrlViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.authenticator_user import AuthenticatorUserViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.ca_certificate import CACertificateViewSet  # noqa: F401
+from aap_gateway_api.views.api.v1.domain_definition import DomainDefinitionView  # noqa: F401
 from aap_gateway_api.views.api.v1.feature_flags import AAPFlagViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_claims import JWTClaimsView  # noqa: F401
 from aap_gateway_api.views.api.v1.jwt_key import JWTKeyView  # noqa: F401
@@ -47,6 +48,7 @@ from aap_gateway_api.views.api.v1.session import SessionView  # noqa: F401
 from aap_gateway_api.views.api.v1.status import StatusView  # noqa: F401
 from aap_gateway_api.views.api.v1.team import TeamViewSet  # noqa: F401
 from aap_gateway_api.views.api.v1.user import UserViewSet  # noqa: F401
+from aap_gateway_api.views.api.v1.user_preference import UserPreferenceView  # noqa: F401
 from aap_gateway_api.views.api.v1.workload_identity_tokens import WorkloadIdentityTokensView  # noqa: F401
 
 logger = logging.getLogger('aap.gateway.views')
