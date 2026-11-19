@@ -177,6 +177,8 @@ def _create_gateway_base_route(http_port, service_cluster, gateway_path="/aap/",
         ("/", "/aap/v3/discovery:listeners"),
         ("/", "/aap/v3/any/future/path"),
         ("/v3/", "/aap/discovery:listeners"),
+        ("/v3/discovery:listeners", "/aap/"),
+        ("/v3/discovery", "/aap/"),
     ],
 )
 def test_xds_listener_denies_discovery_under_gateway_route_base(

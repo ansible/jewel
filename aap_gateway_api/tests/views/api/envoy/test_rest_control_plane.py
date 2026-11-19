@@ -104,6 +104,21 @@ def test_xds_views_accept_canonical_path(unauthenticated_api_client, raw_suffix,
 
 
 @pytest.mark.django_db
+def test_xds_views_sanitize_rejection_log(unauthenticated_api_client, caplog):
+    """The rejected request target must not be able to forge log lines."""
+    raw_uri = "/v3%2Fdiscovery:listeners\r\nFAKE LOG LINE" + "A" * 500
+
+    response = unauthenticated_api_client.post(reverse("lds"), data={}, RAW_URI=raw_uri)
+
+    assert response.status_code == 404
+    message = next(record.getMessage() for record in caplog.records if "Rejecting percent-encoded xDS path" in record.getMessage())
+    assert "\r" not in message
+    assert "\n" not in message
+    assert "FAKE LOG LINE" in message
+    assert len(message) < 250
+
+
+@pytest.mark.django_db
 def test_cds_empty_response_not_cached_during_bootstrap(unauthenticated_api_client):
     """CDS does not cache empty responses during bootstrap (before routes exist)."""
     from django.core.cache import cache

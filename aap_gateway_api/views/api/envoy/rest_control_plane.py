@@ -1,6 +1,7 @@
 import logging
 from urllib.parse import urlsplit
 
+from ansible_base.lib.serializers.mixins import _LOG_CONTROL_RE
 from django.core.cache import cache
 from django.db.models import Max, Prefetch
 from envoy.config.cluster.v3.cluster_pb2 import Cluster
@@ -41,6 +42,8 @@ logger = logging.getLogger("aap_gateway_api.views.api.envoy.rest_control_plane")
 XDS_CACHE_KEY_CDS = "xds:cds"
 XDS_CACHE_KEY_LDS = "xds:lds"
 XDS_CACHE_KEY_SDS = "xds:sds"
+
+_LOGGED_PATH_MAX_LENGTH = 200
 
 # ---------------------------------------------------------------------------
 # Envoy xDS REST control plane views
@@ -86,6 +89,16 @@ def _request_path_was_percent_encoded(request):
     return urlsplit(raw_uri).path != request.path
 
 
+def _sanitize_for_log(value):
+    """Escape control characters and bound the length of user-controlled log data."""
+    if not value:
+        return ""
+    text = _LOG_CONTROL_RE.sub(lambda match: repr(match.group())[1:-1], str(value))
+    if len(text) > _LOGGED_PATH_MAX_LENGTH:
+        text = f"{text[:_LOGGED_PATH_MAX_LENGTH]}..."
+    return text
+
+
 @extend_schema(exclude=True)
 class XDSView(APIView):
     authentication_classes = []
@@ -93,7 +106,8 @@ class XDSView(APIView):
 
     def initial(self, request, *args, **kwargs):
         if _request_path_was_percent_encoded(request):
-            logger.warning("Rejecting percent-encoded xDS path: %s", request.META.get("RAW_URI") or request.META.get("REQUEST_URI"))
+            raw_uri = request.META.get("RAW_URI") or request.META.get("REQUEST_URI")
+            logger.warning("Rejecting percent-encoded xDS path: %s", _sanitize_for_log(raw_uri))
             raise NotFound()
         super().initial(request, *args, **kwargs)
 

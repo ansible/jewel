@@ -52,11 +52,16 @@ def get_xds_deny_prefixes(configured_routes):
         if route.service_cluster.service_type.name != DefaultServiceType.GATEWAY.value:
             continue
         service_path = route.service_path.rstrip("/") + "/"
+        base = route.gateway_path.rstrip("/")
+        if service_path.startswith(xds_prefix):
+            # The route already rewrites into the namespace, so every request
+            # through it lands in xDS territory.
+            prefixes.add(f"{base}/")
+            continue
         # A route only exposes xDS when its rewrite lands inside the namespace.
         if not xds_prefix.startswith(service_path):
             continue
         remainder = xds_prefix[len(service_path) :]
-        base = route.gateway_path.rstrip("/")
         prefixes.add(f"{base}/{remainder}" if remainder else f"{base}/")
     return sorted(prefixes)
 
