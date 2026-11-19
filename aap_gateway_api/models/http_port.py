@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils.translation import gettext as _
 
 from aap_gateway_api.common.envoy import EXT_AUTH_FILTER, EXT_AUTH_PER_ROUTE
+from aap_gateway_api.models.service_type import DefaultServiceType
 from aap_gateway_api.utils.xds_configs import (
     external_auth_filter,
     http_router_filter,
@@ -35,6 +36,29 @@ def get_xds_url_prefix():
     discovery routes or a version bump cannot be exposed by omission.
     """
     return "/" + reverse("lds").lstrip("/").split("/", 1)[0] + "/"
+
+
+def get_xds_deny_prefixes(configured_routes):
+    """Return listener prefixes that can reach the gateway's xDS namespace.
+
+    The xDS namespace is always reachable at the site root through the gateway
+    catch-all route. Envoy matches on the downstream path before applying
+    ``prefix_rewrite``, so any route that proxies to the gateway service
+    cluster also exposes the namespace under its own ``gateway_path`` base.
+    """
+    xds_prefix = get_xds_url_prefix()
+    prefixes = {xds_prefix}
+    for route in configured_routes:
+        if route.service_cluster.service_type.name != DefaultServiceType.GATEWAY.value:
+            continue
+        service_path = route.service_path.rstrip("/") + "/"
+        # A route only exposes xDS when its rewrite lands inside the namespace.
+        if not xds_prefix.startswith(service_path):
+            continue
+        remainder = xds_prefix[len(service_path) :]
+        base = route.gateway_path.rstrip("/")
+        prefixes.add(f"{base}/{remainder}" if remainder else f"{base}/")
+    return sorted(prefixes)
 
 
 def _drf_not_found():
@@ -119,15 +143,17 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         # forward xDS discovery requests to the gateway API. Serve the same
         # 404 response DRF returns for the gateway API.
         status, body, content_type = _drf_not_found()
-        xds_route = {
-            "match": {"prefix": get_xds_url_prefix()},
-            "direct_response": {"status": status, "body": {"inline_string": body.decode()}},
-            "response_headers_to_add": [
-                {"header": {"key": "content-type", "value": content_type}},
-            ],
-            "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
-        }
-        routes.append(xds_route)
+        for prefix in get_xds_deny_prefixes(configured_routes):
+            routes.append(
+                {
+                    "match": {"prefix": prefix},
+                    "direct_response": {"status": status, "body": {"inline_string": body.decode()}},
+                    "response_headers_to_add": [
+                        {"header": {"key": "content-type", "value": content_type}},
+                    ],
+                    "typed_per_filter_config": {EXT_AUTH_FILTER: {"@type": EXT_AUTH_PER_ROUTE, "disabled": True}},
+                }
+            )
         if self.is_api_port:
             redirects = {"/api": "/api/"}
             redirects.update(

@@ -152,6 +152,63 @@ def test_xds_listener_does_not_proxy_discovery_requests(admin_api_client, http_a
     assert route["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
 
 
+def _listener_routes(admin_api_client, port_name=API_PORT_NAME):
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == port_name)
+    return listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+
+
+def _create_gateway_base_route(http_port, service_cluster, gateway_path="/aap/", service_path="/"):
+    AdditionalRoute.objects.create(
+        name="Gateway base route",
+        http_port=http_port,
+        service_cluster=service_cluster,
+        service_port=8000,
+        is_service_https=False,
+        service_path=service_path,
+        gateway_path=gateway_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "service_path,path",
+    [
+        ("/", "/aap/v3/discovery:listeners"),
+        ("/", "/aap/v3/any/future/path"),
+        ("/v3/", "/aap/discovery:listeners"),
+    ],
+)
+def test_xds_listener_denies_discovery_under_gateway_route_base(
+    admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache, service_path, path
+):
+    """A route that proxies to the gateway must not re-expose the xDS namespace."""
+    _create_gateway_base_route(http_api_port_factory(), service_cluster_gateway, service_path=service_path)
+
+    route = _first_matching_route(_listener_routes(admin_api_client), path)
+
+    assert "route" not in route
+    assert route["directResponse"]["status"] == 404
+
+
+def test_xds_listener_allows_other_services_under_similar_base(admin_api_client, http_api_port_factory, service_cluster_eda, isolated_cache):
+    """Only routes that proxy to the gateway re-expose the xDS namespace."""
+    _create_gateway_base_route(http_api_port_factory(), service_cluster_eda)
+
+    route = _first_matching_route(_listener_routes(admin_api_client), "/aap/v3/discovery:listeners")
+
+    assert "route" in route
+
+
+def test_xds_listener_allows_gateway_route_rewriting_outside_namespace(admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache):
+    """A gateway route that rewrites elsewhere cannot reach xDS, so it is not denied."""
+    _create_gateway_base_route(http_api_port_factory(), service_cluster_gateway, service_path="/api/gateway/")
+
+    route = _first_matching_route(_listener_routes(admin_api_client), "/aap/v3/discovery:listeners")
+
+    assert "route" in route
+
+
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
     """Verify that configured service routes are included in the listener."""
     url = reverse("lds")
