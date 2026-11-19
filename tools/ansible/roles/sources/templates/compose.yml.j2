@@ -371,7 +371,7 @@ services:
       # survives container recreation without a PostgreSQL container.
       - aap_gw_keycloak_data:/opt/keycloak/data:z
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost:9000"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000"]
       interval: 5s
       timeout: 5s
       retries: 30
