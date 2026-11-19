@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 
 from django.core.cache import cache
 from django.db.models import Max, Prefetch
@@ -8,6 +9,7 @@ from envoy.service.discovery.v3.discovery_pb2 import DiscoveryResponse
 from google.protobuf import symbol_database
 from google.protobuf.any_pb2 import Any
 from google.protobuf.json_format import MessageToDict, ParseDict
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -51,8 +53,11 @@ XDS_CACHE_KEY_SDS = "xds:sds"
 #   LDS (Listener Discovery Service) - listener + filter-chain definitions
 #   SDS (Secret Discovery Service)   - TLS certificates / CA bundles
 #
-# None of these endpoints require authentication because they are only
-# reachable from Envoy on the loopback interface.
+# None of these endpoints require authentication because they are only meant
+# to be reached by Envoy over its control-plane cluster (gRPC ADS, or the REST
+# cluster in its bootstrap), never through a listener.  Every listener denies
+# the xDS namespace, and XDSView additionally rejects percent-encoded spellings
+# that Envoy's prefix matching does not catch.
 #
 # Responses are cached and invalidated by model signals (see
 # aap_gateway_api/signals/xds_cache.py) so that the ~5-second Envoy
@@ -65,10 +70,32 @@ def invalidate_xds_cache(*keys):
     cache.delete_many(keys)
 
 
+def _request_path_was_percent_encoded(request):
+    """Return True when the raw request target differs from the decoded path.
+
+    WSGI servers decode reserved characters such as ``%2F`` and ``%3A`` when
+    building ``PATH_INFO``, while Envoy does not decode them when matching
+    listener routes. A request like ``/v3%2Fdiscovery:listeners`` therefore
+    misses the listener's xDS deny route but still resolves to an xDS view
+    here. Envoy always sends the canonical spelling, so a mismatch means the
+    request was crafted to bypass the listener.
+    """
+    raw_uri = request.META.get("RAW_URI") or request.META.get("REQUEST_URI")
+    if not raw_uri:
+        return False
+    return urlsplit(raw_uri).path != request.path
+
+
 @extend_schema(exclude=True)
 class XDSView(APIView):
     authentication_classes = []
     permission_classes = []
+
+    def initial(self, request, *args, **kwargs):
+        if _request_path_was_percent_encoded(request):
+            logger.warning("Rejecting percent-encoded xDS path: %s", request.META.get("RAW_URI") or request.META.get("REQUEST_URI"))
+            raise NotFound()
+        super().initial(request, *args, **kwargs)
 
     def get_qs(self, request, model_class, name_field):
         # DISTINCT ON is PostgreSQL-specific; it gives us one row per unique
@@ -165,7 +192,7 @@ class ListenerDiscoverServiceView(XDSView):
 class SecretDiscoverServiceView(XDSView):
     """SDS -- returns a single Secret containing all trusted CA certificates."""
 
-    # No authentication by design -- only reachable from Envoy on loopback.
+    # No authentication by design -- only reachable from Envoy over its control-plane cluster.
     authentication_classes = []
     permission_classes = []
 

@@ -1,6 +1,6 @@
 import pytest
 from ansible_base.lib.utils.response import get_relative_url
-from rest_framework import status
+from rest_framework import serializers, status
 
 from aap_gateway_api.serializers.additional_route import AdditionalRouteSerializer
 
@@ -45,3 +45,27 @@ class TestAdditionalRouteSerializer:
         serializer = AdditionalRouteSerializer()
         validated_data = serializer.validate(test_data)
         assert validated_data['gateway_path'] == expected_path
+
+    @pytest.mark.parametrize(
+        "gateway_path",
+        ["/v3/", "/v3/custom/", "/v3/discovery:listeners"],
+    )
+    def test_gateway_path_rejects_reserved_xds_namespace(self, gateway_path):
+        """Paths in the xDS namespace are shadowed by the listener deny route."""
+        test_data = {'gateway_path': gateway_path, 'enable_gateway_auth': True, 'is_internal_route': False}
+        serializer = AdditionalRouteSerializer()
+
+        with pytest.raises(serializers.ValidationError) as exc_info:
+            serializer.validate(test_data)
+
+        assert "gateway_path" in exc_info.value.detail
+
+    @pytest.mark.parametrize(
+        "gateway_path",
+        ["/v2/custom/", "/v3custom/", "/"],
+    )
+    def test_gateway_path_allows_paths_outside_xds_namespace(self, gateway_path):
+        test_data = {'gateway_path': gateway_path, 'enable_gateway_auth': True, 'is_internal_route': False}
+        serializer = AdditionalRouteSerializer()
+
+        assert serializer.validate(test_data)['gateway_path'] == gateway_path

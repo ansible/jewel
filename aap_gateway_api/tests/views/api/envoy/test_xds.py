@@ -138,6 +138,10 @@ def test_xds_listener_does_not_proxy_discovery_requests(admin_api_client, http_a
     listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
     routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
 
+    # The deny route only proves anything if the gateway catch-all is present
+    # behind it; otherwise the discovery path would match nothing at all.
+    assert any(route["match"].get("prefix") == "/" for route in routes)
+
     route = _first_matching_route(routes, path)
     assert "route" not in route
     assert route["directResponse"]["status"] == 404

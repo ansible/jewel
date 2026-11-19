@@ -22,15 +22,17 @@ from aap_gateway_api.utils.xds_configs import (
 logger = logging.getLogger("aap_gateway_api.models.http_port")
 
 
-def _xds_url_prefix():
+def get_xds_url_prefix():
     """Return the xDS REST route namespace (for example ``/v3/``).
 
-    Envoy fetches its own xDS configuration over the dedicated
-    ``gateway-control-plane-rest`` cluster, so no listener should forward
-    requests in this namespace to the gateway API, where the catch-all
-    gateway service route would otherwise proxy them. Derive the prefix from
-    the URL conf so new discovery routes or a version bump cannot be exposed
-    by omission.
+    Envoy fetches its xDS configuration from the control plane directly (gRPC
+    ADS, or the REST cluster in its bootstrap), never through its own
+    listeners, so no listener should forward requests in this namespace to the
+    gateway API, where the catch-all gateway service route would otherwise
+    proxy them. This namespace is reserved: ``AdditionalRoute`` rejects paths
+    under it because the deny route below is evaluated first, which would
+    silently shadow such a route. Derive the prefix from the URL conf so new
+    discovery routes or a version bump cannot be exposed by omission.
     """
     return "/" + reverse("lds").lstrip("/").split("/", 1)[0] + "/"
 
@@ -118,7 +120,7 @@ class HTTPPort(UniqueNamedCommonModel, AuditableModel):
         # 404 response DRF returns for the gateway API.
         status, body, content_type = _drf_not_found()
         xds_route = {
-            "match": {"prefix": _xds_url_prefix()},
+            "match": {"prefix": get_xds_url_prefix()},
             "direct_response": {"status": status, "body": {"inline_string": body.decode()}},
             "response_headers_to_add": [
                 {"header": {"key": "content-type", "value": content_type}},
