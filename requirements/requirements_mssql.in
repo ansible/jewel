@@ -4,4 +4,4 @@
 # ODBC stack out of the base requirements avoids requiring unixODBC in every
 # environment and keeps Python 3.11 installs installable.
 mssql-django
-aioodbc  # dispatcherd sql_server broker; use dispatcherd[sqlserver] once a release ships it
+dispatcherd[sqlserver]  # the sql_server Service Broker broker
