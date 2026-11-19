@@ -1,8 +1,18 @@
+from django.conf import settings
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from aap_gateway_api.exceptions import ProxyDenied
 from aap_gateway_api.utils.preferences import get_preference_value
 from aap_gateway_api.utils.requests import from_proxy
+
+
+class ApiRootAccessPermission(BasePermission):
+    """Allow anonymous access to API roots unless API_ROOTS_REQUIRE_AUTHENTICATION is enabled."""
+
+    def has_permission(self, request, view):
+        if not getattr(settings, 'API_ROOTS_REQUIRE_AUTHENTICATION', False):
+            return True
+        return bool(request.user and request.user.is_authenticated)
 
 
 class DisallowWriteFromProxy(BasePermission):

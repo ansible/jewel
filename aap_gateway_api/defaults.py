@@ -23,6 +23,14 @@ ALLOWED_HOSTS = ["*"]
 # This setting should not be overrideable
 AOC_UNCHANGEABLE_PREFERENCES = ['gateway_token_name']
 
+# When true, the API root discovery endpoints (/api/, /api/gateway/, and
+# /api/gateway/v1/) require an authenticated user.
+API_ROOTS_REQUIRE_AUTHENTICATION = False
+
+# When true, /api/gateway/v1/ping/ omits its deprecated connectivity fields and
+# returns only a liveness timestamp, for authenticated and anonymous callers.
+HIDE_V1_API_DEPRECATED_FIELDS = False
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

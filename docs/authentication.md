@@ -13,6 +13,17 @@ Explicit credentials take precedence over an ambient browser session. This
 ensures API clients can use an explicitly supplied service token, bearer token,
 or Basic credential even when the browser also has a Gateway session.
 
+## API endpoint hardening
+
+Two opt-in settings reduce what API callers can learn about the deployment.
+Both default to `False` and can be set in `settings.py` or through
+`GATEWAY_`-prefixed environment variables.
+
+| Setting | Effect |
+| --- | --- |
+| `API_ROOTS_REQUIRE_AUTHENTICATION` | When `True`, the `/api/`, `/api/gateway/`, and `/api/gateway/v1/` discovery roots return `401` unless the caller is authenticated. |
+| `HIDE_V1_API_DEPRECATED_FIELDS` | When `True`, `/api/gateway/v1/ping/` returns only `{"pong": "<timestamp>"}` for every caller instead of the deprecated database, proxy, and dispatcherd connectivity fields. |
+
 ## Basic Auth
 
 If a basic auth header is passed to the proxy the following logic applies.

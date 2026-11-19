@@ -7,8 +7,9 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from aap_gateway_api.utils.views.permissions import ApiRootAccessPermission
 
 
 @extend_schema(
@@ -21,7 +22,7 @@ from rest_framework.response import Response
     },
 )
 class GatewayRootView(AnsibleBaseView):
-    permission_classes = (AllowAny,)
+    permission_classes = (ApiRootAccessPermission,)
     name = _('gateway')
     versioning_class = None
 

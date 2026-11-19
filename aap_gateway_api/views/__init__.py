@@ -13,12 +13,12 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework import status as http_status
 from rest_framework.exceptions import ParseError
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
 from aap_gateway_api.models import ServiceAPIRoute
 from aap_gateway_api.utils.preferences import PreferenceCorruptError
+from aap_gateway_api.utils.views.permissions import ApiRootAccessPermission
 from aap_gateway_api.views.api import GatewayRootView  # noqa: F401
 from aap_gateway_api.views.api.v1 import V1RootView  # noqa: F401
 from aap_gateway_api.views.api.v1.app_url import AppUrlViewSet  # noqa: F401
@@ -74,7 +74,7 @@ def gateway_exception_handler(exc, context):
     },
 )
 class ApiRootView(AnsibleBaseView):
-    permission_classes = (AllowAny,)
+    permission_classes = (ApiRootAccessPermission,)
     name = _('REST API')
     versioning_class = None
 
