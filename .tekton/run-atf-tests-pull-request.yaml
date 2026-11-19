@@ -55,6 +55,8 @@ spec:
       value: "gateway"
     - name: pytest-number-of-parallel-processes
       value: "6"
+    - name: pytest-verbose
+      value: "vv"
 
   workspaces:
     - name: workspace
