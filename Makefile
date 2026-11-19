@@ -307,9 +307,13 @@ collection:
 GENSCHEMA_TAG ?= devel
 
 genschema:
-	@if [ ! -d django-ansible-base ]; then \
-		echo "Cloning django-ansible-base..."; \
-		git clone --depth 1 -b devel https://github.com/ansible/django-ansible-base.git django-ansible-base; \
+	@if [ -d django-ansible-base ]; then \
+		echo "Updating django-ansible-base @ $(GENSCHEMA_TAG)..."; \
+		git -C django-ansible-base fetch --depth 1 origin $(GENSCHEMA_TAG) && \
+		git -C django-ansible-base reset --hard origin/$(GENSCHEMA_TAG); \
+	else \
+		echo "Cloning django-ansible-base @ $(GENSCHEMA_TAG)..."; \
+		git clone --depth 1 -b $(GENSCHEMA_TAG) https://github.com/ansible/django-ansible-base.git django-ansible-base; \
 	fi
 	$(PODMAN) run --rm \
 		--security-opt label=disable \

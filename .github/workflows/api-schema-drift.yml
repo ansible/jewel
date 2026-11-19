@@ -44,8 +44,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify committed spec exists
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if ! git show HEAD:openapi.yaml > /dev/null 2>&1; then
+            echo "::error::openapi.yaml is not in the commit — the baseline spec must be committed."
+            exit 1
+          fi
+
       - name: Clone django-ansible-base
-        run: git clone --depth 1 -b devel https://github.com/ansible/django-ansible-base.git django-ansible-base
+        env:
+          TARGET_BRANCH: ${{ needs.ci-image-tag.outputs.tag }}
+        run: |
+          if git ls-remote --heads https://github.com/ansible/django-ansible-base.git "$TARGET_BRANCH" | grep -q "$TARGET_BRANCH"; then
+            DAB_BRANCH="$TARGET_BRANCH"
+          else
+            DAB_BRANCH="devel"
+          fi
+          echo "Cloning django-ansible-base @ $DAB_BRANCH"
+          git clone --depth 1 -b "$DAB_BRANCH" https://github.com/ansible/django-ansible-base.git django-ansible-base
 
       - name: Regenerate spec from code
         run: |
@@ -62,10 +79,13 @@ jobs:
 
       - name: Check for drift
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          if git diff --exit-code openapi.yaml; then
+          set +e
+          git diff --exit-code openapi.yaml
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
             echo "No schema drift detected."
-          else
+          elif [ "$rc" -eq 1 ]; then
             echo ""
             echo "::error::Committed openapi.yaml is out of sync with code."
             echo "::error::Regenerate with the sqlite3 approach and commit the result."
@@ -82,4 +102,7 @@ jobs:
             git diff openapi.yaml | head -100 >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             exit 1
+          else
+            echo "::error::git diff failed with exit code $rc"
+            exit "$rc"
           fi

@@ -12,7 +12,7 @@ on:
       - stable-*
     paths:
       - 'openapi.yaml'
-      - '.github/workflows/oasdiff-breaking-changes*.yml'
+      - '.github/workflows/oasdiff-breaking-change*.yml'
 
 permissions:
   contents: read
