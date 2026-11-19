@@ -61,17 +61,7 @@ jobs:
             --always-clone-repos 'ansible/django-ansible-base'
 
       - name: Regenerate spec from code
-        run: |
-          python3 -c "
-          import os, django
-          os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'aap_gateway_api.settings')
-          django.setup()
-          from django.conf import settings
-          settings.DATABASES['default']['OPTIONS'] = {}
-          from django.core.management import call_command
-          call_command('migrate', '--run-syncdb', verbosity=0)
-          call_command('spectacular', '--format', 'openapi', '--file', 'openapi.yaml')
-          "
+        run: python3 tools/scripts/genschema.py
 
       - name: Check for drift
         run: |
