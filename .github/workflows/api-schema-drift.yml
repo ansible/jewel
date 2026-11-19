@@ -52,17 +52,13 @@ jobs:
             exit 1
           fi
 
-      - name: Clone django-ansible-base
+      - name: Checkout dependencies
         env:
-          TARGET_BRANCH: ${{ needs.ci-image-tag.outputs.tag }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN != '' && secrets.GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          if git ls-remote --heads https://github.com/ansible/django-ansible-base.git "$TARGET_BRANCH" | grep -q "$TARGET_BRANCH"; then
-            DAB_BRANCH="$TARGET_BRANCH"
-          else
-            DAB_BRANCH="devel"
-          fi
-          echo "Cloning django-ansible-base @ $DAB_BRANCH"
-          git clone --depth 1 -b "$DAB_BRANCH" https://github.com/ansible/django-ansible-base.git django-ansible-base
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base'
 
       - name: Regenerate spec from code
         run: |
