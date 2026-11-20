@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 10
     env:
       LC_ALL: "C.UTF-8"
+      PYTHONHASHSEED: "0"
       PYTHONPATH: "./:./django-ansible-base/"
       GATEWAY_SECRET_KEY_FILE: "./tools/configs/dev_secret_key"
       DATABASE_ENGINE: "django.db.backends.sqlite3"

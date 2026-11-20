@@ -319,6 +319,7 @@ genschema:
 		--security-opt label=disable \
 		-v $$(pwd):/jewel \
 		-w /jewel \
+		-e PYTHONHASHSEED=0 \
 		-e PYTHONPATH="./:./django-ansible-base/" \
 		-e GATEWAY_SECRET_KEY_FILE="./tools/configs/dev_secret_key" \
 		-e DATABASE_ENGINE="django.db.backends.sqlite3" \
