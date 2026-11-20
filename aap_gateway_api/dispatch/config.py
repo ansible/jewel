@@ -40,8 +40,10 @@ def get_dispatcherd_config() -> dict:
     ]
 
     if settings.DATABASES["default"]["ENGINE"] == MSSQL_ENGINE:
+        # The broker dict key is the module name under dispatcherd.brokers
+        # (like pg_notify), so it must match the sqlserver module exactly.
         brokers = {
-            "sql_server": {
+            "sqlserver": {
                 "config": {
                     "connection_string": get_sql_server_notify_conn_string(),
                 },
@@ -50,7 +52,7 @@ def get_dispatcherd_config() -> dict:
                 "default_publish_channel": "gateway_broadcast",
             }
         }
-        default_broker = "sql_server"
+        default_broker = "sqlserver"
     else:
         brokers = {
             "pg_notify": {

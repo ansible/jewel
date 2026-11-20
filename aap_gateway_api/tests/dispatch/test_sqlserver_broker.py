@@ -22,7 +22,7 @@ from dispatcherd.brokers.sqlserver import Broker  # noqa: E402 — import after 
 def test_sqlserver_broker_round_trip():
     from aap_gateway_api.dispatch.config import get_dispatcherd_config
 
-    config = get_dispatcherd_config()["brokers"]["sql_server"]["config"]
+    config = get_dispatcherd_config()["brokers"]["sqlserver"]["config"]
     channel = f"smoke_{uuid.uuid4().hex}"
 
     listener = Broker(config, channels=[channel], wait_timeout_ms=100)
