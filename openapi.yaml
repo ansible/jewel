@@ -16278,8 +16278,8 @@ components:
 
             * `allow` - allow
             * `is_superuser` - is_superuser
-            * `role` - role
             * `organization` - organization
+            * `role` - role
             * `team` - team
         role:
           type: string
@@ -16774,11 +16774,11 @@ components:
           description: |-
             The type of change recorded by the entry (i.e. create/update/delete/etc).
 
-            * `create` - Entity created
-            * `update` - Entity updated
-            * `delete` - Entity deleted
             * `associate` - Entity was associated with another entity
+            * `create` - Entity created
+            * `delete` - Entity deleted
             * `disassociate` - Entity was disassociated with another entity
+            * `update` - Entity updated
         changes:
           type: object
           additionalProperties:
@@ -17199,8 +17199,8 @@ components:
           type: string
           description: |-
             * `` - No OIDC support
-            * `RS256` - RSA with SHA-2 256
             * `HS256` - HMAC with SHA-2 256
+            * `RS256` - RSA with SHA-2 256
           x-spec-enum-id: efb8c99632a46c3d
         user:
           type: integer
@@ -18396,8 +18396,8 @@ components:
 
             * `allow` - allow
             * `is_superuser` - is_superuser
-            * `role` - role
             * `organization` - organization
+            * `role` - role
             * `team` - team
         role:
           type: string
@@ -18793,8 +18793,8 @@ components:
           type: string
           description: |-
             * `` - No OIDC support
-            * `RS256` - RSA with SHA-2 256
             * `HS256` - HMAC with SHA-2 256
+            * `RS256` - RSA with SHA-2 256
           x-spec-enum-id: efb8c99632a46c3d
         user:
           type: integer
@@ -19220,8 +19220,8 @@ components:
           description: |-
             The authorization type for this service.
 
-            * `JWT` - JWT
             * `BASIC` - Basic auth
+            * `JWT` - JWT
             * `TOKEN` - Bearer token
         upstream_hostname:
           type: string
@@ -19251,11 +19251,11 @@ components:
           description: |-
             DNS lookup type for this service.
 
-            * `V4_ONLY` - IPv4 only
-            * `V6_ONLY` - IPv6 only
-            * `AUTO` - Auto (IPv6 preferred)
             * `ALL` - All IPv4 and IPv6 addresses
+            * `AUTO` - Auto (IPv6 preferred)
+            * `V4_ONLY` - IPv4 only
             * `V4_PREFERRED` - IPv4 preferred
+            * `V6_ONLY` - IPv6 only
         outlier_detection_enabled:
           type: boolean
           description: If true, outlier detection will be used to determine if a node
@@ -19862,9 +19862,9 @@ components:
           - failed
           type: string
           description: |-
-            * `good` - good
             * `degraded` - degraded
             * `failed` - failed
+            * `good` - good
           x-spec-enum-id: 8f053d7a7629b617
         version:
           type: string
@@ -19893,9 +19893,9 @@ components:
           - failed
           type: string
           description: |-
-            * `good` - good
             * `degraded` - degraded
             * `failed` - failed
+            * `good` - good
           x-spec-enum-id: 8f053d7a7629b617
         mode:
           enum:
@@ -19904,9 +19904,9 @@ components:
           - Unknown
           type: string
           description: |-
+            * `Unknown` - Unknown
             * `cluster` - cluster
             * `standalone` - standalone
-            * `Unknown` - Unknown
           x-spec-enum-id: 108317a9f228ac79
         ping:
           type: boolean
@@ -20373,8 +20373,8 @@ components:
           description: |-
             The authorization type for this service.
 
-            * `JWT` - JWT
             * `BASIC` - Basic auth
+            * `JWT` - JWT
             * `TOKEN` - Bearer token
         upstream_hostname:
           type: string
@@ -20404,11 +20404,11 @@ components:
           description: |-
             DNS lookup type for this service.
 
-            * `V4_ONLY` - IPv4 only
-            * `V6_ONLY` - IPv6 only
-            * `AUTO` - Auto (IPv6 preferred)
             * `ALL` - All IPv4 and IPv6 addresses
+            * `AUTO` - Auto (IPv6 preferred)
+            * `V4_ONLY` - IPv4 only
             * `V4_PREFERRED` - IPv4 preferred
+            * `V6_ONLY` - IPv6 only
         outlier_detection_enabled:
           type: boolean
           description: If true, outlier detection will be used to determine if a node
@@ -20683,9 +20683,9 @@ components:
           - failed
           type: string
           description: |-
-            * `good` - good
             * `degraded` - degraded
             * `failed` - failed
+            * `good` - good
           x-spec-enum-id: 8f053d7a7629b617
         time:
           type: string
@@ -21403,9 +21403,9 @@ components:
           - failed
           type: string
           description: |-
-            * `good` - good
             * `degraded` - degraded
             * `failed` - failed
+            * `good` - good
           x-spec-enum-id: 8f053d7a7629b617
         time:
           type: string
@@ -21427,9 +21427,9 @@ components:
           - failed
           type: string
           description: |-
-            * `good` - good
             * `degraded` - degraded
             * `failed` - failed
+            * `good` - good
           x-spec-enum-id: 8f053d7a7629b617
         url:
           type: string
@@ -21481,9 +21481,9 @@ components:
           - failed
           type: string
           description: |-
-            * `good` - good
             * `degraded` - degraded
             * `failed` - failed
+            * `good` - good
           x-spec-enum-id: 8f053d7a7629b617
         service_name:
           type: string
