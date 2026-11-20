@@ -22,7 +22,7 @@ Both default to `False` and can be set in `settings.py` or through
 | Setting | Effect |
 | --- | --- |
 | `API_ROOTS_REQUIRE_AUTHENTICATION` | When `True`, the `/api/`, `/api/gateway/`, and `/api/gateway/v1/` discovery roots return `401` unless the caller is authenticated. |
-| `HIDE_V1_API_DEPRECATED_FIELDS` | When `True`, `/api/gateway/v1/ping/` returns only `{"pong": "<timestamp>"}` for every caller instead of the deprecated database, proxy, and dispatcherd connectivity fields. |
+| `HIDE_V1_API_DEPRECATED_FIELDS` | When `True`, response serializers omit fields declared through the deprecation serializer mixin. The `/api/gateway/v1/ping/` endpoint also returns only `{"pong": "<timestamp>"}` for every caller instead of the database, proxy, and dispatcherd connectivity fields. |
 
 ## Basic Auth
 

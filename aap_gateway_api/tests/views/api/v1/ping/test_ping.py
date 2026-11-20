@@ -7,6 +7,7 @@ from django.db import DatabaseError
 from django.test import override_settings
 
 from aap_gateway_api.models import HTTPPort, ServiceAPIRoute
+from aap_gateway_api.serializers.status import PingSerializer
 from aap_gateway_api.version import get_aap_version
 
 
@@ -62,6 +63,13 @@ def test_ping_hides_deprecated_fields(mock_http_request, mock_check_db, mock_dis
     mock_check_db.assert_not_called()
     mock_dispatcherd.assert_not_called()
     mock_http_request.assert_not_called()
+
+
+@override_settings(HIDE_V1_API_DEPRECATED_FIELDS=True)
+def test_ping_serializer_hides_deprecated_fields():
+    serialized = PingSerializer({'pong': 'now', 'status': STATUS_GOOD, 'db_connected': True, 'proxy_connected': True})
+
+    assert set(serialized.data) == {'pong', 'status'}
 
 
 @pytest.mark.django_db

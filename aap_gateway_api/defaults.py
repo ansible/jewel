@@ -27,8 +27,9 @@ AOC_UNCHANGEABLE_PREFERENCES = ['gateway_token_name']
 # /api/gateway/v1/) require an authenticated user.
 API_ROOTS_REQUIRE_AUTHENTICATION = False
 
-# When true, /api/gateway/v1/ping/ omits its deprecated connectivity fields and
-# returns only a liveness timestamp, for authenticated and anonymous callers.
+# When true, response serializers omit fields registered as deprecated through
+# the deprecation serializer mixin. The v1 ping endpoint also returns only a
+# liveness timestamp, for authenticated and anonymous callers.
 HIDE_V1_API_DEPRECATED_FIELDS = False
 
 # Password validation
