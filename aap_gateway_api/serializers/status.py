@@ -1,8 +1,7 @@
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
+from ansible_base.lib.utils.views.deprecation import DeprecationSerializerMixin
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
-
-from aap_gateway_api.serializers.mixins import HideDeprecatedFieldsSerializerMixin
 
 status_choices = serializers.ChoiceField(required=False, choices=[STATUS_GOOD, STATUS_DEGRADED, STATUS_FAILED])
 DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT = "DEPRECATED: This field is deprecated and will be removed in a future version."
@@ -28,7 +27,7 @@ class ClusterInfoSerializer(serializers.Serializer):
 
 
 @extend_schema_serializer(deprecate_fields=["db_connected", "proxy_connected"])
-class PingSerializer(HideDeprecatedFieldsSerializerMixin, serializers.Serializer):
+class PingSerializer(DeprecationSerializerMixin, serializers.Serializer):
     version = serializers.CharField(required=False)
     pong = serializers.DateTimeField(required=False)
     status = status_choices

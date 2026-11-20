@@ -4,10 +4,8 @@ import pytest
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_GOOD
 from ansible_base.lib.utils.response import get_relative_url
 from django.db import DatabaseError
-from django.test import override_settings
 
 from aap_gateway_api.models import HTTPPort, ServiceAPIRoute
-from aap_gateway_api.serializers.status import PingSerializer
 from aap_gateway_api.version import get_aap_version
 
 
@@ -45,31 +43,6 @@ def test_ping_all_up(request, mock_dispatcherd, unauthenticated_api_client):
     assert response.data["version"] == get_aap_version()
     assert response.data['status'] == STATUS_GOOD, response.data
     assert response.data['dispatcherd_connected'] is True
-
-
-@pytest.mark.parametrize("client_fixture", ["unauthenticated_api_client", "admin_api_client"])
-@pytest.mark.django_db
-@override_settings(HIDE_V1_API_DEPRECATED_FIELDS=True)
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_dispatcherd")
-@mock.patch("aap_gateway_api.views.api.v1.ping.PingView._check_db")
-@mock.patch("aap_gateway_api.views.api.v1.ping.requests.request")
-def test_ping_hides_deprecated_fields(mock_http_request, mock_check_db, mock_dispatcherd, client_fixture, request):
-    client = request.getfixturevalue(client_fixture)
-    url = get_relative_url("ping-view")
-    response = client.get(url)
-
-    assert response.status_code == 200
-    assert set(response.data) == {"pong"}
-    mock_check_db.assert_not_called()
-    mock_dispatcherd.assert_not_called()
-    mock_http_request.assert_not_called()
-
-
-@override_settings(HIDE_V1_API_DEPRECATED_FIELDS=True)
-def test_ping_serializer_hides_deprecated_fields():
-    serialized = PingSerializer({'pong': 'now', 'status': STATUS_GOOD, 'db_connected': True, 'proxy_connected': True})
-
-    assert set(serialized.data) == {'pong', 'status'}
 
 
 @pytest.mark.django_db

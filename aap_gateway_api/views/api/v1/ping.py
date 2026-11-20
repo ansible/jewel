@@ -32,11 +32,6 @@ class PingView(AnsibleBaseView):
         return bool(reply)
 
     def get(self, request):
-        if getattr(settings, 'HIDE_V1_API_DEPRECATED_FIELDS', False):
-            # Liveness only: callers must not learn whether the database, proxy,
-            # or dispatcherd are healthy.
-            return Response(self.serializer_class({'pong': str(datetime.now())}).data)
-
         timeout = getattr(settings, "PING_PAGE_CHECK_TIMEOUT", 5)
         ignore_cert = getattr(settings, "PING_PAGE_CHECK_IGNORE_CERT", False)
 
