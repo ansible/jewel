@@ -7,7 +7,13 @@ from django.urls import reverse
 
 from aap_gateway_api.models.ca_certificate import CACertificate
 from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
-from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, SecretDiscoverServiceView
+from aap_gateway_api.views.api.envoy.rest_control_plane import (
+    XDS_CACHE_KEY_CDS,
+    XDS_CACHE_KEY_LDS,
+    XDS_CACHE_KEY_SDS,
+    SecretDiscoverServiceView,
+    _sanitize_for_log,
+)
 
 
 @pytest.fixture
@@ -116,6 +122,12 @@ def test_xds_views_sanitize_rejection_log(unauthenticated_api_client, caplog):
     assert "\n" not in message
     assert "FAKE LOG LINE" in message
     assert len(message) < 250
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_sanitize_for_log_handles_empty_values(value):
+    """A missing request target sanitizes to an empty string."""
+    assert _sanitize_for_log(value) == ""
 
 
 @pytest.mark.django_db

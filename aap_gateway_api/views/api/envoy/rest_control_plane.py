@@ -1,7 +1,7 @@
 import logging
+import re
 from urllib.parse import urlsplit
 
-from ansible_base.lib.serializers.mixins import _LOG_CONTROL_RE
 from django.core.cache import cache
 from django.db.models import Max, Prefetch
 from envoy.config.cluster.v3.cluster_pb2 import Cluster
@@ -44,6 +44,7 @@ XDS_CACHE_KEY_LDS = "xds:lds"
 XDS_CACHE_KEY_SDS = "xds:sds"
 
 _LOGGED_PATH_MAX_LENGTH = 200
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 # ---------------------------------------------------------------------------
 # Envoy xDS REST control plane views
@@ -93,7 +94,7 @@ def _sanitize_for_log(value):
     """Escape control characters and bound the length of user-controlled log data."""
     if not value:
         return ""
-    text = _LOG_CONTROL_RE.sub(lambda match: repr(match.group())[1:-1], str(value))
+    text = _CONTROL_CHAR_RE.sub(lambda match: repr(match.group())[1:-1], str(value))
     if len(text) > _LOGGED_PATH_MAX_LENGTH:
         text = f"{text[:_LOGGED_PATH_MAX_LENGTH]}..."
     return text
