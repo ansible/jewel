@@ -41,7 +41,8 @@ def provision_service_broker(using: str = "default", stdout=print) -> None:
 
     db_name = connection.settings_dict["NAME"]
     with connection.cursor() as cursor:
-        cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET ENABLE_BROKER WITH ROLLBACK IMMEDIATE")
+        # NOSONAR: identifier comes from Django settings, quoted via quote_name; DDL cannot be parameterized
+        cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET ENABLE_BROKER WITH ROLLBACK IMMEDIATE")  # NOSONAR
 
     Broker.setup_database({"connection_string": get_sql_server_notify_conn_string(alias=using)})
 
@@ -54,7 +55,8 @@ def provision_service_broker(using: str = "default", stdout=print) -> None:
         if not is_sysadmin:
             cursor.execute(_ROLE_MEMBERSHIP_SQL, [db_principal])
             if cursor.fetchone() is None:
-                cursor.execute(f"ALTER ROLE dispatcherd_runtime ADD MEMBER {connection.ops.quote_name(db_principal)}")
+                # NOSONAR: identifier comes from Django settings, quoted via quote_name; DDL cannot be parameterized
+                cursor.execute(f"ALTER ROLE dispatcherd_runtime ADD MEMBER {connection.ops.quote_name(db_principal)}")  # NOSONAR
 
     stdout(f"Service Broker enabled and dispatcherd runtime objects installed for database {db_name}.")
 

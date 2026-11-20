@@ -79,7 +79,8 @@ class CursorStore:
         """Create the cursor table if it does not already exist."""
         with connection.cursor() as cur:
             sql = self._SQL_CREATE_MSSQL if connection.vendor == "microsoft" else self._SQL_CREATE
-            cur.execute(sql)
+            # NOSONAR: table name is a class constant, not user input
+            cur.execute(sql)  # NOSONAR
 
     def _load(self) -> int:
         """Read current cursor value from DB, returning 0 on any failure."""
@@ -87,7 +88,8 @@ class CursorStore:
             self._ensure_table()
             with connection.cursor() as cur:
                 sql = self._SQL_LOAD_MSSQL if connection.vendor == "microsoft" else self._SQL_LOAD
-                cur.execute(sql, [self.service_slug, self.assignment_type])
+                # NOSONAR: table name is a class constant; values are parameterized
+                cur.execute(sql, [self.service_slug, self.assignment_type])  # NOSONAR
                 row = cur.fetchone()
                 return row[0] if row else 0
         except Exception:
@@ -110,7 +112,8 @@ class CursorStore:
         try:
             with connection.cursor() as cur:
                 sql = self._SQL_UPSERT_MSSQL if connection.vendor == "microsoft" else self._SQL_UPSERT
-                cur.execute(sql, [self.service_slug, self.assignment_type, pk])
+                # NOSONAR: table name is a class constant; values are parameterized
+                cur.execute(sql, [self.service_slug, self.assignment_type, pk])  # NOSONAR
         except Exception:
             msg = f"Failed to advance cursor for {self.service_slug}/{self.assignment_type} to {pk}; next run will reprocess from the old position"
             if self._log_fn:
