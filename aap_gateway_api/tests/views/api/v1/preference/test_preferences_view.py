@@ -384,6 +384,26 @@ def test_get_and_revert_single_setting_encrypted(admin_api_client, register_pref
     assert response.data["value"] == ENCRYPTED_STRING
 
 
+def test_get_unregistered_setting_with_encrypted_value_is_masked(admin_api_client, db):
+    """
+    ensure that a row whose registration is gone but whose stored value was
+    encrypted is still masked — the decrypted secret must not be serialized
+    """
+    from ansible_base.lib.utils.encryption import ansible_encryption
+
+    from aap_gateway_api.models import Preference
+
+    Preference.objects.create(
+        section='general',
+        name='orphan_secret',
+        raw_value=ansible_encryption.encrypt_string('super_secret_value'),
+    )
+    url = get_relative_url("setting-detail", kwargs={"category_slug": 'general', "preference_name": 'orphan_secret'})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200
+    assert response.data["value"] == ENCRYPTED_STRING
+
+
 def test_revert_with_encrypted_setting(admin_api_client, register_preference):
     """
     ensure that an encrypted preference cannot be reverted

@@ -2,6 +2,7 @@ import logging
 import traceback
 from typing import Any, Dict, List, Tuple
 
+from ansible_base.lib.mssql.params import in_chunks
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource
@@ -237,8 +238,7 @@ class RoleAssignmentsMixin:
             for actor_pk, rd, _, _, _ in new_assignments
         ]
 
-        result = AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True)
-        return len(result)
+        return len(AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True))
 
     def _bulk_create_object_assignments(self, assignments: List[Tuple], assignment_type: str) -> Tuple[int, set]:
         """Bulk-create ObjectRoles and object-scoped role assignments."""
@@ -249,14 +249,7 @@ class RoleAssignmentsMixin:
         or_objs_to_create = [ObjectRole(role_definition_id=rd_id, content_type_id=ct_id, object_id=obj_id) for rd_id, ct_id, obj_id in unique_or_keys]
         ObjectRole.objects.bulk_create(or_objs_to_create, ignore_conflicts=True)
 
-        or_query = Q()
-        for rd_id, ct_id, obj_id in unique_or_keys:
-            or_query |= Q(role_definition_id=rd_id, content_type_id=ct_id, object_id=obj_id)
-
-        or_map: Dict[Tuple, ObjectRole] = {}
-        for obj_role in ObjectRole.objects.filter(or_query):
-            key = (obj_role.role_definition_id, obj_role.content_type_id, obj_role.object_id)
-            or_map[key] = obj_role
+        or_map = self._get_object_role_map(unique_or_keys)
 
         AssignmentModel = RoleUserAssignment if assignment_type == 'user' else RoleTeamAssignment  # NOSONAR
         actor_field = 'user_id' if assignment_type == 'user' else 'team_id'
@@ -283,8 +276,27 @@ class RoleAssignmentsMixin:
                 )
             )
 
-        result = AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True)
-        return len(result), set(or_map.values())
+        created = len(AssignmentModel.objects.bulk_create(assignment_objs, ignore_conflicts=True))
+        return created, set(or_map.values())
+
+    @staticmethod
+    def _get_object_role_map(unique_keys: set[tuple[int, int, str]]) -> Dict[Tuple, ObjectRole]:
+        """Load matching object roles without exceeding SQL Server's parameter limit."""
+        if not unique_keys:
+            return {}
+
+        keys = sorted(unique_keys, key=lambda key: (key[0], key[1], key[2]))
+        object_role_map: Dict[Tuple, ObjectRole] = {}
+        for batch in in_chunks(keys, params_per_value=3):
+            query = Q()
+            for role_definition_id, content_type_id, object_id in batch:
+                query |= Q(role_definition_id=role_definition_id, content_type_id=content_type_id, object_id=object_id)
+
+            for object_role in ObjectRole.objects.filter(query):
+                key = (object_role.role_definition_id, object_role.content_type_id, object_role.object_id)
+                object_role_map[key] = object_role
+
+        return object_role_map
 
     def migrate_role_assignments(self, service_slug: str, service_type_name: str) -> None:
         """Migrate role assignments from a service using bulk queries.

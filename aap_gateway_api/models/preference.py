@@ -22,7 +22,8 @@ class Preference(models.BasePreferenceModel, AuditableModel):
         unique_together = ("section", "name")
 
     def save(self, *args, **kwargs):
-        if self.preference.encrypted:
+        # Check for encrypted attribute - Fallback preferences don't have it
+        if hasattr(self.preference, 'encrypted') and self.preference.encrypted:
             self.value = ansible_encryption.encrypt_string(self.value)
             self._encrypted_field_names = {'raw_value'}
         super().save(*args, **kwargs)

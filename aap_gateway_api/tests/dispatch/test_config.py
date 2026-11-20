@@ -1,8 +1,16 @@
+from copy import deepcopy
+
 import psycopg
 import pytest
+from django.conf import settings as django_settings
+from django.db import connection
 from django.test import override_settings
 
-from aap_gateway_api.dispatch.config import get_dispatcherd_config
+from aap_gateway_api.dispatch.config import get_dispatcherd_config, pyodbc_connection_from_config
+
+
+def _default_broker_name():
+    return "sqlserver" if connection.vendor == "microsoft" else "pg_notify"
 
 
 @pytest.mark.django_db
@@ -13,8 +21,49 @@ def test_config_structure():
     assert "brokers" in config
     assert "producers" in config
     assert "publish" in config
-    assert config["publish"] == {"default_broker": "pg_notify"}
+    assert config["publish"] == {"default_broker": _default_broker_name()}
     assert config["producers"] == {}
+
+
+def test_config_broker_names_resolve_to_modules():
+    """dispatcherd resolves broker dict keys as module names under dispatcherd.brokers."""
+    import importlib
+
+    from dispatcherd.brokers import _resolve_module_name
+
+    config = get_dispatcherd_config()
+    for name in config["brokers"]:
+        importlib.import_module(_resolve_module_name(name))
+
+
+def test_config_selects_sql_server_broker():
+    databases = deepcopy(django_settings.DATABASES)
+    databases["default"].update(
+        {
+            "ENGINE": "ansible_base.backends.mssql",
+            "NAME": "gateway",
+            "USER": "sa",
+            "PASSWORD": "YourStrong!Passw0rd",
+            "HOST": "mssql",
+            "PORT": 1433,
+            "TIME_ZONE": None,
+            "OPTIONS": {"driver": "ODBC Driver 18 for SQL Server"},
+        }
+    )
+
+    with override_settings(DATABASES=databases):
+        config = get_dispatcherd_config()
+
+    broker = config["brokers"]["sqlserver"]
+    assert "pg_notify" not in config["brokers"]
+    assert config["publish"]["default_broker"] == "sqlserver"
+    assert broker["channels"] == [getattr(django_settings, "CLUSTER_HOST_ID", "gateway"), "gateway_broadcast"]
+    assert broker["default_publish_channel"] == "gateway_broadcast"
+    assert broker["sync_connection_factory"] == "aap_gateway_api.dispatch.config.pyodbc_connection_from_config"
+    conn_string = broker["config"]["connection_string"]
+    assert "SERVER=mssql,1433" in conn_string
+    assert "DATABASE=gateway" in conn_string
+    assert "DRIVER={ODBC Driver 18 for SQL Server}" in conn_string
 
 
 @pytest.mark.django_db
@@ -30,9 +79,13 @@ def test_config_service_settings():
 @pytest.mark.django_db
 def test_config_broker_settings():
     config = get_dispatcherd_config()
-    broker = config["brokers"]["pg_notify"]
-    assert "conninfo" in broker["config"]
-    assert broker["sync_connection_factory"] == "ansible_base.lib.utils.db.psycopg_connection_from_django"
+    broker = config["brokers"][_default_broker_name()]
+    if connection.vendor == "microsoft":
+        assert "connection_string" in broker["config"]
+        assert broker["sync_connection_factory"] == "aap_gateway_api.dispatch.config.pyodbc_connection_from_config"
+    else:
+        assert "conninfo" in broker["config"]
+        assert broker["sync_connection_factory"] == "ansible_base.lib.utils.db.psycopg_connection_from_django"
     assert broker["default_publish_channel"] == "gateway_broadcast"
     assert "gateway_broadcast" in broker["channels"]
 
@@ -41,7 +94,7 @@ def test_config_broker_settings():
 @override_settings(CLUSTER_HOST_ID="test-node-1")
 def test_config_uses_cluster_host_id():
     config = get_dispatcherd_config()
-    channels = config["brokers"]["pg_notify"]["channels"]
+    channels = config["brokers"][_default_broker_name()]["channels"]
     assert "test-node-1" in channels
     assert "gateway_broadcast" in channels
 
@@ -56,8 +109,32 @@ def test_config_worker_settings_override():
 
 @pytest.mark.django_db
 def test_conninfo_is_parseable():
-    """The generated conninfo string must be parseable by psycopg."""
+    """The generated broker connection info must be parseable by its client library."""
     config = get_dispatcherd_config()
-    conninfo = config["brokers"]["pg_notify"]["config"]["conninfo"]
-    parsed = psycopg.conninfo.conninfo_to_dict(conninfo)
-    assert "dbname" in parsed
+    if connection.vendor == "microsoft":
+        conn_string = config["brokers"]["sqlserver"]["config"]["connection_string"]
+        assert conn_string.count(";") >= 4  # SERVER, DATABASE, UID, PWD, DRIVER
+        assert all("=" in part for part in conn_string.split(";") if part)
+    else:
+        conninfo = config["brokers"]["pg_notify"]["config"]["conninfo"]
+        parsed = psycopg.conninfo.conninfo_to_dict(conninfo)
+        assert "dbname" in parsed
+
+
+def test_pyodbc_connection_from_config_contract(monkeypatch):
+    """The sync publish factory mirrors the sqlserver broker's connect() contract."""
+    pyodbc = pytest.importorskip("pyodbc")
+    calls = {}
+
+    class FakeConnection:
+        pass
+
+    def fake_connect(connection_string, **kwargs):
+        calls["conn_string"], calls["kwargs"] = connection_string, kwargs
+        return FakeConnection()
+
+    monkeypatch.setattr(pyodbc, "connect", fake_connect)
+    conn = pyodbc_connection_from_config(connection_string="SERVER=x", timeout=10)
+    assert isinstance(conn, FakeConnection)
+    assert calls["conn_string"] == "SERVER=x;ConnectRetryCount=0"
+    assert calls["kwargs"] == {"timeout": 10, "autocommit": True}

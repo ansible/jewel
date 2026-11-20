@@ -198,6 +198,8 @@ def test_authenticator_config_rotation(settings):
 @pytest.mark.django_db(transaction=True)
 def test_undecryptable_row_is_skipped(settings):
     """Rows encrypted with a different key are skipped without aborting."""
+    from aap_gateway_api.models import Preference
+
     old_key = settings.SECRET_KEY
     new_key = "new-skip-test-key"
     wrong_key = "completely-different-key"
@@ -205,17 +207,13 @@ def test_undecryptable_row_is_skipped(settings):
     good_cipher = encrypt_with_key("good-value", old_key)
     bad_cipher = encrypt_with_key("bad-value", wrong_key)
 
-    with connection.cursor() as cur:
-        cur.execute(
-            "INSERT INTO aap_gateway_api_preference (section, name, raw_value) VALUES (%s, %s, %s)"
-            " ON CONFLICT (section, name) DO UPDATE SET raw_value = EXCLUDED.raw_value",
-            ["test_skip", "good_pref", good_cipher],
-        )
-        cur.execute(
-            "INSERT INTO aap_gateway_api_preference (section, name, raw_value) VALUES (%s, %s, %s)"
-            " ON CONFLICT (section, name) DO UPDATE SET raw_value = EXCLUDED.raw_value",
-            ["test_skip", "bad_pref", bad_cipher],
-        )
+    Preference.objects.filter(section="test_skip", name__in=["good_pref", "bad_pref"]).delete()
+    Preference.objects.bulk_create(
+        [
+            Preference(section="test_skip", name="good_pref", raw_value=good_cipher),
+            Preference(section="test_skip", name="bad_pref", raw_value=bad_cipher),
+        ]
+    )
 
     out = io.StringIO()
     err = io.StringIO()
@@ -228,20 +226,10 @@ def test_undecryptable_row_is_skipped(settings):
     assert "could not be decrypted" in warning
     assert "old SECRET_KEY must be preserved" in warning
 
-    with connection.cursor() as cur:
-        cur.execute(
-            "SELECT raw_value FROM aap_gateway_api_preference WHERE section = %s AND name = %s",
-            ["test_skip", "bad_pref"],
-        )
-        bad_after = cur.fetchone()[0]
+    bad_after = Preference.objects.filter(section="test_skip", name="bad_pref").values_list("raw_value", flat=True).get()
     assert bad_after == bad_cipher
 
-    with connection.cursor() as cur:
-        cur.execute(
-            "SELECT raw_value FROM aap_gateway_api_preference WHERE section = %s AND name = %s",
-            ["test_skip", "good_pref"],
-        )
-        good_after = cur.fetchone()[0]
+    good_after = Preference.objects.filter(section="test_skip", name="good_pref").values_list("raw_value", flat=True).get()
     assert good_after != good_cipher
     assert decrypt_with_key(good_after, new_key) == "good-value"
 
@@ -305,16 +293,12 @@ def test_parse_config_malformed_json():
 
 
 @pytest.mark.django_db(transaction=True)
-def test_jsonb_encrypted_field_rotation(settings):
-    """Encrypted fields stored in jsonb columns are correctly rotated.
-
-    This covers AuthenticatorUser.extra_data and similar JSONField-backed
-    encrypted fields. The encrypted ciphertext is stored as a JSON string
-    inside the jsonb column, which psycopg may return already-unwrapped
-    (as a Python str) or still JSON-encoded (with outer quotes).
-    """
-    from ansible_base.authentication.models import Authenticator
+def test_rotate_secret_key_uses_orm_pagination_and_json_updates(settings, monkeypatch):
+    """Keyset pages rotate text and JSONField ciphertext through the ORM."""
+    from ansible_base.authentication.models import Authenticator, AuthenticatorUser
     from django.contrib.auth import get_user_model
+
+    from aap_gateway_api.models import Preference
 
     User = get_user_model()
 
@@ -333,20 +317,29 @@ def test_jsonb_encrypted_field_rotation(settings):
 
     extra_data = {"sub": "user123", "groups": ["admin", "dev"], "token": "secret-token-value"}
     encrypted_extra = encrypt_with_key(extra_data, old_key)
+    authenticator_user = AuthenticatorUser.objects.create(
+        provider=authenticator,
+        uid="jsonb-test-uid",
+        user=user,
+        extra_data={},
+        claims={},
+        last_login_map_results=[],
+        access_allowed=True,
+    )
+    AuthenticatorUser.objects.filter(pk=authenticator_user.pk).update(extra_data=encrypted_extra)
 
-    with connection.cursor() as cur:
-        cur.execute(
-            "INSERT INTO dab_authentication_authenticatoruser "
-            "(provider_id, uid, user_id, extra_data, claims, last_login_map_results, access_allowed, created, modified) "
-            "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, NOW(), NOW())",
-            [authenticator.slug, "jsonb-test-uid", user.pk, json.dumps(encrypted_extra), '{}', '[]', True],
-        )
+    section = "test_sqlserver_rotation"
+    preference_values = {
+        "value-0": "first preference",
+        "value-1": "second preference",
+        "value-2": "third preference",
+    }
+    preference_ciphertexts = {name: encrypt_with_key(value, old_key) for name, value in preference_values.items()}
+    Preference.objects.filter(section=section, name__in=preference_values).delete()
+    Preference.objects.bulk_create([Preference(section=section, name=name, raw_value=ciphertext) for name, ciphertext in preference_ciphertexts.items()])
 
-    with connection.cursor() as cur:
-        cur.execute("SELECT extra_data FROM dab_authentication_authenticatoruser WHERE uid = %s", ["jsonb-test-uid"])
-        raw_before = cur.fetchone()[0]
-
-    assert ENCRYPTED_STRING in str(raw_before)
+    # Force multiple keyset pages while keeping the test dataset small.
+    monkeypatch.setattr("aap_gateway_api.management.commands.rotate_secret_key._FETCH_BATCH_SIZE", 2)
 
     out = io.StringIO()
     with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
@@ -354,17 +347,15 @@ def test_jsonb_encrypted_field_rotation(settings):
 
     assert "re-encrypted" in out.getvalue()
 
-    with connection.cursor() as cur:
-        cur.execute("SELECT extra_data FROM dab_authentication_authenticatoruser WHERE uid = %s", ["jsonb-test-uid"])
-        raw_after = cur.fetchone()[0]
+    raw_after = AuthenticatorUser.objects.filter(pk=authenticator_user.pk).values_list("extra_data", flat=True).get()
+    assert ENCRYPTED_STRING in raw_after
+    assert raw_after != encrypted_extra
+    assert decrypt_with_key(raw_after, new_key) == extra_data
 
-    raw_after_str = raw_after if isinstance(raw_after, str) else json.dumps(raw_after)
-    if raw_after_str.startswith('"'):
-        raw_after_str = json.loads(raw_after_str)
-
-    assert ENCRYPTED_STRING in raw_after_str
-    assert raw_after_str != encrypted_extra
-    assert decrypt_with_key(raw_after_str, new_key) == extra_data
+    rotated_preferences = dict(Preference.objects.filter(section=section).values_list("name", "raw_value"))
+    for name, original_value in preference_values.items():
+        assert rotated_preferences[name] != preference_ciphertexts[name]
+        assert decrypt_with_key(rotated_preferences[name], new_key) == original_value
 
 
 @pytest.mark.django_db(transaction=True)

@@ -355,18 +355,19 @@ class TestMainScenarios:
         mock_clone.assert_called_once()
 
     @patch("get_pr_checkout.execute_git_clone")
+    @patch("get_pr_checkout.get_default_branch")
     @patch("get_pr_checkout.list_repo_branches")
     @patch("get_pr_checkout.branch_exists")
-    def test_devel_fallback_when_branch_not_found(self, mock_branch_exists, mock_list_branches, mock_clone, monkeypatch):
-        """Test that when no matching branch exists, it falls back to devel"""
+    def test_devel_fallback_when_branch_not_found(self, mock_branch_exists, mock_list_branches, mock_default_branch, mock_clone, monkeypatch):
+        """Test that when no matching branch exists, it falls back to devel when the repo has one"""
         monkeypatch.setenv("PR_BODY", "No requirements")
         monkeypatch.setenv("GH_TOKEN", "test_token")
         monkeypatch.setenv("GITHUB_BASE_REF", "devel")
         _set_cli_args("ansible/django-ansible-base")
 
-        # Branch doesn't exist in any variant; listing succeeds but no suffix match
+        # Branch doesn't exist in any variant; repo has a devel branch
         mock_branch_exists.return_value = False
-        mock_list_branches.return_value = ["main"]
+        mock_list_branches.return_value = ["devel", "main"]
         mock_clone.return_value = True
 
         with pytest.raises(SystemExit) as exc_info:
@@ -401,6 +402,32 @@ class TestMainScenarios:
         assert exc_info.value.code == 0
         mock_clone.assert_called_once()
         assert mock_clone.call_args[0][1] == "devel"
+
+    @patch("get_pr_checkout.execute_git_clone")
+    @patch("get_pr_checkout.get_default_branch")
+    @patch("get_pr_checkout.list_repo_branches")
+    @patch("get_pr_checkout.branch_exists")
+    def test_fallback_to_default_branch_when_devel_missing(self, mock_branch_exists, mock_list_branches, mock_default_branch, mock_clone, monkeypatch):
+        """Repos without a devel branch (e.g. ansible/dispatcherd) fall back to their default branch"""
+        monkeypatch.setenv("PR_BODY", "No requirements")
+        monkeypatch.setenv("GH_TOKEN", "test_token")
+        monkeypatch.setenv("GITHUB_BASE_REF", "devel")
+        _set_cli_args("ansible/dispatcherd")
+
+        # Branch doesn't exist in any variant; repo has no devel branch
+        mock_branch_exists.return_value = False
+        mock_list_branches.return_value = ["main", "sqlserver-service-broker-v2"]
+        mock_default_branch.return_value = "main"
+        mock_clone.return_value = True
+
+        with pytest.raises(SystemExit) as exc_info:
+            get_pr_checkout.main()
+
+        assert exc_info.value.code == 0
+        mock_clone.assert_called_once()
+        clone_url = mock_clone.call_args[0][0]
+        assert "ansible/dispatcherd" in clone_url
+        assert mock_clone.call_args[0][1] == "main"
 
     @patch("get_pr_checkout.execute_git_clone")
     @patch("get_pr_checkout.list_repo_branches")

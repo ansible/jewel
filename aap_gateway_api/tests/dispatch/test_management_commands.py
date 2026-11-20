@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 
 
 @pytest.mark.django_db
@@ -26,7 +27,10 @@ def test_dispatcherd_command_passes_config(mock_setup, mock_run_service):
 
     config = mock_setup.call_args[0][0]
     assert config["version"] == 2
-    assert "pg_notify" in config["brokers"]
+    if connection.vendor == "microsoft":
+        assert "sqlserver" in config["brokers"]
+    else:
+        assert "pg_notify" in config["brokers"]
 
 
 @pytest.mark.django_db
@@ -63,7 +67,10 @@ def test_dispatcherctl_alive_command(mock_setup, mock_get_control):
     mock_setup.assert_called_once()
     config = mock_setup.call_args[0][0]
     assert config["version"] == 2
-    assert "pg_notify" in config["brokers"]
+    if connection.vendor == "microsoft":
+        assert "sqlserver" in config["brokers"]
+    else:
+        assert "pg_notify" in config["brokers"]
     mock_ctl.control_with_reply.assert_called_once()
     assert "alive" in out.getvalue()
 

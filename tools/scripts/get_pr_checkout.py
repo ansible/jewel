@@ -236,6 +236,14 @@ def branch_exists(repo: str, branch: str, token: Optional[str]) -> bool:
     return result is not None
 
 
+def get_default_branch(repo: str, token: Optional[str]) -> Optional[str]:
+    """Return the repository's default branch name, or None on failure."""
+    data = make_api_request(f'/repos/{repo}', token, context=repo)
+    if data is None:
+        return None
+    return data.get('default_branch')
+
+
 def list_repo_branches(repo: str, token: Optional[str]) -> Optional[List[str]]:
     """
     Return all branch names in a repository (paginated).
@@ -429,8 +437,19 @@ def process_always_clone_repos(always_clone_repos: list, target_branch: str, tok
                     break
 
         if not matching_repo:
-            # Final fallback: devel
-            selected_branch = "devel"
+            # Final fallback: devel when the repository has one, otherwise the
+            # repository's default branch (e.g. ansible/dispatcherd uses main).
+            branches = list_repo_branches(primary_repo, token)
+            if branches is None:
+                print(f"##[error]❌ FATAL: Failed to list branches for '{primary_repo}'")
+                sys.exit(1)
+            if 'devel' in branches:
+                selected_branch = 'devel'
+            else:
+                selected_branch = get_default_branch(primary_repo, token)
+                if not selected_branch:
+                    print(f"##[error]❌ FATAL: Could not determine default branch for '{primary_repo}'")
+                    sys.exit(1)
             matching_repo = primary_repo
             print(f"  ⚠️  Branch '{target_branch}' not found in any variant, falling back to '{selected_branch}' from '{matching_repo}'")
 

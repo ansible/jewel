@@ -23,6 +23,7 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     libtool-ltdl-devel \
     openldap-devel \
     postgresql \
+    unixODBC-devel \
     less \
     xmlsec1-devel
 
@@ -35,7 +36,9 @@ RUN /usr/bin/${PYTHON} -m venv /opt/aap_gateway/venv
 COPY requirements/requirements.txt /tmp/requirements.txt
 COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
 COPY requirements/requirements_git.txt /tmp/requirements_git.txt
+COPY requirements/requirements_mssql.txt /tmp/requirements_mssql.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install --require-hashes -r /tmp/requirements.txt
+RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install --require-hashes -r /tmp/requirements_mssql.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_dev.txt
 ARG DJANGO_ANSIBLE_BASE_DEVEL_SHA
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
@@ -68,7 +71,12 @@ RUN dnf module install -y nginx:1.22/common && \
     ${PYTHON}-pip \
     socat \
     supervisor \
+    unixODBC \
     xmlsec1-openssl
+
+RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
+    dnf clean all
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
@@ -138,6 +146,7 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     libtool-ltdl-devel \
     openldap-devel \
     postgresql \
+    unixODBC-devel \
     less \
     xmlsec1-devel
 
@@ -169,7 +178,12 @@ RUN dnf module install -y nginx:1.22/common && \
     "${PYTHON}" \
     "${PYTHON}-pip" \
     supervisor \
+    unixODBC \
     xmlsec1-openssl
+
+RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
+    dnf clean all
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
@@ -254,9 +268,14 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     libtool-ltdl-devel \
     openldap-devel \
     openssl-devel \
+    unixODBC-devel \
     xmlsec1-devel \
     xmlsec1-openssl \
     && dnf clean all
+
+RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    ACCEPT_EULA=Y dnf install -y msodbcsql18 unixODBC && \
+    dnf clean all
 
 RUN mkdir -p /opt/ci-venv && \
     "/usr/bin/${PYTHON}" -m venv /opt/ci-venv

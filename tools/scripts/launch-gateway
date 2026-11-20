@@ -100,4 +100,11 @@ if [ $? != 0 ] ; then
     exit 255
 fi
 
+# Idempotent: enables Service Broker and installs dispatcherd's runtime
+# objects on SQL Server, logs and does nothing on other backends.
+${GATEWAY_MANAGE} setup_service_broker
+
+DISPATCHERD_AUTOSTART=true
+export DISPATCHERD_AUTOSTART
+
 exec supervisord -n

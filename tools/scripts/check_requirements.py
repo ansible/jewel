@@ -97,6 +97,27 @@ def main():
 
     print("requirements.txt satisfies all constraints.")
 
+    # The SQL Server backend stack lives in its own compiled file, installed
+    # only by the py312-mssql tox environments.
+    mssql_pins = parse_pinned(req_dir / 'requirements_mssql.txt')
+    mssql_errors = []
+    for req in parse_constraints(req_dir / 'requirements_mssql.in'):
+        name = req.name.lower().replace('-', '_')
+        if name not in mssql_pins:
+            mssql_errors.append(f"  {req.name}: required by {req} but not found in requirements_mssql.txt")
+            continue
+        pinned = mssql_pins[name]
+        if not req.specifier.contains(pinned, prereleases=True):
+            mssql_errors.append(f"  {req.name}: pinned {pinned} does not satisfy {req.specifier}")
+    if mssql_errors:
+        print("requirements_mssql.txt does not satisfy input constraints:", file=sys.stderr)
+        for e in mssql_errors:
+            print(e, file=sys.stderr)
+        print("\nRun 'make requirements' to regenerate.", file=sys.stderr)
+        sys.exit(1)
+
+    print("requirements_mssql.txt satisfies all constraints.")
+
 
 if __name__ == '__main__':
     main()
