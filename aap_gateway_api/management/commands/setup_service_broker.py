@@ -43,6 +43,11 @@ def provision_service_broker(using: str = "default", stdout=print) -> None:
     with connection.cursor() as cursor:
         # NOSONAR: identifier comes from Django settings, quoted via quote_name; DDL cannot be parameterized
         cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET ENABLE_BROKER WITH ROLLBACK IMMEDIATE")  # NOSONAR
+        # SQL Server's default READ COMMITTED blocks readers behind writers,
+        # unlike PostgreSQL's MVCC — without snapshot isolation, gateway
+        # requests hang behind concurrent writes (observed as uWSGI harakiri
+        # and 502s under ATF load).
+        cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE")  # NOSONAR
 
     Broker.setup_database({"connection_string": get_sql_server_notify_conn_string(alias=using)})
 
