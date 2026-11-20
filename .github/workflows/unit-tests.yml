@@ -208,6 +208,10 @@ jobs:
             --cov-report=xml:coverage-mssql.xml \
             --junit-xml=junit-mssql.xml
 
+      - name: Inject PR number into coverage file
+        if: github.event_name == 'pull_request'
+        run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage-mssql.xml
+
       - name: Upload SQL Server coverage artifact
         uses: actions/upload-artifact@v4
         with:
