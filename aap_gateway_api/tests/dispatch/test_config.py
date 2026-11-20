@@ -10,7 +10,7 @@ from aap_gateway_api.dispatch.config import get_dispatcherd_config, pyodbc_conne
 
 
 def _default_broker_name():
-    return "sql_server" if connection.vendor == "microsoft" else "pg_notify"
+    return "sqlserver" if connection.vendor == "microsoft" else "pg_notify"
 
 
 @pytest.mark.django_db
@@ -23,6 +23,17 @@ def test_config_structure():
     assert "publish" in config
     assert config["publish"] == {"default_broker": _default_broker_name()}
     assert config["producers"] == {}
+
+
+def test_config_broker_names_resolve_to_modules():
+    """dispatcherd resolves broker dict keys as module names under dispatcherd.brokers."""
+    import importlib
+
+    from dispatcherd.brokers import _resolve_module_name
+
+    config = get_dispatcherd_config()
+    for name in config["brokers"]:
+        importlib.import_module(_resolve_module_name(name))
 
 
 def test_config_selects_sql_server_broker():
@@ -43,9 +54,9 @@ def test_config_selects_sql_server_broker():
     with override_settings(DATABASES=databases):
         config = get_dispatcherd_config()
 
-    broker = config["brokers"]["sql_server"]
+    broker = config["brokers"]["sqlserver"]
     assert "pg_notify" not in config["brokers"]
-    assert config["publish"]["default_broker"] == "sql_server"
+    assert config["publish"]["default_broker"] == "sqlserver"
     assert broker["channels"] == [getattr(django_settings, "CLUSTER_HOST_ID", "gateway"), "gateway_broadcast"]
     assert broker["default_publish_channel"] == "gateway_broadcast"
     assert broker["sync_connection_factory"] == "aap_gateway_api.dispatch.config.pyodbc_connection_from_config"
@@ -101,7 +112,7 @@ def test_conninfo_is_parseable():
     """The generated broker connection info must be parseable by its client library."""
     config = get_dispatcherd_config()
     if connection.vendor == "microsoft":
-        conn_string = config["brokers"]["sql_server"]["config"]["connection_string"]
+        conn_string = config["brokers"]["sqlserver"]["config"]["connection_string"]
         assert conn_string.count(";") >= 4  # SERVER, DATABASE, UID, PWD, DRIVER
         assert all("=" in part for part in conn_string.split(";") if part)
     else:
