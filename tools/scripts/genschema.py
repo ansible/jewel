@@ -10,9 +10,9 @@ django.setup()
 from django.conf import settings  # noqa: E402
 from django.core.management import call_command  # noqa: E402
 
-settings.DATABASES["default"] = {
-    "ENGINE": "django.db.backends.sqlite3",
-    "NAME": ":memory:",
-}
+db = settings.DATABASES["default"]
+db["ENGINE"] = "django.db.backends.sqlite3"
+db["NAME"] = ":memory:"
+db["OPTIONS"] = {}
 call_command("migrate", "--run-syncdb", verbosity=0)
 call_command("spectacular", "--format", "openapi", "--file", "openapi.yaml")
