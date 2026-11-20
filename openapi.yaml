@@ -16268,8 +16268,8 @@ components:
           enum:
           - allow
           - is_superuser
-          - role
           - organization
+          - role
           - team
           type: string
           x-spec-enum-id: 4064e71cef1ae1e7
@@ -16764,11 +16764,11 @@ components:
           description: The user who created this resource.
         operation:
           enum:
-          - create
-          - update
-          - delete
           - associate
+          - create
+          - delete
           - disassociate
+          - update
           type: string
           x-spec-enum-id: 9d2b7b6e53dc82e9
           description: |-
@@ -17194,8 +17194,8 @@ components:
         algorithm:
           enum:
           - ''
-          - RS256
           - HS256
+          - RS256
           type: string
           description: |-
             * `` - No OIDC support
@@ -18386,8 +18386,8 @@ components:
           enum:
           - allow
           - is_superuser
-          - role
           - organization
+          - role
           - team
           type: string
           x-spec-enum-id: 4064e71cef1ae1e7
@@ -18788,8 +18788,8 @@ components:
         algorithm:
           enum:
           - ''
-          - RS256
           - HS256
+          - RS256
           type: string
           description: |-
             * `` - No OIDC support
@@ -19212,8 +19212,8 @@ components:
           description: The unique service ID provided by the service.
         auth_type:
           enum:
-          - JWT
           - BASIC
+          - JWT
           - TOKEN
           type: string
           x-spec-enum-id: e24087e68e36b686
@@ -19241,11 +19241,11 @@ components:
             * `STRICT_DNS` - Strict DNS
         dns_lookup_family:
           enum:
-          - V4_ONLY
-          - V6_ONLY
-          - AUTO
           - ALL
+          - AUTO
+          - V4_ONLY
           - V4_PREFERRED
+          - V6_ONLY
           type: string
           x-spec-enum-id: 65c5f314f2d8baed
           description: |-
@@ -19857,9 +19857,9 @@ components:
       properties:
         status:
           enum:
-          - good
           - degraded
           - failed
+          - good
           type: string
           description: |-
             * `degraded` - degraded
@@ -19888,9 +19888,9 @@ components:
       properties:
         status:
           enum:
-          - good
           - degraded
           - failed
+          - good
           type: string
           description: |-
             * `degraded` - degraded
@@ -19899,9 +19899,9 @@ components:
           x-spec-enum-id: 8f053d7a7629b617
         mode:
           enum:
+          - Unknown
           - cluster
           - standalone
-          - Unknown
           type: string
           description: |-
             * `Unknown` - Unknown
@@ -20365,8 +20365,8 @@ components:
           description: The unique service ID provided by the service.
         auth_type:
           enum:
-          - JWT
           - BASIC
+          - JWT
           - TOKEN
           type: string
           x-spec-enum-id: e24087e68e36b686
@@ -20394,11 +20394,11 @@ components:
             * `STRICT_DNS` - Strict DNS
         dns_lookup_family:
           enum:
-          - V4_ONLY
-          - V6_ONLY
-          - AUTO
           - ALL
+          - AUTO
+          - V4_ONLY
           - V4_PREFERRED
+          - V6_ONLY
           type: string
           x-spec-enum-id: 65c5f314f2d8baed
           description: |-
@@ -20678,9 +20678,9 @@ components:
       properties:
         status:
           enum:
-          - good
           - degraded
           - failed
+          - good
           type: string
           description: |-
             * `degraded` - degraded
@@ -21398,9 +21398,9 @@ components:
       properties:
         status:
           enum:
-          - good
           - degraded
           - failed
+          - good
           type: string
           description: |-
             * `degraded` - degraded
@@ -21422,9 +21422,9 @@ components:
       properties:
         status:
           enum:
-          - good
           - degraded
           - failed
+          - good
           type: string
           description: |-
             * `degraded` - degraded
@@ -21476,9 +21476,9 @@ components:
       properties:
         status:
           enum:
-          - good
           - degraded
           - failed
+          - good
           type: string
           description: |-
             * `degraded` - degraded

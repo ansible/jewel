@@ -35,20 +35,14 @@ def _stabilize_yaml(path):
     while i < len(lines):
         stripped = lines[i].rstrip()
         if stripped.endswith("enum:") and not stripped.endswith("x-spec-enum-id:"):
-            indent = len(lines[i]) - len(lines[i].lstrip())
-            item_indent = indent + 2
             j = i + 1
             enum_items = []
             while j < len(lines):
                 line = lines[j]
-                if line.rstrip() == "":
+                if line.rstrip() == "" or not line.lstrip().startswith("- "):
                     break
-                cur_indent = len(line) - len(line.lstrip())
-                if cur_indent == item_indent and line.lstrip().startswith("- "):
-                    enum_items.append(line)
-                    j += 1
-                else:
-                    break
+                enum_items.append(line)
+                j += 1
             if enum_items:
                 enum_items.sort()
                 lines[i + 1 : j] = enum_items
