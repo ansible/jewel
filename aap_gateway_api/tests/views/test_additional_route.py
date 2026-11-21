@@ -1,7 +1,7 @@
 from ansible_base.lib.utils.response import get_relative_url
 
 from aap_gateway_api.models import AdditionalRoute
-from aap_gateway_api.models.additional_route import get_gateway_path_prefix_error_message
+from aap_gateway_api.models.additional_route import get_gateway_path_prefix_error_message, get_gateway_path_xds_prefix_error_message
 
 
 def test_additional_route_detail(admin_api_client, additional_route_controller):
@@ -136,6 +136,26 @@ def test_additional_route_api_port_cannot_start_with_plugin_prefix(admin_api_cli
     assert response.status_code == 400
     assert AdditionalRoute.objects.count() == 0
     assert response.data['gateway_path'][0] == get_gateway_path_prefix_error_message()
+
+
+def test_additional_route_cannot_start_with_xds_prefix(admin_api_client, http_port_factory, service_cluster_eda):
+    """The xDS namespace is reserved on every listener, not just the API port."""
+    http_port = http_port_factory()
+    url = get_relative_url('route-list')
+    data = {
+        'name': 'test',
+        'http_port': http_port.pk,
+        'service_cluster': service_cluster_eda.pk,
+        'service_path': '/test',
+        'service_port': 8080,
+        'description': 'test',
+        'gateway_path': '/v3/test',
+        'is_service_https': False,
+    }
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == 400
+    assert AdditionalRoute.objects.count() == 0
+    assert response.data['gateway_path'][0] == get_gateway_path_xds_prefix_error_message()
 
 
 def test_additional_route_name_must_be_unique(admin_api_client, additional_route_controller):
