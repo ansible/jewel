@@ -1,7 +1,10 @@
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
+from ansible_base.lib.utils.views.deprecation import DeprecationSerializerMixin
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
 status_choices = serializers.ChoiceField(required=False, choices=[STATUS_GOOD, STATUS_DEGRADED, STATUS_FAILED])
+DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT = "DEPRECATED: This field is deprecated and will be removed in a future version."
 
 
 # Serializers for status and ping pages.
@@ -23,16 +26,22 @@ class ClusterInfoSerializer(serializers.Serializer):
     cluster_stats_messages_received = serializers.CharField(required=False)
 
 
-class PingSerializer(serializers.Serializer):
+@extend_schema_serializer(deprecate_fields=["db_connected", "proxy_connected"])
+class PingSerializer(DeprecationSerializerMixin, serializers.Serializer):
     version = serializers.CharField(required=False)
     pong = serializers.DateTimeField(required=False)
     status = status_choices
-    db_connected = serializers.BooleanField(required=False)
+    db_connected = serializers.BooleanField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
     db_exception = serializers.CharField(required=False)
-    proxy_connected = serializers.BooleanField(required=False)
+    proxy_connected = serializers.BooleanField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
     proxy_status_code = serializers.IntegerField(required=False)
     proxy_exception_type = serializers.CharField(required=False)
     dispatcherd_connected = serializers.BooleanField(required=False)
+
+    deprecated_fields = {
+        "db_connected": "The 'db_connected' field is deprecated and will be removed in a future version.",
+        "proxy_connected": "The 'proxy_connected' field is deprecated and will be removed in a future version.",
+    }
 
 
 class RedisResponseSerializer(serializers.Serializer):
