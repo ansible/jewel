@@ -39,7 +39,8 @@ jobs:
         with:
           app-id: ${{ vars.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_APP_ID }}
           private-key: ${{ secrets.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_PRIVATE_KEY }}
-          owner: ansible
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         id: labeler
         env:
