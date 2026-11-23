@@ -1,0 +1,48 @@
+---
+# Companion workflow: posts oasdiff breaking change results as PR comments.
+# Uses workflow_run trigger (fork-safe pattern).
+# Jira: AAP-86435
+name: "API: Breaking Change Comment"
+
+on:
+  workflow_run:
+    workflows: ["API: Breaking Change Detection"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  check-freshness:
+    name: Verify workflow run is current
+    if: github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    outputs:
+      is_current: ${{ steps.check.outputs.is_current }}
+    steps:
+      - name: Compare head SHAs
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_HEAD: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          PR_NUMBER=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
+            --jq '.pull_requests[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "is_current=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CURRENT_HEAD=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.head.sha')
+          if [ "$CURRENT_HEAD" = "$RUN_HEAD" ]; then
+            echo "is_current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping stale run (PR head is ${CURRENT_HEAD}, run was ${RUN_HEAD})"
+            echo "is_current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  comment:
+    needs: check-freshness
+    if: needs.check-freshness.outputs.is_current == 'true'
+    uses: ansible/actions/.github/workflows/oasdiff-post-breaking-change-comment.yml@364fabf5470712ced6b63e1a27c9bcfac66f81e6

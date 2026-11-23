@@ -118,6 +118,30 @@ See [Reporting Bugs](#reporting-bugs) above.
   [Keycloak development environment](docs/authentication.md#keycloak-development-environment)
   for the configured authenticators and token helper.
 
+## Updating the OpenAPI specification
+
+The OpenAPI specification (`openapi.yaml`) is generated from code with
+drf-spectacular and committed to the repository. When you change an API
+endpoint, regenerate the spec and commit it alongside your code — CI fails if
+the committed spec drifts from the code:
+
+```
+make genschema
+git add openapi.yaml
+```
+
+`make genschema` runs inside the `jewel-ci:devel` container with a temporary
+sqlite3 database. On stable branches, override the container tag:
+
+```
+make genschema GENSCHEMA_TAG=stable-2.5
+```
+
+If your change modifies the API surface, also add a changelog fragment under
+`changelogs/fragments/` describing the change. CI warns when a spec change has
+no fragment and uploads a skeleton fragment as an artifact that you can fill
+in.
+
 ## Code quality
 
 Jewel uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting.
