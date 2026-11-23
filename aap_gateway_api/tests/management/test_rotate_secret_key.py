@@ -192,6 +192,63 @@ def test_authenticator_config_rotation(settings):
     assert after["KEY"] == "my-client-id"
 
 
+@pytest.mark.django_db(transaction=True)
+def test_authenticator_config_skip_plain_and_undecryptable_fields(settings):
+    """Sub-fields holding plain or foreign-key-encrypted values are skipped without aborting."""
+    from ansible_base.authentication.models import Authenticator
+
+    new_key = "new-skip-auth-key"
+    wrong_key = "totally-wrong-key"
+
+    plain = Authenticator.objects.create(
+        name="Test OIDC Plain Secret",
+        enabled=True,
+        create_objects=True,
+        type="ansible_base.authentication.authenticator_plugins.oidc",
+        configuration={"KEY": "client-id", "SECRET": "placeholder"},
+    )
+    # .update() bypasses the model save path that encrypts listed sub-fields,
+    # landing the raw values in the column the way legacy rows can look.
+    Authenticator.objects.filter(pk=plain.pk).update(configuration={"KEY": "client-id", "SECRET": "plain-secret-value"})
+
+    foreign = Authenticator.objects.create(
+        name="Test OIDC Foreign Secret",
+        enabled=True,
+        create_objects=True,
+        type="ansible_base.authentication.authenticator_plugins.oidc",
+        configuration={"KEY": "client-id", "SECRET": "placeholder"},
+    )
+    foreign_cipher = encrypt_with_key("foreign-secret", wrong_key)
+    Authenticator.objects.filter(pk=foreign.pk).update(configuration={"KEY": "client-id", "SECRET": foreign_cipher})
+
+    # A row that does rotate, so the summary line is printed.
+    from aap_gateway_api.models import Preference
+
+    old_key = settings.SECRET_KEY
+    Preference.objects.filter(section="test_skip_auth", name="good_pref").delete()
+    Preference.objects.bulk_create([Preference(section="test_skip_auth", name="good_pref", raw_value=encrypt_with_key("good-value", old_key))])
+
+    out = io.StringIO()
+    err = io.StringIO()
+    with patch.dict(os.environ, {"GATEWAY_SECRET_KEY": new_key}):
+        call_command("rotate_secret_key", use_custom_key=True, stdout=out, stderr=err)
+
+    assert "re-encrypted" in out.getvalue()
+
+    # values_list bypasses the model's from_db sub-field decryption, matching
+    # what the command itself sees.
+    def stored_config(pk):
+        return Authenticator.objects.filter(pk=pk).values_list("configuration", flat=True).get()
+
+    assert stored_config(plain.pk)["SECRET"] == "plain-secret-value"
+
+    assert stored_config(foreign.pk)["SECRET"] == foreign_cipher
+
+    warning = err.getvalue()
+    assert "could not be decrypted" in warning
+    assert "old SECRET_KEY must be preserved" in warning
+
+
 # ── Graceful skip on decryption failure ──────────────────────────────────
 
 
