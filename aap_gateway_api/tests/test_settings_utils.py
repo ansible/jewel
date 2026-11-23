@@ -9,11 +9,11 @@ from dynaconf.validator import ValidationError
 from aap_gateway_api.settings_utils import (
     _CUSTOM_ENVVAR_MAPPINGS,
     DYNACONF_VALIDATORS,
+    apply_grpc_database_options,
     load_custom_envvars,
     load_grpc_settings,
     load_healthcheck_settings,
     load_oidc_provider_settings,
-    normalize_grpc_options_for_sql_server,
 )
 
 
@@ -39,6 +39,7 @@ def test_load_grpc_settings_displays_proper_message(test_args, log_message, keep
     ):
         with patch.object(sys, 'argv', test_args):
             load_grpc_settings(DYNACONF)
+            apply_grpc_database_options(DYNACONF)
             assert DYNACONF.DATABASES['default']['OPTIONS'].get('keepalives_count', 5) == keepalives_count
 
 
@@ -67,7 +68,7 @@ def test_validate_grpc_settings_in_etc_aap_gw_override(tmp_path, expected_log, m
             assert DYNACONF.DATABASES['default']['OPTIONS'].get('keepalives_count', 0) == expected_settings
 
 
-def test_load_grpc_settings_normalizes_options_for_mssql(tmp_path, monkeypatch):
+def test_apply_grpc_database_options_for_mssql(tmp_path, monkeypatch):
     temp_settings = tmp_path / "grpc_settings.py"
     temp_settings.write_text('DATABASES__default__OPTIONS__extra_params="TrustServerCertificate=yes"')
     monkeypatch.setenv("GATEWAY_GRPC_SETTINGS_FILE", str(temp_settings))
@@ -83,19 +84,15 @@ def test_load_grpc_settings_normalizes_options_for_mssql(tmp_path, monkeypatch):
         load_grpc_settings(dynaconf_settings)
         # the engine arrives from a source loaded after the gRPC settings
         dynaconf_settings.set("DATABASES__default__ENGINE", "ansible_base.backends.mssql")
-        normalize_grpc_options_for_sql_server(dynaconf_settings)
+        apply_grpc_database_options(dynaconf_settings)
 
     options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
     assert "keepalives" not in options
-    assert "keepalives_count" not in options
-    # the sentinel tests/grpc_defaults.py sets no application_name, so the
-    # value being renamed is defaults.py's; the rename mechanism is what matters
-    assert options["APP"] == "Django API"
-    assert "application_name" not in options
+    assert options["APP"] == "Django API"  # from tests/grpc_defaults.py sentinel
     assert options["extra_params"] == "TrustServerCertificate=yes"
 
 
-def test_load_grpc_settings_keeps_postgres_options(monkeypatch):
+def test_apply_grpc_database_options_for_postgres(monkeypatch):
     monkeypatch.delenv("DATABASE_ENGINE", raising=False)
     dynaconf_settings = factory(
         __name__,
@@ -105,12 +102,32 @@ def test_load_grpc_settings_keeps_postgres_options(monkeypatch):
 
     with patch.object(sys, 'argv', ['start_grpc_server']):
         load_grpc_settings(dynaconf_settings)
-        normalize_grpc_options_for_sql_server(dynaconf_settings)
+        apply_grpc_database_options(dynaconf_settings)
 
     options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
     assert options["keepalives"] == 71  # from tests/grpc_defaults.py sentinel
-    assert options["application_name"] == "Django API"
     assert "APP" not in options
+
+
+def test_apply_grpc_database_options_preserves_explicit_configuration(monkeypatch):
+    """Explicitly configured OPTIONS win over the backend defaults."""
+    monkeypatch.delenv("DATABASE_ENGINE", raising=False)
+    dynaconf_settings = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+
+    with patch.object(sys, 'argv', ['start_grpc_server']):
+        load_grpc_settings(dynaconf_settings)
+        options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
+        options["keepalives"] = 9
+        dynaconf_settings.set("DATABASES__default__OPTIONS", options, merge=False)
+        apply_grpc_database_options(dynaconf_settings)
+
+    options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
+    assert options["keepalives"] == 9
+    assert options["keepalives_idle"] == 75  # unset keys still get defaults
 
 
 def test_load_healthcheck_settings_uses_connection_timeout_for_mssql():

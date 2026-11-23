@@ -122,13 +122,17 @@ def load_grpc_settings(settings: Dynaconf) -> None:
     load_python_file_with_injected_context(settings_file_path, settings=settings)
 
 
-def normalize_grpc_options_for_sql_server(settings: Dynaconf) -> None:
-    """Normalize the gRPC server's database OPTIONS for SQL Server.
+def apply_grpc_database_options(settings: Dynaconf) -> None:
+    """Apply the gRPC server's backend-specific database OPTIONS.
 
-    Runs after every settings source that can select the database engine
-    (standard YAML files, environment variables) has loaded — the engine is
-    not yet final when ``load_grpc_settings`` runs. Only acts on gRPC server
-    startup, so other processes are untouched.
+    grpc_defaults.py defines ``GRPC_DATABASE_OPTIONS`` keyed by database
+    engine. This runs after every settings source that can select the engine
+    (standard YAML files, environment variables) has loaded, resolves the
+    final engine, and merges that engine's defaults into the default
+    database's OPTIONS — explicit configuration always takes precedence, so
+    only keys not already set are filled in. Engines without an entry get no
+    backend-specific defaults. Only acts on gRPC server startup, so other
+    processes are untouched.
     """
     from sys import argv
 
@@ -137,22 +141,14 @@ def normalize_grpc_options_for_sql_server(settings: Dynaconf) -> None:
 
     default_db = settings.DATABASES.get("default", {})
     database_engine = os.getenv("DATABASE_ENGINE") or default_db.get("ENGINE")
-    if database_engine == "ansible_base.backends.mssql":
-        _normalize_grpc_options_for_sql_server(settings)
+    backend_defaults = dict(settings.GRPC_DATABASE_OPTIONS.get(database_engine, {}))
+    if not backend_defaults:
+        return
 
-
-def _normalize_grpc_options_for_sql_server(settings: Dynaconf) -> None:
-    """Make the PostgreSQL-oriented gRPC connection options usable on SQL Server.
-
-    grpc_defaults.py sets psycopg keepalive options and application_name; an
-    ODBC connection string rejects unknown keywords, so drop the keepalives and
-    pass the application name as the ODBC APP keyword instead.
-    """
-    options = dict(settings.DATABASES.get("default", {}).get("OPTIONS") or {})
-    normalized = {key: value for key, value in options.items() if not key.startswith("keepalives")}
-    if "application_name" in normalized:
-        normalized["APP"] = normalized.pop("application_name")
-    settings.set("DATABASES__default__OPTIONS", normalized, loader_identifier="settings:grpc_sql_server_options", merge=False)
+    options = dict(default_db.get("OPTIONS") or {})
+    for key, value in backend_defaults.items():
+        options.setdefault(key, value)
+    settings.set("DATABASES__default__OPTIONS", options, loader_identifier="settings:grpc_database_options", merge=False)
 
 
 def load_healthcheck_settings(settings: Dynaconf) -> None:

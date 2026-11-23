@@ -1,9 +1,9 @@
-"""Live round-trip through dispatcherd's sql_server Service Broker broker.
+"""Live round-trip through dispatcherd's SQL Server Service Broker.
 
-Runs only against a provisioned SQL Server test database (the session conftest
-fixture provisions Service Broker); on PostgreSQL the test is skipped. Proves
-the config jewel generates — connection string, channels, factory import path —
-actually works end to end.
+Runs against a provisioned SQL Server test database; skipped on PostgreSQL.
+Uses Gateway's generated connection settings to publish and receive a message
+on a test channel. Does not exercise Gateway's publisher factory or a running
+dispatcherd service.
 """
 
 import json

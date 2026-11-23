@@ -121,27 +121,56 @@ def test_conninfo_is_parseable():
         assert "dbname" in parsed
 
 
-def test_pyodbc_connection_from_config_contract(monkeypatch):
-    """The sync publish factory mirrors the sqlserver broker's connect() contract."""
+def test_pyodbc_connection_from_config_returns_django_connection(monkeypatch):
+    """The sync publish factory returns Django's underlying connection, not a new one."""
     try:
         import pyodbc
     except ImportError:
         # Not installed, or installed without unixODBC (PostgreSQL runners get
         # pyodbc via DAB's dependency set but cannot import it).
         pytest.skip("pyodbc is not importable in this environment")
-    calls = {}
 
     class FakeConnection:
-        timeout = None
+        pass
 
-    def fake_connect(connection_string, **kwargs):
-        calls["conn_string"], calls["kwargs"] = connection_string, kwargs
-        return FakeConnection()
+    class FakeDatabase:
+        vendor = "microsoft"
 
-    monkeypatch.setattr(pyodbc, "connect", fake_connect)
-    conn = pyodbc_connection_from_config(connection_string="SERVER=x", timeout=10)
-    assert isinstance(conn, FakeConnection)
-    assert calls["conn_string"] == "SERVER=x;ConnectRetryCount=0"
-    assert calls["kwargs"] == {"timeout": 10, "autocommit": True}
-    # the query timeout matches dispatcherd's own connect()
-    assert conn.timeout == 35
+        def __init__(self):
+            self.connection = FakeConnection()
+
+        def validate_thread_sharing(self):
+            pass
+
+        def ensure_connection(self):
+            pass
+
+        def validate_no_broken_transaction(self):
+            pass
+
+    # The factory lazy-imports pyodbc, so patch the class it checks against.
+    monkeypatch.setattr(pyodbc, "Connection", FakeConnection)
+    fake = FakeDatabase()
+    monkeypatch.setattr("aap_gateway_api.dispatch.config.connections", {"default": fake})
+    assert pyodbc_connection_from_config(connection_string="ignored=too") is fake.connection
+
+
+def test_pyodbc_connection_from_config_rejects_wrong_backend(monkeypatch):
+    """A non-pyodbc Django connection is rejected rather than silently misused."""
+
+    class FakeDatabase:
+        vendor = "microsoft"
+        connection = object()
+
+        def validate_thread_sharing(self):
+            pass
+
+        def ensure_connection(self):
+            pass
+
+        def validate_no_broken_transaction(self):
+            pass
+
+    monkeypatch.setattr("aap_gateway_api.dispatch.config.connections", {"default": FakeDatabase()})
+    with pytest.raises(TypeError, match="pyodbc driver"):
+        pyodbc_connection_from_config()
