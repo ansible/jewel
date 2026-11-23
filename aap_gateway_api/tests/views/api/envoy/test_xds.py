@@ -1,9 +1,22 @@
 import pytest
 from django.urls import reverse
+from rest_framework.exceptions import NotFound
+from rest_framework.renderers import JSONRenderer
+from rest_framework.views import exception_handler
 
 from aap_gateway_api.models import AdditionalRoute, HTTPPort, ServiceAPIRoute, ServiceNode
 
 API_PORT_NAME = "port-9080"
+
+
+def _first_matching_route(routes, path):
+    for route in routes:
+        match = route["match"]
+        if "prefix" in match and path.startswith(match["prefix"]):
+            return route
+        if "path" in match and path == match["path"]:
+            return route
+    raise AssertionError(f"No route matched {path}")
 
 
 def test_xds_listener_discover_service_httpport_count(unauthenticated_api_client):
@@ -91,6 +104,113 @@ def test_xds_api_port_deduplicates_api_redirect(admin_api_client, service_api_ro
     assert len(api_redirects) == 1
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v3/discovery:listeners",
+        "/v3/discovery:clusters",
+        "/v3/discovery:secrets",
+        "/v3/discovery%3Alisteners",
+        "/v3/any/future/discovery/path",
+    ],
+)
+def test_xds_listener_does_not_proxy_discovery_requests(admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache, path):
+    """Envoy must not forward xDS REST requests to the gateway API.
+
+    The gateway API route is a catch-all ("/"), so without an explicit deny
+    route Envoy would proxy the whole xDS namespace through the public
+    listener.
+    """
+    ServiceAPIRoute.objects.create(
+        name="Gateway API catch-all",
+        http_port=http_api_port_factory(),
+        is_service_https=False,
+        service_cluster=service_cluster_gateway,
+        service_port=8000,
+        service_path="/",
+        envoy_cluster_name="gateway-api",
+        api_slug="gateway",
+    )
+
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == API_PORT_NAME)
+    routes = listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+
+    # The deny route only proves anything if the gateway catch-all is present
+    # behind it; otherwise the discovery path would match nothing at all.
+    assert any(route["match"].get("prefix") == "/" for route in routes)
+
+    route = _first_matching_route(routes, path)
+    assert "route" not in route
+    assert route["directResponse"]["status"] == 404
+    drf_404 = exception_handler(NotFound(), {})
+    assert route["directResponse"]["body"]["inlineString"] == JSONRenderer().render(drf_404.data).decode()
+    response_headers = {header["header"]["key"]: header["header"]["value"] for header in route["responseHeadersToAdd"]}
+    assert response_headers["content-type"] == JSONRenderer.media_type
+    assert route["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["disabled"] is True
+
+
+def _listener_routes(admin_api_client, port_name=API_PORT_NAME):
+    response = admin_api_client.post(reverse("lds"), data={})
+    assert response.status_code == 200
+    listener = next(resource for resource in response.data["resources"] if resource["name"] == port_name)
+    return listener["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+
+
+def _create_gateway_base_route(http_port, service_cluster, gateway_path="/aap/", service_path="/"):
+    AdditionalRoute.objects.create(
+        name="Gateway base route",
+        http_port=http_port,
+        service_cluster=service_cluster,
+        service_port=8000,
+        is_service_https=False,
+        service_path=service_path,
+        gateway_path=gateway_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "service_path,path",
+    [
+        ("/", "/aap/v3/discovery:listeners"),
+        ("/", "/aap/v3/any/future/path"),
+        ("/v3/", "/aap/discovery:listeners"),
+        ("/v3/discovery:listeners", "/aap/"),
+        ("/v3/discovery", "/aap/"),
+    ],
+)
+def test_xds_listener_denies_discovery_under_gateway_route_base(
+    admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache, service_path, path
+):
+    """A route that proxies to the gateway must not re-expose the xDS namespace."""
+    _create_gateway_base_route(http_api_port_factory(), service_cluster_gateway, service_path=service_path)
+
+    route = _first_matching_route(_listener_routes(admin_api_client), path)
+
+    assert "route" not in route
+    assert route["directResponse"]["status"] == 404
+
+
+def test_xds_listener_allows_other_services_under_similar_base(admin_api_client, http_api_port_factory, service_cluster_eda, isolated_cache):
+    """Only routes that proxy to the gateway re-expose the xDS namespace."""
+    _create_gateway_base_route(http_api_port_factory(), service_cluster_eda)
+
+    route = _first_matching_route(_listener_routes(admin_api_client), "/aap/v3/discovery:listeners")
+
+    assert "route" in route
+
+
+def test_xds_listener_allows_gateway_route_rewriting_outside_namespace(admin_api_client, http_api_port_factory, service_cluster_gateway, isolated_cache):
+    """A gateway route that rewrites elsewhere cannot reach xDS, so it is not denied."""
+    _create_gateway_base_route(http_api_port_factory(), service_cluster_gateway, service_path="/api/gateway/")
+
+    route = _first_matching_route(_listener_routes(admin_api_client), "/aap/v3/discovery:listeners")
+
+    assert "route" in route
+
+
 def test_xds_listener_discover_service_routes(unauthenticated_api_client, full_service_hierarchy_controller):
     """Verify that configured service routes are included in the listener."""
     url = reverse("lds")
@@ -160,7 +280,8 @@ def test_lds_listener_discover_service_service_type_auth_type(admin_api_client, 
     response = admin_api_client.post(lds_url, data={})
     assert response.status_code == 200
 
-    route_config = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"][1]
+    routes = response.data["resources"][0]["filterChains"][0]["filters"][0]["typedConfig"]["routeConfig"]["virtualHosts"][0]["routes"]
+    route_config = next(route for route in routes if route.get("route", {}).get("cluster") == full_service_hierarchy_controller.route.envoy_cluster_name)
     assert route_config["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["checkSettings"]["contextExtensions"]["service_type"] == "hub"
     assert route_config["typedPerFilterConfig"]["envoy.filters.http.ext_authz"]["checkSettings"]["contextExtensions"]["auth_type"] == "TOKEN"
 
