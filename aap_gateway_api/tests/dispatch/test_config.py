@@ -157,6 +157,12 @@ def test_pyodbc_connection_from_config_returns_django_connection(monkeypatch):
 
 def test_pyodbc_connection_from_config_rejects_wrong_backend(monkeypatch):
     """A non-pyodbc Django connection is rejected rather than silently misused."""
+    try:
+        import pyodbc  # noqa: F401 — imported to test importability, not used
+    except ImportError:
+        # Not installed, or installed without unixODBC (PostgreSQL runners get
+        # pyodbc via DAB's dependency set but cannot import it).
+        pytest.skip("pyodbc is not importable in this environment")
 
     class FakeDatabase:
         vendor = "microsoft"
