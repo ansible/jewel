@@ -1,0 +1,26 @@
+---
+title: Opt-in authentication for API discovery roots and deprecated ping connectivity fields
+type:
+  - added
+  - deprecated
+breaking: false
+endpoint:
+  - /api/
+  - /api/gateway/
+  - /api/gateway/v1/
+  - /api/gateway/v1/ping/
+summary: >-
+  Added the API_ROOTS_REQUIRE_AUTHENTICATION setting to optionally require
+  authentication for the /api/, /api/gateway/, and /api/gateway/v1/ discovery
+  roots. The setting defaults to false, preserving anonymous access. The ping
+  response connectivity fields (db_connected, db_exception, proxy_connected,
+  proxy_status_code, and proxy_exception_type) are now marked as deprecated in
+  the OpenAPI schema.
+migration: >-
+  No action is required for existing deployments: the discovery roots remain
+  anonymous by default and the ping response shape is unchanged. To require
+  authentication for the discovery roots, set API_ROOTS_REQUIRE_AUTHENTICATION
+  to a boolean true (accepted lowercase env spellings: true or false). Clients
+  consuming the deprecated ping connectivity fields should migrate to the
+  authenticated /api/gateway/v1/status/ endpoint for detailed health
+  information.

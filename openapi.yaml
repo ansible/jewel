@@ -14,7 +14,6 @@ paths:
       - OAuth2_Authentication: []
       - Basic_Authentication: []
       - SessionAuthentication: []
-      - {}
       responses:
         '200':
           content:
@@ -33,7 +32,6 @@ paths:
       - OAuth2_Authentication: []
       - Basic_Authentication: []
       - SessionAuthentication: []
-      - {}
       responses:
         '200':
           content:
@@ -52,7 +50,6 @@ paths:
       - OAuth2_Authentication: []
       - Basic_Authentication: []
       - SessionAuthentication: []
-      - {}
       responses:
         '200':
           content:
@@ -19854,6 +19851,7 @@ components:
             be modified once created.
     Ping:
       type: object
+      description: Gateway version and connectivity details for the ping endpoint.
       properties:
         status:
           enum:
@@ -19873,14 +19871,49 @@ components:
           format: date-time
         db_connected:
           type: boolean
+          description: 'DEPRECATED: This field is deprecated and will be removed in
+            a future version. Use the authenticated /api/gateway/v1/status/ endpoint
+            for detailed health information.'
+          deprecated: true
+          x-api-deprecated-detail: The 'db_connected' field is deprecated and will
+            be removed in a future version. Use the authenticated /api/gateway/v1/status/
+            endpoint for detailed health information.
         db_exception:
           type: string
+          description: 'DEPRECATED: This field is deprecated and will be removed in
+            a future version. Use the authenticated /api/gateway/v1/status/ endpoint
+            for detailed health information.'
+          deprecated: true
+          x-api-deprecated-detail: The 'db_exception' field is deprecated and will
+            be removed in a future version. Use the authenticated /api/gateway/v1/status/
+            endpoint for detailed health information.
         proxy_connected:
           type: boolean
+          description: 'DEPRECATED: This field is deprecated and will be removed in
+            a future version. Use the authenticated /api/gateway/v1/status/ endpoint
+            for detailed health information.'
+          deprecated: true
+          x-api-deprecated-detail: The 'proxy_connected' field is deprecated and will
+            be removed in a future version. Use the authenticated /api/gateway/v1/status/
+            endpoint for detailed health information.
         proxy_status_code:
           type: integer
+          description: 'DEPRECATED: This field is deprecated and will be removed in
+            a future version. Use the authenticated /api/gateway/v1/status/ endpoint
+            for detailed health information.'
+          deprecated: true
+          x-api-deprecated-detail: The 'proxy_status_code' field is deprecated and
+            will be removed in a future version. Use the authenticated /api/gateway/v1/status/
+            endpoint for detailed health information.
         proxy_exception_type:
           type: string
+          description: 'DEPRECATED: This field is deprecated and will be removed in
+            a future version. Use the authenticated /api/gateway/v1/status/ endpoint
+            for detailed health information.'
+          deprecated: true
+          x-api-deprecated-detail: The 'proxy_exception_type' field is deprecated
+            and will be removed in a future version. Use the authenticated /api/gateway/v1/status/
+            endpoint for detailed health information.
         dispatcherd_connected:
           type: boolean
     RedisResponse:

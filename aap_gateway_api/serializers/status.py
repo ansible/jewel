@@ -39,6 +39,8 @@ class ClusterInfoSerializer(serializers.Serializer):
 
 @extend_schema_serializer(deprecate_fields=list(DEPRECATED_CONNECTIVITY_FIELD_NAMES))
 class PingSerializer(DeprecationSerializerMixin, serializers.Serializer):
+    """Gateway version and connectivity details for the ping endpoint."""
+
     # PingView is GET-only, so DeprecationSerializerMixin's request-payload hook
     # never runs at runtime. It is applied here to register deprecated_fields for
     # the OpenAPI x-api-deprecated-detail extension.
