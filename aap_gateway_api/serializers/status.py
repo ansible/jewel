@@ -1,10 +1,21 @@
 from ansible_base.lib.constants import STATUS_DEGRADED, STATUS_FAILED, STATUS_GOOD
 from ansible_base.lib.utils.views.deprecation import DeprecationSerializerMixin
+from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
 status_choices = serializers.ChoiceField(required=False, choices=[STATUS_GOOD, STATUS_DEGRADED, STATUS_FAILED])
-DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT = "DEPRECATED: This field is deprecated and will be removed in a future version."
+DEPRECATED_CONNECTIVITY_FIELD_NAMES = (
+    "db_connected",
+    "db_exception",
+    "proxy_connected",
+    "proxy_status_code",
+    "proxy_exception_type",
+)
+DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT = _(
+    "DEPRECATED: This field is deprecated and will be removed in a future version. "
+    "Use the authenticated /api/gateway/v1/status/ endpoint for detailed health information."
+)
 
 
 # Serializers for status and ping pages.
@@ -26,21 +37,27 @@ class ClusterInfoSerializer(serializers.Serializer):
     cluster_stats_messages_received = serializers.CharField(required=False)
 
 
-@extend_schema_serializer(deprecate_fields=["db_connected", "proxy_connected"])
+@extend_schema_serializer(deprecate_fields=list(DEPRECATED_CONNECTIVITY_FIELD_NAMES))
 class PingSerializer(DeprecationSerializerMixin, serializers.Serializer):
+    # PingView is GET-only, so DeprecationSerializerMixin's request-payload hook
+    # never runs at runtime. It is applied here to register deprecated_fields for
+    # the OpenAPI x-api-deprecated-detail extension.
     version = serializers.CharField(required=False)
     pong = serializers.DateTimeField(required=False)
     status = status_choices
     db_connected = serializers.BooleanField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
-    db_exception = serializers.CharField(required=False)
+    db_exception = serializers.CharField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
     proxy_connected = serializers.BooleanField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
-    proxy_status_code = serializers.IntegerField(required=False)
-    proxy_exception_type = serializers.CharField(required=False)
+    proxy_status_code = serializers.IntegerField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
+    proxy_exception_type = serializers.CharField(required=False, help_text=DEPRECATED_CONNECTIVITY_FIELD_HELP_TEXT)
     dispatcherd_connected = serializers.BooleanField(required=False)
 
     deprecated_fields = {
-        "db_connected": "The 'db_connected' field is deprecated and will be removed in a future version.",
-        "proxy_connected": "The 'proxy_connected' field is deprecated and will be removed in a future version.",
+        field_name: (
+            f"The '{field_name}' field is deprecated and will be removed in a future version. "
+            "Use the authenticated /api/gateway/v1/status/ endpoint for detailed health information."
+        )
+        for field_name in DEPRECATED_CONNECTIVITY_FIELD_NAMES
     }
 
 

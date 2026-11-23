@@ -17,9 +17,9 @@
       state: "{{ gateway_state }}"
 
   tasks:
-    - name: Check if API is available and returning status 200
+    - name: Check if the anonymous ping endpoint is available and returning status 200
       uri:
-        url: "{{ gateway_hostname }}/api/"
+        url: "{{ gateway_hostname }}/api/gateway/v1/ping/"
         validate_certs: "{{ gateway_validate_certs|default(False) }}"
       register: result
       until: "result.status == 200"

@@ -1,6 +1,7 @@
 from unittest import mock
 
 from ansible_base.lib.utils.response import get_relative_url
+from django.test import override_settings
 
 
 class TestLogoutView:
@@ -11,6 +12,13 @@ class TestLogoutView:
         response = admin_api_client.post(url)
         assert response.status_code == 302
         assert response.url == "/api/"
+
+    @override_settings(API_ROOTS_REQUIRE_AUTHENTICATION=True)
+    def test_implicit_next_with_hardening_redirects_to_login(self, admin_api_client):
+        url = get_relative_url('logout')
+        response = admin_api_client.post(url)
+        assert response.status_code == 302
+        assert response.url == get_relative_url('login')
 
     def test_explicit_next_same_host(self, admin_api_client):
         url = get_relative_url('logout')
@@ -23,6 +31,13 @@ class TestLogoutView:
         response = admin_api_client.post(url + "?next=https://www.example.com/some/path")
         assert response.status_code == 302
         assert response.url == "/api/"
+
+    @override_settings(API_ROOTS_REQUIRE_AUTHENTICATION=True)
+    def test_disallowed_next_with_hardening_redirects_to_login(self, admin_api_client):
+        url = get_relative_url('logout')
+        response = admin_api_client.post(url + "?next=https://www.example.com/some/path")
+        assert response.status_code == 302
+        assert response.url == get_relative_url('login')
 
     # Following Red Hat Contributor's conclusion after also trying really hard.
     # See aap_gateway_api/tests/authentication/test_logged_basic_auth.py

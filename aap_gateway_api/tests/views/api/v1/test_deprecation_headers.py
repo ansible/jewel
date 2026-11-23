@@ -178,12 +178,14 @@ class TestOpenAPIDeprecationSchema:
         schema = _get_schema(admin_api_client)
         properties = schema["components"]["schemas"]["Ping"]["properties"]
 
-        for field_name in ("db_connected", "proxy_connected"):
+        deprecated_fields = ("db_connected", "db_exception", "proxy_connected", "proxy_status_code", "proxy_exception_type")
+        for field_name in deprecated_fields:
             prop = properties[field_name]
             assert prop["deprecated"] is True, f"Ping.{field_name} should be deprecated"
             assert "deprecated and will be removed" in prop["x-api-deprecated-detail"]
 
         assert properties["status"].get("deprecated") is not True
+        assert properties["dispatcherd_connected"].get("deprecated") is not True
 
     def test_non_deprecated_endpoints_not_marked(self, admin_api_client):
         schema = _get_schema(admin_api_client)
