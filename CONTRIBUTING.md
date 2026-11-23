@@ -145,7 +145,15 @@ in.
 
 The local Compose stack can run Gateway against SQL Server. Set `mssql_enabled: true` in the workspace's `container-startup.yml`, optionally override `mssql_sa_password`, then start the stack with `make podman-compose` (or the `make docker-compose` alias). The SQL Server 2025 Developer container creates the `gateway` database before Gateway starts, and Keycloak runs on its embedded development database so the stack needs no PostgreSQL container. PostgreSQL remains Gateway's database when `mssql_enabled` is false.
 
-The Gateway development image installs Microsoft ODBC Driver 18. SQL Server's self-signed certificate is trusted only in local development and test settings. The default SQL Server memory limit is 2048 MB and can be changed with `mssql_memory_limit_mb` in `container-startup.yml`.
+SQL Server's self-signed certificate is trusted only in local development and test settings. The default SQL Server memory limit is 2048 MB and can be changed with `mssql_memory_limit_mb` in `container-startup.yml`.
+
+### Microsoft ODBC driver redistribution rule
+
+**Gateway images must never contain Microsoft's ODBC driver binaries** — neither the `msodbcsql18` RPM nor the `mssql-python-odbc` wheel (whose wheel ships the same driver libraries). A redistribution agreement with Microsoft is pending; until it is signed:
+
+- Published images (GHCR `jewel`, quay `jewel-ci`) build without the driver — the GHCR workflow builds with `INCLUDE_MSSQL_DRIVER=false` and fails if any `libmsodbcsql*` binary is found in the image.
+- The driver is installed or configured at runtime/startup instead: CI installs the RPM in the SQL Server job, and `launch-gateway` registers the driver library from the locally pip-installed `mssql-python-odbc` wheel via `ODBCSYSINI` (the development image installs that wheel because it is built and used only on your machine and is never published).
+- A local runtime image may opt in with `--build-arg INCLUDE_MSSQL_DRIVER=true --build-arg ACCEPT_MS_ODBC_EULA=Y`; the resulting image must not be published. See the [Microsoft ODBC Driver license](https://github.com/microsoft/mssql-python/blob/main/mssql_python_odbc/licenses/MICROSOFT_ODBC_DRIVER_FOR_SQL_SERVER_LICENSE.txt).
 
 ## Code quality
 

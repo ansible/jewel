@@ -94,6 +94,21 @@ jobs:
           extra-args: |
             --target
             jewel
+            --build-arg
+            INCLUDE_MSSQL_DRIVER=false
+
+      - name: Verify no Microsoft ODBC driver binaries in the image
+        run: |
+          # RULE (AAP-98732): published images must not contain Microsoft's
+          # driver binaries (msodbcsql18 RPM or mssql-python-odbc wheel).
+          # The buildah-built image is available locally; check the amd64
+          # manifest directly. Also scans the venv where the wheel would be.
+          found=$(podman run --rm "${{ env.IMAGE_NAME }}:latest" sh -c             "find / -name 'libmsodbcsql*' -o -name 'msodbcsql18*' 2>/dev/null | head -1")
+          if [ -n "$found" ]; then
+            echo "::error::Microsoft ODBC driver binaries found in the image: $found"
+            exit 1
+          fi
+          echo "Verified: no Microsoft ODBC driver binaries in the published image." 
 
       - name: Push multi-architecture image
         uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3.0.0

@@ -75,10 +75,10 @@ RUN dnf module install -y nginx:1.22/common && \
     unixODBC \
     xmlsec1-openssl
 
-RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
-    ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
-    dnf clean all
-
+# No Microsoft ODBC driver here: gateway images never bake EULA-licensed
+# Microsoft driver binaries (AAP-98732). The driver library from the
+# mssql-python-odbc pip wheel (installed below) is registered at startup by
+# launch-gateway. This image is local-only and never published.
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
 COPY tools/scripts/auto-reload /usr/bin/auto-reload
@@ -161,11 +161,17 @@ RUN echo "/opt/aap_gateway/aap_gateway" > "/opt/aap_gateway/venv/lib/${PYTHON}/s
 # See: https://github.com/advisories/GHSA-r9hx-vwmv-q579
 RUN /opt/aap_gateway/venv/bin/pip install --upgrade 'setuptools>=65.5.1'
 
+# RULE (AAP-98732): the mssql-python-odbc wheel in requirements_mssql.txt
+# ships Microsoft driver binaries; published images exclude it unless the
+# opt-in below is set. SQL Server deployments install it at runtime instead.
+ARG INCLUDE_MSSQL_DRIVER=false
 COPY requirements/requirements.txt /tmp/requirements.txt
 COPY requirements/requirements_git.txt /tmp/requirements_git.txt
 COPY requirements/requirements_mssql.txt /tmp/requirements_mssql.txt
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements.txt
-RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install --require-hashes -r /tmp/requirements_mssql.txt
+RUN if [ "$INCLUDE_MSSQL_DRIVER" = "true" ]; then \
+        /opt/aap_gateway/venv/bin/pip --no-cache-dir install --require-hashes -r /tmp/requirements_mssql.txt; \
+    fi
 RUN /opt/aap_gateway/venv/bin/pip --no-cache-dir install -r /tmp/requirements_git.txt
 
 FROM quay.io/centos/centos:stream9 AS jewel
@@ -184,9 +190,23 @@ RUN dnf module install -y nginx:1.22/common && \
     unixODBC \
     xmlsec1-openssl
 
-RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
-    ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
-    dnf clean all
+# RULE (AAP-98732): published gateway images must not contain Microsoft's
+# ODBC driver binaries — neither the msodbcsql18 RPM nor the
+# mssql-python-odbc wheel (requirements_mssql.txt), which ships the same
+# driver libraries. SQL Server support requires a rebuild with
+# INCLUDE_MSSQL_DRIVER=true and explicit EULA acceptance, pending the
+# Microsoft redistribution agreement. Install or configure the driver at
+# runtime/startup otherwise.
+ARG INCLUDE_MSSQL_DRIVER=false
+ARG ACCEPT_MS_ODBC_EULA=N
+RUN if [ "$INCLUDE_MSSQL_DRIVER" = "true" ]; then \
+        if [ "$ACCEPT_MS_ODBC_EULA" != "Y" ]; then \
+            echo "INCLUDE_MSSQL_DRIVER=true requires ACCEPT_MS_ODBC_EULA=Y" >&2; exit 1; \
+        fi; \
+        dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+        ACCEPT_EULA=Y dnf install -y msodbcsql18 && \
+        dnf clean all; \
+    fi
 
 COPY --from=builder /opt/aap_gateway /opt/aap_gateway
 COPY tools/scripts/launch-gateway /usr/bin/launch-gateway
@@ -276,8 +296,10 @@ RUN sed -i '/^\[crb\]$/,/^enabled=0$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/c
     xmlsec1-openssl \
     && dnf clean all
 
-RUN dnf install -y https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
-    ACCEPT_EULA=Y dnf install -y msodbcsql18 unixODBC && \
+# No Microsoft ODBC driver in the CI image (AAP-98732): images must not
+# contain EULA-licensed Microsoft driver binaries. The SQL Server job
+# installs the driver at runtime; unixODBC stays so pyodbc can import.
+RUN dnf install -y unixODBC && \
     dnf clean all
 
 RUN mkdir -p /opt/ci-venv && \

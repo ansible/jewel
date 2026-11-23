@@ -100,6 +100,28 @@ if [ $? != 0 ] ; then
     exit 255
 fi
 
+# Register the Microsoft ODBC driver from the mssql-python-odbc pip wheel
+# (AAP-98732): images never bake EULA-licensed Microsoft driver binaries, so
+# the driver library that pip installed into the venv is what ODBC loads.
+# unixODBC reads $ODBCSYSINI/odbcinst.ini; the system odbcinst.ini (from a
+# runtime driver install) takes precedence when it defines the driver.
+ODBC_CONF_DIR=/tmp/gateway-odbc
+DRIVER_LIB=$(${GATEWAY_PYTHON} - <<'PYEOF'
+import glob, os
+
+import mssql_python_odbc
+
+base = os.path.join(os.path.dirname(mssql_python_odbc.__file__), "libs", "linux", "rhel", "x86_64", "lib")
+matches = glob.glob(os.path.join(base, "libmsodbcsql*.so*"))
+print(matches[0] if matches else "")
+PYEOF
+)
+if [ -n "$DRIVER_LIB" ] && [ -f "$DRIVER_LIB" ]; then
+    mkdir -p "${ODBC_CONF_DIR}"
+    printf '[ODBC Driver 18 for SQL Server]\nDriver = %s\n' "${DRIVER_LIB}" > "${ODBC_CONF_DIR}/odbcinst.ini"
+    export ODBCSYSINI="${ODBC_CONF_DIR}"
+fi
+
 # Idempotent: enables Service Broker and installs dispatcherd's runtime
 # objects on SQL Server, logs and does nothing on other backends. Only the
 # first node provisions — every node running the DDL would terminate other
