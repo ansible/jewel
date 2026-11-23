@@ -167,8 +167,12 @@ def load_healthcheck_settings(settings: Dynaconf) -> None:
     if not default_db:
         return
     healthcheck_db = default_db.to_dict()
-    timeout_option = "connection_timeout" if default_db.get("ENGINE") == "ansible_base.backends.mssql" else "connect_timeout"
-    healthcheck_db.setdefault("OPTIONS", {})[timeout_option] = 3
+    if default_db.get("ENGINE") == "ansible_base.backends.mssql":
+        # connection_timeout is per attempt; mssql-django would otherwise retry
+        # 5 times with a 5 s backoff, keeping the ping slow on dead hosts.
+        healthcheck_db.setdefault("OPTIONS", {}).update(connection_timeout=3, connection_retries=0)
+    else:
+        healthcheck_db.setdefault("OPTIONS", {})["connect_timeout"] = 3
     healthcheck_db["CONN_MAX_AGE"] = 0
     healthcheck_db["CONN_HEALTH_CHECKS"] = True
     healthcheck_db["TEST"] = {"MIRROR": "default"}

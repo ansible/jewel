@@ -13,8 +13,7 @@ class EncryptedPreferencesManager(PreferencesManager):
         for pref in prefs:
             key = self.get_cache_key(pref.section, pref.name)
             value = pref.raw_value
-            # Check for encrypted attribute - Fallback preferences don't have it
-            if hasattr(pref.preference, 'encrypted') and pref.preference.encrypted:
+            if pref.is_encrypted:
                 value = ansible_encryption.encrypt_string(value)
             if value is None or value == "":
                 # some cache backends refuse to cache None or empty values

@@ -384,6 +384,29 @@ def test_get_and_revert_single_setting_encrypted(admin_api_client, register_pref
     assert response.data["value"] == ENCRYPTED_STRING
 
 
+def test_unregistered_setting_with_encrypted_value_keeps_encryption_on_save(db):
+    """Saving an orphaned row that was stored encrypted must not write plaintext."""
+    from ansible_base.lib.utils.encryption import ansible_encryption
+
+    from aap_gateway_api.models import Preference
+
+    Preference.objects.create(
+        section='general',
+        name='orphan_save_secret',
+        raw_value=ansible_encryption.encrypt_string('save_me'),
+    )
+    stored = Preference.objects.filter(section='general', name='orphan_save_secret').values_list('raw_value', flat=True).get()
+    assert ENCRYPTED_STRING in stored
+
+    instance = Preference.objects.get(section='general', name='orphan_save_secret')
+    assert instance.value == 'save_me'  # from_db decrypted
+    instance.save()
+
+    stored_after = Preference.objects.filter(section='general', name='orphan_save_secret').values_list('raw_value', flat=True).get()
+    assert ENCRYPTED_STRING in stored_after
+    assert ansible_encryption.decrypt_string(stored_after) == 'save_me'
+
+
 def test_get_unregistered_setting_with_encrypted_value_is_masked(admin_api_client, db):
     """
     ensure that a row whose registration is gone but whose stored value was

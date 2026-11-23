@@ -132,7 +132,7 @@ def test_pyodbc_connection_from_config_contract(monkeypatch):
     calls = {}
 
     class FakeConnection:
-        pass
+        timeout = None
 
     def fake_connect(connection_string, **kwargs):
         calls["conn_string"], calls["kwargs"] = connection_string, kwargs
@@ -143,3 +143,5 @@ def test_pyodbc_connection_from_config_contract(monkeypatch):
     assert isinstance(conn, FakeConnection)
     assert calls["conn_string"] == "SERVER=x;ConnectRetryCount=0"
     assert calls["kwargs"] == {"timeout": 10, "autocommit": True}
+    # the query timeout matches dispatcherd's own connect()
+    assert conn.timeout == 35

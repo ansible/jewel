@@ -1,7 +1,8 @@
 # SQL Server backend support (AAP-98732).
-# Installed only by the py312-mssql tox environments and, eventually, by the
-# shipped SQL Server container image on top of requirements.txt. Keeping the
-# ODBC stack out of the base requirements avoids requiring unixODBC in every
-# environment and keeps Python 3.11 installs installable.
+# Installed by the py312-mssql tox environments and by the gateway container
+# image (dev and runtime profiles) on top of requirements.txt, keeping the
+# image complete and switchable between database backends. The ODBC stack
+# stays out of the base requirements so environments that are not in the
+# SQL Server tech preview (including Python 3.11) never need unixODBC.
 mssql-django
 dispatcherd[sqlserver]  # the sql_server Service Broker broker

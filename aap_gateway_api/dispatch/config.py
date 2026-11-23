@@ -30,7 +30,12 @@ def pyodbc_connection_from_config(**kwargs) -> "pyodbc.Connection":
     options.setdefault("timeout", 10)
     if "connectretrycount" not in connection_string.lower():
         connection_string += ";ConnectRetryCount=0"
-    return pyodbc.connect(connection_string, **options)
+    connection = pyodbc.connect(connection_string, **options)
+    # pyodbc's `timeout` kwarg is only the login timeout; the query timeout
+    # defaults to 0 (unbounded). Match the broker's connect(): a wedged
+    # publish query must not hang the calling request indefinitely.
+    connection.timeout = 35
+    return connection
 
 
 def get_dispatcherd_config() -> dict:

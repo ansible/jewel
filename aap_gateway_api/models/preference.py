@@ -21,9 +21,23 @@ class Preference(models.BasePreferenceModel, AuditableModel):
         app_label = "aap_gateway_api"
         unique_together = ("section", "name")
 
+    @property
+    def is_encrypted(self) -> bool:
+        """True when this preference's value is (or should be) encrypted at rest.
+
+        Registered preferences declare encryption via ``preference.encrypted``.
+        Fallback rows (no registration) lack that attribute, but ``from_db``
+        marks rows whose stored value was encrypted via
+        ``_encrypted_field_names`` — an orphaned row that was stored encrypted
+        keeps its encryption on save and stays masked on read.
+        """
+        preference = getattr(self, 'preference', None)
+        if hasattr(preference, 'encrypted') and preference.encrypted:
+            return True
+        return 'raw_value' in getattr(self, '_encrypted_field_names', set())
+
     def save(self, *args, **kwargs):
-        # Check for encrypted attribute - Fallback preferences don't have it
-        if hasattr(self.preference, 'encrypted') and self.preference.encrypted:
+        if self.is_encrypted:
             self.value = ansible_encryption.encrypt_string(self.value)
             self._encrypted_field_names = {'raw_value'}
         super().save(*args, **kwargs)

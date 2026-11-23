@@ -41,13 +41,21 @@ def provision_service_broker(using: str = "default", stdout=print) -> None:
 
     db_name = connection.settings_dict["NAME"]
     with connection.cursor() as cursor:
-        # identifier comes from Django settings, quoted via quote_name; DDL cannot be parameterized
-        cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET ENABLE_BROKER WITH ROLLBACK IMMEDIATE")  # NOSONAR
-        # SQL Server's default READ COMMITTED blocks readers behind writers,
-        # unlike PostgreSQL's MVCC — without snapshot isolation, gateway
-        # requests hang behind concurrent writes (observed as uWSGI harakiri
-        # and 502s under ATF load).
-        cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE")  # NOSONAR
+        # Only ALTER what is not already set: these statements need exclusive
+        # access and terminate open sessions (including other gateway nodes
+        # and test workers), so a re-run against an already-provisioned
+        # database must be a no-op.
+        cursor.execute("SELECT is_broker_enabled, is_read_committed_snapshot_on FROM sys.databases WHERE database_id = DB_ID()")
+        broker_enabled, rcsi_enabled = cursor.fetchone()
+        if not broker_enabled:
+            # identifier comes from Django settings, quoted via quote_name; DDL cannot be parameterized
+            cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET ENABLE_BROKER WITH ROLLBACK IMMEDIATE")  # NOSONAR
+        if not rcsi_enabled:
+            # SQL Server's default READ COMMITTED blocks readers behind writers,
+            # unlike PostgreSQL's MVCC — without snapshot isolation, gateway
+            # requests hang behind concurrent writes (observed as uWSGI harakiri
+            # and 502s under ATF load).
+            cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(db_name)} SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE")  # NOSONAR
 
     Broker.setup_database({"connection_string": get_sql_server_notify_conn_string(alias=using)})
 

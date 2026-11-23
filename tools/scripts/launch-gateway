@@ -101,10 +101,14 @@ if [ $? != 0 ] ; then
 fi
 
 # Idempotent: enables Service Broker and installs dispatcherd's runtime
-# objects on SQL Server, logs and does nothing on other backends.
-${GATEWAY_MANAGE} setup_service_broker
-
-DISPATCHERD_AUTOSTART=true
-export DISPATCHERD_AUTOSTART
+# objects on SQL Server, logs and does nothing on other backends. Only the
+# first node provisions — every node running the DDL would terminate other
+# nodes' sessions while the ALTERs take effect. A failure is logged but does
+# not stop the container: the gateway itself does not depend on the broker,
+# and a runtime login without DDL rights must not block startup.
+if [ "${CONTAINER_NUMBER}" = "1" ]; then
+    ${GATEWAY_MANAGE} setup_service_broker || \
+        echo "$(timestamp) Warning: setup_service_broker failed; dispatch may not work until the database is provisioned"
+fi
 
 exec supervisord -n

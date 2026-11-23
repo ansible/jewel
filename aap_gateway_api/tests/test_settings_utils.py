@@ -138,6 +138,7 @@ def test_load_healthcheck_settings_uses_connection_timeout_for_mssql():
 
     options = dynaconf_settings.DATABASES["healthcheck"]["OPTIONS"]
     assert options["connection_timeout"] == 3
+    assert options["connection_retries"] == 0
     assert "connect_timeout" not in options
 
 
