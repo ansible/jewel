@@ -9,9 +9,10 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.schemas.generators import EndpointEnumerator
+
+from aap_gateway_api.utils.views.permissions import ApiRootAccessPermission
 
 logger = logging.getLogger('aap.gateway.views')
 
@@ -24,7 +25,7 @@ GW_V1_ROOT_URL = "/api/gateway/v1"
 
 @extend_schema(request=None, responses={"200": OpenApiTypes.OBJECT})
 class V1RootView(AnsibleBaseView):
-    permission_classes = (AllowAny,)
+    permission_classes = (ApiRootAccessPermission,)
     name = _('v1')
     versioning_class = None
 

@@ -11,9 +11,9 @@
       gateway_password: "{{ gateway_admin_password }}"
       gateway_validate_certs: False
   pre_tasks:
-  - name: Check if API is available and returning status 200
+  - name: Check if the anonymous ping endpoint is available and returning status 200
     uri:
-      url: "{{ gateway_host }}/api/"
+      url: "{{ gateway_host }}/api/gateway/v1/ping/"
       validate_certs: "{{ gateway_validate_certs|default(False) }}"
     register: result
     until: "result.status == 200"

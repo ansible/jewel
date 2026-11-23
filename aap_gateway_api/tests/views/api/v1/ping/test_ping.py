@@ -42,6 +42,7 @@ def test_ping_all_up(request, mock_dispatcherd, unauthenticated_api_client):
 
     assert response.data["version"] == get_aap_version()
     assert response.data['status'] == STATUS_GOOD, response.data
+    assert response.data['db_connected'] is True
     assert response.data['dispatcherd_connected'] is True
 
 
@@ -98,6 +99,7 @@ def test_ping_proxy_non_200(request, mock_dispatcherd, unauthenticated_api_clien
     response = unauthenticated_api_client.get(url)
     assert response.status_code == 200
     assert response.data['status'] == STATUS_DEGRADED
+    assert response.data['proxy_connected'] is False
     assert response.data['proxy_status_code'] == 500
 
 

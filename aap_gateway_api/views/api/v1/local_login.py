@@ -7,6 +7,7 @@ from ansible_base.lib.utils.requests import get_remote_host
 from django.conf import settings
 from django.contrib.auth import views
 from django.core.exceptions import PermissionDenied
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import NotAcceptable
 from rest_framework.negotiation import DefaultContentNegotiation
@@ -70,6 +71,14 @@ class LoggedLogoutView(views.LogoutView):
     def get(self, request, *args, **kwargs):
         """Handle GET requests for logout (for backward compatibility)."""
         return self.post(request, *args, **kwargs)
+
+    def get_success_url(self):
+        url = super().get_success_url()
+        if getattr(settings, 'API_ROOTS_REQUIRE_AUTHENTICATION', False) and url == reverse('api_root_view'):
+            # The API root rejects anonymous requests when hardening is enabled,
+            # so send logged-out users to the login page instead of a 401.
+            return reverse('login')
+        return url
 
     def dispatch(self, request, *args, **kwargs):
         original_user = getattr(request, 'user', None)

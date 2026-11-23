@@ -3,9 +3,10 @@ from os import environ
 from unittest.mock import patch
 
 import pytest
-from ansible_base.lib.dynamic_config import factory
+from ansible_base.lib.dynamic_config import factory, load_envvars
+from dynaconf.validator import ValidationError
 
-from aap_gateway_api.settings_utils import _CUSTOM_ENVVAR_MAPPINGS, load_custom_envvars, load_grpc_settings, load_oidc_provider_settings
+from aap_gateway_api.settings_utils import _CUSTOM_ENVVAR_MAPPINGS, DYNACONF_VALIDATORS, load_custom_envvars, load_grpc_settings, load_oidc_provider_settings
 
 
 @pytest.mark.parametrize(
@@ -214,3 +215,32 @@ class TestLoadCustomEnvvars:
             assert isinstance(entry[1], str), f"Entry {entry[0]}: setting key must be a string"
             if len(entry) == 3:
                 assert callable(entry[2]), f"Entry {entry[0]}: transform must be callable"
+
+
+class TestApiRootsBoolValidation:
+    """API_ROOTS_REQUIRE_AUTHENTICATION must be a real boolean, not a truthy string."""
+
+    @pytest.fixture
+    def validated_settings(self):
+        return factory(
+            __name__,
+            "GATEWAY_TEST",
+            settings_files=["defaults.py", "settings_dev.py"],
+            validators=DYNACONF_VALIDATORS,
+        )
+
+    @pytest.mark.parametrize("env_value,expected", [("true", True), ("false", False)])
+    def test_lowercase_boolean_envvars_are_accepted(self, validated_settings, monkeypatch, env_value, expected):
+        monkeypatch.setenv("GATEWAY_TEST_API_ROOTS_REQUIRE_AUTHENTICATION", env_value)
+        load_envvars(validated_settings)
+        validated_settings.validators.validate()
+
+        assert validated_settings.API_ROOTS_REQUIRE_AUTHENTICATION is expected
+
+    @pytest.mark.parametrize("env_value", ["FALSE", "No", "0", "1", "yes", "on"])
+    def test_invalid_boolean_envvars_fail_validation(self, validated_settings, monkeypatch, env_value):
+        monkeypatch.setenv("GATEWAY_TEST_API_ROOTS_REQUIRE_AUTHENTICATION", env_value)
+        load_envvars(validated_settings)
+
+        with pytest.raises(ValidationError):
+            validated_settings.validators.validate()

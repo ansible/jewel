@@ -4,11 +4,19 @@ import sys
 
 from ansible_base.lib.dynamic_config import load_python_file_with_injected_context
 from ansible_base.lib.utils.validation import to_python_boolean
-from dynaconf import Dynaconf
+from dynaconf import Dynaconf, Validator
 
 logger = logging.getLogger('aap.gateway.settings.utils')
 _GATEWAY_ETC_DIRECTORY = '/etc/ansible-automation-platform/gateway/'
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Dynaconf converts only a subset of boolean spellings (true/false and
+# True/False) from environment variables. Others such as "FALSE", "No", or "1"
+# stay strings or integers, and a truthy value would silently enable the
+# setting. Validate the type so unsupported values fail loudly.
+DYNACONF_VALIDATORS = [
+    Validator("API_ROOTS_REQUIRE_AUTHENTICATION", is_type_of=bool),
+]
 
 
 # Mapping of environment variables to Dynaconf settings keys.

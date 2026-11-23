@@ -4,6 +4,7 @@ from ansible_base.lib.dynamic_config import export, factory, load_envvars, load_
 
 from .settings_utils import (
     _GATEWAY_ETC_DIRECTORY,
+    DYNACONF_VALIDATORS,
     load_custom_envvars,
     load_grpc_settings,
     load_healthcheck_settings,
@@ -16,6 +17,7 @@ DYNACONF = factory(
     "GATEWAY",
     # Options passed directly to dynaconf
     settings_files=["defaults.py", "settings_dev.py"],
+    validators=DYNACONF_VALIDATORS,
 )
 
 # Load settings from the global settings file if specified in the
