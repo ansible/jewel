@@ -102,6 +102,15 @@ pytest  # May work due to configured Django settings
 
 The django-ansible-base repository has its own test configuration and can run independently of the main Gateway tests.
 
+When running Gateway tests with a local checkout, tox installs the checkout after
+`requirements/requirements.txt` and after the test dependencies. The checkout's
+pinned dependencies (`django-ansible-base/requirements/requirements_all.txt`) are
+installed together with the package, so dependency changes on the checked-out DAB
+branch take precedence over versions pinned for the DAB devel branch. The install
+is cached in the tox env and is refreshed automatically when either
+`django-ansible-base/requirements/requirements_all.txt` or the gateway's hashed
+`requirements/requirements.txt` changes.
+
 ## Coverage
 
 Tests include coverage reporting. Coverage reports are generated in:
