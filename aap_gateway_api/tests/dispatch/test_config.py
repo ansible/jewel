@@ -123,7 +123,12 @@ def test_conninfo_is_parseable():
 
 def test_pyodbc_connection_from_config_contract(monkeypatch):
     """The sync publish factory mirrors the sqlserver broker's connect() contract."""
-    pyodbc = pytest.importorskip("pyodbc")
+    try:
+        import pyodbc
+    except ImportError:
+        # Not installed, or installed without unixODBC (PostgreSQL runners get
+        # pyodbc via DAB's dependency set but cannot import it).
+        pytest.skip("pyodbc is not importable in this environment")
     calls = {}
 
     class FakeConnection:
