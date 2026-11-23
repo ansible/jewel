@@ -2,6 +2,7 @@ from ansible_base.activitystream.models import AuditableModel
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
+from aap_gateway_api.models.http_port import get_xds_url_prefix
 from aap_gateway_api.models.route import API_PREFIX, Route
 from aap_gateway_api.models.ui_plugin_route import PLUGIN_PREFIX
 
@@ -10,6 +11,12 @@ def get_gateway_path_prefix_error_message():
     return _("Custom routes on the API port cannot start with '%(API_PREFIX)s' or '%(PLUGIN_PREFIX)s'") % {
         "API_PREFIX": API_PREFIX,
         "PLUGIN_PREFIX": PLUGIN_PREFIX,
+    }
+
+
+def get_gateway_path_xds_prefix_error_message():
+    return _("Custom routes cannot start with '%(XDS_PREFIX)s', which is reserved for the Envoy xDS control plane") % {
+        "XDS_PREFIX": get_xds_url_prefix(),
     }
 
 
@@ -24,6 +31,8 @@ class AdditionalRoute(Route, AuditableModel):
     router_basename = 'route'
 
     def clean(self):
+        if self.gateway_path.startswith(get_xds_url_prefix()):
+            raise ValidationError({"gateway_path": get_gateway_path_xds_prefix_error_message()})
         if self.http_port.is_api_port and (self.gateway_path.startswith(API_PREFIX) or self.gateway_path.startswith(PLUGIN_PREFIX)):
             raise ValidationError({"gateway_path": get_gateway_path_prefix_error_message()})
 

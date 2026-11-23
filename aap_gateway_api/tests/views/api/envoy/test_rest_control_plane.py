@@ -7,7 +7,13 @@ from django.urls import reverse
 
 from aap_gateway_api.models.ca_certificate import CACertificate
 from aap_gateway_api.utils.xds_configs import SDS_SECRET_CONFIG_NAME
-from aap_gateway_api.views.api.envoy.rest_control_plane import XDS_CACHE_KEY_CDS, XDS_CACHE_KEY_LDS, XDS_CACHE_KEY_SDS, SecretDiscoverServiceView
+from aap_gateway_api.views.api.envoy.rest_control_plane import (
+    XDS_CACHE_KEY_CDS,
+    XDS_CACHE_KEY_LDS,
+    XDS_CACHE_KEY_SDS,
+    SecretDiscoverServiceView,
+    _sanitize_for_log,
+)
 
 
 @pytest.fixture
@@ -67,6 +73,61 @@ def test_lds_no_gateway_cluster(unauthenticated_api_client, full_service_hierarc
     url = reverse("lds")
     response = unauthenticated_api_client.post(url, data={})
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "url_name,raw_uri",
+    [
+        ("lds", "/v3%2Fdiscovery:listeners"),
+        ("lds", "/v3/discovery%3Alisteners"),
+        ("cds", "/v3%2Fdiscovery:clusters"),
+        ("sds", "/v3/discovery%3Asecrets"),
+    ],
+)
+@pytest.mark.parametrize("meta_key", ["RAW_URI", "REQUEST_URI"])
+@pytest.mark.django_db
+def test_xds_views_reject_percent_encoded_paths(unauthenticated_api_client, url_name, raw_uri, meta_key):
+    """Percent-encoded reserved characters must not reach an xDS view.
+
+    Envoy does not decode reserved characters when matching listener routes,
+    so an encoded spelling slips past the listener deny route while the WSGI
+    server still decodes it into the xDS namespace.
+    """
+    response = unauthenticated_api_client.post(reverse(url_name), data={}, **{meta_key: raw_uri})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("raw_suffix", ["", "?foo=bar"])
+@pytest.mark.parametrize("meta_key", ["RAW_URI", "REQUEST_URI"])
+@pytest.mark.django_db
+def test_xds_views_accept_canonical_path(unauthenticated_api_client, raw_suffix, meta_key):
+    """The canonical spelling Envoy sends is still served."""
+    path = reverse("lds")
+    response = unauthenticated_api_client.post(path, data={}, **{meta_key: path + raw_suffix})
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_xds_views_sanitize_rejection_log(unauthenticated_api_client, caplog):
+    """The rejected request target must not be able to forge log lines."""
+    raw_uri = "/v3%2Fdiscovery:listeners\r\nFAKE LOG LINE" + "A" * 500
+
+    response = unauthenticated_api_client.post(reverse("lds"), data={}, RAW_URI=raw_uri)
+
+    assert response.status_code == 404
+    message = next(record.getMessage() for record in caplog.records if "Rejecting percent-encoded xDS path" in record.getMessage())
+    assert "\r" not in message
+    assert "\n" not in message
+    assert "FAKE LOG LINE" in message
+    assert len(message) < 250
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_sanitize_for_log_handles_empty_values(value):
+    """A missing request target sanitizes to an empty string."""
+    assert _sanitize_for_log(value) == ""
 
 
 @pytest.mark.django_db

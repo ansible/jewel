@@ -2,7 +2,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 
 from aap_gateway_api.models import AdditionalRoute
-from aap_gateway_api.models.additional_route import get_gateway_path_prefix_error_message
+from aap_gateway_api.models.additional_route import get_gateway_path_prefix_error_message, get_gateway_path_xds_prefix_error_message
+from aap_gateway_api.models.http_port import get_xds_url_prefix
 from aap_gateway_api.models.route import API_PREFIX
 from aap_gateway_api.models.ui_plugin_route import PLUGIN_PREFIX
 from aap_gateway_api.serializers.base_route import BaseRouteSerializer
@@ -48,6 +49,15 @@ class AdditionalRouteSerializer(BaseRouteSerializer):
         attrs = super().validate(attrs)
 
         errors = {}
+
+        # The xDS namespace is reserved on every listener because the xDS deny route is evaluated first.
+        if (gateway_path := attrs.get("gateway_path")) and gateway_path.startswith(get_xds_url_prefix()):
+            errors.setdefault('gateway_path', []).append(
+                ErrorDetail(
+                    get_gateway_path_xds_prefix_error_message(),
+                    code='required',
+                )
+            )
 
         # Validate that additional routes on API ports don't use reserved prefixes
         if (
