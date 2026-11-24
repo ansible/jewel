@@ -1,0 +1,95 @@
+---
+# Drift detection: regenerate the OpenAPI spec from code and fail if the
+# committed openapi.yaml is out of sync. Ensures developers commit spec
+# changes alongside code changes.
+#
+# Pattern follows AWX and Metrics, adapted for Gateway's jewel-ci container.
+# Uses sqlite3 in-memory database because UserSerializer queries the DB
+# during schema generation, which the dummy backend cannot handle.
+# Jira: AAP-86435
+name: "API: Schema Drift Detection"
+
+on:
+  pull_request:
+    branches:
+      - devel
+      - stable-*
+  push:
+    branches:
+      - devel
+
+permissions:
+  contents: read
+
+jobs:
+  ci-image-tag:
+    uses: ./.github/workflows/ci-image-tag.yml
+    with:
+      ref: ${{ github.event.merge_group.base_ref || github.base_ref || github.ref_name }}
+
+  drift:
+    name: Check schema drift
+    needs: ci-image-tag
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/ansible/jewel-ci:${{ needs.ci-image-tag.outputs.tag }}
+    timeout-minutes: 10
+    env:
+      LC_ALL: "C.UTF-8"
+      PYTHONHASHSEED: "0"
+      PYTHONPATH: "./:./django-ansible-base/"
+      GATEWAY_SECRET_KEY_FILE: "./tools/configs/dev_secret_key"
+      DATABASE_ENGINE: "django.db.backends.sqlite3"
+      DATABASE_NAME: "/tmp/gateway_schema.db"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify committed spec exists
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if ! git show HEAD:openapi.yaml > /dev/null 2>&1; then
+            echo "::error::openapi.yaml is not in the commit — the baseline spec must be committed."
+            exit 1
+          fi
+
+      - name: Checkout dependencies
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/scripts/get_pr_checkout.py \
+            --always-clone-repos 'ansible/django-ansible-base'
+
+      - name: Regenerate spec from code
+        run: python3 tools/scripts/genschema.py
+
+      - name: Check for drift
+        run: |
+          set +e
+          git diff --exit-code openapi.yaml
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "No schema drift detected."
+          elif [ "$rc" -eq 1 ]; then
+            echo ""
+            echo "::error::Committed openapi.yaml is out of sync with code."
+            echo "::error::Regenerate with the sqlite3 approach and commit the result."
+            echo ""
+            echo "## Schema Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The committed \`openapi.yaml\` does not match what \`drf-spectacular\` generates from the current code." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**To fix:** see the developer workflow in the PR description." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            TOTAL_LINES=$(git diff openapi.yaml | wc -l)
+            echo "Showing first 100 of $TOTAL_LINES diff lines:" >> $GITHUB_STEP_SUMMARY
+            echo '```diff' >> $GITHUB_STEP_SUMMARY
+            git diff openapi.yaml | head -100 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "::error::git diff failed with exit code $rc"
+            exit "$rc"
+          fi

@@ -302,6 +302,31 @@ collection:
 	fi;
 	pip install requests
 
+## Regenerate the committed OpenAPI spec using the jewel-ci container
+## Override GENSCHEMA_TAG for stable branches: make genschema GENSCHEMA_TAG=stable-2.5
+GENSCHEMA_TAG ?= devel
+
+genschema:
+	@if [ -d django-ansible-base ]; then \
+		echo "Updating django-ansible-base @ $(GENSCHEMA_TAG)..."; \
+		git -C django-ansible-base fetch --depth 1 origin $(GENSCHEMA_TAG) && \
+		git -C django-ansible-base reset --hard origin/$(GENSCHEMA_TAG); \
+	else \
+		echo "Cloning django-ansible-base @ $(GENSCHEMA_TAG)..."; \
+		git clone --depth 1 -b $(GENSCHEMA_TAG) https://github.com/ansible/django-ansible-base.git django-ansible-base; \
+	fi
+	$(PODMAN) run --rm \
+		--security-opt label=disable \
+		-v $$(pwd):/jewel \
+		-w /jewel \
+		-e PYTHONHASHSEED=0 \
+		-e PYTHONPATH="./:./django-ansible-base/" \
+		-e GATEWAY_SECRET_KEY_FILE="./tools/configs/dev_secret_key" \
+		-e DATABASE_ENGINE="django.db.backends.sqlite3" \
+		-e DATABASE_NAME="/tmp/gateway_schema.db" \
+		quay.io/ansible/jewel-ci:$(GENSCHEMA_TAG) \
+		python3 tools/scripts/genschema.py
+
 ## Canonical Podman Compose build target
 podman-compose-build: compose-build
 
@@ -311,7 +336,8 @@ docker-compose-build: compose-build
 ## Build the Compose containers
 compose-build: $(SOURCES_STAMP) podman-preflight update_django_ansible_base_hash tools/generated/.has_built_api
 
-API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+DAB_REQUIREMENT_INPUTS := $(wildcard django-ansible-base/pyproject.toml django-ansible-base/requirements/*.in django-ansible-base/requirements/requirements_all.txt)
+API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt requirements/requirements_git.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(DAB_REQUIREMENT_INPUTS) $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
     API_TARGETS += tools/generated/.has_built_ui
 endif
