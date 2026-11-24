@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Require explicit acceptance of the Microsoft ODBC Driver license before
+# the SQL Server development stack starts. The mssql-python-odbc wheel used
+# by the development environment ships Microsoft's ODBC driver binaries;
+# using them means accepting their license.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+acceptance_file="${MSSQL_ODBC_EULA_FILE:-$repo_root/.accept-mssql-odbc-eula}"
+license_url="https://github.com/microsoft/mssql-python/blob/main/mssql_python_odbc/licenses/MICROSOFT_ODBC_DRIVER_FOR_SQL_SERVER_LICENSE.txt"
+
+if [[ ! -f "$acceptance_file" ]]; then
+    echo "Microsoft ODBC Driver license acceptance is required to run Gateway against SQL Server." >&2
+    echo "Review: $license_url" >&2
+    echo "After accepting the terms, create .accept-mssql-odbc-eula in the repository root and retry." >&2
+    exit 1
+fi

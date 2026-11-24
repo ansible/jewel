@@ -109,6 +109,25 @@ def test_apply_grpc_database_options_for_postgres(monkeypatch):
     assert "APP" not in options
 
 
+def test_apply_grpc_database_options_ignores_stale_database_engine_env(monkeypatch):
+    """A stale DATABASE_ENGINE env var must not override the configured engine."""
+    monkeypatch.setenv("DATABASE_ENGINE", "django.db.backends.postgresql")
+    dynaconf_settings = factory(
+        __name__,
+        "GATEWAY_TEST",
+        settings_files=["defaults.py", "settings_dev.py"],
+    )
+
+    with patch.object(sys, 'argv', ['start_grpc_server']):
+        load_grpc_settings(dynaconf_settings)
+        dynaconf_settings.set("DATABASES__default__ENGINE", "ansible_base.backends.mssql")
+        apply_grpc_database_options(dynaconf_settings)
+
+    options = dict(dynaconf_settings.DATABASES["default"]["OPTIONS"])
+    assert options["APP"] == "Django API"  # mssql defaults, not PostgreSQL keepalives
+    assert "keepalives" not in options
+
+
 def test_apply_grpc_database_options_preserves_explicit_configuration(monkeypatch):
     """Explicitly configured OPTIONS win over the backend defaults."""
     monkeypatch.delenv("DATABASE_ENGINE", raising=False)

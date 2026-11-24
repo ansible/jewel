@@ -36,14 +36,15 @@ def stop_service(proc):
 
 
 def _print_process_output(stdout, stderr):
+    # stdout/stderr are lists of byte chunks (one per captured stream read).
     if stdout:
         print('')
         print('standard out:')
-        print(str(stdout, encoding='utf-8'))
+        print(b''.join(stdout).decode('utf-8', errors='replace'))
     if stderr:
         print('')
         print('standard err:')
-        print(str(stderr, encoding='utf-8'))
+        print(b''.join(stderr).decode('utf-8', errors='replace'))
 
 
 def launch_service(service_type, port, setup_fixture=None, dev_mode=False, secret_key=None, save_std=True, user_prefix='controller', page_size=None):

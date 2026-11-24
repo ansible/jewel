@@ -140,7 +140,12 @@ def apply_grpc_database_options(settings: Dynaconf) -> None:
         return
 
     default_db = settings.DATABASES.get("default", {})
-    database_engine = os.getenv("DATABASE_ENGINE") or default_db.get("ENGINE")
+    # The engine in settings is final here — every source that can select it
+    # has already loaded. Deliberately do NOT consult the DATABASE_ENGINE
+    # environment variable: it may be stale or divergent from the configured
+    # engine, and a stale value would merge PostgreSQL options into an ODBC
+    # OPTIONS dict (or vice versa).
+    database_engine = default_db.get("ENGINE")
     backend_defaults = dict(settings.GRPC_DATABASE_OPTIONS.get(database_engine, {}))
     if not backend_defaults:
         return

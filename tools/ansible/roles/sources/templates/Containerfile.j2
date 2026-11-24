@@ -193,10 +193,10 @@ RUN dnf module install -y nginx:1.22/common && \
 # RULE (AAP-98732): published gateway images must not contain Microsoft's
 # ODBC driver binaries — neither the msodbcsql18 RPM nor the
 # mssql-python-odbc wheel (requirements_mssql.txt), which ships the same
-# driver libraries. SQL Server support requires a rebuild with
-# INCLUDE_MSSQL_DRIVER=true and explicit EULA acceptance, pending the
-# Microsoft redistribution agreement. Install or configure the driver at
-# runtime/startup otherwise.
+# driver libraries. SQL Server support requires a local rebuild with
+# INCLUDE_MSSQL_DRIVER=true and explicit EULA acceptance; the resulting
+# image is local-only and must not be published. Install or configure the
+# driver at runtime/startup otherwise.
 ARG INCLUDE_MSSQL_DRIVER=false
 ARG ACCEPT_MS_ODBC_EULA=N
 RUN if [ "$INCLUDE_MSSQL_DRIVER" = "true" ]; then \

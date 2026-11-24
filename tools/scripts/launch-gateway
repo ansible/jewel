@@ -100,26 +100,36 @@ if [ $? != 0 ] ; then
     exit 255
 fi
 
-# Register the Microsoft ODBC driver from the mssql-python-odbc pip wheel
-# (AAP-98732): images never bake EULA-licensed Microsoft driver binaries, so
-# the driver library that pip installed into the venv is what ODBC loads.
-# unixODBC reads $ODBCSYSINI/odbcinst.ini; the system odbcinst.ini (from a
-# runtime driver install) takes precedence when it defines the driver.
-ODBC_CONF_DIR=/tmp/gateway-odbc
-DRIVER_LIB=$(${GATEWAY_PYTHON} - <<'PYEOF'
-import glob, os
+# For SQL Server, register the Microsoft ODBC driver library that pip
+# installed into the venv (the mssql-python-odbc wheel) with unixODBC.
+# Gateway images never bake EULA-licensed Microsoft driver binaries
+# (AAP-98732); where the wheel is absent (published images), a runtime
+# driver install registers itself in the system odbcinst.ini instead.
+# NOTE: ODBCSYSINI *replaces* unixODBC's system configuration directory,
+# so it is only exported when the wheel's driver is actually used —
+# otherwise the system registration (from a runtime install) applies.
+DB_ENGINE=$(${GATEWAY_PYTHON} -c 'from django.conf import settings; print(settings.DATABASES["default"]["ENGINE"])')
+if [ "${DB_ENGINE}" = "ansible_base.backends.mssql" ]; then
+    DRIVER_LIB=$(${GATEWAY_PYTHON} - <<'PYEOF' 2>/dev/null || true
+import glob
+import os
 
-import mssql_python_odbc
+try:
+    import mssql_python_odbc
+except ImportError:
+    raise SystemExit(0)
 
 base = os.path.join(os.path.dirname(mssql_python_odbc.__file__), "libs", "linux", "rhel", "x86_64", "lib")
 matches = glob.glob(os.path.join(base, "libmsodbcsql*.so*"))
 print(matches[0] if matches else "")
 PYEOF
 )
-if [ -n "$DRIVER_LIB" ] && [ -f "$DRIVER_LIB" ]; then
-    mkdir -p "${ODBC_CONF_DIR}"
-    printf '[ODBC Driver 18 for SQL Server]\nDriver = %s\n' "${DRIVER_LIB}" > "${ODBC_CONF_DIR}/odbcinst.ini"
-    export ODBCSYSINI="${ODBC_CONF_DIR}"
+    if [ -n "${DRIVER_LIB}" ] && [ -f "${DRIVER_LIB}" ]; then
+        ODBC_CONF_DIR=/tmp/gateway-odbc
+        mkdir -p "${ODBC_CONF_DIR}"
+        printf '[ODBC Driver 18 for SQL Server]\nDriver = %s\n' "${DRIVER_LIB}" > "${ODBC_CONF_DIR}/odbcinst.ini"
+        export ODBCSYSINI="${ODBC_CONF_DIR}"
+    fi
 fi
 
 # Idempotent: enables Service Broker and installs dispatcherd's runtime

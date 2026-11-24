@@ -4,5 +4,11 @@
 # image complete and switchable between database backends. The ODBC stack
 # stays out of the base requirements so environments that are not in the
 # SQL Server tech preview (including Python 3.11) never need unixODBC.
+# Pins track django-ansible-base's requirements_all.txt so the dev image and
+# base tox environments (which install DAB's lockfile after this one) do not
+# silently change versions out from under the py312-mssql environments.
 mssql-django
+mssql-python==1.17.0
+mssql-python-rs==0.4.0
+pyodbc==5.4.0
 dispatcherd[sqlserver]  # the sql_server Service Broker broker

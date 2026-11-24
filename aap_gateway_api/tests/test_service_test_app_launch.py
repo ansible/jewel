@@ -51,3 +51,12 @@ def test_launch_service_captures_child_logs_without_pipe_blocking(monkeypatch):
             stdout_sink.close()
         if hasattr(stderr_sink, "close"):
             stderr_sink.close()
+
+
+def test_print_process_output_decodes_byte_chunk_lists(capsys):
+    """Captured output arrives as lists of byte chunks and must print, not raise."""
+    from aap_gateway_api.tests.service_test_app.launch import _print_process_output
+
+    _print_process_output([b'first line\n', b'second line\n'], [b'boom \xff\xfe'])
+    out = capsys.readouterr().out
+    assert 'first line' in out and 'second line' in out
