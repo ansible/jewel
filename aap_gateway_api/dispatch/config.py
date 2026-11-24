@@ -23,6 +23,11 @@ def pyodbc_connection_from_config(using: str = "default", **kwargs) -> "pyodbc.C
     and a rollback retracts it, instead of being sent immediately on a
     separate autocommit connection.
 
+    The query timeout stays whatever Django/mssql-django configured
+    (OPTIONS["query_timeout"], default unbounded) — deliberately matching the
+    pg_notify factory rather than dispatcherd's own connect(), which sets 35s
+    on connections it owns.
+
     ``pyodbc`` is imported here, not at module scope, so PostgreSQL-only
     environments (no unixODBC) can load the dispatch config without it.
     """

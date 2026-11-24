@@ -1,9 +1,11 @@
 # SQL Server backend support (AAP-98732).
-# Installed by the py312-mssql tox environments and by the gateway container
-# image (dev and runtime profiles) on top of requirements.txt, keeping the
-# image complete and switchable between database backends. The ODBC stack
-# stays out of the base requirements so environments that are not in the
-# SQL Server tech preview (including Python 3.11) never need unixODBC.
+# Installed by the py312-mssql tox environments and by the local-only dev
+# image profile; the published runtime image carries this stack only when
+# built with INCLUDE_MSSQL_DRIVER=true (it must not contain Microsoft's
+# ODBC driver binaries otherwise — the driver is installed or configured
+# at runtime/startup instead). The ODBC stack stays out of the base
+# requirements so environments that are not in the SQL Server tech
+# preview (including Python 3.11) never need unixODBC.
 # Pins track django-ansible-base's requirements_all.txt so the dev image and
 # base tox environments (which install DAB's lockfile after this one) do not
 # silently change versions out from under the py312-mssql environments.

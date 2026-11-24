@@ -352,6 +352,7 @@ ifndef HEADLESS
 endif
 ## Build the API container
 tools/generated/.has_built_api: $(API_TARGETS)
+	$(MAKE) check-mssql-odbc-eula
 	mkdir -p django-ansible-base/requirements
 	$(eval GATEWAY_NODE_COUNT=$(shell grep 'gateway_node_count' container-startup.yml | sed 's:[^0-9]::g')) \
 	$(eval GATEWAY_NODES=$(shell seq 1 ${GATEWAY_NODE_COUNT} | sed 's:^:gateway:g' | xargs)) \
