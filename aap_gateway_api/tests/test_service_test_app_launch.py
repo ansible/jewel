@@ -58,5 +58,7 @@ def test_print_process_output_decodes_byte_chunk_lists(capsys):
     from aap_gateway_api.tests.service_test_app.launch import _print_process_output
 
     _print_process_output([b'first line\n', b'second line\n'], [b'boom \xff\xfe'])
-    out = capsys.readouterr().out
-    assert 'first line' in out and 'second line' in out
+    captured = capsys.readouterr()
+    assert 'first line' in captured.out
+    assert 'second line' in captured.out
+    assert 'boom' in captured.err
