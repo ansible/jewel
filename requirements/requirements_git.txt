@@ -1,1 +1,4 @@
+# Requires django-ansible-base devel with ansible_base.lib.mssql.notify
+# (get_sql_server_notify_conn_string, merged in #1287) — used by the
+# dispatch broker configuration.
 django-ansible-base[activitystream,api-documentation,authentication,redis-client,rest-filters,rbac,oauth2-provider,feature-flags,observability] @ git+https://github.com/ansible/django-ansible-base@devel
