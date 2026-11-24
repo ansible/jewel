@@ -1,0 +1,111 @@
+name: Token Scope Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - NO_JIRA-verify-pr-labels-workflow
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        id: scoped-token
+        with:
+          app-id: ${{ vars.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_APP_ID }}
+          private-key: ${{ secrets.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        id: unscoped-token
+        continue-on-error: true
+        with:
+          app-id: ${{ vars.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_APP_ID }}
+          private-key: ${{ secrets.ANSIBLE_CICD_BOT_ORG_RW_TOKEN_PRIVATE_KEY }}
+          owner: ansible
+
+      - name: Probe repository and organization endpoints
+        env:
+          SCOPED_TOKEN: ${{ steps.scoped-token.outputs.token }}
+          UNSCOPED_TOKEN: ${{ steps.unscoped-token.outputs.token }}
+          ORG: ansible
+          REPO: jewel
+          MEMBER: ${{ github.actor }}
+        run: |
+          set -u
+          echo "| token | endpoint | status |" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          probe() {
+            local label="$1" token="$2" endpoint="$3" display="${4:-$3}"
+            local status auth=()
+            if [ -n "$token" ]; then
+              auth=(-H "Authorization: Bearer $token")
+            fi
+            status=$(curl -sS -o /dev/null -w '%{http_code}' \
+              "${auth[@]}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com$endpoint")
+            echo "| $label | $display | $status |" | tee -a "$GITHUB_STEP_SUMMARY"
+          }
+
+          ORG_ENDPOINTS=(
+            "/orgs/$ORG"
+            "/orgs/$ORG/members"
+            "/orgs/$ORG/public_members"
+            "/orgs/$ORG/teams"
+            "/orgs/$ORG/outside_collaborators"
+            "/orgs/$ORG/invitations"
+            "/orgs/$ORG/blocks"
+            "/orgs/$ORG/security_managers"
+            "/orgs/$ORG/credential-authorizations"
+            "/orgs/$ORG/installations"
+          )
+
+          for endpoint in "${ORG_ENDPOINTS[@]}"; do
+            probe scoped "$SCOPED_TOKEN" "$endpoint"
+            probe unscoped "$UNSCOPED_TOKEN" "$endpoint"
+          done
+
+          for endpoint in "/orgs/$ORG/members" "/orgs/$ORG/public_members"; do
+            probe anon "" "$endpoint"
+          done
+
+          probe scoped "$SCOPED_TOKEN" "/orgs/$ORG/members/$MEMBER" "/orgs/$ORG/members/<redacted>"
+          probe anon "" "/orgs/$ORG/members/$MEMBER" "/orgs/$ORG/members/<redacted>"
+          probe unscoped "$UNSCOPED_TOKEN" "/orgs/$ORG/members/$MEMBER" "/orgs/$ORG/members/<redacted>"
+
+          probe scoped "$SCOPED_TOKEN" "/orgs/$ORG/memberships/$MEMBER" "/orgs/$ORG/memberships/<redacted>"
+          probe anon "" "/orgs/$ORG/memberships/$MEMBER" "/orgs/$ORG/memberships/<redacted>"
+          probe unscoped "$UNSCOPED_TOKEN" "/orgs/$ORG/memberships/$MEMBER" "/orgs/$ORG/memberships/<redacted>"
+
+          probe scoped "$SCOPED_TOKEN" "/orgs/$ORG/public_members/$MEMBER" "/orgs/$ORG/public_members/<redacted>"
+          probe anon "" "/orgs/$ORG/public_members/$MEMBER" "/orgs/$ORG/public_members/<redacted>"
+          probe unscoped "$UNSCOPED_TOKEN" "/orgs/$ORG/public_members/$MEMBER" "/orgs/$ORG/public_members/<redacted>"
+
+          probe scoped "$SCOPED_TOKEN" "/user"
+          probe unscoped "$UNSCOPED_TOKEN" "/user"
+          probe scoped "$SCOPED_TOKEN" "/repos/$ORG/$REPO"
+          probe unscoped "$UNSCOPED_TOKEN" "/repos/$ORG/$REPO"
+          probe scoped "$SCOPED_TOKEN" "/installation/repositories"
+          probe unscoped "$UNSCOPED_TOKEN" "/installation/repositories"
+
+          OTHER_REPO=""
+          if [ -n "$UNSCOPED_TOKEN" ]; then
+            OTHER_REPO=$(curl -sS \
+              -H "Authorization: Bearer $UNSCOPED_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/installation/repositories" \
+              | jq -r '[.repositories[] | select(.private == true and .full_name != "ansible/jewel")][0].full_name // empty')
+          fi
+
+          if [ -n "$OTHER_REPO" ]; then
+            probe scoped "$SCOPED_TOKEN" "/repos/$OTHER_REPO" "/repos/<private-other>"
+            probe anon "" "/repos/$OTHER_REPO" "/repos/<private-other>"
+            probe unscoped "$UNSCOPED_TOKEN" "/repos/$OTHER_REPO" "/repos/<private-other>"
+          fi
