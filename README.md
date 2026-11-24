@@ -12,7 +12,7 @@
 
 # Jewel
 
-Jewel provides the source code for the Gateway that connects Ansible services and provides common resources.
+Jewel provides the source code for the Gateway that connects Ansible services and provides common resources. (CI test)
 
 > The project name, Jewel, refers to a precious stone known as the Eye of the Sea from the same novel that originated the word Ansible, Ursula K. Le Guin's *Rocannon's World*.
 > Ansible communicates across distance; Jewel is what everything converges on.
