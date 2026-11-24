@@ -61,4 +61,6 @@ def test_print_process_output_decodes_byte_chunk_lists(capsys):
     captured = capsys.readouterr()
     assert 'first line' in captured.out
     assert 'second line' in captured.out
-    assert 'boom' in captured.err
+    # both sections print to stdout (pre-existing behavior)
+    assert 'standard err:' in captured.out
+    assert 'boom' in captured.out
