@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -28,6 +29,7 @@ _CUSTOM_ENVVAR_MAPPINGS = (
     ("DATABASE_PASSWORD", "DATABASES__default__PASSWORD"),
     ("DATABASE_HOST", "DATABASES__default__HOST"),
     ("DATABASE_PORT", "DATABASES__default__PORT"),
+    ("DATABASE_OPTIONS", "DATABASES__default__OPTIONS", json.loads),
     ("ENVOY_HOSTNAME", "ENVOY_HOSTNAME"),
     ("ENVOY_VERIFY_HTTPS_CERTIFICATES", "ENVOY_VERIFY_HTTPS_CERTIFICATES"),
     ("ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES", "ENVOY_PER_CONNECTION_BUFFER_LIMIT_BYTES"),
@@ -74,7 +76,17 @@ def load_custom_envvars(settings):
         )
         data["GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH"] = settings.GRPC_SERVER_MAX_RECEIVE_MESSAGE_LENGTH_MIN_VALUE
 
+    has_database_options = "DATABASES__default__OPTIONS" in data
+    database_options = data.pop("DATABASES__default__OPTIONS", None)
+
     settings.update(data, loader_identifier="settings:load_custom_envvars", merge=True)
+    if has_database_options:
+        settings.set(
+            "DATABASES__default__OPTIONS",
+            database_options,
+            loader_identifier="settings:load_custom_envvars",
+            merge=False,
+        )
 
 
 def set_secret_key(settings):
@@ -110,19 +122,58 @@ def load_grpc_settings(settings: Dynaconf) -> None:
     load_python_file_with_injected_context(settings_file_path, settings=settings)
 
 
+def apply_grpc_database_options(settings: Dynaconf) -> None:
+    """Apply the gRPC server's backend-specific database OPTIONS.
+
+    grpc_defaults.py defines ``GRPC_DATABASE_OPTIONS`` keyed by database
+    engine. This runs after every settings source that can select the engine
+    (standard YAML files, environment variables) has loaded, resolves the
+    final engine, and merges that engine's defaults into the default
+    database's OPTIONS — explicit configuration always takes precedence, so
+    only keys not already set are filled in. Engines without an entry get no
+    backend-specific defaults. Only acts on gRPC server startup, so other
+    processes are untouched.
+    """
+    from sys import argv
+
+    if 'start_grpc_server' not in argv:
+        return
+
+    default_db = settings.DATABASES.get("default", {})
+    # The engine in settings is final here — every source that can select it
+    # has already loaded. Deliberately do NOT consult the DATABASE_ENGINE
+    # environment variable: it may be stale or divergent from the configured
+    # engine, and a stale value would merge PostgreSQL options into an ODBC
+    # OPTIONS dict (or vice versa).
+    database_engine = default_db.get("ENGINE")
+    backend_defaults = dict(settings.GRPC_DATABASE_OPTIONS.get(database_engine, {}))
+    if not backend_defaults:
+        return
+
+    options = dict(default_db.get("OPTIONS") or {})
+    for key, value in backend_defaults.items():
+        options.setdefault(key, value)
+    settings.set("DATABASES__default__OPTIONS", options, loader_identifier="settings:grpc_database_options", merge=False)
+
+
 def load_healthcheck_settings(settings: Dynaconf) -> None:
     """Create a 'healthcheck' DATABASES alias derived from 'default'.
 
     Deep-copies the full default DB config via ``to_dict()`` so every key
-    (including any installer-added ones) is preserved, then overlays an
-    aggressive connect_timeout so PingView._check_db() fails fast instead
-    of blocking for ~130 s on unreachable hosts.
+    (including any installer-added ones) is preserved, then overlays the
+    backend-specific timeout so PingView._check_db() fails fast instead of
+    blocking for ~130 s on unreachable hosts.
     """
     default_db = settings.DATABASES.get("default")
     if not default_db:
         return
     healthcheck_db = default_db.to_dict()
-    healthcheck_db.setdefault("OPTIONS", {})["connect_timeout"] = 3
+    if default_db.get("ENGINE") == "ansible_base.backends.mssql":
+        # connection_timeout is per attempt; mssql-django would otherwise retry
+        # 5 times with a 5 s backoff, keeping the ping slow on dead hosts.
+        healthcheck_db.setdefault("OPTIONS", {}).update(connection_timeout=3, connection_retries=0)
+    else:
+        healthcheck_db.setdefault("OPTIONS", {})["connect_timeout"] = 3
     healthcheck_db["CONN_MAX_AGE"] = 0
     healthcheck_db["CONN_HEALTH_CHECKS"] = True
     healthcheck_db["TEST"] = {"MIRROR": "default"}

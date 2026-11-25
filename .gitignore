@@ -93,3 +93,4 @@ AGENTS_USER.md
 
 # Ignore files created during workflows
 .github_mcp_env
+.accept-mssql-odbc-eula

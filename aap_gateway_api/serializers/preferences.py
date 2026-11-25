@@ -373,6 +373,6 @@ class SettingPreferenceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(field=OpenApiTypes.ANY)
     def get_value(self, obj):
-        if obj.preference.encrypted:
+        if obj.is_encrypted:
             return ENCRYPTED_STRING
         return obj.value

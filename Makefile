@@ -19,6 +19,14 @@ ADMIN_PASSWORD ?= $(shell $(PYTHON) -c "import secrets; print(secrets.token_urls
 GATEWAY_ABS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 UNAME_S := $(shell uname -s)
 PODMAN_COLLECTION_STAMP := tools/generated/.podman-collection-installed
+# Require explicit Microsoft ODBC Driver license acceptance before the SQL
+# Server development stack starts (see tools/scripts/check-mssql-odbc-eula).
+MSSQL_ENABLED := $(shell grep -E '^mssql_enabled' container-startup.yml 2>/dev/null | grep -qE 'true' && echo true)
+
+.PHONY: check-mssql-odbc-eula
+check-mssql-odbc-eula:
+	@if [ "$(MSSQL_ENABLED)" = "true" ]; then tools/scripts/check-mssql-odbc-eula; fi
+
 SOURCES_STAMP := tools/generated/.sources-generated
 SOURCES_INPUTS := tools/ansible/generate-sources.yml tools/ansible/vars/container_config.yml \
 	$(shell find tools/ansible/roles/sources -type f) \
@@ -204,6 +212,7 @@ podman-compose: podman-compose-detached register-services plumb
 
 ## Start the Podman containers in detached mode and wait for readiness
 podman-compose-detached: $(SOURCES_STAMP) tools/generated/proxy.yml compose-build git_hooks_config podman-collection
+	$(MAKE) check-mssql-odbc-eula
 	env UID=${UID} PODMAN_COMPOSE="${PODMAN_COMPOSE}" ansible-playbook tools/ansible/initialize-containers.yml -e @container-startup.yml -e @tools/ansible/vars/container_config.yml;
 	env UID=${UID} $(PODMAN_COMPOSE) -f tools/generated/compose.yml $(COMPOSE_OPTS) up --detach --remove-orphans $(COMPOSE_UP_OPTS) --wait;
 
@@ -337,12 +346,13 @@ docker-compose-build: compose-build
 compose-build: $(SOURCES_STAMP) podman-preflight update_django_ansible_base_hash tools/generated/.has_built_api
 
 DAB_REQUIREMENT_INPUTS := $(wildcard django-ansible-base/pyproject.toml django-ansible-base/requirements/*.in django-ansible-base/requirements/requirements_all.txt)
-API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt requirements/requirements_git.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(DAB_REQUIREMENT_INPUTS) $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
+API_TARGETS = tools/generated/.django_ansible_base_head tools/generated/Containerfile.dev_env tools/configs/uwsgi.ini tools/configs/supervisord.conf requirements/requirements.txt requirements/requirements_dev.txt requirements/requirements_git.txt requirements/requirements_mssql.txt tools/scripts/auto-reload tools/configs/nginx.conf tools/generated/gateway.crt $(DAB_REQUIREMENT_INPUTS) $(shell find tools -type f -name "*gateway*") $(shell find tools/ansible -type f)
 ifndef HEADLESS
     API_TARGETS += tools/generated/.has_built_ui
 endif
 ## Build the API container
 tools/generated/.has_built_api: $(API_TARGETS)
+	$(MAKE) check-mssql-odbc-eula
 	mkdir -p django-ansible-base/requirements
 	$(eval GATEWAY_NODE_COUNT=$(shell grep 'gateway_node_count' container-startup.yml | sed 's:[^0-9]::g')) \
 	$(eval GATEWAY_NODES=$(shell seq 1 ${GATEWAY_NODE_COUNT} | sed 's:^:gateway:g' | xargs)) \

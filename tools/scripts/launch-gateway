@@ -66,6 +66,55 @@ user.save()
 EOF
 }
 
+# For SQL Server, register the Microsoft ODBC driver library that pip
+# installed into the venv (the mssql-python-odbc wheel) with unixODBC.
+# This must happen BEFORE the readiness loop: database_ready() connects
+# through pyodbc, whose DRIVER name resolves via unixODBC, and gateway
+# images never bake EULA-licensed Microsoft driver binaries (AAP-98732)
+# — where the wheel is absent (published images), a runtime driver
+# install registers itself in the system odbcinst.ini instead.
+# NOTE: ODBCSYSINI *replaces* unixODBC's system configuration directory,
+# so it is only exported when the wheel's driver is actually used —
+# otherwise the system registration (from a runtime install) applies.
+DB_ENGINE=$(${GATEWAY_PYTHON} -c 'from django.conf import settings; print(settings.DATABASES["default"]["ENGINE"])')
+if [ "${DB_ENGINE}" = "ansible_base.backends.mssql" ]; then
+    DRIVER_LIB=$(${GATEWAY_PYTHON} - <<'PYEOF' 2>/dev/null || true
+import os
+import platform
+
+from mssql_python.ddbc_bindings import normalize_architecture
+
+try:
+    import mssql_python_odbc
+except ImportError:
+    raise SystemExit(0)
+
+# The wheel ships distro- and arch-specific libraries under
+# libs/linux/<distro>/<arch>/lib/; resolve this host's arch the same way
+# mssql-python does, and prefer the RHEL build (the gateway image is
+# CentOS Stream) with a fallback to the first available distro.
+arch = normalize_architecture("linux", platform.machine())
+base = os.path.join(os.path.dirname(mssql_python_odbc.__file__), "libs", "linux")
+candidates = [os.path.join(base, "rhel", arch, "lib")] + [
+    os.path.join(base, d, arch, "lib") for d in sorted(os.listdir(base)) if d != "rhel"
+]
+for lib_dir in candidates:
+    if os.path.isdir(lib_dir):
+        for name in sorted(os.listdir(lib_dir)):
+            if name.startswith("libmsodbcsql") and ".so" in name:
+                print(os.path.join(lib_dir, name))
+                raise SystemExit(0)
+raise SystemExit(0)
+PYEOF
+)
+    if [ -n "${DRIVER_LIB}" ] && [ -f "${DRIVER_LIB}" ]; then
+        ODBC_CONF_DIR=/tmp/gateway-odbc
+        mkdir -p "${ODBC_CONF_DIR}"
+        printf '[ODBC Driver 18 for SQL Server]\nDriver = %s\n' "${DRIVER_LIB}" > "${ODBC_CONF_DIR}/odbcinst.ini"
+        export ODBCSYSINI="${ODBC_CONF_DIR}"
+    fi
+fi
+
 until database_ready; do
     echo "$(timestamp) Waiting until the database is ready..."
     sleep 5
@@ -98,6 +147,17 @@ ${GATEWAY_MANAGE} collectstatic --noinput
 ${GATEWAY_MANAGE} authenticators --initialize
 if [ $? != 0 ] ; then
     exit 255
+fi
+
+# Idempotent: enables Service Broker and installs dispatcherd's runtime
+# objects on SQL Server, logs and does nothing on other backends. Only the
+# first node provisions — every node running the DDL would terminate other
+# nodes' sessions while the ALTERs take effect. A failure is logged but does
+# not stop the container: the gateway itself does not depend on the broker,
+# and a runtime login without DDL rights must not block startup.
+if [ "${CONTAINER_NUMBER}" = "1" ]; then
+    ${GATEWAY_MANAGE} setup_service_broker || \
+        echo "$(timestamp) Warning: setup_service_broker failed; dispatch may not work until the database is provisioned"
 fi
 
 exec supervisord -n

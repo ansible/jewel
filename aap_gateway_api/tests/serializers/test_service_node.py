@@ -13,7 +13,7 @@ class TestServiceNodeSerializer:
     @pytest.fixture
     def service_cluster(self):
         """Create a service cluster for testing."""
-        service_type = ServiceType.objects.create(name="Controller", login_path="/api/login/", logout_path="/api/logout/", ping_url="/api/ping/")
+        service_type = ServiceType.objects.create(name="Test Controller Service", login_path="/api/login/", logout_path="/api/logout/", ping_url="/api/ping/")
         return ServiceCluster.objects.create(name="Test Cluster", service_type=service_type, auth_type="shared_secret")
 
     @pytest.mark.parametrize(

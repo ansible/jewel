@@ -141,6 +141,27 @@ If your change modifies the API surface, also add a changelog fragment under
 `changelogs/fragments/` describing the change. CI warns when a spec change has
 no fragment and uploads a skeleton fragment as an artifact that you can fill
 in.
+### Local SQL Server mode
+
+The local Compose stack can run Gateway against SQL Server. Set `mssql_enabled: true` in the workspace's `container-startup.yml`, optionally override `mssql_sa_password`, then start the stack with `make podman-compose` (or the `make docker-compose` alias). The SQL Server 2025 Developer container creates the `gateway` database before Gateway starts, and Keycloak runs on its embedded development database so the stack needs no PostgreSQL container. PostgreSQL remains Gateway's database when `mssql_enabled` is false.
+
+SQL Server's self-signed certificate is trusted only in local development and test settings. The default SQL Server memory limit is 2048 MB and can be changed with `mssql_memory_limit_mb` in `container-startup.yml`.
+
+### Microsoft ODBC driver rule
+
+**Gateway images must never contain Microsoft's ODBC driver binaries** — neither the `msodbcsql18` RPM nor the `mssql-python-odbc` wheel (which ships the same driver libraries):
+
+- Published images (GHCR `jewel`, quay `jewel-ci`) build without the driver — the GHCR workflow builds with `INCLUDE_MSSQL_DRIVER=false` and fails if any `libmsodbcsql*` binary is found in the image.
+- The driver is installed or configured at runtime/startup instead: CI installs the RPM in the SQL Server job, and `launch-gateway` registers the driver library from the locally pip-installed `mssql-python-odbc` wheel via `ODBCSYSINI` when the database engine is SQL Server (the development image installs that wheel because it is built and used only on your machine and is never published).
+- A local runtime image may opt in with `--build-arg INCLUDE_MSSQL_DRIVER=true --build-arg ACCEPT_MS_ODBC_EULA=Y`; the resulting image is local-only and must not be published. See the [Microsoft ODBC Driver license](https://github.com/microsoft/mssql-python/blob/main/mssql_python_odbc/licenses/MICROSOFT_ODBC_DRIVER_FOR_SQL_SERVER_LICENSE.txt).
+
+**License acceptance for local development**: starting the Compose stack with `mssql_enabled: true` requires explicit acceptance of the [Microsoft ODBC Driver license](https://github.com/microsoft/mssql-python/blob/main/mssql_python_odbc/licenses/MICROSOFT_ODBC_DRIVER_FOR_SQL_SERVER_LICENSE.txt). After reviewing and accepting it, record the acceptance and retry:
+
+```bash
+touch .accept-mssql-odbc-eula
+```
+
+The marker file is git- and container-ignored. The check runs on every SQL Server mode startup, cached image or not; PostgreSQL mode skips it entirely.
 
 ## Code quality
 
