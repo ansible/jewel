@@ -276,6 +276,20 @@ class TestGatewayRoleDefinitionType:
         assert 'permissions' in data
         assert set(data['permissions']) == {'shared.view_organization', 'awx.view_project'}
 
+    @pytest.mark.parametrize(
+        ('role_name', 'expected_permissions'),
+        [
+            ('Automation Dashboard Viewer', {'shared.view_automation_dashboard'}),
+            ('Automation Dashboard Editor', {'shared.view_automation_dashboard', 'shared.change_automation_dashboard'}),
+        ],
+    )
+    def test_managed_dashboard_roles_are_published_with_shared_permissions(self, role_name, expected_permissions):
+        role_definition = RoleDefinition.objects.get(name=role_name)
+
+        assert role_definition.managed is True
+        assert role_definition.content_type.api_slug == 'shared.organization'
+        assert set(GatewayRoleDefinitionType(instance=role_definition).data['permissions']) == expected_permissions
+
     def test_update_without_permissions(self, role_definition):
         role_definition.permissions.set([])
 
